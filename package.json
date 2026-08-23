@@ -1,0 +1,76 @@
+{
+  "name": "deskmate",
+  "version": "0.1.0",
+  "description": "DeskMate Windows AI voice input and desktop companion",
+  "author": "zuming58",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zuming58/DeskMate.git"
+  },
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "allowScripts": {
+    "electron@36.9.5": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true
+  },
+  "scripts": {
+    "dev": "vite",
+    "build:input-bridge": "dotnet publish native/DeskMate.InputBridge/DeskMate.InputBridge.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/DeskMate.InputBridge/publish",
+    "dev:desktop": "npm run build:input-bridge && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs --dev\"",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "build:desktop": "npm run build:input-bridge && npm run build && electron-builder --win --dir",
+    "preview": "vite preview",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "test:sites": "node --test tests/sites-worker.test.mjs"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.46.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.deskmate.app",
+    "productName": "DeskMate",
+    "files": [
+      "electron/**/*",
+      "dist/client/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/DeskMate.InputBridge/publish",
+        "to": "input-bridge",
+        "filter": [
+          "DeskMate.InputBridge.exe"
+        ]
+      },
+      {
+        "from": "electron/assets",
+        "to": "app-assets",
+        "filter": [
+          "*.ico",
+          "*.png"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "dir",
+      "executableName": "DeskMate",
+      "icon": "electron/assets/tray-icon.ico"
+    }
+  }
+}

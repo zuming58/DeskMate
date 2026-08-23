@@ -1,0 +1,3 @@
+import { createAiEvent } from "../domain/aiStatus.js";
+export class MockAgentProvider { constructor(provider, bus = null) { this.provider = provider; this.bus = bus; this.sequence = 0; this.sessionId = `mock-${provider}`; } emit(state, options = {}) { const event = createAiEvent(this.provider, state, { ...options, sessionId: this.sessionId, sequence: ++this.sequence }); this.bus?.publish?.(event); return event; } reset() { this.sequence = 0; this.sessionId = `mock-${this.provider}-${Date.now()}`; } }
+export function createMockAgentProviders(bus) { return Object.fromEntries(["codex", "claude-code", "hermes", "workbody"].map((provider) => [provider, new MockAgentProvider(provider, bus)])); }
