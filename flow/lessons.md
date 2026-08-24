@@ -10,6 +10,11 @@
 - 现象：运行中的 `DeskMate.exe` 会锁住 `release/win-unpacked`，导致 electron-builder 报 EBUSY。
 - 做法：打包前关闭正在运行的 DeskMate，再重试构建；不要把它误判为源码错误。
 
+## ESP-IDF toolchain activation is process-local
+
+- 现象：新的 PowerShell 工具进程中直接运行 `cmake`、`ctest` 或 `idf.py` 可能提示命令不存在，即使此前另一个终端已经激活过 ESP-IDF；PowerShell 的 `$LASTEXITCODE` 也不能可靠代表“命令未找到”这一类调用失败。
+- 做法：每个执行 ESP-IDF/Host 验证的新进程先显式加载冻结版本的环境入口，再检查工具版本；命令链同时检查 PowerShell 成功状态或直接抛错，不凭陈旧的 `$LASTEXITCODE` 宣称测试通过。
+
 ## npm production defaults
 
 - 现象：部分电脑的 npm 全局配置偏向 production，导致缺少开发依赖。

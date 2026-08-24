@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T02 合并收工自检完成
+
+- 做了什么：按根级 `AGENTS.md` 和 Project Flow 收工规范复核 T02 第二轮审计、合并提交 `216616d`、远程同步、文档分层、仓库卫生及全部验证证据；确认本地 `main` 与 `origin/main` 一致。
+- 为什么：把“另一台电脑返工、本机独立复审、主线合并”收束为可供下一会话直接接力的单一事实，避免把代码/构建通过误解为真机已经可用。
+- 怎么理解：T02 只锁定 EasyInput 的输入纯逻辑、held-key HID 内部表示和 ESP-IDF 构建基线；当前固件入口仍丢弃采集事件，没有真实 USB 输出或诊断通道，所以 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` 不等于可烧录或 HIL 通过。
+- 产出路径：`firmware/easyinput-controller/`、`flow/tasks/T02-easyinput-input-foundation.md`、`docs/reviews/t02-easyinput-input-foundation-second-audit-2026-08-24.md`、`docs/provenance/t02-easyinput-input-foundation.md`。
+- 问题→解决：纠正了返工记录中“板级扫描全部 PASS”的表述为 1 PASS、1 WARN、0 FAIL并人工复核引脚；确认新 PowerShell 进程必须先激活 ESP-IDF v5.5.5 环境，随后 Host 2/2、IDF build、桌面 66/66 与桌面打包均通过。未连接、读取或烧录硬件。
+- 下一步：建立单独的下一功能包，先实现边沿安全的按键/旋钮硬件适配与可观察诊断出口；另一台电脑做短分支代码、host test 和无硬件构建，本机复审后再单独准备恢复证据并申请首次烧录/HIL 授权。
+
 ## 2026-08-24 · T02 返工独立复审通过并合入主线
 
 - 做了什么：在隔离 worktree 独立审计 `origin/codex/easyinput-input-foundation@7edb0a66187a1e02c26d64aa1470595f659a44ad`，复核首轮问题的修复、任务范围、来源记录和仓库卫生，并在本机精确工具链重新执行 host test 与固件构建。
