@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 merge closure self-check completed
+
+- 做了什么：按根级 `AGENTS.md` 与 Project Flow 收工 Hook 复核 T03 合并后的仓库状态、最新交接、稳定决策、踩坑记录、模块入口、任务卡和首次烧录授权卡；确认 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9` 已与远程一致，并修正模块文档中仍残留的“等待合并”状态。
+- 为什么：上一轮代码、审计与主线推送已完成，但 `firmware/easyinput-controller/AGENTS.md`、`CLAUDE.md`、`README.md` 和 T03 任务卡仍写成 `READY_FOR_MAIN_MERGE_PENDING_HIL_AUTHORIZATION`，会让下一会话误以为还要再次合并。
+- 怎么理解：T03 当前唯一真实状态是 `MERGED_PENDING_HIL_AUTHORIZATION`；代码门已经关闭，硬件门尚未打开。`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` 不能冒充 `HIL_CONFIRMED`，也不授权识别设备、读取 Flash/NVS 或烧录。
+- 产出路径：`firmware/easyinput-controller/AGENTS.md`、`firmware/easyinput-controller/CLAUDE.md`、`firmware/easyinput-controller/README.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`flow/plan.md` 与本记录；审计证据继续见 `docs/reviews/t03-easyinput-usb-input-runtime-third-audit-2026-08-24.md`，下一门见 `docs/testing/t03-first-flash-authorization-card-2026-08-24.md`。
+- 问题解决：稳定流程决策已在 `flow/decisions.md` D022，生命周期队列/epoch 经验已在 `flow/lessons.md`，本轮没有新的结构、架构、视觉方向或外部资料，不需要改根级 `AGENTS.md`、`DESIGN.md`，也不重复新增决策或踩坑条目。
+- 下一步：等待用户明确授权 T03 首次烧录卡；授权后也必须先只识别目标 EasyInput、备份并校验 Flash/NVS、展示目标和写入范围，再进行首次写入与 T03 HIL。授权前不启动 T04，不操作小智。
+
 ## 2026-08-24 · T03 third audit fixed locally and merged to main
 
 - 做了什么：审计另一台电脑的第三轮候选 `dbf621fc2ba3dcaf64ab2794708186f5ad8150a0`；确认描述符完整黄金向量与有序生命周期实现有效，并按用户“局部小问题本机直接修”的原则，在原分支直接修复重复 mount epoch 与生命周期队列溢出，提交 `aac2ec9` 后合入 `main`。

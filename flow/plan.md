@@ -6,7 +6,7 @@
 
 ### Current execution point
 
-- T03 最终代码已合入主线候选：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
+- T03 最终代码已合入并推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
 - 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，但代码门已关闭；下一道门是恢复证据、用户授权和首次真机 HIL。T03 真机锁定前不进入 T04。
