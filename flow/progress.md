@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 输入合同、任务卡与第二电脑交接已就绪
+
+- 做了什么：把下一功能包正式定义为 T03“实体输入 → USB HID 最小闭环”，冻结 `INPUT_V1_FROZEN` 合同切片，建立另一台电脑可执行的任务卡与复制提示词，并同步项目计划、三端指导书、模块入口及 Codex/Claude 两端规则。
+- 为什么：T02 只证明了输入纯逻辑和构建基础，当前固件仍丢弃事件；直接烧录既没有可观察验证价值，也会覆盖现有可用固件。T03 必须先补齐实体采集、默认动作路由、TinyUSB 生命周期、断线防粘键和诊断快照。
+- 怎么理解：完整 EasyInput 固件尚未完成。现在只允许另一台电脑在 `codex/easyinput-usb-input-runtime` 实现 `INPUT_V1_FROZEN`；配置/NVS、Host Action/打开应用、BLE/Wi-Fi、音频、GPIO8、DeskMate Link、小智及桌面代码全部继续关闭。合同采用逐切片冻结，不把未讨论能力伪装成已定稿。
+- 产出路径：`contracts/deskmate-host/easyinput-input-v1.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`docs/handoffs/second-computer-easyinput-usb-input-runtime-2026-08-24.md`、`flow/plan.md`、`flow/decisions.md` D021、`firmware/easyinput-controller/` 局部入口和 `docs/README.md`。
+- 问题→解决：根级 `CLAUDE.md` 落后于 `AGENTS.md`，已补齐三端边界、安全与双电脑规则并恢复逐字一致；模块 AGENTS/CLAUDE 也同步切换到 T03。文档检查通过：ASCII 路径、Markdown 本地链接、根级/模块级规则一致、敏感信息扫描和 `git diff --check` 均通过。本轮没有连接、识别、读取或烧录硬件，未运行 flash/erase/monitor。
+- 下一步：把本记录和 T03 准备提交推送到 `main`；另一台电脑从最新 `origin/main` 创建 `codex/easyinput-usb-input-runtime` 严格执行 T03，完成后推送并停止。本机随后独立审计与重建，准备原 Maker 恢复方案，再单独向用户申请首次烧录/HIL 授权；T03 锁定前不开始 T04。
+
 ## 2026-08-24 · T02 合并收工自检完成
 
 - 做了什么：按根级 `AGENTS.md` 和 Project Flow 收工规范复核 T02 第二轮审计、合并提交 `216616d`、远程同步、文档分层、仓库卫生及全部验证证据；确认本地 `main` 与 `origin/main` 一致。

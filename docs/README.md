@@ -15,6 +15,8 @@
 - [T02 audit and requested changes](reviews/t02-easyinput-input-foundation-audit-2026-08-24.md)
 - [T02 second audit and acceptance](reviews/t02-easyinput-input-foundation-second-audit-2026-08-24.md)
 - [Second-computer EasyInput rework prompt](handoffs/second-computer-easyinput-rework-2026-08-24.md)
+- [T03 second-computer USB input runtime prompt](handoffs/second-computer-easyinput-usb-input-runtime-2026-08-24.md)
+- [T03 EasyInput USB input runtime task](../flow/tasks/T03-easyinput-usb-input-runtime.md)
 
 ## Product
 
@@ -30,6 +32,7 @@
 - [EasyInput Maker protocol](contracts/easyinput-maker-protocol.md)
 - [Legacy audio investigation](contracts/legacy-audio-investigation.md)
 - [Reference and recovery baselines](provenance/reference-baselines-2026-08-24.md)
+- [Frozen EasyInput input v1 contract](../contracts/deskmate-host/easyinput-input-v1.md)
 
 ## Production modules
 

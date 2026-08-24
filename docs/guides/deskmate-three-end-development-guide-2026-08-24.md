@@ -6,6 +6,8 @@
 
 > 核心路线：先冻结硬件与恢复基线，再开发正式 EasyInput 总控固件；先用模拟器证明协议，再接三根 UART 线；先让屏幕变化，再开放舵机。无硬件笔记本负责代码、宿主测试和构建，有硬件电脑负责独立审计、烧录授权和真机验收。相似功能组成一个小功能包，包内完成后立刻做软硬件联调和旧功能全量回归，通过后锁定，再进入下一包。摄像头、温湿度和其他外挂最后再加。
 
+> 2026-08-24 执行点：T02 输入基础已通过代码、Host 测试与 ESP-IDF v5.5.5 构建门，但没有真机证据。当前只开放 T03“实体输入 → USB HID”闭环，实施依据为 `contracts/deskmate-host/easyinput-input-v1.md` 与 `flow/tasks/T03-easyinput-usb-input-runtime.md`。完整配置、打开应用、BLE、音频和 DeskMate Link 仍未进入本包；T03 经当前电脑独立复审、恢复方案准备和用户单独授权后，才进行第一次烧录/HIL。
+
 ![DeskMate V1 硬件基线高密度信息图](../assets/hardware/deskmate-v1-hardware-baseline-infographic.png)
 
 ## 1. 这份指导书给出的最终结论

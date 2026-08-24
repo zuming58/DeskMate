@@ -19,7 +19,8 @@
 ## Development and safety
 
 - 目标工具链由项目冻结为 ESP-IDF 5.5.5；若本机版本不匹配，停止并报告，不静默换版本。
-- 当前首个任务是 `../../flow/tasks/T02-easyinput-input-foundation.md`。在它完成前，本目录只有协作骨架，不得声称已有可烧录固件。
+- T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
+- 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
 - 无硬件电脑只运行 host test、静态检查和 build；最高证据为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现；任何真机操作由有硬件电脑另行申请授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。
@@ -28,6 +29,7 @@
 ## Module entry points
 
 - 说明：`README.md`
-- 第一任务卡：`../../flow/tasks/T02-easyinput-input-foundation.md`
+- 当前任务卡：`../../flow/tasks/T03-easyinput-usb-input-runtime.md`
+- 冻结输入合同：`../../contracts/deskmate-host/easyinput-input-v1.md`
 - 参考基线：`../../docs/provenance/reference-baselines-2026-08-24.md`
 - 测试和构建入口：从仓库根运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`；在已激活且精确为 ESP-IDF 5.5.5 的环境中运行 `idf.py -C firmware/easyinput-controller build`。两者均不访问设备。
