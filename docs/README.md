@@ -17,6 +17,8 @@
 - [Second-computer EasyInput rework prompt](handoffs/second-computer-easyinput-rework-2026-08-24.md)
 - [T03 second-computer USB input runtime prompt](handoffs/second-computer-easyinput-usb-input-runtime-2026-08-24.md)
 - [T03 EasyInput USB input runtime task](../flow/tasks/T03-easyinput-usb-input-runtime.md)
+- [T03 first independent audit](reviews/t03-easyinput-usb-input-runtime-audit-2026-08-24.md)
+- [T03 first-audit rework prompt](handoffs/second-computer-easyinput-usb-input-runtime-rework-2026-08-24.md)
 
 ## Product
 

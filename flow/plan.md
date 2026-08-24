@@ -7,7 +7,7 @@
 ### Current execution point
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
-- 当前唯一开放任务是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)：另一台电脑在 `codex/easyinput-usb-input-runtime` 完成“实体输入 → USB HID”最小闭环。
+- 当前唯一开放任务是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)：另一台电脑的首个候选已完成，但本机独立审计发现溢出旧 key-down 重放与 HID interface 字符串索引错误，状态为 `REVIEW_CHANGES_REQUIRED`；继续原分支返工，不进入 T04。
 - T03 只允许实现 [`INPUT_V1_FROZEN`](../contracts/deskmate-host/easyinput-input-v1.md) 切片；完整 DeskMate host contract 仍未冻结，配置、NVS、Host Action、BLE、音频和 DeskMate Link 不得提前实现。
 - T03 分支推送后由当前电脑独立审计与重建。只有代码门通过、原 Maker 恢复方案准备完毕并获得用户单独授权后，才执行 EasyInput 第一次烧录和 HIL。
 

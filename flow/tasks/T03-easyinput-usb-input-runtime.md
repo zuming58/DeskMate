@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`READY_FOR_IMPLEMENTATION`。只允许另一台无硬件电脑在短分支实现；完成后由当前电脑独立复审。
+- 状态：`REVIEW_CHANGES_REQUIRED`。候选 `b57d6671a921877835723eebee4252fcdc5c9b92` 可构建，但输入事件溢出会重放旧 key-down，USB HID interface 还引用不存在的字符串索引；不得合并或烧录。审计见 [`t03-easyinput-usb-input-runtime-audit-2026-08-24.md`](../../docs/reviews/t03-easyinput-usb-input-runtime-audit-2026-08-24.md)。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

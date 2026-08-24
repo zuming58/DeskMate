@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 首轮独立审计退回修改
+
+- 做了什么：拉取并在隔离 worktree 审计 `origin/codex/easyinput-usb-input-runtime@b57d6671a921877835723eebee4252fcdc5c9b92`，核对来源、范围、板级引脚、USB/HID 生命周期、测试、依赖和仓库卫生；用本机精确工具链重跑 Host 与 IDF 构建，并增加临时溢出回归验证恢复语义。
+- 为什么：另一台电脑的 3/3 测试与构建通过只能证明现有测试覆盖内成立；第一次烧录前必须独立证明断线、溢出和描述符不会产生粘键或枚举隐患。
+- 怎么理解：T03 主体方向正确、原有 Host 3/3 和 ESP-IDF v5.5.5 构建均可重现，但还不是可烧录候选。输入事件 ring 丢 Release 后，owner 先恢复又继续 drain 旧 Press，会重新发出 key-down；HID interface 使用字符串索引 4，而固件只注册 0～2。状态改为 `REVIEW_CHANGES_REQUIRED`，不合并、不烧录、不开始 T04。
+- 产出路径：`docs/reviews/t03-easyinput-usb-input-runtime-audit-2026-08-24.md`、`docs/handoffs/second-computer-easyinput-usb-input-runtime-rework-2026-08-24.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md` 和 `flow/lessons.md`。
+- 问题→解决：新增临时回归按“S1 Press + 31 个 detent 填满 ring + Release 被丢弃 + 当前 mask=0”稳定复现恢复全零后仍有旧报告，现有 `input_runtime_tests` 因新断言失败；审计临时改动未写回候选分支。另确认 `TUD_HID_DESCRIPTOR` 的 iInterface=4 悬空，并要求补完整描述符黄金向量与 `managed_components/` 忽略项。
+- 验证：原候选 Host CTest 3/3 通过；精确 ESP-IDF v5.5.5 / esp32s3 / Minimal build 成功，镜像 `0x36200`、app 余量 `0xc9e00`（79%）。板级扫描 1 PASS、1 WARN、0 FAIL，WARN 是扫描器不识别 `constexpr`；人工引脚复核通过。范围、ASCII、来源、密钥、构建产物、AGENTS/CLAUDE 和 `git diff --check` 通过。本轮未连接/识别设备，未扫描端口，未读 Flash，未运行 flash/erase/monitor/HIL；隔离审计 worktree 及生成产物已删除。
+- 下一步：另一台电脑继续原分支按返工提示修复并推送新 HEAD 后停止；本机进行第二轮独立审计。只有回归、描述符、Host 测试和精确 IDF 构建全部通过，才准备 Maker 恢复方案并向用户提交首次烧录授权卡。
+
 ## 2026-08-24 · T03 输入合同、任务卡与第二电脑交接已就绪
 
 - 做了什么：把下一功能包正式定义为 T03“实体输入 → USB HID 最小闭环”，冻结 `INPUT_V1_FROZEN` 合同切片，建立另一台电脑可执行的任务卡与复制提示词，并同步项目计划、三端指导书、模块入口及 Codex/Claude 两端规则。
