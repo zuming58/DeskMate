@@ -30,4 +30,4 @@
 - 说明：`README.md`
 - 第一任务卡：`../../flow/tasks/T02-easyinput-input-foundation.md`
 - 参考基线：`../../docs/provenance/reference-baselines-2026-08-24.md`
-- 测试和构建入口：由 T02 建立并在本文件更新；当前不得伪造命令已可用。
+- 测试和构建入口：从仓库根运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`；在已激活且精确为 ESP-IDF 5.5.5 的环境中运行 `idf.py -C firmware/easyinput-controller build`。两者均不访问设备。

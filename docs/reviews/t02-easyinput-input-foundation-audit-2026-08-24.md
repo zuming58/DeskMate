@@ -2,7 +2,8 @@
 
 - 审计对象：`origin/codex/easyinput-input-foundation`
 - 候选提交：`315e7e2bb2d9298aec3a12cac849445973eb956d`
-- 结论：`CHANGES_REQUESTED`，不得合并、不得烧录。
+- 当时结论：`CHANGES_REQUESTED`，不得合并、不得烧录。
+- 后续状态：问题已由提交 `7edb0a6` 修复并通过独立复审；最新结论见 [`t02-easyinput-input-foundation-second-audit-2026-08-24.md`](t02-easyinput-input-foundation-second-audit-2026-08-24.md)。本文件保留首轮审计证据。
 
 ## 已确认的证据
 

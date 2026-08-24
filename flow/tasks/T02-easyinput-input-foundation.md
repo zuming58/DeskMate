@@ -1,6 +1,6 @@
 # T02 · EasyInput input foundation
 
-- 状态：`REVIEW_CHANGES_REQUIRED`。候选提交 `315e7e2` 已由有工具链电脑审计退回；详见 `../../docs/reviews/t02-easyinput-input-foundation-audit-2026-08-24.md`。
+- 状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。首轮审计问题已由提交 `7edb0a6` 修复，并由本机独立复审、重跑 2 项 host test 与精确 ESP-IDF v5.5.5 最小构建；详见 `../../docs/reviews/t02-easyinput-input-foundation-second-audit-2026-08-24.md`。未做设备访问、烧录或 HIL，不代表真机通过。
 - 背景：DeskMate 已冻结 V1 硬件职责，但正式 EasyInput 固件目录目前只有骨架。需要先建立一包可独立测试、可构建、可审计的输入基础，再申请任何真机操作。
 - 目标：在 `firmware/easyinput-controller/` 建立 ESP-IDF 5.5.5 / ESP32-S3 构建骨架，实现八键、旋钮和 USB HID 的纯逻辑与 host test；完成后停下，交给有硬件电脑审计。
 

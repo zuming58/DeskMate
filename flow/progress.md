@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T02 返工独立复审通过并合入主线
+
+- 做了什么：在隔离 worktree 独立审计 `origin/codex/easyinput-input-foundation@7edb0a66187a1e02c26d64aa1470595f659a44ad`，复核首轮问题的修复、任务范围、来源记录和仓库卫生，并在本机精确工具链重新执行 host test 与固件构建。
+- 结果：CMake/CTest 3.30.2、MSVC 19.44 下 2/2 host test 通过；ESP-IDF v5.5.5、target `esp32s3`、`Minimal build - ON` 构建成功，镜像 `167216` 字节（`0x28d30`）。T02 达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
+- 修复确认：`esp_driver_gpio`/`esp_timer` 依赖明确；计时改用单调毫秒且每轮至少让出一个 FreeRTOS tick；held-key 报告覆盖 modifiers、六 usage、并发、幂等、释放与 fail-closed 溢出；测试失败不再弹出 MSVC 模态窗口；来源文件移到根级 `docs/provenance/`，局部规则重新一致。
+- 板级检查：自动扫描实际为 1 PASS、1 WARN、0 FAIL，不是“全部 PASS”；WARN 仅因扫描器不识别 C++ `constexpr` 引脚声明。人工复核 S1～S8=`2,47,38,41,1,6,7,48`、编码器=`17/16/18`、USB 声明=`19/20` 正确，GPIO0/GPIO8 未使用。
+- 安全边界：本轮未连接、识别或读取设备，未扫描端口，未执行 flash、erase 或 monitor。当前 `main` 只采样并丢弃输入事件，尚无可观察诊断输出，因此该结论不是可烧录、HIL 或真机功能通过。
+- 产出：`docs/reviews/t02-easyinput-input-foundation-second-audit-2026-08-24.md`；返工代码与来源记录合入 `main`。下一包应先建立边沿安全的输入适配与可观察诊断出口，再申请独立恢复/烧录/HIL 任务。
+
 ## 2026-08-24 · 默认硬件验收主机确认
 
 - 决策：EasyInput 与小智默认连接当前运行 `F:\Codex\deskmate` 主会话的电脑；另一台电脑默认负责短分支代码、host test、模拟器和无硬件构建。
@@ -17,6 +26,25 @@
 - 板级与安全：静态板级扫描 1 PASS、1 WARN、0 FAIL；WARN 是扫描器不能识别 C++ constexpr，引脚由人工复核正确，GPIO0/GPIO8 未使用。远端提交无密钥、用户数据或构建产物。本轮未连接/识别设备，未读取或写入 Flash，未烧录、erase、monitor。
 - 产出：`docs/reviews/t02-easyinput-input-foundation-audit-2026-08-24.md`、`docs/handoffs/second-computer-easyinput-rework-2026-08-24.md`；审计临时 worktree 和生成产物已删除。
 - 下一步：另一台电脑继续原分支，安装/激活精确 ESP-IDF v5.5.5，修复审计项并真实通过 host test/build 后推送新提交；本机再次独立审计。任一电脑都可在后续承担 HIL，但必须在代码门通过后另行确认恢复与烧录授权。
+
+## 2026-08-24 · T02 audit rework confirmed
+
+- 状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED`。候选提交 `315e7e2` 的审计问题已在原分支修复；证据仅限无硬件测试与构建，等待另一台电脑再次独立复审。
+- 修复：`main` 精确依赖 `esp_driver_gpio`/`esp_timer` 并启用 IDF `MINIMAL_BUILD`；GPIO 配置错误 fail fast；采样改用 `esp_timer_get_time()` 单调毫秒与 `vTaskDelay(1)`。HID 改为平台无关的 held-key 状态，支持 modifiers、最多六 usage、并发/幂等/单键释放/全释放与 fail-closed 溢出。
+- 测试：使用 CMake/CTest 3.30.2、MSVC 19.44 运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`，2/2 通过；测试失败通过 stderr 与非零退出报告，不使用会弹窗的原始 `assert`。
+- 构建：EIM 已有环境真实报告 `ESP-IDF v5.5.5`；运行 `idf.py -C firmware/easyinput-controller build` 成功，target `esp32s3`，日志为 `Minimal build - ON`，镜像 `0x28d30` 字节，1 MiB app 分区余量 84%。生成的 `dependencies.lock` 固定 IDF 5.5.5/esp32s3；build、sdkconfig、bin、elf、map 未提交。
+- 静态检查：返工电脑报告板级扫描 PASS；后续独立复审确认实际输出为 1 PASS、1 WARN、0 FAIL，WARN 是扫描器不识别 C++ `constexpr`。S1～S8=`2,47,38,41,1,6,7,48`、编码器=`17/16/18`、USB 声明=`19/20` 经人工复核正确；GPIO0/GPIO8 未使用，USB 运行时未配置。`git diff --check`、密钥、范围、ASCII 路径与构建产物检查通过；`AGENTS.md`/`CLAUDE.md` 逐字一致；来源记录移至 `docs/provenance/t02-easyinput-input-foundation.md`。
+- 安全：未连接、识别或读取设备，未扫描端口，未执行 flash、erase、monitor；两个外部参考目录未修改或复制。下一步只由另一台电脑复审本分支；复审通过后仍须单独建立恢复、烧录与 HIL 授权任务。
+
+## 2026-08-24 · T02 EasyInput input foundation implementation
+
+- 做了什么：在分支 `codex/easyinput-input-foundation` 的 `firmware/easyinput-controller/` 建立 ESP-IDF 5.5.5 / ESP32-S3 工程骨架；实现八个独立低有效按键、20 ms 防抖、多键事件、编码器 Gray-code 四相 detent/非法跳变丢弃/按压防抖，以及平台无关的 8 字节 Boot Keyboard HID 内部表示。
+- 为什么：完成 T02 的无硬件可审计代码包，为有硬件电脑独立重跑和审查提供最小输入基础；本轮没有打开配置、音频、BLE/Wi-Fi、NVS、分区、DeskMate Link 或其他功能包。
+- 产出：`firmware/easyinput-controller/CMakeLists.txt`、`sdkconfig.defaults`、`main/idf_component.yml`、`components/input_core/`、`main/main.cpp`、`host_test/`、`.gitignore`、`docs/provenance.md` 和更新后的模块 `README.md`。
+- GPIO 合同：S1～S8 为 `2,47,38,41,1,6,7,48`；编码器 A/B/按压为 `17/16/18`；USB D-/D+ 仅记录 `19/20`；GPIO0、GPIO8 未使用。未配置 GPIO19/20 外设驱动，未初始化共享音频/LED 电源域。
+- 来源：全部代码为按 T02 合同的独立重实现；逐文件来源、参考固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、许可证和采用方式见 `firmware/easyinput-controller/docs/provenance.md`。外部参考目录未修改、未复制、未使用其 build 产物。
+- 验证：已执行 `cmake -S host_test -B host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build host_test/build --config Debug`、`ctest --test-dir host_test/build -C Debug --output-on-failure`，但本机均因命令不存在而未运行；`idf.py --version` 同样不可用，故本轮不能声明 `TEST_CONFIRMED` 或 `BUILD_CONFIRMED`。无设备访问、无端口扫描、无烧录/读取/monitor。
+- 状态：代码待工具链可用环境重跑 host test 和精确 ESP-IDF 5.5.5 `idf.py build`；本记录不把未执行结果冒充通过。下一步由有硬件电脑安装/激活冻结工具链后独立审查、重跑并决定是否申请真机验收。
 
 ## 2026-08-24 · 双电脑开发起点已推进入仓前状态
 

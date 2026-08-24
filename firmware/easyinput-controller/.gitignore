@@ -1,0 +1,8 @@
+build/
+build-*/
+host_test/build/
+*.bin
+*.elf
+*.map
+sdkconfig
+sdkconfig.old
