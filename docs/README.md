@@ -19,6 +19,8 @@
 - [T03 EasyInput USB input runtime task](../flow/tasks/T03-easyinput-usb-input-runtime.md)
 - [T03 first independent audit](reviews/t03-easyinput-usb-input-runtime-audit-2026-08-24.md)
 - [T03 first-audit rework prompt](handoffs/second-computer-easyinput-usb-input-runtime-rework-2026-08-24.md)
+- [T03 second independent audit](reviews/t03-easyinput-usb-input-runtime-second-audit-2026-08-24.md)
+- [T03 second-audit rework prompt](handoffs/second-computer-easyinput-usb-input-runtime-second-rework-2026-08-24.md)
 
 ## Product
 

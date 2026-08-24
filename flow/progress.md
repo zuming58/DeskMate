@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 第二轮独立审计继续退回修改
+
+- 做了什么：拉取并在隔离 worktree 审计 `origin/codex/easyinput-usb-input-runtime@24bf3e776c34290c85fc68916513971be970894e`，复核首轮修复、USB 生命周期适配、描述符测试、来源与范围；在本机显式加载冻结工具链重跑 Host 与 ESP-IDF 构建。
+- 为什么：首轮两处阻断虽已修正，但进入第一次烧录前必须证明 callback 顺序和完整描述符都受冻结测试保护，不能只依赖另一台电脑的 3/3 与构建结论。
+- 怎么理解：旧 key-down 重放和 interface 字符串索引已经关闭，Host 3/3、ESP-IDF v5.5.5 / esp32s3 构建可复现；但独立 mount/unmount 布尔标志会合并并颠倒快速生命周期事件，且所谓“精确黄金向量”只有 device 全量比较，configuration/string/report 仍是局部或语义抽查。T03 保持 `REVIEW_CHANGES_REQUIRED`，不合并、不烧录、不开始 T04。
+- 产出路径：`docs/reviews/t03-easyinput-usb-input-runtime-second-audit-2026-08-24.md`、`docs/handoffs/second-computer-easyinput-usb-input-runtime-second-rework-2026-08-24.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`flow/lessons.md`。
+- 问题解决：确认返工新增的 ring 全丢弃及 held/released 回归有效，`iInterface=0` 与 `managed_components/` 忽略正确；新发现的生命周期顺序丢失和黄金向量不完整已给出精确返工边界。裸 PowerShell 中 `cmake` 不在 PATH，按冻结规则在同一进程加载 v5.5.5 profile 后验证成功。
+- 验证：Host CTest 3/3；ESP-IDF v5.5.5、target esp32s3、Minimal build 成功，镜像 `0x362a0`（221,856 字节），app 余量 `0xc9d60`（79%）；板级扫描 1 PASS/1 已知 constexpr WARN/0 FAIL，人工引脚复核通过；范围、来源、ASCII、AGENTS/CLAUDE、忽略产物与 `git diff --check` 通过。未连接/识别设备，未扫描端口，未读 Flash，未运行 flash/erase/monitor/HIL；隔离 worktree 与产物已删除。
+- 下一步：另一台电脑继续原 T03 分支只修生命周期有序传递和四组完整描述符黄金向量，推送新 HEAD 后停止；本机第三轮独立审计通过前不合并 main、不准备烧录授权卡、不开始 T04。
+
 ## 2026-08-24 · T03 首轮独立审计退回修改
 
 - 做了什么：拉取并在隔离 worktree 审计 `origin/codex/easyinput-usb-input-runtime@b57d6671a921877835723eebee4252fcdc5c9b92`，核对来源、范围、板级引脚、USB/HID 生命周期、测试、依赖和仓库卫生；用本机精确工具链重跑 Host 与 IDF 构建，并增加临时溢出回归验证恢复语义。
