@@ -1,11 +1,12 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
-import { expressionPresets, historyItems, keyActions } from "../appData.js";
+import { expressionPresets, historyItems } from "../appData.js";
 import { AI_EVENT_TYPES } from "../adapters/index.js";
 import { legacyState } from "../domain/aiStatus.js";
+import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding } from "../domain/keymap.js";
 import { mapAiStateToPetIntent } from "../domain/petIntent.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 function normalizeHistoryEntry(item) {
   const text = String(item?.text || "");
@@ -21,8 +22,9 @@ export const defaultState = {
   schemaVersion: SCHEMA_VERSION,
   history: historyItems,
   vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ from: "桌面宠物", to: "桌宠" }, { from: "克劳德代码", to: "Claude Code" }] },
-  keymap: [...keyActions.slice(0, 8)],
-  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: false, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
+  keymap: structuredClone(DEFAULT_KEYMAP),
+  encoder: structuredClone(DEFAULT_ENCODER),
+  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
   runtime: { inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" }, lastTrigger: null },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
   agentExpressionMapping: { codex: "focus", claude: "listen", hermes: "think", workbody: "happy" },
@@ -39,6 +41,8 @@ function mergeDefaults(value) {
   return {
     ...structuredClone(defaultState), ...value, schemaVersion: SCHEMA_VERSION,
     history: Array.isArray(value.history) ? value.history.map(normalizeHistoryEntry) : structuredClone(defaultState.history),
+    keymap: Array.isArray(value.keymap) && value.keymap.length === 8 ? value.keymap.map((item, index) => normalizeKeyBinding(item, defaultState.keymap[index])) : structuredClone(defaultState.keymap),
+    encoder: normalizeEncoder(value.encoder),
     vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
     settings: { ...defaultState.settings, ...(value.settings || {}), operation: "toggle" },
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
@@ -57,6 +61,7 @@ export function migrateState(raw) {
   if (raw.schemaVersion === 0) raw = { ...raw, vocabulary: { hotwords: raw.hotwords || [], rules: raw.rules || [] } };
   if ((raw.schemaVersion ?? 0) < 4) raw = { ...raw, settings: { ...(raw.settings || {}), formatting: "raw" } };
   if ((raw.schemaVersion ?? 0) < 5) raw = { ...raw, history: Array.isArray(raw.history) ? raw.history.map(normalizeHistoryEntry) : raw.history };
+  if ((raw.schemaVersion ?? 0) < 6) raw = { ...raw, keymap: Array.isArray(raw.keymap) ? raw.keymap.map((item, index) => normalizeKeyBinding(item, DEFAULT_KEYMAP[index])) : raw.keymap, encoder: normalizeEncoder(raw.encoder), settings: { ...(raw.settings || {}), activeWindowOutputEnabled: true } };
   return mergeDefaults(raw);
 }
 
@@ -83,7 +88,8 @@ export function validateConfig(value) {
   if (value.schemaVersion !== undefined && (!Number.isInteger(value.schemaVersion) || value.schemaVersion < 0)) throw new Error("schemaVersion 必须是非负整数数字");
   if ((value.schemaVersion ?? 0) > SCHEMA_VERSION) throw new Error("配置来自更高版本，请先升级 DeskMate");
   if (value.history !== undefined && (!Array.isArray(value.history) || value.history.some((item) => !item || typeof item !== "object" || typeof item.text !== "string" || typeof item.time !== "string" || (item.rawText !== undefined && typeof item.rawText !== "string") || (item.organizer !== undefined && (!item.organizer || typeof item.organizer !== "object" || Array.isArray(item.organizer)))))) throw new Error("历史记录格式无效");
-  if (value.keymap !== undefined && (!Array.isArray(value.keymap) || value.keymap.length !== 8 || value.keymap.some((item) => typeof item !== "string"))) throw new Error("按键映射必须包含 8 项文字动作");
+  if (value.keymap !== undefined && (!Array.isArray(value.keymap) || value.keymap.length !== 8 || value.keymap.some((item) => typeof item !== "string" && (!item || typeof item !== "object" || Array.isArray(item) || typeof item.action !== "string")))) throw new Error("按键映射必须包含 8 项有效动作");
+  if (value.encoder !== undefined && (!value.encoder || typeof value.encoder !== "object" || Array.isArray(value.encoder))) throw new Error("旋钮配置格式无效");
   if (value.vocabulary !== undefined && (!value.vocabulary || typeof value.vocabulary !== "object" || Array.isArray(value.vocabulary))) throw new Error("词库格式无效");
   if (value.vocabulary?.hotwords && (!Array.isArray(value.vocabulary.hotwords) || value.vocabulary.hotwords.some((item) => typeof item !== "string"))) throw new Error("热词格式无效");
   if (value.vocabulary?.rules && (!Array.isArray(value.vocabulary.rules) || value.vocabulary.rules.some((item) => !item || typeof item.from !== "string" || typeof item.to !== "string"))) throw new Error("替换规则格式无效");

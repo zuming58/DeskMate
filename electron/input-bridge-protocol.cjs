@@ -1,12 +1,27 @@
 const ALLOWED_SOURCES = new Set(["easyinput-hid", "f22-fallback", "keyboard"]);
 const ALLOWED_KEYS = new Set(["F22", "RightAlt", "Escape", "Device"]);
 const ALLOWED_ACTIONS = new Set(["down", "up", "connected", "disconnected"]);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
 
 function parseBridgeLine(line) {
   if (typeof line !== "string" || !line.trim() || line.length > 2048) return null;
   let value;
   try { value = JSON.parse(line); } catch { return null; }
-  if (!value || value.version !== 1 || !["input", "status"].includes(value.type)) return null;
+  if (!value || value.version !== 1) return null;
+  if (value.type === "host-action") {
+    if (value.source !== "easyinput-hid" || !UUID_PATTERN.test(value.hostActionId) || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "host-action", source: "easyinput-hid", hostActionId: value.hostActionId, time: value.time, sequence: value.sequence });
+  }
+  if (value.type === "config-write") {
+    if (!REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "config-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: typeof value.reason === "string" ? value.reason.slice(0, 80) : "", time: value.time, sequence: value.sequence });
+  }
+  if (value.type === "config-ack") {
+    if (value.source !== "easyinput-hid" || typeof value.ok !== "boolean" || typeof value.saved !== "boolean" || !Number.isInteger(value.bytes) || value.bytes < 0 || value.bytes > 2048 || !Number.isInteger(value.crc16) || value.crc16 < 0 || value.crc16 > 0xffff || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "config-ack", source: "easyinput-hid", ok: value.ok, saved: value.saved, bytes: value.bytes, crc16: value.crc16, phase: Number(value.phase) || 0, time: value.time, sequence: value.sequence });
+  }
+  if (!["input", "status"].includes(value.type)) return null;
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
   return Object.freeze({
@@ -46,6 +61,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
+    if (["host-action", "config-write", "config-ack"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) this.reset("easyinput-hid", "F22");
       return { kind: "status", event };

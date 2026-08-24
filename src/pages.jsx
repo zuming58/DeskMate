@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   IconAdjustmentsHorizontal as AdjustmentsHorizontal,
   IconAlertCircle as AlertCircle,
+  IconAppWindow as AppWindow,
   IconArrowDown as ArrowDown,
   IconArrowLeft as ArrowLeft,
   IconArrowRight as ArrowRight,
@@ -18,6 +19,7 @@ import {
   IconEye as Eye,
   IconEyeOff as EyeOff,
   IconFileExport as FileExport,
+  IconFolderOpen as FolderOpen,
   IconGauge as Gauge,
   IconHistory as History,
   IconKeyboard as Keyboard,
@@ -42,7 +44,7 @@ import {
   IconUpload as Upload,
   IconUser as User,
 } from "@tabler/icons-react";
-import { agents, expressionPresets, historyItems, keyActions } from "./appData.js";
+import { agents, expressionPresets, historyItems } from "./appData.js";
 import { useAppStore } from "./store/appStore.js";
 import { useRecorder } from "./hooks/useRecorder.js";
 import { clearRecordingBlobs, deleteRecordingBlob, getRecordingBlob, saveRecordingBlob } from "./store/recordingStore.js";
@@ -51,6 +53,8 @@ import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { BailianSttAdapter, BailianTextOrganizer, ConfigurableTextOrganizer, HttpSttAdapter, MockSttAdapter } from "./adapters/sttAdapters.js";
 import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
+import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
+import { shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
 import { processVoiceRecording } from "./services/voicePipeline.js";
@@ -82,6 +86,106 @@ const moodIcons = {
   sleep: Moon,
   alert: AlertCircle,
 };
+
+function ShortcutRecorder({ value, onConfirm, global = false }) {
+  const [capturing, setCapturing] = useState(false);
+  const [candidate, setCandidate] = useState("");
+  const [message, setMessage] = useState("");
+  const stopCapture = useCallback(() => {
+    setCapturing(false);
+    setCandidate("");
+    setMessage("");
+    if (global) voiceAdapters.desktop.setShortcutCapture(false).catch(() => {});
+  }, [global]);
+  const startCapture = async () => {
+    setMessage("");
+    setCandidate("");
+    if (global) await voiceAdapters.desktop.setShortcutCapture(true);
+    setCapturing(true);
+  };
+  useEffect(() => {
+    if (!capturing) return undefined;
+    const capture = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape" && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) { stopCapture(); return; }
+      const result = shortcutFromKeyboardEvent(event);
+      if (result.error) { setCandidate(""); setMessage(result.error); }
+      else if (result.shortcut) { setCandidate(result.shortcut); setMessage("请确认是否使用这个快捷键"); }
+      else { setCandidate(""); setMessage(result.display ? `已按下 ${result.display}，请继续按一个字母、数字或功能键` : "请按下组合键"); }
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [capturing, stopCapture]);
+  useEffect(() => () => { if (global) voiceAdapters.desktop.setShortcutCapture(false).catch(() => {}); }, [global]);
+  const confirm = async () => {
+    if (!candidate) return;
+    try {
+      await onConfirm(candidate);
+      stopCapture();
+    } catch (error) {
+      setMessage(error.message || "快捷键无法注册");
+    }
+  };
+  return (
+    <div className="shortcut-recorder">
+      <button type="button" className={`shortcut-recorder__field ${capturing ? "is-capturing" : ""}`} onClick={startCapture}>{capturing ? candidate || "请按下新的组合键…" : value || "点击录制快捷键"}</button>
+      {capturing && <div className="shortcut-recorder__confirm"><small>{message || "请同时按下修饰键和一个按键；Esc 取消"}</small><div><Button variant="ghost" onClick={stopCapture}>取消</Button><Button variant="primary" disabled={!candidate} onClick={confirm}>确认</Button></div></div>}
+    </div>
+  );
+}
+
+function ApplicationPicker({ binding, onChange, notify }) {
+  const [apps, setApps] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setApps(await voiceAdapters.desktop.listApplications()); }
+    catch { notify("无法读取 Windows 应用列表"); }
+    finally { setLoading(false); }
+  }, [notify]);
+  useEffect(() => { void load(); }, [load]);
+  const select = async (token) => {
+    try {
+      const result = await voiceAdapters.desktop.registerApplication(token);
+      if (!result?.id) throw new Error("应用注册失败");
+      onChange({ ...binding, appActionId: result.id, appName: result.label });
+    } catch (error) { notify(`选择失败：${error.message}`); }
+  };
+  const choose = async () => {
+    try {
+      const result = await voiceAdapters.desktop.chooseApplication();
+      if (result?.cancelled) return;
+      if (!result?.id) throw new Error("应用注册失败");
+      onChange({ ...binding, appActionId: result.id, appName: result.label });
+    } catch (error) { notify(`选择失败：${error.message}`); }
+  };
+  const test = async () => {
+    const result = await voiceAdapters.desktop.testApplication(binding.appActionId);
+    notify(result?.ok ? `已打开 ${result.label || binding.appName}` : `无法打开应用：${result?.reason || "未知错误"}`);
+  };
+  const filtered = apps.filter((app) => app.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0, 30);
+  return (
+    <div className="application-picker">
+      {binding.appActionId && <div className="application-picker__selected"><AppWindow size={20} /><strong>{binding.appName || "已选择应用"}</strong><Button variant="ghost" onClick={test}>测试打开</Button></div>}
+      <SearchField value={query} onChange={setQuery} placeholder={loading ? "正在读取应用…" : "搜索已安装应用"} />
+      <div className="application-picker__list">{filtered.map((app) => <button type="button" key={app.token} onClick={() => select(app.token)}><AppWindow size={17} /><span>{app.label}</span></button>)}</div>
+      <div className="application-picker__footer"><Button icon={FolderOpen} variant="ghost" onClick={choose}>选择其他应用</Button><Button variant="ghost" onClick={load}>刷新</Button></div>
+    </div>
+  );
+}
+
+function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
+  const current = normalizeKeyBinding(binding);
+  const changeAction = (action) => onChange({ action });
+  return <>
+    <label>按下动作<Select value={current.action} onChange={changeAction} ariaLabel="按键动作">{options.map((action) => <option value={action.id} key={action.id}>{action.label}</option>)}</Select></label>
+    {current.action === "hotkey" && <label>快捷键<ShortcutRecorder value={current.shortcut || "点击录制快捷键"} onConfirm={async (shortcut) => onChange({ ...current, shortcut })} /></label>}
+    {current.action === "fixed-text" && <label>固定文字<textarea maxLength={512} value={current.text || ""} onChange={(event) => onChange({ ...current, text: event.target.value })} placeholder="输入按键要写出的文字" /></label>}
+    {current.action === "open-app" && <ApplicationPicker binding={current} onChange={onChange} notify={notify} />}
+  </>;
+}
 const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-focus-face.png`;
 
 function ExpressionTile({ preset, selected, onClick, compact = false }) {
@@ -389,7 +493,12 @@ export function HistoryPage({ notify }) {
   const items = state.history;
   const setItems = (next) => patch({ history: typeof next === "function" ? next(state.history) : next });
   const filtered = items.filter((item) => item.text.includes(query) || item.rawText?.includes(query) || item.time.includes(query));
-  const copy = async (text) => { try { await navigator.clipboard.writeText(text); } catch { /* demo fallback */ } notify("内容已复制"); };
+  const copy = async (text) => {
+    try {
+      const result = await voiceAdapters.output.output(text, "clipboard");
+      notify(result?.ok ? "内容已复制" : `复制失败：${result?.reason || "剪贴板不可用"}`);
+    } catch (error) { notify(`复制失败：${error.message || "剪贴板不可用"}`); }
+  };
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
   const playRecording = async (item) => {
     try {
@@ -464,10 +573,26 @@ export function VocabularyPage({ notify }) {
 
 export function KeymapPage({ notify }) {
   const { state, patch } = useAppStore();
-  const [selectedKey, setSelectedKey] = useState(0);
+  const [selectedInput, setSelectedInput] = useState({ kind: "key", index: 0 });
   const [diagnostics, setDiagnostics] = useState([]);
-  const actions = state.keymap;
-  const update = (value) => patch({ keymap: actions.map((action, index) => index === selectedKey ? value : action) });
+  const [syncState, setSyncState] = useState({ status: "idle", label: "本机配置 · 未同步" });
+  const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
+  const encoder = normalizeEncoder(state.encoder);
+  const updateKey = (value) => patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) });
+  const updateEncoder = (value) => patch({ encoder: normalizeEncoder({ ...encoder, ...value }) });
+  const syncKeyboard = async () => {
+    setSyncState({ status: "syncing", label: "正在同步…" });
+    try {
+      const config = createKeyboardConfig({ keymap: bindings, encoder, voiceShortcut: state.settings.voiceShortcut });
+      const result = await voiceAdapters.desktop.syncKeyboardConfig(config);
+      if (!result?.ok) throw new Error(result?.message || result?.reason || "键盘未确认配置");
+      setSyncState({ status: "success", label: `键盘已确认 · ${result.bytes} 字节` });
+      notify("按键与旋钮配置已同步到键盘并保存");
+    } catch (error) {
+      setSyncState({ status: "error", label: "同步失败" });
+      notify(`同步失败：${error.message}`);
+    }
+  };
   useEffect(() => {
     return deviceEventBus.subscribe((event) => {
       if (!state.settings.keyDiagnosticsEnabled || event.type !== "key-diagnostic") return;
@@ -476,23 +601,34 @@ export function KeymapPage({ notify }) {
   }, [state.settings.keyDiagnosticsEnabled]);
   return (
     <div className="page">
-      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone="demo">本机配置 · 未同步</StatusBadge><Button icon={Send} variant="primary" onClick={() => notify("已保存到本机；板子同步协议尚未接入")}>保存配置</Button></>} />
-      <Notice tone="demo" title="标准按键已由 Windows 直接执行">板子发送的回车、退格、全选、复制、粘贴和撤销属于标准 HID 功能，无需软件重发。这里修改的映射会保存到本机；写回板子仍需确认厂商配置协议。</Notice>
+      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : syncState.status === "error" ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>同步到键盘</Button></>} />
+      <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。当前配置报告会整份覆盖板上配置，因此在读取并合并板上的网络、音频和按键配置前，“同步到键盘”会安全拦截，不会误删已有设置。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
       <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
       <div className="keymap-grid">
         <Card className="keymap-board">
           <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>尚未读取</strong></span><span>同步结果 <strong className="success-text">UI 已就绪</strong></span></div>
           <div className="keyboard-visual">
-            <div className="key-grid">{actions.map((action, index) => <button key={index} className={`hardware-key ${selectedKey === index ? "is-selected" : ""}`} onClick={() => setSelectedKey(index)}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{action}</strong></button>)}</div>
-            <button className="dial-control" onClick={() => notify("旋钮：滚动 / 上下")}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>滚动 · 上下</strong><small>ENCODER</small></button>
+            <div className="key-grid">{bindings.map((binding, index) => <button key={index} className={`hardware-key ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{actionLabel(binding)}</strong></button>)}</div>
+            <button className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER</small></button>
           </div>
         </Card>
         <Card className="key-editor">
-          <div className="key-editor__title"><span>KEY {selectedKey + 1}</span><strong>按键设置</strong></div>
-          <label>按下动作<Select value={actions[selectedKey]} onChange={update} ariaLabel="按键动作">{keyActions.map((action) => <option key={action}>{action}</option>)}</Select></label>
-          <div className="mapping-preview"><span>当前映射</span><strong>{actions[selectedKey]}</strong><small>切换按键后自动保存到本机</small></div>
-          <Button variant="primary" className="button--wide" onClick={() => notify(`KEY ${selectedKey + 1} 已保存为“${actions[selectedKey]}”`)}>保存当前按键</Button>
+          {selectedInput.kind === "key" ? <>
+            <div className="key-editor__title"><span>KEY {selectedInput.index + 1}</span><strong>按键设置</strong></div>
+            <BindingEditor binding={bindings[selectedInput.index]} onChange={updateKey} notify={notify} />
+            <div className="mapping-preview"><span>当前映射</span><strong>{actionLabel(bindings[selectedInput.index])}</strong><small>修改后自动保存到本机</small></div>
+            <Button variant="primary" className="button--wide" onClick={() => notify(`KEY ${selectedInput.index + 1} 的本机配置已保存`)}>保存当前按键</Button>
+          </> : <>
+            <div className="key-editor__title"><span>ENCODER</span><strong>旋钮设置</strong></div>
+            <label>旋转模式<Segmented compact value={encoder.mode} onChange={(mode) => updateEncoder({ mode })} options={[{ value: "scroll", label: "滚动页面" }, { value: "cursor", label: "移动光标" }]} /></label>
+            <label>滚动方向<Segmented compact value={encoder.axis} onChange={(axis) => updateEncoder({ axis })} options={[{ value: "vertical", label: "上下" }, { value: "horizontal", label: "左右" }]} /></label>
+            <label>滚动速度<Slider label="旋钮滚动速度" min={1} max={5} suffix="" value={encoder.speed} onChange={(speed) => updateEncoder({ speed })} /></label>
+            <SettingRow title="反转上下方向"><Toggle checked={encoder.reverseVertical} onChange={(reverseVertical) => updateEncoder({ reverseVertical })} /></SettingRow>
+            <SettingRow title="反转左右方向"><Toggle checked={encoder.reverseHorizontal} onChange={(reverseHorizontal) => updateEncoder({ reverseHorizontal })} /></SettingRow>
+            <BindingEditor binding={encoder.press} options={ENCODER_PRESS_ACTIONS} onChange={(press) => updateEncoder({ press })} notify={notify} />
+            <div className="mapping-preview"><span>旋钮短按</span><strong>{actionLabel(encoder.press)}</strong><small>旋转与短按会一起同步</small></div>
+          </>}
         </Card>
       </div>
     </div>
@@ -679,7 +815,7 @@ export function SettingsPage({ notify }) {
       <div className="settings-layout">
         <Card className="settings-nav">{[{ id: "input", icon: Keyboard, label: "输入与快捷键" }, { id: "format", icon: Book2, label: "文字整理" }, { id: "appearance", icon: Sun, label: "外观与悬浮窗" }, { id: "account", icon: User, label: "账户" }, { id: "diagnostics", icon: Gauge, label: "系统诊断" }].map((item) => <button className={section === item.id ? "is-active" : ""} onClick={() => setSection(item.id)} key={item.id}><item.icon size={19} /><span>{item.label}</span><ArrowRight size={16} /></button>)}</Card>
         <Card className="settings-panel">
-          {section === "input" && <><SectionTitle index="01" title="快捷键" /><SettingRow title="EasyInput 语音键（Ctrl+Shift+Space）" description="当前真机已确认发送 Ctrl+Shift+Space；F22 作为兼容路径，仅在按键释放时切换录音，不拦截其他标准按键"><Toggle checked={state.settings.boardF22Enabled} onChange={(value) => updateSettings({ boardF22Enabled: value })} /></SettingRow><SettingRow title="备用语音快捷键" description="无效或冲突时保留原快捷键；默认 Ctrl+Shift+Space"><input value={state.settings.voiceShortcut} onChange={(event) => updateSettings({ voiceShortcut: event.target.value })} aria-label="全局语音快捷键" /></SettingRow><SettingRow title="右 Alt 触发" description="可兼容旧方案，但可能影响 AltGr 和正常输入，因此默认关闭"><Toggle checked={state.settings.rightAltEnabled} onChange={(value) => updateSettings({ rightAltEnabled: value })} /></SettingRow>{state.settings.rightAltEnabled && <Notice tone="warning" title="右 Alt 已启用">Raw Input 桥不会吞掉右 Alt；部分应用仍可能把它当作 AltGr。若输入异常，请关闭此选项。</Notice>}<SettingRow title="快捷键操作方式" description="按一下开始，再按一下结束；只在释放事件触发并带 350ms 防抖"><StatusBadge tone="success">切换模式</StatusBadge></SettingRow><SettingRow title="转写后文字输出" description="无论输出成功与否，都会先保存历史记录"><Segmented compact value={state.settings.outputMode} onChange={(value) => updateSettings({ outputMode: value })} options={[{ value: "history", label: "仅历史" }, { value: "clipboard", label: "复制" }]} /></SettingRow><SettingRow title="写入原输入窗口" description="目标窗口改变或自动输入失败时会回退到剪贴板"><Toggle checked={state.settings.activeWindowOutputEnabled} onChange={(value) => updateSettings({ activeWindowOutputEnabled: value })} /></SettingRow></>}
+          {section === "input" && <><SectionTitle index="01" title="快捷键" /><SettingRow title="EasyInput 语音键（Ctrl+Shift+Space）" description="当前真机已确认发送 Ctrl+Shift+Space；F22 作为兼容路径，仅在按键释放时切换录音，不拦截其他标准按键"><Toggle checked={state.settings.boardF22Enabled} onChange={(value) => updateSettings({ boardF22Enabled: value })} /></SettingRow><SettingRow title="备用语音快捷键" description="点击后直接按下新的组合键，确认成功注册后才保存；默认 Ctrl+Shift+Space"><ShortcutRecorder global value={state.settings.voiceShortcut} onConfirm={async (candidate) => { const result = await voiceAdapters.desktop.registerShortcut(candidate); if (!result?.registered || result.shortcut !== candidate) throw new Error(result?.reason || "快捷键被其他应用占用"); updateSettings({ voiceShortcut: result.shortcut }); notify(`备用语音快捷键已保存为 ${result.shortcut}`); }} /></SettingRow><SettingRow title="右 Alt 触发" description="可兼容旧方案，但可能影响 AltGr 和正常输入，因此默认关闭"><Toggle checked={state.settings.rightAltEnabled} onChange={(value) => updateSettings({ rightAltEnabled: value })} /></SettingRow>{state.settings.rightAltEnabled && <Notice tone="warning" title="右 Alt 已启用">Raw Input 桥不会吞掉右 Alt；部分应用仍可能把它当作 AltGr。若输入异常，请关闭此选项。</Notice>}<SettingRow title="快捷键操作方式" description="按一下开始，再按一下结束；只在释放事件触发并带 350ms 防抖"><StatusBadge tone="success">切换模式</StatusBadge></SettingRow><SettingRow title="转写后文字输出" description="无论输出成功与否，都会先保存历史记录"><Segmented compact value={state.settings.outputMode} onChange={(value) => updateSettings({ outputMode: value })} options={[{ value: "history", label: "仅历史" }, { value: "clipboard", label: "复制" }]} /></SettingRow><SettingRow title="写入原输入窗口" description="默认写回触发语音时所在的输入窗口；目标变化或自动输入失败时回退到剪贴板"><Toggle checked={state.settings.activeWindowOutputEnabled} onChange={(value) => updateSettings({ activeWindowOutputEnabled: value })} /></SettingRow></>}
           {section === "format" && <><SectionTitle index="02" title="文字整理" /><SettingRow title="整理方式" description="智能或自定义服务不可用时安全退回原样输出"><Segmented value={format} onChange={(value) => updateSettings({ formatting: value })} options={[{ value: "raw", label: "原样输出" }, { value: "smart", label: "智能整理" }, { value: "custom", label: "自定义" }]} /></SettingRow>{format === "custom" && <label className="field-label">自定义整理要求<input value={state.settings.customOrganizerRule} maxLength={4000} onChange={(event) => updateSettings({ customOrganizerRule: event.target.value })} placeholder="例如：整理成简洁的任务清单；不得增加原文没有的信息" /></label>}<SettingRow title="HTTP STT 端点" description="启用后录音会发送到该服务；仅允许 HTTPS，本机服务可使用 HTTP localhost；不要填写带 Token 的 URL"><input value={state.settings.sttEndpoint} onChange={(event) => updateSettings({ sttEndpoint: event.target.value, sttMode: event.target.value ? "http" : "unconfigured" })} placeholder="https://example.invalid/stt" /></SettingRow><Notice tone={format === "raw" || bailianStatus.configured ? "success" : "warning"} title="当前规则">{format === "raw" ? "保留识别结果，只应用词库替换规则，不调用文字模型。" : !bailianStatus.configured ? "尚未配置百炼 API Key，将自动保留原始转写。" : format === "smart" ? "使用 qwen3.7-flash 清理口头语、重复和标点；失败时保留原文。" : state.settings.customOrganizerRule ? "先完成基础清理，再按自定义要求整理；失败时保留原文。" : "尚未填写自定义整理要求，将退回原样输出。"}</Notice></>}
           {section === "appearance" && <><SectionTitle index="03" title="外观与悬浮窗" /><SettingRow title="外观" description="跟随系统外观，或手动固定亮色 / 暗色"><Segmented value={theme} onChange={(value) => updateSettings({ theme: value })} options={[{ value: "system", label: "跟随系统" }, { value: "light", label: "亮色" }, { value: "dark", label: "暗色" }]} /></SettingRow><SettingRow title="悬浮窗显示" description="录音时显示状态和实时识别文字"><Toggle checked={floating} onChange={(value) => updateSettings({ floating: value })} /></SettingRow><SettingRow title="背景不透明度" description="数值越高，悬浮窗背景越实"><Slider label="背景不透明度" value={state.settings.backgroundOpacity} onChange={(value) => updateSettings({ backgroundOpacity: value })} /></SettingRow></>}
           {section === "account" && <><SectionTitle index="04" title="千问服务" /><div className="account-card"><span className="avatar"><Lock size={28} /></span><div><strong>阿里云百炼 · ASR + 智能整理</strong><p>qwen3-asr-flash 负责转写，qwen3.7-flash 负责可选文字整理；共用同一份加密 API Key。</p></div><StatusBadge tone={bailianStatus.configured ? "success" : "demo"}>{bailianStatus.configured ? "已配置" : "未配置"}</StatusBadge></div><label className="field-label">百炼 API Key<span className="secret-field"><input type={showBailianKey ? "text" : "password"} autoComplete="off" value={bailianKey} onChange={(event) => setBailianKey(event.target.value)} placeholder={bailianStatus.configured ? "已加密保存；输入新 Key 可替换" : "sk-..."} /><button type="button" aria-label={showBailianKey ? "隐藏 API Key" : "显示 API Key"} title={showBailianKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowBailianKey((value) => !value)}>{showBailianKey ? <EyeOff size={20} /> : <Eye size={20} />}</button></span></label><label className="field-label">业务空间 ID（可选）<input value={bailianWorkspace} onChange={(event) => setBailianWorkspace(event.target.value)} placeholder="留空使用百炼兼容域名" /></label><Notice tone="info" title="账号安全">只需要百炼 API Key，不需要阿里云登录密码、AccessKey ID 或 AccessKey Secret。密钥只在 Electron 主进程中解密，不会进入配置导出或 Git。</Notice><div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!bailianKey.trim()} onClick={saveBailian}>加密保存并启用</Button>{bailianStatus.configured && <Button variant="ghost" icon={Trash} onClick={clearBailian}>删除本机 Key</Button>}</div></>}

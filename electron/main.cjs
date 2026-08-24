@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, session, safeStorage, Tray, Menu, nativeImage, screen } = require("electron");
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session, safeStorage, shell, Tray, Menu, nativeImage, screen } = require("electron");
 const path = require("path");
 const { fileURLToPath } = require("url");
 const { spawn } = require("child_process");
@@ -11,6 +11,7 @@ const { transcribe: transcribeBailian } = require("./bailian.cjs");
 const { organize: organizeBailian } = require("./bailian-organizer.cjs");
 const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
+const { AppActionStore } = require("./app-actions.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
@@ -32,7 +33,9 @@ let voiceTargetWindow = null;
 let voiceTargetCaptureToken = 0;
 let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
+let appActionStore;
 let isQuitting = false;
+let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
 const activeBailianRequests = new Map();
@@ -164,8 +167,20 @@ function registerShortcut(nextShortcut = shortcut) {
   if (!registered) return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: "shortcut-unavailable" };
   const previous = shortcut;
   shortcut = candidate;
+  shortcutCaptureActive = false;
   if (previous !== candidate) globalShortcut.unregister(previous);
   return { registered: true, shortcut };
+}
+
+function setShortcutCapture(active) {
+  shortcutCaptureActive = Boolean(active);
+  if (shortcutCaptureActive) {
+    if (globalShortcut.isRegistered(shortcut)) globalShortcut.unregister(shortcut);
+    return { ok: true, active: true, shortcut };
+  }
+  if (globalShortcut.isRegistered(shortcut)) return { ok: true, active: false, shortcut };
+  const result = registerShortcut(shortcut);
+  return { ok: Boolean(result.registered), active: false, shortcut: result.shortcut, reason: result.reason };
 }
 
 async function pasteIntoCapturedWindow(text) {
@@ -293,6 +308,10 @@ function startInputBridge() {
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
   inputBridge.on("trigger", (event) => { sendToMain("key-diagnostic", event); void emitVoiceToggle(event.source, event.key); });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
+  inputBridge.on("host-action", async (event) => {
+    const result = await appActionStore.execute(event.hostActionId);
+    sendToMain("host-action-result", { ...result, at: new Date().toISOString() });
+  });
   inputBridge.start();
 }
 
@@ -300,7 +319,7 @@ async function runSmokeTest() {
   if (!smokeMode || smokeStage !== 0) return;
   smokeStage = 1;
   await new Promise((resolve) => setTimeout(resolve, 1200));
-  await mainWindow.webContents.executeJavaScript(`localStorage.setItem("deskmate.app-state", JSON.stringify({ schemaVersion: 5, settings: { keyDiagnosticsEnabled: true, simulatorEnabled: true, sttMode: "mock", outputMode: "clipboard", formatting: "raw" } })); location.hash = "/dashboard"; location.reload();`);
+  await mainWindow.webContents.executeJavaScript(`localStorage.setItem("deskmate.app-state", JSON.stringify({ schemaVersion: 6, settings: { keyDiagnosticsEnabled: true, simulatorEnabled: true, sttMode: "mock", outputMode: "clipboard", activeWindowOutputEnabled: false, formatting: "raw" } })); location.hash = "/dashboard"; location.reload();`);
 }
 
 async function finishSmokeTest() {
@@ -313,7 +332,7 @@ async function finishSmokeTest() {
   await new Promise((resolve) => setTimeout(resolve, 2800));
   const report = await mainWindow.webContents.executeJavaScript(`(() => { const state = JSON.parse(localStorage.getItem("deskmate.app-state") || "{}"); return { historyText: state.history?.[0]?.text || "", route: location.hash, sttMode: state.settings?.sttMode || "missing", simulatorEnabled: Boolean(state.settings?.simulatorEnabled), sttStatus: state.diagnostics?.stt?.status || "missing", sttProvider: state.diagnostics?.stt?.provider || "missing" }; })()`);
   report.clipboardText = clipboard.readText();
-  report.ok = Boolean(report.historyText && report.clipboardText === report.historyText && report.route === "#/voice");
+  report.ok = Boolean(report.historyText && report.clipboardText === report.historyText && report.route === "#/dashboard");
   const resultPath = process.env.DESKMATE_SMOKE_RESULT;
   if (resultPath && path.extname(resultPath).toLowerCase() === ".json") fs.writeFileSync(resultPath, JSON.stringify(report, null, 2));
   app.exit(report.ok ? 0 : 1);
@@ -353,15 +372,26 @@ async function runBailianOrganizerTest(text) {
 app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
+  appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
   if (bailianTestAudio) { await runBailianConnectionTest(bailianTestAudio); return; }
   if (bailianTestOrganizer) { await runBailianOrganizerTest(bailianTestOrganizer); return; }
   createWindow();
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => ({ supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), inputBridge: inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false } }));
+  handleTrusted("desktop:get-capabilities", () => ({ supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: false, reason: "full-config-merge-required", transport: "vendor-hid-0x10" }, inputBridge: inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false } }));
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
+  handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
+  handleTrusted("desktop:list-applications", () => appActionStore.discover());
+  handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
+  handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
+  handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
+  handleTrusted("desktop:sync-keyboard-config", () => ({
+    ok: false,
+    reason: "full-config-merge-required",
+    message: "需要先读取并合并键盘现有的网络、音频和按键配置；本次已阻止覆盖写入。",
+  }));
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
   handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));

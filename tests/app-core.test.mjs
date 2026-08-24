@@ -1,20 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultState, loadState, migrateState, reduceAppState, validateConfig } from "../src/store/appStore.js";
+import { defaultState, loadState, migrateState, reduceAppState, SCHEMA_VERSION, validateConfig } from "../src/store/appStore.js";
 import { AI_EVENT_TYPES, AgentStatusAdapter } from "../src/adapters/index.js";
 
 test("migrates legacy storage to current schema without dropping defaults", () => {
   const result = migrateState({ schemaVersion: 0, hotwords: ["旧词"], rules: [] });
-  assert.equal(result.schemaVersion, 5);
+  assert.equal(result.schemaVersion, SCHEMA_VERSION);
   assert.deepEqual(result.vocabulary.hotwords, ["旧词"]);
   assert.equal(result.settings.theme, defaultState.settings.theme);
   assert.equal(result.settings.formatting, "raw");
   assert.equal(result.keymap.length, 8);
+  assert.equal(result.keymap[0].action, "voice-input");
+  assert.equal(result.settings.activeWindowOutputEnabled, true);
 });
 
 test("migrates history schema v4 to raw and organized text fields", () => {
   const result = migrateState({ schemaVersion: 4, history: [{ id: 9, time: "10:00", text: "legacy text" }] });
-  assert.equal(result.schemaVersion, 5);
+  assert.equal(result.schemaVersion, SCHEMA_VERSION);
   assert.equal(result.history[0].rawText, "legacy text");
   assert.equal(result.history[0].text, "legacy text");
   assert.equal(result.history[0].organizer.mode, "raw");

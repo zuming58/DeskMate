@@ -39,6 +39,12 @@ export class DesktopBridgeAdapter {
   async capabilities() { return this.bridge?.getCapabilities ? this.bridge.getCapabilities() : { supported: false, platform: "web" }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "protocol-unconfirmed", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async registerShortcut(shortcut) { return this.bridge?.registerShortcut ? this.bridge.registerShortcut(shortcut) : { registered: false, shortcut, reason: "desktop-bridge-unavailable" }; }
+  async setShortcutCapture(active) { return this.bridge?.setShortcutCapture ? this.bridge.setShortcutCapture(active) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async listApplications() { return this.bridge?.listApplications ? this.bridge.listApplications() : []; }
+  async registerApplication(token) { return this.bridge?.registerApplication ? this.bridge.registerApplication(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async chooseApplication() { return this.bridge?.chooseApplication ? this.bridge.chooseApplication() : { cancelled: true }; }
+  async testApplication(id) { return this.bridge?.testApplication ? this.bridge.testApplication(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async syncKeyboardConfig(value) { return this.bridge?.syncKeyboardConfig ? this.bridge.syncKeyboardConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setVoiceRecording(recording) { return this.bridge?.setVoiceRecording ? this.bridge.setVoiceRecording(recording) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setVoiceState(value) { return this.bridge?.setVoiceState ? this.bridge.setVoiceState(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -46,6 +52,7 @@ export class DesktopBridgeAdapter {
   onVoiceCancel(listener) { return this.bridge?.onVoiceCancel ? this.bridge.onVoiceCancel(listener) : () => {}; }
   onKeyDiagnostic(listener) { return this.bridge?.onKeyDiagnostic ? this.bridge.onKeyDiagnostic(listener) : () => {}; }
   onInputBridgeStatus(listener) { return this.bridge?.onInputBridgeStatus ? this.bridge.onInputBridgeStatus(listener) : () => {}; }
+  onHostActionResult(listener) { return this.bridge?.onHostActionResult ? this.bridge.onHostActionResult(listener) : () => {}; }
   onNavigate(listener) { return this.bridge?.onNavigate ? this.bridge.onNavigate(listener) : () => {}; }
 }
 

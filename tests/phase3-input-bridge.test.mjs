@@ -20,6 +20,13 @@ test("bridge protocol accepts only the privacy-preserving schema", () => {
   assert.equal(parseBridgeLine("not-json"), null);
 });
 
+test("bridge protocol accepts sanitized Host Action and config acknowledgements", () => {
+  const base = { version: 1, source: "easyinput-hid", time: "2026-08-21T10:00:00.000Z", sequence: 1 };
+  assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, type: "host-action", hostActionId: "01234567-89ab-cdef-0123-456789abcdef", devicePath: "private" })), { ...base, type: "host-action", hostActionId: "01234567-89ab-cdef-0123-456789abcdef" });
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, type: "host-action", hostActionId: "01234567-89AB-cdef-0123-456789abcdef" })), null);
+  assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 })), { ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 });
+});
+
 test("F22 triggers only on release and filters repeat, debounce, stuck release, and disconnect", () => {
   let now = 1000;
   const filter = new InputTriggerFilter({ now: () => now });

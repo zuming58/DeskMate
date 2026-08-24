@@ -1,6 +1,6 @@
 # EasyInput Maker protocol contract
 
-来源固定为 `CY-CHENYUE/easy-input-maker@34087cd40d24d23579da0357973ebc1a37e7ce7c`。详细研究见 [firmware study](../references/easyinput-maker-firmware-study.md)。
+原始协议研究固定为 `CY-CHENYUE/easy-input-maker@34087cd40d24d23579da0357973ebc1a37e7ce7c`；2026-08-23 桌面实现复核到本地参考 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`。详细研究见 [firmware study](../references/easyinput-maker-firmware-study.md)，实现来源记录见 [upstream sources](../references/upstream-sources.md)。
 
 ## Device identity
 
@@ -21,6 +21,15 @@
 | `0x15` | Board → Host Input | 扬声器资源响应 |
 
 实现要求：严格校验版本、长度、分块、总长度和 CRC；未知报告不写入。
+
+DeskMate 的 Windows 侧已实现 `0x10` 分块编码、`0x11` 配置确认/Host Action 解码和厂商 HID 报告长度校验。配置写入当前保持安全门禁：Maker 会用一份 JSON 覆盖完整板载配置，而 DeskMate 尚未取得可无损合并的完整现有配置，因此 UI 只保存本机设置并明确拒绝实际写入。完成“读取当前配置 → 保留网络/音频字段 → 用户确认 → 写入 → 校验确认”闭环后才开放。
+
+## Host Action
+
+- 固件只发送规范的小写 UUID，不携带 Windows 路径或命令行。
+- 应用搜索、文件选择、UUID 到 `.exe`/`.lnk` 的映射和启动全部在 Electron 主进程内完成。
+- React 渲染进程只看到显示名、短期选择 token 和 UUID；未知 UUID、非规范 UUID 或未注册目标一律拒绝。
+- Host Action 是 Windows 主机动作，不作为 EasyInput 与小智云台之间的板间协议。
 
 ## LAN audio
 

@@ -10,13 +10,16 @@
 
 ## In progress
 
-- Maker firmware UDP audio protocol and vendor HID contracts.
-- Mock board and protocol test suite that can be developed without physical hardware.
-- Hardware acceptance on the computer connected to EasyInput.
+- Freeze the integrated repository layout, source provenance and licensing inventory.
+- Define the desktop-to-controller host contract and controller-to-yuntai DeskMate Link v1.
+- Build mock controller/yuntai transports and deterministic protocol tests before hardware writes.
+- Re-implement or carefully adapt selected Maker and Xiaozhi capabilities into production firmware modules in this repository.
 
-## Later
+## Subsequent delivery
 
 - Real Codex, Claude Code, Hermes and Workbody status providers.
-- Pet expression and motion runtime.
-- Screen, LEDs, servos, light, temperature/humidity and direction sensors.
+- EasyInput controller firmware with preserved voice/input/audio/light capabilities.
+- Xiaozhi yuntai firmware with safe expression, screen, servo and local audio execution.
+- First complete loop through desktop software, controller firmware and yuntai firmware.
+- Light, temperature/humidity and direction sensors after separate contracts.
 - Installer, updates, signing, privacy controls and release hardening.

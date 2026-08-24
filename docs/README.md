@@ -2,6 +2,12 @@
 
 ## Current handoff
 
+- [Latest three-end development guide](guides/deskmate-three-end-development-guide-2026-08-24.md)
+- [DeskMate V1 hardware baseline](architecture/deskmate-v1-hardware-baseline.md)
+- [Integrated software and hardware project start](handoffs/integrated-project-start-2026-08-23.md)
+- [Earlier three-system source-analysis handoff (boundary superseded)](handoffs/development-start-handoff-2026-08-23.md)
+- [EasyInput Maker technical map](handoffs/easyinput-maker-technical-map-2026-08-23.md)
+- [Xiaozhi yuntai analysis guide (completed by external maps)](handoffs/xiaozhi-yuntai-analysis-guide-2026-08-23.md)
 - [Desktop handoff](handoffs/desktop-handoff-2026-08-23.md)
 - [Project progress](../flow/progress.md)
 - [Development plan](../flow/plan.md)
@@ -16,6 +22,7 @@
 
 - [System overview](architecture/system-overview.md)
 - [Hardware connectivity](architecture/hardware-connectivity.md)
+- [V1 hardware baseline infographic](assets/hardware/deskmate-v1-hardware-baseline-infographic.png)
 - [EasyInput Maker protocol](contracts/easyinput-maker-protocol.md)
 - [Legacy audio investigation](contracts/legacy-audio-investigation.md)
 
@@ -34,3 +41,4 @@
 
 - [Pinned upstream sources](references/upstream-sources.md)
 - [EasyInput Maker firmware study](references/easyinput-maker-firmware-study.md)
+- [Xiaozhi yuntai integration reference](references/xiaozhi-yuntai-integration-reference.md)

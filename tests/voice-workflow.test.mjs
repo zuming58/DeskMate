@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { downsampleToPcm16, shouldIgnoreToggle } from "../src/hooks/useRecorder.js";
 import { DesktopBridgeAdapter, EasyInputLanAudioAdapter, TextOutputAdapter } from "../src/adapters/voiceAdapters.js";
+import { shortcutFromKeyboardEvent } from "../src/domain/shortcutCapture.js";
 
 const require = createRequire(import.meta.url);
 const { normalizeShortcut } = require("../electron/shortcut.cjs");
@@ -26,6 +27,12 @@ test("desktop shortcuts are normalized and unsafe values are rejected", () => {
   assert.throws(() => normalizeShortcut("Space"), /修饰键/);
   assert.throws(() => normalizeShortcut("Ctrl+Ctrl+A"), /重复/);
   assert.throws(() => normalizeShortcut("DefinitelyNotAnAccelerator"), /修饰键/);
+});
+
+test("shortcut capture derives an accelerator from physical key presses", () => {
+  assert.deepEqual(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), { shortcut: "Ctrl+Alt+K" });
+  assert.equal(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }).error.includes("修饰键"), true);
+  assert.deepEqual(shortcutFromKeyboardEvent({ code: "ControlLeft", key: "Control", ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }), { pending: true, display: "Ctrl" });
 });
 
 test("web desktop bridge safely degrades and LAN audio stays unavailable", async () => {

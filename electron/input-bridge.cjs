@@ -2,6 +2,8 @@ const { EventEmitter } = require("events");
 const { spawn } = require("child_process");
 const readline = require("readline");
 const { parseBridgeLine, InputTriggerFilter } = require("./input-bridge-protocol.cjs");
+const { randomUUID } = require("crypto");
+const { encodeKeyboardConfig } = require("./easyinput-config.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -15,6 +17,7 @@ class InputBridgeManager extends EventEmitter {
     this.stopping = false;
     this.restartAttempts = 0;
     this.restartTimer = null;
+    this.pendingConfig = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "" };
   }
 
@@ -25,7 +28,7 @@ class InputBridgeManager extends EventEmitter {
   start() {
     if (this.child || this.stopping) return this.snapshot();
     try {
-      const child = this.spawnImpl(this.executable, [], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      const child = this.spawnImpl(this.executable, [], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
       this.child = child;
       this.status = { ...this.status, available: true, process: "running", error: "" };
       this.emit("status", this.snapshot());
@@ -49,12 +52,42 @@ class InputBridgeManager extends EventEmitter {
       this.status = { ...this.status, boardConnected: event.boardConnected, error: "" };
       this.emit("status", this.snapshot());
     }
+    if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
+    if (result.kind === "config-ack" && this.pendingConfig) {
+      const matches = event.bytes === this.pendingConfig.bytes && event.crc16 === this.pendingConfig.crc16;
+      if (matches) this.finishConfig(event.ok && event.saved ? { ok: true, bytes: event.bytes, crc16: event.crc16, saved: true } : { ok: false, reason: event.ok ? "config-not-saved" : "config-rejected", bytes: event.bytes, crc16: event.crc16 });
+    }
+    if (result.kind === "host-action") this.emit("host-action", event);
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
+  }
+
+  syncConfig(value) {
+    if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    let encoded;
+    try { encoded = encodeKeyboardConfig(value); } catch (error) { return Promise.resolve({ ok: false, reason: error.message }); }
+    const requestId = `cfg-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishConfig({ ok: false, reason: "config-ack-timeout" }), 8000);
+      this.pendingConfig = { requestId, bytes: encoded.bytes, crc16: encoded.crc16, timeout, resolve };
+      const command = { version: 1, type: "sync-config", requestId, bytes: encoded.bytes, crc16: encoded.crc16, reports: encoded.reports.map((report) => report.toString("base64")) };
+      this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => { if (error) this.finishConfig({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
+  finishConfig(result) {
+    const pending = this.pendingConfig;
+    if (!pending) return;
+    this.pendingConfig = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
   }
 
   handleExit(error) {
     if (!this.child && this.stopping) return;
     this.child = null;
+    this.finishConfig({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -71,6 +104,7 @@ class InputBridgeManager extends EventEmitter {
     this.restartTimer = null;
     const child = this.child;
     this.child = null;
+    this.finishConfig({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false };

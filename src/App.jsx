@@ -140,7 +140,6 @@ function AppContent() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const [pendingVoiceEvent, setPendingVoiceEvent] = useState(null);
   const lastBoardConnected = useRef(null);
   const runtimeRef = useRef(null);
   const { event, state, patch } = useAppStore();
@@ -161,25 +160,18 @@ function AppContent() {
     voiceAdapters.desktop.setTriggerConfig({ boardF22: state.settings.boardF22Enabled, rightAlt: state.settings.rightAltEnabled }).catch(() => {});
   }, [state.settings.boardF22Enabled, state.settings.rightAltEnabled]);
   useEffect(() => voiceAdapters.desktop.onVoiceToggle((detail) => {
-    window.location.hash = "/voice";
-    setCurrent("voice");
     const source = detail.source || "global-shortcut";
-    setPendingVoiceEvent(createDeviceEvent("voice-toggle", source, { phase: detail.phase || null, shortcut: detail.shortcut || "" }, { at: detail.at }));
+    deviceEventBus.publish(createDeviceEvent("voice-toggle", source, { phase: detail.phase || null, shortcut: detail.shortcut || "" }, { at: detail.at }));
   }), []);
   useEffect(() => voiceAdapters.desktop.onVoiceCancel((detail) => {
     deviceEventBus.publish(createDeviceEvent("voice-cancel", detail.source || "keyboard", {}, { at: detail.at }));
   }), []);
-  useEffect(() => {
-    if (current !== "voice" || !pendingVoiceEvent) return undefined;
-    const timer = window.setTimeout(() => {
-      deviceEventBus.publish(pendingVoiceEvent);
-      setPendingVoiceEvent(null);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [current, pendingVoiceEvent]);
   useEffect(() => voiceAdapters.desktop.onKeyDiagnostic((detail) => {
     const source = detail.source || "desktop-input";
     deviceEventBus.publish(createDeviceEvent("key-diagnostic", source, { key: detail.key || "", action: detail.action || "", sequence: Number(detail.sequence) || null }, { at: detail.time || detail.at }));
+  }), []);
+  useEffect(() => voiceAdapters.desktop.onHostActionResult((result) => {
+    setToast(result?.ok ? `已打开 ${result.label || "应用"}` : `打开应用失败：${result?.reason || "未找到映射"}`);
   }), []);
   useEffect(() => {
     const updateBridge = (inputBridge) => {
@@ -220,7 +212,10 @@ function AppContent() {
       {mobileOpen && <button className="mobile-scrim" aria-label="关闭菜单" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">
         <AppHeader current={current} setMobileOpen={setMobileOpen} />
-        <div className="app-content"><CurrentPage navigate={navigate} notify={setToast} /></div>
+        <div className="app-content">
+          <div className={current === "voice" ? "" : "voice-workflow-host--hidden"}><VoicePage navigate={navigate} notify={setToast} /></div>
+          {current !== "voice" && <CurrentPage navigate={navigate} notify={setToast} />}
+        </div>
       </main>
       {toast && <div className="toast"><CircleCheck size={18} />{toast}</div>}
       <div className="demo-watermark"><Sparkles size={14} />{state.runtime?.inputBridge?.boardConnected ? "EasyInput 真机桥已连接" : "软件核心已就绪 · 等待板子"}</div>
