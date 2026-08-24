@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T02 EasyInput input foundation implementation
+
+- 做了什么：在分支 `codex/easyinput-input-foundation` 的 `firmware/easyinput-controller/` 建立 ESP-IDF 5.5.5 / ESP32-S3 工程骨架；实现八个独立低有效按键、20 ms 防抖、多键事件、编码器 Gray-code 四相 detent/非法跳变丢弃/按压防抖，以及平台无关的 8 字节 Boot Keyboard HID 内部表示。
+- 为什么：完成 T02 的无硬件可审计代码包，为有硬件电脑独立重跑和审查提供最小输入基础；本轮没有打开配置、音频、BLE/Wi-Fi、NVS、分区、DeskMate Link 或其他功能包。
+- 产出：`firmware/easyinput-controller/CMakeLists.txt`、`sdkconfig.defaults`、`main/idf_component.yml`、`components/input_core/`、`main/main.cpp`、`host_test/`、`.gitignore`、`docs/provenance.md` 和更新后的模块 `README.md`。
+- GPIO 合同：S1～S8 为 `2,47,38,41,1,6,7,48`；编码器 A/B/按压为 `17/16/18`；USB D-/D+ 仅记录 `19/20`；GPIO0、GPIO8 未使用。未配置 GPIO19/20 外设驱动，未初始化共享音频/LED 电源域。
+- 来源：全部代码为按 T02 合同的独立重实现；逐文件来源、参考固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、许可证和采用方式见 `firmware/easyinput-controller/docs/provenance.md`。外部参考目录未修改、未复制、未使用其 build 产物。
+- 验证：已执行 `cmake -S host_test -B host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build host_test/build --config Debug`、`ctest --test-dir host_test/build -C Debug --output-on-failure`，但本机均因命令不存在而未运行；`idf.py --version` 同样不可用，故本轮不能声明 `TEST_CONFIRMED` 或 `BUILD_CONFIRMED`。无设备访问、无端口扫描、无烧录/读取/monitor。
+- 状态：代码待工具链可用环境重跑 host test 和精确 ESP-IDF 5.5.5 `idf.py build`；本记录不把未执行结果冒充通过。下一步由有硬件电脑安装/激活冻结工具链后独立审查、重跑并决定是否申请真机验收。
+
 ## 2026-08-24 · 双电脑开发起点已推进入仓前状态
 
 - 做了什么：审计并提交此前的桌面修复、三端资料和 V1 硬件基线，形成提交 `dbae59e`；随后建立 `firmware/easyinput-controller/`、`firmware/xiaozhi-yuntai/`、两个合同目录、模拟器目录、局部 AGENTS/CLAUDE 入口、外部恢复基线索引和第一张无硬件任务卡 T02。
