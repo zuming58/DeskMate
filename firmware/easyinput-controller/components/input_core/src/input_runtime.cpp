@@ -18,7 +18,13 @@ constexpr std::array<InputActionRouter::Chord, 8> kDefaultChords{{
 bool UsbLifecycleEventQueue::publish(UsbLifecycleEvent event) {
     const size_t head = head_.load(std::memory_order_relaxed);
     const size_t next = (head + 1u) % events_.size();
-    if (next == tail_.load(std::memory_order_acquire)) return false;
+    if (next == tail_.load(std::memory_order_acquire)) {
+        uint32_t current = drops_.load(std::memory_order_relaxed);
+        while (current != UINT32_MAX &&
+               !drops_.compare_exchange_weak(
+                   current, current + 1, std::memory_order_relaxed)) {}
+        return false;
+    }
     events_[head] = event;
     head_.store(next, std::memory_order_release);
     return true;
@@ -36,6 +42,47 @@ size_t UsbLifecycleEventQueue::queued() const {
     const size_t head = head_.load(std::memory_order_acquire);
     const size_t tail = tail_.load(std::memory_order_acquire);
     return (head + events_.size() - tail) % events_.size();
+}
+
+uint32_t UsbLifecycleEventQueue::take_drops() {
+    return drops_.exchange(0, std::memory_order_acq_rel);
+}
+
+void UsbLifecycleEventQueue::discard_pending() {
+    tail_.store(head_.load(std::memory_order_acquire), std::memory_order_release);
+}
+
+uint32_t UsbCallbackLifecycleState::next_epoch() {
+    uint32_t current = epoch_.load(std::memory_order_acquire);
+    while (current != UINT32_MAX &&
+           !epoch_.compare_exchange_weak(
+               current, current + 1, std::memory_order_acq_rel)) {}
+    return current == UINT32_MAX ? UINT32_MAX : current + 1;
+}
+
+UsbLifecycleEvent UsbCallbackLifecycleState::on_mount() {
+    const bool duplicate = mounted_.exchange(true, std::memory_order_acq_rel);
+    const uint32_t epoch = duplicate
+        ? epoch_.load(std::memory_order_acquire)
+        : next_epoch();
+    return {UsbLifecycleEventKind::Mount, epoch};
+}
+
+UsbLifecycleEvent UsbCallbackLifecycleState::on_unmount() {
+    mounted_.store(false, std::memory_order_release);
+    return current_event(UsbLifecycleEventKind::Unmount);
+}
+
+UsbLifecycleEvent UsbCallbackLifecycleState::current_event(
+    UsbLifecycleEventKind kind) const {
+    return {kind, epoch_.load(std::memory_order_acquire)};
+}
+
+UsbCallbackSnapshot UsbCallbackLifecycleState::snapshot() const {
+    return {
+        mounted_.load(std::memory_order_acquire),
+        epoch_.load(std::memory_order_acquire),
+    };
 }
 
 KeyboardSnapshot InputActionRouter::compose() const {
@@ -110,9 +157,15 @@ void UsbInputRuntime::clear_queue() { queue_head_ = 0; queue_size_ = 0; }
 bool UsbInputRuntime::any_held() const { return std::any_of(physically_held_.begin(), physically_held_.end(), [](bool v) { return v; }); }
 
 void UsbInputRuntime::on_mount() {
+    uint32_t next = diagnostics_.usb_mount_epoch;
+    if (next != UINT32_MAX) ++next;
+    if (next == 0) next = 1;
+    on_mount(next);
+}
+
+void UsbInputRuntime::on_mount(uint32_t epoch) {
     mounted_ = true;
-    if (diagnostics_.usb_mount_epoch != UINT32_MAX) ++diagnostics_.usb_mount_epoch;
-    if (diagnostics_.usb_mount_epoch == 0) diagnostics_.usb_mount_epoch = 1;
+    diagnostics_.usb_mount_epoch = epoch == 0 ? 1 : epoch;
     clear_queue();
     if (any_held()) suppress_until_all_released_ = true;
 }
@@ -203,6 +256,16 @@ void UsbInputRuntime::on_input(const InputEvent& event) {
 void UsbInputRuntime::on_raw_edge_drops(uint32_t count) { saturating_add(diagnostics_.raw_edge_drops, count); }
 void UsbInputRuntime::on_encoder_resync() { saturating_add(diagnostics_.encoder_resyncs, 1); }
 void UsbInputRuntime::on_input_event_drops(uint32_t count) { saturating_add(diagnostics_.input_event_drops, count); }
+void UsbInputRuntime::on_usb_lifecycle_drops(uint32_t count) { saturating_add(diagnostics_.usb_lifecycle_drops, count); }
+void UsbInputRuntime::reconcile_usb_lifecycle(UsbCallbackSnapshot callback) {
+    clear_queue();
+    router_.release_all();
+    mounted_ = callback.mounted;
+    if (callback.epoch != 0) diagnostics_.usb_mount_epoch = callback.epoch;
+    // A lost lifecycle event makes the prior key state untrustworthy. Swallow
+    // input until all observed keys are released before accepting a new press.
+    suppress_until_all_released_ = true;
+}
 void UsbInputRuntime::recover_after_input_drop(uint8_t active_key_mask) {
     for (size_t index = 0; index < physically_held_.size(); ++index) {
         physically_held_[index] = (active_key_mask & (1u << index)) != 0;
@@ -226,6 +289,62 @@ void UsbInputRuntime::complete_report() {
 bool UsbInputRuntime::reject_vendor_feature(uint8_t report_id, const uint8_t* data, size_t length) const {
     (void)report_id; (void)data; (void)length;
     return false;
+}
+
+UsbLifecycleProcessResult process_usb_lifecycle_events(
+    UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
+    bool& report_in_flight, uint32_t& report_epoch,
+    UsbCallbackSnapshot callback) {
+    UsbLifecycleProcessResult result{};
+    result.dropped_events = events.take_drops();
+    if (result.dropped_events != 0) {
+        events.discard_pending();
+        report_in_flight = false;
+        runtime.on_usb_lifecycle_drops(result.dropped_events);
+        runtime.reconcile_usb_lifecycle(callback);
+        return result;
+    }
+
+    UsbLifecycleEvent event{};
+    while (events.consume(event)) {
+        switch (event.kind) {
+            case UsbLifecycleEventKind::Mount:
+                if (!runtime.mounted() ||
+                    event.epoch != runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_mount(event.epoch);
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Unmount:
+                if (runtime.mounted() &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_unmount();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Resume:
+                if (runtime.mounted() &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_resume();
+                }
+                break;
+            case UsbLifecycleEventKind::TransferComplete:
+                if (report_in_flight && event.epoch == report_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.complete_report();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::TransferFailed:
+                if (report_in_flight && event.epoch == report_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_transfer_failed();
+                    report_in_flight = false;
+                }
+                break;
+        }
+    }
+    return result;
 }
 
 const uint8_t kHidReportDescriptor[] = {

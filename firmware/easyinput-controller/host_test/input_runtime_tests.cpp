@@ -64,44 +64,6 @@ void drain_input_events(InputCore& input, UsbInputRuntime& runtime) {
     while (input.pop_event(event)) runtime.on_input(event);
 }
 
-void apply_lifecycle_events(UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
-                            bool& report_in_flight, uint32_t& report_epoch) {
-    UsbLifecycleEvent event{};
-    while (events.consume(event)) {
-        switch (event.kind) {
-            case UsbLifecycleEventKind::Mount:
-                if (!runtime.mounted()) {
-                    runtime.on_mount();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::Unmount:
-                if (runtime.mounted()) {
-                    runtime.on_unmount();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::Resume:
-                if (runtime.mounted()) runtime.on_resume();
-                break;
-            case UsbLifecycleEventKind::TransferComplete:
-                if (report_in_flight && event.epoch == report_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
-                    runtime.complete_report();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::TransferFailed:
-                if (report_in_flight && event.epoch == report_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
-                    runtime.on_transfer_failed();
-                    report_in_flight = false;
-                }
-                break;
-        }
-    }
-}
-
 void add_encoder_detent(InputCore& input, uint32_t& now) {
     for (const uint8_t phase : std::array<uint8_t, 4>{1, 3, 2, 0}) {
         input.scan_encoder_phase(phase, now++);
@@ -195,7 +157,7 @@ void ordered_lifetime_events_and_stale_completion() {
 
     CHECK(events.publish({UsbLifecycleEventKind::Mount, 1}));
     CHECK(events.publish({UsbLifecycleEventKind::Unmount, 1}));
-    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {false, 1});
     CHECK(!runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 1);
     CHECK(runtime.queued_reports() == 0);
@@ -204,7 +166,7 @@ void ordered_lifetime_events_and_stale_completion() {
     CHECK(events.publish({UsbLifecycleEventKind::Mount, 2}));
     CHECK(events.publish({UsbLifecycleEventKind::TransferComplete, 1}));
     CHECK(events.publish({UsbLifecycleEventKind::TransferFailed, 1}));
-    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {true, 2});
     CHECK(runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 2);
     CHECK(runtime.queued_reports() == 0);
@@ -217,7 +179,7 @@ void ordered_lifetime_events_and_stale_completion() {
     CHECK(events.publish({UsbLifecycleEventKind::Mount, 3}));
     CHECK(events.publish({UsbLifecycleEventKind::TransferComplete, 2}));
     CHECK(events.publish({UsbLifecycleEventKind::TransferFailed, 2}));
-    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {true, 3});
     CHECK(runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 3);
     CHECK(runtime.queued_reports() == 0);
@@ -228,6 +190,53 @@ void ordered_lifetime_events_and_stale_completion() {
     runtime.on_input(key(0, false));
     runtime.on_input(key(1, true));
     CHECK(runtime.queued_reports() == 1);
+}
+
+void lifecycle_duplicate_mount_and_overflow_recovery() {
+    UsbLifecycleEventQueue events;
+    UsbCallbackLifecycleState callback;
+    UsbInputRuntime runtime;
+    bool report_in_flight = false;
+    uint32_t report_epoch = 0;
+
+    const auto mount = callback.on_mount();
+    const auto duplicate_mount = callback.on_mount();
+    CHECK(mount.epoch == 1);
+    CHECK(duplicate_mount.epoch == mount.epoch);
+    CHECK(callback.snapshot().mounted);
+    CHECK(events.publish(mount));
+    CHECK(events.publish(duplicate_mount));
+    process_usb_lifecycle_events(
+        events, runtime, report_in_flight, report_epoch, callback.snapshot());
+    CHECK(runtime.mounted());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+
+    runtime.on_input(key(0, true));
+    CHECK(runtime.queued_reports() == 1);
+    report_in_flight = true;
+    report_epoch = 1;
+    CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferComplete)));
+    process_usb_lifecycle_events(
+        events, runtime, report_in_flight, report_epoch, callback.snapshot());
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 0);
+
+    for (size_t index = 0; index < kUsbLifecycleQueueCapacity; ++index) {
+        CHECK(events.publish({UsbLifecycleEventKind::Resume, 1}));
+    }
+    CHECK(events.queued() == kUsbLifecycleQueueCapacity);
+    const auto unmount = callback.on_unmount();
+    CHECK(!callback.snapshot().mounted);
+    CHECK(!events.publish(unmount));
+    const auto recovered = process_usb_lifecycle_events(
+        events, runtime, report_in_flight, report_epoch, callback.snapshot());
+    CHECK(recovered.dropped_events == 1);
+    CHECK(!runtime.mounted());
+    CHECK(runtime.queued_reports() == 0);
+    CHECK(runtime.diagnostics().usb_lifecycle_drops == 1);
+
+    const auto remount = callback.on_mount();
+    CHECK(remount.epoch == 2);
 }
 
 void queue_failure_release_and_wheel_boundaries() {
@@ -429,7 +438,7 @@ void diagnostics_are_saturating_and_redacted() {
     CHECK(snapshot.raw_edge_drops == UINT32_MAX);
     CHECK(snapshot.input_event_drops == 7);
     CHECK(snapshot.encoder_resyncs == 1);
-    CHECK(sizeof(RuntimeDiagnosticsSnapshot) == 5 * sizeof(uint32_t));
+    CHECK(sizeof(RuntimeDiagnosticsSnapshot) == 6 * sizeof(uint32_t));
 }
 
 void input_drop_recovery_waits_for_release() {
@@ -519,6 +528,7 @@ int main() {
     encoder_axis_vectors();
     lifetime_and_disconnect_safety();
     ordered_lifetime_events_and_stale_completion();
+    lifecycle_duplicate_mount_and_overflow_recovery();
     queue_failure_release_and_wheel_boundaries();
     wheel_coalescing_boundaries_and_no_replay();
     descriptor_and_vendor_fail_closed();

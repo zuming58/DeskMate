@@ -46,11 +46,15 @@ public:
     bool publish(UsbLifecycleEvent event);
     bool consume(UsbLifecycleEvent& event);
     size_t queued() const;
+    uint32_t take_drops();
+    void discard_pending();
 
 private:
-    std::array<UsbLifecycleEvent, kUsbLifecycleQueueCapacity> events_{};
+    // One slot distinguishes full from empty, so storage is capacity + 1.
+    std::array<UsbLifecycleEvent, kUsbLifecycleQueueCapacity + 1> events_{};
     std::atomic<size_t> head_{0};
     std::atomic<size_t> tail_{0};
+    std::atomic<uint32_t> drops_{0};
 };
 
 enum class InputSourceId : uint8_t { S1, S2, S3, S4, S5, S6, S7, S8, EncoderPress, Count };
@@ -70,6 +74,29 @@ struct RuntimeDiagnosticsSnapshot {
     uint32_t hid_report_drops{0};
     uint32_t encoder_resyncs{0};
     uint32_t usb_mount_epoch{0};
+    uint32_t usb_lifecycle_drops{0};
+};
+
+struct UsbCallbackSnapshot {
+    bool mounted{false};
+    uint32_t epoch{0};
+};
+
+class UsbCallbackLifecycleState {
+public:
+    UsbLifecycleEvent on_mount();
+    UsbLifecycleEvent on_unmount();
+    UsbLifecycleEvent current_event(UsbLifecycleEventKind kind) const;
+    UsbCallbackSnapshot snapshot() const;
+
+private:
+    std::atomic<uint32_t> epoch_{0};
+    std::atomic<bool> mounted_{false};
+    uint32_t next_epoch();
+};
+
+struct UsbLifecycleProcessResult {
+    uint32_t dropped_events{0};
 };
 
 struct RoutedAction {
@@ -107,12 +134,15 @@ struct QueuedHidReport {
 class UsbInputRuntime {
 public:
     void on_mount();
+    void on_mount(uint32_t epoch);
     void on_unmount();
     void on_resume();
     void on_input(const InputEvent& event);
     void on_raw_edge_drops(uint32_t count);
     void on_encoder_resync();
     void on_input_event_drops(uint32_t count);
+    void on_usb_lifecycle_drops(uint32_t count);
+    void reconcile_usb_lifecycle(UsbCallbackSnapshot callback);
     void recover_after_input_drop(uint8_t active_key_mask);
     void on_transfer_failed();
     bool front_report(QueuedHidReport& report) const;
@@ -139,6 +169,11 @@ private:
     bool any_held() const;
     void recover_release();
 };
+
+UsbLifecycleProcessResult process_usb_lifecycle_events(
+    UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
+    bool& report_in_flight, uint32_t& report_epoch,
+    UsbCallbackSnapshot callback);
 
 extern const uint8_t kHidReportDescriptor[];
 extern const size_t kHidReportDescriptorSize;

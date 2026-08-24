@@ -55,7 +55,7 @@ int main() {
     CHECK(contains(main_source, "kRawEdgeQueueCapacity"));
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));
     CHECK(contains(main_source, "UsbLifecycleEventQueue lifecycle_events"));
-    CHECK(contains(main_source, "lifecycle_events.consume(event)"));
+    CHECK(contains(main_source, "process_usb_lifecycle_events"));
     CHECK(contains(main_source, "lifecycle_events.publish"));
     CHECK(!contains(main_source, "mount_pending"));
     CHECK(!contains(main_source, "unmount_pending"));
@@ -67,7 +67,7 @@ int main() {
     CHECK(contains(main_source, "} else {\n            InputEvent event{};"));
     CHECK(contains(main_source, "tud_mount_cb"));
     CHECK(contains(main_source, "tud_umount_cb"));
-    CHECK(!contains(main_source, "ESP_LOG"));
+    CHECK(contains(main_source, "ESP_LOGW(kLogTag, \"USB lifecycle queue recovered"));
     CHECK(!contains(main_source, "GPIO_NUM_0"));
     CHECK(!contains(main_source, "GPIO_NUM_8"));
     CHECK(!contains(main_source, "GPIO_NUM_12"));

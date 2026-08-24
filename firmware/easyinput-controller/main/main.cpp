@@ -5,6 +5,7 @@
 #include "class/hid/hid_device.h"
 #include "driver/gpio.h"
 #include "esp_err.h"
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -30,8 +31,9 @@ QueueHandle_t raw_edge_queue = nullptr;
 TaskHandle_t owner_task = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
 UsbLifecycleEventQueue lifecycle_events;
-std::atomic<uint32_t> callback_epoch{0};
+UsbCallbackLifecycleState callback_lifecycle;
 UsbInputRuntime runtime;
+constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
     if (owner_task != nullptr) {
@@ -65,41 +67,8 @@ uint8_t read_encoder_phase() {
         gpio_get_level(static_cast<gpio_num_t>(kEncoderBGpio)));
 }
 
-void publish_callback_work(bool& report_in_flight, uint32_t& report_in_flight_epoch) {
-    UsbLifecycleEvent event{};
-    while (lifecycle_events.consume(event)) {
-        switch (event.kind) {
-            case UsbLifecycleEventKind::Mount:
-                if (!runtime.mounted()) {
-                    runtime.on_mount();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::Unmount:
-                if (runtime.mounted()) {
-                    runtime.on_unmount();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::Resume:
-                if (runtime.mounted()) runtime.on_resume();
-                break;
-            case UsbLifecycleEventKind::TransferComplete:
-                if (report_in_flight && event.epoch == report_in_flight_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
-                    runtime.complete_report();
-                    report_in_flight = false;
-                }
-                break;
-            case UsbLifecycleEventKind::TransferFailed:
-                if (report_in_flight && event.epoch == report_in_flight_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
-                    runtime.on_transfer_failed();
-                    report_in_flight = false;
-                }
-                break;
-        }
-    }
+UsbCallbackSnapshot callback_snapshot() {
+    return callback_lifecycle.snapshot();
 }
 
 void input_owner_task(void*) {
@@ -107,7 +76,13 @@ void input_owner_task(void*) {
     bool report_in_flight = false;
     uint32_t report_in_flight_epoch = 0;
     for (;;) {
-        publish_callback_work(report_in_flight, report_in_flight_epoch);
+        const auto lifecycle = process_usb_lifecycle_events(
+            lifecycle_events, runtime, report_in_flight,
+            report_in_flight_epoch, callback_snapshot());
+        if (lifecycle.dropped_events != 0) {
+            ESP_LOGW(kLogTag, "USB lifecycle queue recovered after %lu dropped events",
+                     static_cast<unsigned long>(lifecycle.dropped_events));
+        }
 
         const uint32_t now_ms = monotonic_milliseconds(
             static_cast<uint64_t>(esp_timer_get_time()));
@@ -163,8 +138,7 @@ void notify_owner_from_callback() {
 }
 
 void publish_lifecycle_event(UsbLifecycleEventKind kind) {
-    const uint32_t epoch = callback_epoch.load(std::memory_order_acquire);
-    lifecycle_events.publish({kind, epoch});
+    lifecycle_events.publish(callback_lifecycle.current_event(kind));
     notify_owner_from_callback();
 }
 }  // namespace
@@ -218,12 +192,12 @@ extern "C" void app_main(void) {
 }
 
 extern "C" void tud_mount_cb(void) {
-    const uint32_t epoch = callback_epoch.fetch_add(1, std::memory_order_acq_rel) + 1;
-    lifecycle_events.publish({UsbLifecycleEventKind::Mount, epoch});
+    lifecycle_events.publish(callback_lifecycle.on_mount());
     notify_owner_from_callback();
 }
 extern "C" void tud_umount_cb(void) {
-    publish_lifecycle_event(UsbLifecycleEventKind::Unmount);
+    lifecycle_events.publish(callback_lifecycle.on_unmount());
+    notify_owner_from_callback();
 }
 extern "C" void tud_resume_cb(void) {
     publish_lifecycle_event(UsbLifecycleEventKind::Resume);

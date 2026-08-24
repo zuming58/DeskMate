@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 third audit locally fixed and ready for main merge
+
+- 做了什么：在 `codex/easyinput-usb-input-runtime@dbf621fc2ba3dcaf64ab2794708186f5ad8150a0` 上完成第三轮本机独立审计；确认完整 USB 描述符黄金向量已补齐，并直接修复两项边界清楚的生命周期缺陷，没有再次退回另一台电脑。
+- 为什么：重复 `tud_mount_cb` 原先会单独推进 callback epoch、却不会推进 runtime epoch，导致后续完成回调永远不匹配；声明容量 16 的环形队列实际只能容纳 15 条，且回调忽略发布失败，会静默丢失 mount/unmount/transfer 生命周期事实。
+- 怎么理解：callback 生命周期状态现在是 Host 可测的单一实现；重复 mount 保持同一 epoch，真实 remount 才推进。队列提供完整 16 个可用槽，第 17 条会饱和计数；owner 检测溢出后丢弃不可信序列、清除在途报告并按 callback 挂载快照安全恢复，同时等待实体键释放，避免粘键或重放。
+- 产出路径：`firmware/easyinput-controller/components/input_core/include/input_runtime.h`、`components/input_core/src/input_runtime.cpp`、`main/main.cpp`、两个 Host 测试文件、模块 README/AGENTS/CLAUDE、`docs/provenance/t03-easyinput-usb-input-runtime.md` 与本任务状态。
+- 验证：CMake 3.30.2 / MSVC Host CTest 3/3 通过；ESP-IDF v5.5.5、target `esp32s3`、Minimal build ON 构建通过，应用镜像 `0x36610`，最小 app 分区余量 `0xc99f0`（79%）；板级扫描 1 PASS / 1 WARN / 0 FAIL，WARN 仅因扫描器不识别 C++ `constexpr`，人工复核 S1～S8=`2,47,38,41,1,6,7,48`、编码器=`17/16/18`、USB=`19/20` 与合同一致；`git diff --check`、范围、ASCII 路径、来源、密钥、规则一致和构建产物检查通过。
+- 问题解决与下一步：本轮达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，未连接/识别设备、未扫描端口、未读取 Flash、未执行 flash/erase/monitor/HIL。提交并推送本地修复后合并 main；随后准备原 Maker 固件可恢复证据与首次烧录授权卡，取得用户明确授权后才开始 T03 真机验收，不启动 T04。
+
 ## 2026-08-24 · T03 second-audit rework ready for third audit
 
 - 状态与范围：继续 `codex/easyinput-usb-input-runtime`，基于 `24bf3e776c34290c85fc68916513971be970894e` 仅修复第二轮审计两项；未合并 main，未开始 T04，未修改 Windows、小智、DeskMate Link、冻结合同或外部参考目录。任务状态为 `REWORK_COMPLETE_PENDING_THIRD_AUDIT`。

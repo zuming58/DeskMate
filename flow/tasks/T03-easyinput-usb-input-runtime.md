@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`REWORK_COMPLETE_PENDING_THIRD_AUDIT`。前两轮审计问题已返工，Host 测试和无硬件构建已重新通过；等待本机第三轮独立审计，不代表代码审计或真机通过。
+- 状态：`READY_FOR_MAIN_MERGE_PENDING_HIL_AUTHORIZATION`。第三轮本机独立审计已完成，并直接修复重复 mount epoch、生命周期队列真实容量与溢出恢复；达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，尚未烧录或真机验收。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`
