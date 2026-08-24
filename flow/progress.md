@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T02 audit rework confirmed
+
+- 状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED`。候选提交 `315e7e2` 的审计问题已在原分支修复；证据仅限无硬件测试与构建，等待另一台电脑再次独立复审。
+- 修复：`main` 精确依赖 `esp_driver_gpio`/`esp_timer` 并启用 IDF `MINIMAL_BUILD`；GPIO 配置错误 fail fast；采样改用 `esp_timer_get_time()` 单调毫秒与 `vTaskDelay(1)`。HID 改为平台无关的 held-key 状态，支持 modifiers、最多六 usage、并发/幂等/单键释放/全释放与 fail-closed 溢出。
+- 测试：使用 CMake/CTest 3.30.2、MSVC 19.44 运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`，2/2 通过；测试失败通过 stderr 与非零退出报告，不使用会弹窗的原始 `assert`。
+- 构建：EIM 已有环境真实报告 `ESP-IDF v5.5.5`；运行 `idf.py -C firmware/easyinput-controller build` 成功，target `esp32s3`，日志为 `Minimal build - ON`，镜像 `0x28d30` 字节，1 MiB app 分区余量 84%。生成的 `dependencies.lock` 固定 IDF 5.5.5/esp32s3；build、sdkconfig、bin、elf、map 未提交。
+- 静态检查：板级只读扫描 PASS，S1～S8=`2,47,38,41,1,6,7,48`、编码器=`17/16/18`、USB 声明=`19/20`；GPIO0/GPIO8 未使用，USB 运行时未配置。`git diff --check`、密钥、范围、ASCII 路径与构建产物检查通过；`AGENTS.md`/`CLAUDE.md` 逐字一致；来源记录移至 `docs/provenance/t02-easyinput-input-foundation.md`。
+- 安全：未连接、识别或读取设备，未扫描端口，未执行 flash、erase、monitor；两个外部参考目录未修改或复制。下一步只由另一台电脑复审本分支；复审通过后仍须单独建立恢复、烧录与 HIL 授权任务。
+
 ## 2026-08-24 · T02 EasyInput input foundation implementation
 
 - 做了什么：在分支 `codex/easyinput-input-foundation` 的 `firmware/easyinput-controller/` 建立 ESP-IDF 5.5.5 / ESP32-S3 工程骨架；实现八个独立低有效按键、20 ms 防抖、多键事件、编码器 Gray-code 四相 detent/非法跳变丢弃/按压防抖，以及平台无关的 8 字节 Boot Keyboard HID 内部表示。

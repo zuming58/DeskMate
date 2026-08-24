@@ -1,6 +1,6 @@
 # T02 · EasyInput input foundation
 
-- 状态：待实现（无硬件电脑）。
+- 状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED`。候选提交 `315e7e2` 的审计问题已在同一分支返工，2 项 host test 与精确 ESP-IDF v5.5.5 最小构建通过；等待另一台电脑复审，不代表可烧录或真机通过。
 - 背景：DeskMate 已冻结 V1 硬件职责，但正式 EasyInput 固件目录目前只有骨架。需要先建立一包可独立测试、可构建、可审计的输入基础，再申请任何真机操作。
 - 目标：在 `firmware/easyinput-controller/` 建立 ESP-IDF 5.5.5 / ESP32-S3 构建骨架，实现八键、旋钮和 USB HID 的纯逻辑与 host test；完成后停下，交给有硬件电脑审计。
 

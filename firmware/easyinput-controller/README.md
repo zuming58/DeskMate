@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`T02_IMPLEMENTED`。本包提供 ESP-IDF 5.5.5 / ESP32-S3 骨架、平台无关输入核心和 host test；无硬件电脑未执行真机操作。
+当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED`。审计返工后的 2 项 host test 与精确 ESP-IDF v5.5.5 最小构建已通过；仍未连接或访问硬件，不代表可烧录或真机通过。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。第一包完成并经有硬件电脑审计前，不进入配置、音频、DeskMate Link 或真机阶段。
 
@@ -20,16 +20,15 @@
 Host test (no device required):
 
 ```powershell
-cmake -S host_test -B host_test/build -DCMAKE_BUILD_TYPE=Debug
-cmake --build host_test/build --config Debug
-ctest --test-dir host_test/build -C Debug --output-on-failure
+cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug
+cmake --build firmware/easyinput-controller/host_test/build --config Debug
+ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure
 ```
 
 Firmware build (ESP-IDF 5.5.5, ESP32-S3; no `flash` or `monitor`):
 
 ```powershell
-idf.py set-target esp32s3
-idf.py build
+idf.py -C firmware/easyinput-controller build
 ```
 
-Evidence is limited to `TEST_CONFIRMED` and `BUILD_CONFIRMED`; hardware audit is pending.
+Evidence is limited to `TEST_CONFIRMED` and `BUILD_CONFIRMED`; independent code review and any later hardware authorization remain pending.

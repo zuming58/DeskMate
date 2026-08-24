@@ -7,6 +7,10 @@ namespace deskmate::easyinput {
 
 inline constexpr uint32_t kDebounceMs = 20;
 
+constexpr uint32_t monotonic_milliseconds(uint64_t microseconds) {
+    return static_cast<uint32_t>(microseconds / 1000u);
+}
+
 enum class InputEventType : uint8_t {
     KeyPressed,
     KeyReleased,
