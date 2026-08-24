@@ -64,6 +64,44 @@ void drain_input_events(InputCore& input, UsbInputRuntime& runtime) {
     while (input.pop_event(event)) runtime.on_input(event);
 }
 
+void apply_lifecycle_events(UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
+                            bool& report_in_flight, uint32_t& report_epoch) {
+    UsbLifecycleEvent event{};
+    while (events.consume(event)) {
+        switch (event.kind) {
+            case UsbLifecycleEventKind::Mount:
+                if (!runtime.mounted()) {
+                    runtime.on_mount();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Unmount:
+                if (runtime.mounted()) {
+                    runtime.on_unmount();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Resume:
+                if (runtime.mounted()) runtime.on_resume();
+                break;
+            case UsbLifecycleEventKind::TransferComplete:
+                if (report_in_flight && event.epoch == report_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.complete_report();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::TransferFailed:
+                if (report_in_flight && event.epoch == report_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_transfer_failed();
+                    report_in_flight = false;
+                }
+                break;
+        }
+    }
+}
+
 void add_encoder_detent(InputCore& input, uint32_t& now) {
     for (const uint8_t phase : std::array<uint8_t, 4>{1, 3, 2, 0}) {
         input.scan_encoder_phase(phase, now++);
@@ -146,6 +184,49 @@ void lifetime_and_disconnect_safety() {
     CHECK(runtime.queued_reports() == 0);
     runtime.on_input(key(0, false));
     runtime.on_input(key(0, true));
+    CHECK(runtime.queued_reports() == 1);
+}
+
+void ordered_lifetime_events_and_stale_completion() {
+    UsbLifecycleEventQueue events;
+    UsbInputRuntime runtime;
+    bool report_in_flight = false;
+    uint32_t report_epoch = 0;
+
+    CHECK(events.publish({UsbLifecycleEventKind::Mount, 1}));
+    CHECK(events.publish({UsbLifecycleEventKind::Unmount, 1}));
+    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    CHECK(!runtime.mounted());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(runtime.queued_reports() == 0);
+
+    CHECK(events.publish({UsbLifecycleEventKind::Mount, 2}));
+    CHECK(events.publish({UsbLifecycleEventKind::Mount, 2}));
+    CHECK(events.publish({UsbLifecycleEventKind::TransferComplete, 1}));
+    CHECK(events.publish({UsbLifecycleEventKind::TransferFailed, 1}));
+    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    CHECK(runtime.mounted());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 2);
+    CHECK(runtime.queued_reports() == 0);
+
+    runtime.on_input(key(0, true));
+    CHECK(runtime.queued_reports() == 1);
+    report_in_flight = true;
+    report_epoch = runtime.diagnostics().usb_mount_epoch;
+    CHECK(events.publish({UsbLifecycleEventKind::Unmount, 2}));
+    CHECK(events.publish({UsbLifecycleEventKind::Mount, 3}));
+    CHECK(events.publish({UsbLifecycleEventKind::TransferComplete, 2}));
+    CHECK(events.publish({UsbLifecycleEventKind::TransferFailed, 2}));
+    apply_lifecycle_events(events, runtime, report_in_flight, report_epoch);
+    CHECK(runtime.mounted());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 3);
+    CHECK(runtime.queued_reports() == 0);
+    CHECK(!report_in_flight);
+
+    runtime.on_input(key(0, true));
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_input(key(0, false));
+    runtime.on_input(key(1, true));
     CHECK(runtime.queued_reports() == 1);
 }
 
@@ -243,19 +324,46 @@ void descriptor_and_vendor_fail_closed() {
     CHECK(kUsbDeviceDescriptor[14] == 1);
     CHECK(kUsbDeviceDescriptor[15] == 2);
     CHECK(kUsbDeviceDescriptor[16] == 0);
-    CHECK(kUsbConfigurationDescriptor.size() == kUsbConfigurationDescriptorLength);
-    CHECK(kUsbConfigurationDescriptor[0] == 9);
-    CHECK(kUsbConfigurationDescriptor[1] == 0x02);
-    CHECK(kUsbConfigurationDescriptor[2] == kUsbConfigurationDescriptorLength);
-    CHECK(kUsbConfigurationDescriptor[3] == 0);
-    CHECK(kUsbConfigurationDescriptor[17] == kUsbInterfaceStringIndex);
-    CHECK(kUsbInterfaceStringIndex == 0);
-    CHECK(kUsbStringDescriptors.size() == 3);
-    CHECK(kUsbStringDescriptors[0] == kUsbLanguageDescriptor);
-    CHECK(std::string(kUsbStringDescriptors[1]) == "DeskMate");
-    CHECK(std::string(kUsbStringDescriptors[2]) == "EasyInput AI");
-    CHECK(kUsbConfigurationDescriptor[25] == static_cast<uint8_t>(kHidReportDescriptorSize));
-    CHECK(kUsbConfigurationDescriptor[26] == static_cast<uint8_t>(kHidReportDescriptorSize >> 8));
+    const std::array<uint8_t, kUsbConfigurationDescriptorLength> expected_configuration{
+        9, 0x02, 34, 0, 1, 1, 0, 0xa0, 50,
+        9, 0x04, 0, 0, 1, 0x03, 0, 0, 0,
+        9, 0x21, 0x11, 0x01, 0, 1, 0x22,
+        0xea, 0x00,
+        7, 0x05, 0x81, 0x03, 64, 0, 10};
+    CHECK(kUsbConfigurationDescriptor == expected_configuration);
+    const std::array<uint8_t, 2> expected_language{0x09, 0x04};
+    CHECK(std::equal(expected_language.begin(), expected_language.end(),
+                     reinterpret_cast<const uint8_t*>(kUsbLanguageDescriptor)));
+    constexpr std::array<uint8_t, 8> expected_manufacturer{'D', 'e', 's', 'k', 'M', 'a', 't', 'e'};
+    constexpr std::array<uint8_t, 12> expected_product{'E', 'a', 's', 'y', 'I', 'n', 'p', 'u', 't', ' ', 'A', 'I'};
+    CHECK(std::equal(expected_manufacturer.begin(), expected_manufacturer.end(),
+                     reinterpret_cast<const uint8_t*>(kUsbStringDescriptors[1])));
+    CHECK(kUsbStringDescriptors[1][expected_manufacturer.size()] == '\0');
+    CHECK(std::equal(expected_product.begin(), expected_product.end(),
+                     reinterpret_cast<const uint8_t*>(kUsbStringDescriptors[2])));
+    CHECK(kUsbStringDescriptors[2][expected_product.size()] == '\0');
+
+    const std::vector<uint8_t> expected_report{
+        0x05,0x01,0x09,0x06,0xa1,0x01,0x85,0x01,
+        0x05,0x07,0x19,0xe0,0x29,0xe7,0x15,0x00,0x25,0x01,0x75,0x01,0x95,0x08,0x81,0x02,
+        0x05,0xff,0x09,0x03,0x15,0x00,0x25,0x01,0x95,0x01,0x75,0x08,0x81,0x02,
+        0x05,0x07,0x19,0x00,0x29,0x65,0x15,0x00,0x25,0x65,0x95,0x06,0x75,0x08,0x81,0x00,
+        0x05,0x08,0x19,0x01,0x29,0x05,0x95,0x05,0x75,0x01,0x91,0x02,0x95,0x01,0x75,0x03,0x91,0x03,0xc0,
+        0x05,0x01,0x09,0x02,0xa1,0x01,0x85,0x02,0x09,0x01,0xa1,0x00,
+        0x05,0x09,0x19,0x01,0x29,0x05,0x15,0x00,0x25,0x01,0x95,0x05,0x75,0x01,0x81,0x02,
+        0x95,0x01,0x75,0x03,0x81,0x01,0x05,0x01,0x09,0x30,0x09,0x31,0x09,0x38,
+        0x15,0x81,0x25,0x7f,0x75,0x08,0x95,0x03,0x81,0x06,
+        0x05,0x0c,0x0a,0x38,0x02,0x95,0x01,0x81,0x06,0xc0,0xc0,
+        0x06,0x00,0xff,0x09,0x02,0xa1,0x01,
+        0x85,0x10,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x02,0xb1,0x02,
+        0x85,0x11,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x02,0x81,0x02,
+        0x85,0x12,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x10,0x09,0x03,0xb1,0x02,
+        0x85,0x13,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x10,0x09,0x04,0xb1,0x02,
+        0x85,0x14,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x05,0xb1,0x02,
+        0x85,0x15,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x06,0x81,0x02,0xc0,
+    };
+    CHECK(expected_report.size() == kHidReportDescriptorSize);
+    CHECK(std::equal(expected_report.begin(), expected_report.end(), kHidReportDescriptor));
 
     const ParsedReportLengths reports = parse_report_descriptor();
     CHECK(reports.input_bits[0x01] == 8 * 8);
@@ -410,6 +518,7 @@ int main() {
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
     lifetime_and_disconnect_safety();
+    ordered_lifetime_events_and_stale_completion();
     queue_failure_release_and_wheel_boundaries();
     wheel_coalescing_boundaries_and_no_replay();
     descriptor_and_vendor_fail_closed();

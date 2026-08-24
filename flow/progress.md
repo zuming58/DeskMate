@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 second-audit rework ready for third audit
+
+- 状态与范围：继续 `codex/easyinput-usb-input-runtime`，基于 `24bf3e776c34290c85fc68916513971be970894e` 仅修复第二轮审计两项；未合并 main，未开始 T04，未修改 Windows、小智、DeskMate Link、冻结合同或外部参考目录。任务状态为 `REWORK_COMPLETE_PENDING_THIRD_AUDIT`。
+- 生命周期：移除 `mount_pending`/`unmount_pending` 等独立布尔标志，加入容量 16 的有序 `UsbLifecycleEventQueue`；TinyUSB callback 只按实际顺序发布 Mount/Unmount/Resume/TransferComplete/TransferFailed 和 epoch，owner 顺序消费。旧 lifetime complete/fail 按 epoch 忽略；重复 callback、mount→unmount、unmount→mount、最终 mounted/epoch/queue 与 held-key suppression 均有 Host 回归。
+- 描述符：Host 现在对生产使用的 device、configuration、language、manufacturer/product string 和 HID report descriptor 做完整逐字节黄金向量比较，同时保留 Report ID、Input/Output/Feature 方向与 bit/payload 长度语义解析；配置属性、endpoint、flags、usage、logical range 和报告顺序均锁定。
+- Host 验证：运行任务卡规定的 CMake configure/build 与 CTest 命令，`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过，新增生命周期顺序/旧 epoch 和完整 descriptor 向量回归。
+- 固件构建：新 PowerShell 激活 `C:\Espressif\tools\Microsoft.v5.5.5.PowerShell_profile.ps1`，`idf.py --version` 精确为 `ESP-IDF v5.5.5`；`idf.py -C firmware/easyinput-controller build` 成功，target `esp32s3`，应用镜像 `0x36320`（221984 字节），最小 app 分区余量 `0xc9ce0`（79%）。
+- 来源与安全：更新 `docs/provenance/t03-easyinput-usb-input-runtime.md`；全部为合同驱动独立重实现，Maker 固定参考仍为 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、PolyForm Noncommercial 1.0.0，未复制源码或 build 产物。未连接/识别设备，未扫描端口，未读取 Flash，未执行 flash、erase、monitor 或 HIL；只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
+
 ## 2026-08-24 · T03 first-audit rework ready for second audit
 
 - 状态与范围：继续 `codex/easyinput-usb-input-runtime`，针对 `b57d6671a921877835723eebee4252fcdc5c9b92` 的主线首轮审计报告完成限定返工；未合并 main，未开始 T04，未修改 Windows、小智、DeskMate Link、冻结合同或外部参考目录。任务状态为 `REWORK_COMPLETE_PENDING_SECOND_AUDIT`。

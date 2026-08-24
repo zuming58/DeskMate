@@ -29,11 +29,8 @@ std::array<uint8_t, kRawEdgeQueueCapacity * sizeof(RawEdge)> raw_edge_queue_stor
 QueueHandle_t raw_edge_queue = nullptr;
 TaskHandle_t owner_task = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
-std::atomic<bool> mount_pending{false};
-std::atomic<bool> unmount_pending{false};
-std::atomic<bool> resume_pending{false};
-std::atomic<bool> transfer_complete_pending{false};
-std::atomic<bool> transfer_failed_pending{false};
+UsbLifecycleEventQueue lifecycle_events;
+std::atomic<uint32_t> callback_epoch{0};
 UsbInputRuntime runtime;
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -68,39 +65,49 @@ uint8_t read_encoder_phase() {
         gpio_get_level(static_cast<gpio_num_t>(kEncoderBGpio)));
 }
 
-void publish_callback_work(bool& report_in_flight) {
-    const bool unmounted =
-        unmount_pending.exchange(false, std::memory_order_acq_rel);
-    const bool mounted = mount_pending.exchange(false, std::memory_order_acq_rel);
-    const bool resumed = resume_pending.exchange(false, std::memory_order_acq_rel);
-    const bool failed =
-        transfer_failed_pending.exchange(false, std::memory_order_acq_rel);
-    const bool completed =
-        transfer_complete_pending.exchange(false, std::memory_order_acq_rel);
-    if (unmounted) {
-        runtime.on_unmount();
-        report_in_flight = false;
-    }
-    if (mounted) {
-        runtime.on_mount();
-    }
-    if (resumed) {
-        runtime.on_resume();
-    }
-    if (failed) {
-        runtime.on_transfer_failed();
-        report_in_flight = false;
-    } else if (completed && report_in_flight) {
-        runtime.complete_report();
-        report_in_flight = false;
+void publish_callback_work(bool& report_in_flight, uint32_t& report_in_flight_epoch) {
+    UsbLifecycleEvent event{};
+    while (lifecycle_events.consume(event)) {
+        switch (event.kind) {
+            case UsbLifecycleEventKind::Mount:
+                if (!runtime.mounted()) {
+                    runtime.on_mount();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Unmount:
+                if (runtime.mounted()) {
+                    runtime.on_unmount();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::Resume:
+                if (runtime.mounted()) runtime.on_resume();
+                break;
+            case UsbLifecycleEventKind::TransferComplete:
+                if (report_in_flight && event.epoch == report_in_flight_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.complete_report();
+                    report_in_flight = false;
+                }
+                break;
+            case UsbLifecycleEventKind::TransferFailed:
+                if (report_in_flight && event.epoch == report_in_flight_epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                    runtime.on_transfer_failed();
+                    report_in_flight = false;
+                }
+                break;
+        }
     }
 }
 
 void input_owner_task(void*) {
     InputCore input;
     bool report_in_flight = false;
+    uint32_t report_in_flight_epoch = 0;
     for (;;) {
-        publish_callback_work(report_in_flight);
+        publish_callback_work(report_in_flight, report_in_flight_epoch);
 
         const uint32_t now_ms = monotonic_milliseconds(
             static_cast<uint64_t>(esp_timer_get_time()));
@@ -142,6 +149,7 @@ void input_owner_task(void*) {
         if (!report_in_flight && runtime.front_report(report) && tud_hid_ready()) {
             if (tud_hid_report(report.report_id, report.payload.data(), report.length)) {
                 report_in_flight = true;
+                report_in_flight_epoch = report.epoch;
             } else {
                 runtime.on_transfer_failed();
             }
@@ -152,6 +160,12 @@ void input_owner_task(void*) {
 
 void notify_owner_from_callback() {
     if (owner_task != nullptr) xTaskNotifyGive(owner_task);
+}
+
+void publish_lifecycle_event(UsbLifecycleEventKind kind) {
+    const uint32_t epoch = callback_epoch.load(std::memory_order_acquire);
+    lifecycle_events.publish({kind, epoch});
+    notify_owner_from_callback();
 }
 }  // namespace
 
@@ -204,27 +218,24 @@ extern "C" void app_main(void) {
 }
 
 extern "C" void tud_mount_cb(void) {
-    mount_pending.store(true, std::memory_order_release);
+    const uint32_t epoch = callback_epoch.fetch_add(1, std::memory_order_acq_rel) + 1;
+    lifecycle_events.publish({UsbLifecycleEventKind::Mount, epoch});
     notify_owner_from_callback();
 }
 extern "C" void tud_umount_cb(void) {
-    unmount_pending.store(true, std::memory_order_release);
-    notify_owner_from_callback();
+    publish_lifecycle_event(UsbLifecycleEventKind::Unmount);
 }
 extern "C" void tud_resume_cb(void) {
-    resume_pending.store(true, std::memory_order_release);
-    notify_owner_from_callback();
+    publish_lifecycle_event(UsbLifecycleEventKind::Resume);
 }
 extern "C" void tud_hid_report_complete_cb(
     uint8_t, uint8_t const*, uint16_t) {
-    transfer_complete_pending.store(true, std::memory_order_release);
-    notify_owner_from_callback();
+    publish_lifecycle_event(UsbLifecycleEventKind::TransferComplete);
 }
 extern "C" void tud_hid_report_failed_cb(
     uint8_t, hid_report_type_t report_type, uint8_t const*, uint16_t) {
     if (report_type == HID_REPORT_TYPE_INPUT) {
-        transfer_failed_pending.store(true, std::memory_order_release);
-        notify_owner_from_callback();
+        publish_lifecycle_event(UsbLifecycleEventKind::TransferFailed);
     }
 }
 extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t) {

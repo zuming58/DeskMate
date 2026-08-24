@@ -54,6 +54,14 @@ int main() {
     CHECK(contains(main_source, "xQueueCreateStatic"));
     CHECK(contains(main_source, "kRawEdgeQueueCapacity"));
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));
+    CHECK(contains(main_source, "UsbLifecycleEventQueue lifecycle_events"));
+    CHECK(contains(main_source, "lifecycle_events.consume(event)"));
+    CHECK(contains(main_source, "lifecycle_events.publish"));
+    CHECK(!contains(main_source, "mount_pending"));
+    CHECK(!contains(main_source, "unmount_pending"));
+    CHECK(!contains(main_source, "resume_pending"));
+    CHECK(!contains(main_source, "transfer_complete_pending"));
+    CHECK(!contains(main_source, "transfer_failed_pending"));
     CHECK(contains(main_source, "input.discard_pending_events()"));
     CHECK(contains(main_source, "if (dropped_events != 0)"));
     CHECK(contains(main_source, "} else {\n            InputEvent event{};"));
@@ -68,6 +76,8 @@ int main() {
     CHECK(contains(runtime_header, "kRawEdgeQueueCapacity = 64"));
     CHECK(contains(runtime_header, "kInputEventQueueCapacity = 32"));
     CHECK(contains(runtime_header, "kHidReportQueueCapacity = 16"));
+    CHECK(contains(runtime_header, "kUsbLifecycleQueueCapacity = 16"));
+    CHECK(contains(runtime_header, "UsbLifecycleEventQueue"));
     CHECK(contains(runtime_header, "kUsbInterfaceStringIndex = 0"));
     CHECK(contains(runtime_header, "kUsbDeviceDescriptor"));
     CHECK(contains(runtime_header, "kUsbConfigurationDescriptor"));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -19,11 +20,38 @@ inline constexpr uint8_t kMouseReportId = 0x02;
 inline constexpr uint8_t kUsbInterfaceStringIndex = 0;
 inline constexpr size_t kUsbDeviceDescriptorLength = 18;
 inline constexpr size_t kUsbConfigurationDescriptorLength = 34;
+inline constexpr size_t kUsbLifecycleQueueCapacity = 16;
 
 extern const std::array<uint8_t, kUsbDeviceDescriptorLength> kUsbDeviceDescriptor;
 extern const std::array<uint8_t, kUsbConfigurationDescriptorLength> kUsbConfigurationDescriptor;
 extern const char kUsbLanguageDescriptor[];
 extern std::array<const char*, 3> kUsbStringDescriptors;
+
+enum class UsbLifecycleEventKind : uint8_t {
+    Mount,
+    Unmount,
+    Resume,
+    TransferComplete,
+    TransferFailed,
+};
+
+struct UsbLifecycleEvent {
+    UsbLifecycleEventKind kind{UsbLifecycleEventKind::Resume};
+    uint32_t epoch{0};
+};
+
+// Single-producer (TinyUSB callback task), single-consumer (input owner) queue.
+class UsbLifecycleEventQueue {
+public:
+    bool publish(UsbLifecycleEvent event);
+    bool consume(UsbLifecycleEvent& event);
+    size_t queued() const;
+
+private:
+    std::array<UsbLifecycleEvent, kUsbLifecycleQueueCapacity> events_{};
+    std::atomic<size_t> head_{0};
+    std::atomic<size_t> tail_{0};
+};
 
 enum class InputSourceId : uint8_t { S1, S2, S3, S4, S5, S6, S7, S8, EncoderPress, Count };
 enum class ScrollAxis : uint8_t { Vertical, Horizontal };

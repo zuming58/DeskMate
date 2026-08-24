@@ -15,6 +15,29 @@ constexpr std::array<InputActionRouter::Chord, 8> kDefaultChords{{
 }};
 }
 
+bool UsbLifecycleEventQueue::publish(UsbLifecycleEvent event) {
+    const size_t head = head_.load(std::memory_order_relaxed);
+    const size_t next = (head + 1u) % events_.size();
+    if (next == tail_.load(std::memory_order_acquire)) return false;
+    events_[head] = event;
+    head_.store(next, std::memory_order_release);
+    return true;
+}
+
+bool UsbLifecycleEventQueue::consume(UsbLifecycleEvent& event) {
+    const size_t tail = tail_.load(std::memory_order_relaxed);
+    if (tail == head_.load(std::memory_order_acquire)) return false;
+    event = events_[tail];
+    tail_.store((tail + 1u) % events_.size(), std::memory_order_release);
+    return true;
+}
+
+size_t UsbLifecycleEventQueue::queued() const {
+    const size_t head = head_.load(std::memory_order_acquire);
+    const size_t tail = tail_.load(std::memory_order_acquire);
+    return (head + events_.size() - tail) % events_.size();
+}
+
 KeyboardSnapshot InputActionRouter::compose() const {
     KeyboardSnapshot result{};
     size_t usage_index = 0;
