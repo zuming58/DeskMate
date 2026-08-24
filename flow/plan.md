@@ -6,10 +6,10 @@
 
 ### Current execution point
 
-- T03 第二轮候选 `24bf3e776c34290c85fc68916513971be970894e` 已通过 Host 3/3 与 ESP-IDF v5.5.5 构建，并关闭首轮两处阻断；本机第二轮审计又发现 TinyUSB 生命周期 callback 顺序丢失及完整描述符黄金向量缺口，状态继续为 `REVIEW_CHANGES_REQUIRED`。另一台电脑继续原分支返工，本机第三轮审计通过前不合并、不烧录、不开始 T04。
+- T03 最终代码已合入主线候选：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
-- 当前唯一开放任务是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)：另一台电脑的首个候选已完成，但本机独立审计发现溢出旧 key-down 重放与 HID interface 字符串索引错误，状态为 `REVIEW_CHANGES_REQUIRED`；继续原分支返工，不进入 T04。
+- 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，但代码门已关闭；下一道门是恢复证据、用户授权和首次真机 HIL。T03 真机锁定前不进入 T04。
 - T03 只允许实现 [`INPUT_V1_FROZEN`](../contracts/deskmate-host/easyinput-input-v1.md) 切片；完整 DeskMate host contract 仍未冻结，配置、NVS、Host Action、BLE、音频和 DeskMate Link 不得提前实现。
 - T03 分支推送后由当前电脑独立审计与重建。只有代码门通过、原 Maker 恢复方案准备完毕并获得用户单独授权后，才执行 EasyInput 第一次烧录和 HIL。
 

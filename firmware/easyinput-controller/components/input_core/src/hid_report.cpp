@@ -32,14 +32,14 @@ void HeldKeyboardState::release_all() {
     explicit_modifiers_ = 0;
 }
 
-BootKeyboardReport HeldKeyboardState::report() const {
-    BootKeyboardReport report{};
-    uint8_t usage_index = 2;
-    report[0] = explicit_modifiers_;
+KeyboardSnapshot HeldKeyboardState::report() const {
+    KeyboardSnapshot report{};
+    uint8_t usage_index = 0;
+    report.modifier = explicit_modifiers_;
     for (const auto& held : usages_) {
         if (held.usage == HidUsage::None) continue;
-        report[0] = static_cast<uint8_t>(report[0] | held.modifiers);
-        report[usage_index++] = static_cast<uint8_t>(held.usage);
+        report.modifier = static_cast<uint8_t>(report.modifier | held.modifiers);
+        report.usages[usage_index++] = static_cast<uint8_t>(held.usage);
     }
     return report;
 }

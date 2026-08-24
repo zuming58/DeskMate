@@ -20,13 +20,18 @@ void InputCore::reset() {
     encoder_accumulator_ = 0;
     event_head_ = 0;
     event_tail_ = 0;
+    event_count_ = 0;
+    event_drops_ = 0;
 }
 
 void InputCore::emit(InputEventType type, uint8_t index, int8_t value) {
-    const uint8_t next = static_cast<uint8_t>((event_head_ + 1u) % events_.size());
-    if (next == event_tail_) return;  // fail closed if a consumer falls behind
+    if (event_count_ == events_.size()) {
+        if (event_drops_ != UINT32_MAX) ++event_drops_;
+        return;
+    }
     events_[event_head_] = {type, index, value};
-    event_head_ = next;
+    event_head_ = static_cast<uint8_t>((event_head_ + 1u) % events_.size());
+    ++event_count_;
 }
 
 void InputCore::scan_debounced(uint8_t index, bool active, uint32_t now_ms) {
@@ -51,7 +56,8 @@ void InputCore::scan_keys(uint8_t raw_key_mask, uint32_t now_ms) {
     }
 }
 
-void InputCore::scan_encoder(uint8_t raw_phase, bool raw_press_active, uint32_t now_ms) {
+void InputCore::scan_encoder_phase(uint8_t raw_phase, uint32_t now_ms) {
+    (void)now_ms;
     raw_phase &= 0x03u;
     if (!encoder_initialized_) {
         encoder_initialized_ = true;
@@ -73,6 +79,9 @@ void InputCore::scan_encoder(uint8_t raw_phase, bool raw_press_active, uint32_t 
         }
     }
     encoder_phase_ = raw_phase;
+}
+
+void InputCore::scan_encoder_press(bool raw_press_active, uint32_t now_ms) {
     auto& press = debounce_[8];
     if (!press.initialized) {
         press = {true, raw_press_active, raw_press_active, now_ms};
@@ -85,11 +94,29 @@ void InputCore::scan_encoder(uint8_t raw_phase, bool raw_press_active, uint32_t 
     }
 }
 
+void InputCore::resync_encoder(uint8_t raw_phase) {
+    encoder_initialized_ = true;
+    encoder_phase_ = static_cast<uint8_t>(raw_phase & 0x03u);
+    encoder_accumulator_ = 0;
+}
+
 bool InputCore::pop_event(InputEvent& event) {
-    if (event_tail_ == event_head_) return false;
+    if (event_count_ == 0) return false;
     event = events_[event_tail_];
     event_tail_ = static_cast<uint8_t>((event_tail_ + 1u) % events_.size());
+    --event_count_;
     return true;
+}
+
+void InputCore::discard_pending_events() {
+    event_tail_ = event_head_;
+    event_count_ = 0;
+}
+
+uint32_t InputCore::take_event_drops() {
+    const uint32_t drops = event_drops_;
+    event_drops_ = 0;
+    return drops;
 }
 
 }  // namespace deskmate::easyinput

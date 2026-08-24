@@ -21,6 +21,7 @@
 - 目标工具链由项目冻结为 ESP-IDF 5.5.5；若本机版本不匹配，停止并报告，不静默换版本。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
+- T03 第三轮本机审计当前达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`：重复 mount epoch、生命周期队列真实容量和溢出恢复已修复，Host 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建通过，依赖为 esp_tinyusb 1.7.6~2；任务状态为 `READY_FOR_MAIN_MERGE_PENDING_HIL_AUTHORIZATION`，不代表可烧录、HIL 或真机通过。
 - 无硬件电脑只运行 host test、静态检查和 build；最高证据为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现；任何真机操作由有硬件电脑另行申请授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。

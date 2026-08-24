@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`REVIEW_CHANGES_REQUIRED`。候选 `24bf3e776c34290c85fc68916513971be970894e` 已修复首轮溢出重放和 HID interface 字符串索引，但第二轮审计发现 mount/unmount callback 顺序会被独立布尔标志压平，且 configuration/string/report descriptor 尚无完整逐字节黄金向量；不得合并、烧录或开始 T04。审计见 [`t03-easyinput-usb-input-runtime-second-audit-2026-08-24.md`](../../docs/reviews/t03-easyinput-usb-input-runtime-second-audit-2026-08-24.md)。
+- 状态：`READY_FOR_MAIN_MERGE_PENDING_HIL_AUTHORIZATION`。第三轮本机独立审计已完成，并直接修复重复 mount epoch、生命周期队列真实容量与溢出恢复；达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，尚未烧录或真机验收。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

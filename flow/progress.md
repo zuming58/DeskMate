@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 third audit fixed locally and merged to main
+
+- 做了什么：审计另一台电脑的第三轮候选 `dbf621fc2ba3dcaf64ab2794708186f5ad8150a0`；确认描述符完整黄金向量与有序生命周期实现有效，并按用户“局部小问题本机直接修”的原则，在原分支直接修复重复 mount epoch 与生命周期队列溢出，提交 `aac2ec9` 后合入 `main`。
+- 为什么：重复 `tud_mount_cb` 原先会推进 callback epoch、但 runtime 会忽略重复 mount，后续完成回调因此无法匹配；声明容量 16 的环形队列实际只有 15 个可用槽，且发布失败被静默忽略。这两项都属于边界清楚、可由 Host 回归证明的局部缺陷，无需再跨电脑往返。
+- 怎么理解：callback 生命周期状态现为 Host 可测的单一实现；重复 mount 保持同一 epoch，真实 remount 才推进。队列提供完整 16 个槽，第 17 条会饱和计数；owner 检测溢出后丢弃不可信序列、清除在途报告、按 callback 快照恢复并等待实体键释放，避免粘键与旧滚轮重放。
+- 产出路径：`firmware/easyinput-controller/`、`docs/provenance/t03-easyinput-usb-input-runtime.md`、`docs/reviews/t03-easyinput-usb-input-runtime-third-audit-2026-08-24.md`、`docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md` 与 `flow/plan.md`。
+- 验证：CMake 3.30.2 / MSVC Host CTest 3/3；ESP-IDF v5.5.5、target `esp32s3`、Minimal build ON，应用镜像 `0x36610`、最小 app 分区余量 `0xc99f0`（79%）；板级扫描 1 PASS / 1 已知 constexpr WARN / 0 FAIL，人工复核 S1～S8=`2,47,38,41,1,6,7,48`、编码器=`17/16/18`、USB=`19/20`；范围、来源、密钥、ASCII、规则一致、构建产物与 `git diff --check` 均通过。
+- 问题解决与下一步：T03 达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但尚未 `HIL_CONFIRMED`。本轮未连接/识别设备、未扫描端口、未读取 Flash、未执行 flash/erase/monitor。Maker 没有已确认的独立恢复 `.bin`，因此首次写入前必须先取得用户对“只识别目标设备并备份 Flash/NVS、校验备份、随后烧录 T03”的明确授权；T03 真机矩阵通过前不启动 T04。
+
 ## 2026-08-24 · T03 第二轮独立审计继续退回修改
 
 - 做了什么：拉取并在隔离 worktree 审计 `origin/codex/easyinput-usb-input-runtime@24bf3e776c34290c85fc68916513971be970894e`，复核首轮修复、USB 生命周期适配、描述符测试、来源与范围；在本机显式加载冻结工具链重跑 Host 与 ESP-IDF 构建。

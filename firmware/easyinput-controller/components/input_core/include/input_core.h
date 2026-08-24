@@ -32,9 +32,19 @@ public:
     // raw_key_mask uses one bit per key, where 1 means the low-active switch is closed.
     void scan_keys(uint8_t raw_key_mask, uint32_t now_ms);
     // raw_phase is (A << 1) | B. Invalid two-bit jumps are discarded.
-    void scan_encoder(uint8_t raw_phase, bool raw_press_active, uint32_t now_ms);
+    void scan_encoder_phase(uint8_t raw_phase, uint32_t now_ms);
+    void scan_encoder_press(bool raw_press_active, uint32_t now_ms);
+    // Compatibility helper for T02 callers; production runtime uses the split entries.
+    void scan_encoder(uint8_t raw_phase, bool raw_press_active, uint32_t now_ms) {
+        scan_encoder_phase(raw_phase, now_ms);
+        scan_encoder_press(raw_press_active, now_ms);
+    }
+    void resync_encoder(uint8_t raw_phase);
 
     bool pop_event(InputEvent& event);
+    // Drops the complete pending sequence after an event-ring overflow.
+    void discard_pending_events();
+    uint32_t take_event_drops();
     void reset();
 
 private:
@@ -52,6 +62,8 @@ private:
     std::array<InputEvent, 32> events_{};
     uint8_t event_head_;
     uint8_t event_tail_;
+    uint8_t event_count_;
+    uint32_t event_drops_;
 
     void emit(InputEventType type, uint8_t index, int8_t value = 0);
     void scan_debounced(uint8_t index, bool active, uint32_t now_ms);
