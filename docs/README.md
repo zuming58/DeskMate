@@ -12,6 +12,8 @@
 - [Project progress](../flow/progress.md)
 - [Development plan](../flow/plan.md)
 - [Second-computer EasyInput start prompt](handoffs/second-computer-easyinput-start-2026-08-24.md)
+- [T02 audit and requested changes](reviews/t02-easyinput-input-foundation-audit-2026-08-24.md)
+- [Second-computer EasyInput rework prompt](handoffs/second-computer-easyinput-rework-2026-08-24.md)
 
 ## Product
 

@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T02 首轮独立审计退回修改
+
+- 做了什么：拉取并只读审计 `origin/codex/easyinput-input-foundation@315e7e2bb2d9298aec3a12cac849445973eb956d`，在隔离 worktree 使用本机精确 ESP-IDF v5.5.5、MSVC、CMake/CTest 重跑候选代码；形成审计报告和另一台电脑返工提示词。
+- 结果：原有 host test 1/1 通过，但加入“松键必须清除 modifiers”断言后稳定失败；`idf.py build` 因 `main` 未声明 `esp_driver_gpio` 依赖而失败，因此 T02 当前为 `REVIEW_CHANGES_REQUIRED`，不得合并或烧录。
+- 其他问题：主循环以 `tick++` 冒充毫秒，而生成配置为 `CONFIG_FREERTOS_HZ=100`、`pdMS_TO_TICKS(1)=0`；HID 仅能表达单 usage，尚未覆盖并发 held state；MSVC 原始 assert 会弹模态框；模块内误建 `docs/`；AGENTS/CLAUDE 已漂移。
+- 板级与安全：静态板级扫描 1 PASS、1 WARN、0 FAIL；WARN 是扫描器不能识别 C++ constexpr，引脚由人工复核正确，GPIO0/GPIO8 未使用。远端提交无密钥、用户数据或构建产物。本轮未连接/识别设备，未读取或写入 Flash，未烧录、erase、monitor。
+- 产出：`docs/reviews/t02-easyinput-input-foundation-audit-2026-08-24.md`、`docs/handoffs/second-computer-easyinput-rework-2026-08-24.md`；审计临时 worktree 和生成产物已删除。
+- 下一步：另一台电脑继续原分支，安装/激活精确 ESP-IDF v5.5.5，修复审计项并真实通过 host test/build 后推送新提交；本机再次独立审计。任一电脑都可在后续承担 HIL，但必须在代码门通过后另行确认恢复与烧录授权。
+
 ## 2026-08-24 · 双电脑开发起点已推进入仓前状态
 
 - 做了什么：审计并提交此前的桌面修复、三端资料和 V1 硬件基线，形成提交 `dbae59e`；随后建立 `firmware/easyinput-controller/`、`firmware/xiaozhi-yuntai/`、两个合同目录、模拟器目录、局部 AGENTS/CLAUDE 入口、外部恢复基线索引和第一张无硬件任务卡 T02。
