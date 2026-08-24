@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`READY_FOR_IMPLEMENTATION`。只允许另一台无硬件电脑在短分支实现；完成后由当前电脑独立复审。
+- 状态：`IMPLEMENTED_PENDING_AUDIT`。代码、Host 测试和无硬件构建已完成；等待有硬件电脑独立审计，不代表真机通过。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

@@ -2,6 +2,17 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 USB input runtime implementation handoff
+
+- 分支与范围：从最新 `origin/main` 创建并切换 `codex/easyinput-usb-input-runtime`，只修改 EasyInput 固件、根级来源记录、任务状态和本记录；未合并 T02 旧分支，未修改 Windows、小智、DeskMate Link、冻结合同或两个外部参考目录。
+- 实现：按键/编码器相位/旋钮按压入口拆分；GPIO any-edge ISR 使用容量 64 静态 raw-edge 队列并记录 `esp_timer_get_time()` 单调时间；owner task 每 tick 采样八键和按压，溢出清队列、清半步并以当前相位重建。唯一 `InputActionRouter` 实现 S1=`Ctrl+Shift+Space`、S2=`Enter`、S3=`Ctrl+Shift+E`、S4=`Backspace`、S5=`Ctrl+A`、S6=`Ctrl+C`、S7=`Ctrl+V`、S8=`Ctrl+Z`，旋钮垂直/水平方向和按压切轴遵循 `INPUT_V1_FROZEN`。
+- USB：加入 `espressif/esp_tinyusb`，提交解析后的 `dependencies.lock`（esp_tinyusb `1.7.6~2`、tinyusb `0.21.0~1`、IDF `5.5.5`）；固定 VID/PID `0x303A/0x1006`、Keyboard `0x01`、Mouse `0x02` 和 Vendor `0x10`～`0x15` 兼容描述符。单 owner report queue 容量 16；mount/unmount/resume/transfer callbacks 只发布状态并唤醒 owner。未挂载不排队，断线/失败/溢出丢弃滚轮并优先全零键盘报告，重连不重放旧 chord，全部释放后才接受新 chord；Vendor Feature fail closed。
+- 诊断与来源：`RuntimeDiagnosticsSnapshot` 只读、饱和计数 `raw_edge_drops/input_event_drops/hid_report_drops/encoder_resyncs/usb_mount_epoch`；新增逐文件来源记录 [`docs/provenance/t03-easyinput-usb-input-runtime.md`](../docs/provenance/t03-easyinput-usb-input-runtime.md)，Maker 固定来源为 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、许可证 PolyForm Noncommercial 1.0.0，仅作只读行为参考，未复制代码或 build 产物。
+- Host 验证：执行任务卡规定的 CMake configure/build 与 CTest 命令；CTest `input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过。
+- 固件构建：新 PowerShell 进程激活 `C:\Espressif\tools\Microsoft.v5.5.5.PowerShell_profile.ps1` 后，`idf.py --version` 为 `ESP-IDF v5.5.5`，`idf.py -C firmware/easyinput-controller build` 成功，target `esp32s3`、`Minimal build - ON`，应用镜像 `0x36200`（221696 字节），最小 app 分区余量 `0xc9e00`（79%）。
+- 静态检查：`git diff --check` 通过；源码合同测试确认 GPIO0/GPIO8/GPIO12/GPIO43/GPIO44 未初始化，AGENTS.md 与 CLAUDE.md 逐字一致；范围、ASCII 路径、来源、密钥和构建产物检查通过，`managed_components/`、`build/`、`sdkconfig`、bin/elf/map 均未纳入提交。
+- 未执行与下一步：没有连接、识别或读取设备，没有扫描端口，没有 flash、erase 或 monitor；没有声称 HIL/真机通过。提交并推送本独立分支后立即停止，等待有硬件电脑审计，不开始 T04。
+
 ## 2026-08-24 · T03 输入合同、任务卡与第二电脑交接已就绪
 
 - 做了什么：把下一功能包正式定义为 T03“实体输入 → USB HID 最小闭环”，冻结 `INPUT_V1_FROZEN` 合同切片，建立另一台电脑可执行的任务卡与复制提示词，并同步项目计划、三端指导书、模块入口及 Codex/Claude 两端规则。
