@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 using namespace deskmate::easyinput;
 
@@ -18,6 +19,55 @@ void check(bool value, const char* expression, const char* file, int line) {
 
 InputEvent key(uint8_t index, bool pressed) {
     return {pressed ? InputEventType::KeyPressed : InputEventType::KeyReleased, index, 0};
+}
+
+struct ParsedReportLengths {
+    std::array<uint16_t, 256> input_bits{};
+    std::array<uint16_t, 256> output_bits{};
+    std::array<uint16_t, 256> feature_bits{};
+};
+
+ParsedReportLengths parse_report_descriptor() {
+    ParsedReportLengths parsed{};
+    uint32_t report_size = 0;
+    uint32_t report_count = 0;
+    uint8_t report_id = 0;
+    for (size_t offset = 0; offset < kHidReportDescriptorSize;) {
+        const uint8_t prefix = kHidReportDescriptor[offset++];
+        CHECK(prefix != 0xfe);
+        if (prefix == 0xfe) break;
+        const size_t byte_count = (prefix & 0x03u) == 3 ? 4 : (prefix & 0x03u);
+        uint32_t value = 0;
+        for (size_t index = 0; index < byte_count; ++index) {
+            CHECK(offset < kHidReportDescriptorSize);
+            if (offset >= kHidReportDescriptorSize) return parsed;
+            value |= static_cast<uint32_t>(kHidReportDescriptor[offset++]) << (8u * index);
+        }
+        const uint8_t type = static_cast<uint8_t>((prefix >> 2u) & 0x03u);
+        const uint8_t tag = static_cast<uint8_t>((prefix >> 4u) & 0x0fu);
+        if (type == 1 && tag == 7) report_size = value;
+        if (type == 1 && tag == 8) report_id = static_cast<uint8_t>(value);
+        if (type == 1 && tag == 9) report_count = value;
+        if (type == 0 && (tag == 8 || tag == 9 || tag == 11)) {
+            const uint32_t bits = report_size * report_count;
+            CHECK(bits <= UINT16_MAX);
+            if (tag == 8) parsed.input_bits[report_id] += static_cast<uint16_t>(bits);
+            if (tag == 9) parsed.output_bits[report_id] += static_cast<uint16_t>(bits);
+            if (tag == 11) parsed.feature_bits[report_id] += static_cast<uint16_t>(bits);
+        }
+    }
+    return parsed;
+}
+
+void drain_input_events(InputCore& input, UsbInputRuntime& runtime) {
+    InputEvent event{};
+    while (input.pop_event(event)) runtime.on_input(event);
+}
+
+void add_encoder_detent(InputCore& input, uint32_t& now) {
+    for (const uint8_t phase : std::array<uint8_t, 4>{1, 3, 2, 0}) {
+        input.scan_encoder_phase(phase, now++);
+    }
 }
 
 void default_action_vectors() {
@@ -123,17 +173,135 @@ void queue_failure_release_and_wheel_boundaries() {
     CHECK(report.payload == zero_report);
 }
 
+void wheel_coalescing_boundaries_and_no_replay() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.queued_reports() == 1);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.report_id == kMouseReportId);
+    CHECK(report.length == 5);
+    CHECK(static_cast<int8_t>(report.payload[3]) == -6);
+    runtime.complete_report();
+
+    for (int index = 0; index < 42; ++index) {
+        runtime.on_input({InputEventType::EncoderStep, 0, -1});
+    }
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(static_cast<int8_t>(report.payload[3]) == 126);
+    runtime.on_input({InputEventType::EncoderStep, 0, -1});
+    CHECK(runtime.queued_reports() == 2);
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(static_cast<int8_t>(report.payload[3]) == 3);
+    runtime.complete_report();
+
+    for (int index = 0; index < 42; ++index) {
+        runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    }
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(static_cast<int8_t>(report.payload[3]) == -126);
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.queued_reports() == 2);
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(static_cast<int8_t>(report.payload[3]) == -3);
+    runtime.complete_report();
+
+    for (int index = 0; index < 16; ++index) {
+        runtime.on_input({InputEventType::EncoderStep, 0,
+                          static_cast<int8_t>(index % 2 == 0 ? 1 : -1)});
+    }
+    CHECK(runtime.queued_reports() == kHidReportQueueCapacity);
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.diagnostics().hid_report_drops == 1);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    const std::array<uint8_t, 8> zero_report{};
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_unmount();
+    runtime.on_mount();
+    CHECK(runtime.queued_reports() == 0);
+}
+
 void descriptor_and_vendor_fail_closed() {
-    CHECK(kUsbVid == 0x303a && kUsbPid == 0x1006);
-    CHECK(kKeyboardReportId == 1 && kMouseReportId == 2);
-    const auto has = [](std::initializer_list<uint8_t> pattern) {
-        return std::search(kHidReportDescriptor, kHidReportDescriptor + kHidReportDescriptorSize,
-                           pattern.begin(), pattern.end()) != kHidReportDescriptor + kHidReportDescriptorSize;
-    };
-    CHECK(has({0x85, 0x01})); CHECK(has({0x85, 0x02}));
-    CHECK(has({0x85, 0x10, 0x15, 0x00})); CHECK(has({0x95, 0x3f}));
-    CHECK(has({0x85, 0x12})); CHECK(has({0x95, 0x10}));
-    CHECK(has({0x85, 0x15}));
+    const std::array<uint8_t, kUsbDeviceDescriptorLength> expected_device{
+        18, 0x01, 0x00, 0x02, 0, 0, 0, 64,
+        0x3a, 0x30, 0x06, 0x10, 0x00, 0x01, 1, 2, 0, 1};
+    CHECK(kUsbDeviceDescriptor == expected_device);
+    CHECK(kUsbDeviceDescriptor[8] == static_cast<uint8_t>(kUsbVid));
+    CHECK(kUsbDeviceDescriptor[9] == static_cast<uint8_t>(kUsbVid >> 8));
+    CHECK(kUsbDeviceDescriptor[10] == static_cast<uint8_t>(kUsbPid));
+    CHECK(kUsbDeviceDescriptor[11] == static_cast<uint8_t>(kUsbPid >> 8));
+    CHECK(kUsbDeviceDescriptor[14] == 1);
+    CHECK(kUsbDeviceDescriptor[15] == 2);
+    CHECK(kUsbDeviceDescriptor[16] == 0);
+    CHECK(kUsbConfigurationDescriptor.size() == kUsbConfigurationDescriptorLength);
+    CHECK(kUsbConfigurationDescriptor[0] == 9);
+    CHECK(kUsbConfigurationDescriptor[1] == 0x02);
+    CHECK(kUsbConfigurationDescriptor[2] == kUsbConfigurationDescriptorLength);
+    CHECK(kUsbConfigurationDescriptor[3] == 0);
+    CHECK(kUsbConfigurationDescriptor[17] == kUsbInterfaceStringIndex);
+    CHECK(kUsbInterfaceStringIndex == 0);
+    CHECK(kUsbStringDescriptors.size() == 3);
+    CHECK(kUsbStringDescriptors[0] == kUsbLanguageDescriptor);
+    CHECK(std::string(kUsbStringDescriptors[1]) == "DeskMate");
+    CHECK(std::string(kUsbStringDescriptors[2]) == "EasyInput AI");
+    CHECK(kUsbConfigurationDescriptor[25] == static_cast<uint8_t>(kHidReportDescriptorSize));
+    CHECK(kUsbConfigurationDescriptor[26] == static_cast<uint8_t>(kHidReportDescriptorSize >> 8));
+
+    const ParsedReportLengths reports = parse_report_descriptor();
+    CHECK(reports.input_bits[0x01] == 8 * 8);
+    CHECK(reports.output_bits[0x01] == 8);
+    CHECK(reports.input_bits[0x02] == 5 * 8);
+    CHECK(reports.feature_bits[0x10] == 63 * 8);
+    CHECK(reports.input_bits[0x11] == 63 * 8);
+    CHECK(reports.feature_bits[0x12] == 16 * 8);
+    CHECK(reports.feature_bits[0x13] == 16 * 8);
+    CHECK(reports.feature_bits[0x14] == 63 * 8);
+    CHECK(reports.input_bits[0x15] == 63 * 8);
+    for (uint16_t id = 0; id < 256; ++id) {
+        const bool expected = id == 0x01 || id == 0x02 ||
+                              (id >= 0x10 && id <= 0x15);
+        if (!expected) {
+            CHECK(reports.input_bits[id] == 0);
+            CHECK(reports.output_bits[id] == 0);
+            CHECK(reports.feature_bits[id] == 0);
+        }
+    }
+
+    InputActionRouter router;
+    const std::array<std::array<uint8_t, 8>, 8> expected_keys{{
+        {{3, 0, 0x2c, 0, 0, 0, 0, 0}}, {{0, 0, 0x28, 0, 0, 0, 0, 0}},
+        {{3, 0, 0x08, 0, 0, 0, 0, 0}}, {{0, 0, 0x2a, 0, 0, 0, 0, 0}},
+        {{1, 0, 0x04, 0, 0, 0, 0, 0}}, {{1, 0, 0x06, 0, 0, 0, 0, 0}},
+        {{1, 0, 0x19, 0, 0, 0, 0, 0}}, {{1, 0, 0x1d, 0, 0, 0, 0, 0}},
+    }};
+    for (uint8_t index = 0; index < 8; ++index) {
+        InputActionRouter single;
+        CHECK(serialize_keyboard_report(single.apply(key(index, true)).keyboard) ==
+              expected_keys[index]);
+    }
+    const std::array<uint8_t, 5> vertical_cw{0, 0, 0, 0xfd, 0};
+    const std::array<uint8_t, 5> vertical_ccw{0, 0, 0, 3, 0};
+    const std::array<uint8_t, 5> horizontal_cw{0, 0, 0, 0, 3};
+    const std::array<uint8_t, 5> horizontal_ccw{0, 0, 0, 0, 0xfd};
+    CHECK(serialize_mouse_report(router.apply({InputEventType::EncoderStep, 0, 1}).wheel) ==
+          vertical_cw);
+    CHECK(serialize_mouse_report(router.apply({InputEventType::EncoderStep, 0, -1}).wheel) ==
+          vertical_ccw);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(serialize_mouse_report(router.apply({InputEventType::EncoderStep, 0, 1}).wheel) ==
+          horizontal_cw);
+    CHECK(serialize_mouse_report(router.apply({InputEventType::EncoderStep, 0, -1}).wheel) ==
+          horizontal_ccw);
     UsbInputRuntime runtime;
     const auto before = runtime.diagnostics();
     const uint8_t payload[2]{1, 2};
@@ -173,6 +341,68 @@ void input_drop_recovery_waits_for_release() {
     runtime.on_input(key(1, true));
     CHECK(runtime.queued_reports() == 1);
 }
+
+void event_ring_overflow_discards_stale_key_down() {
+    InputCore input;
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    input.scan_keys(0, 0);
+    input.scan_keys(0x01, 1);
+    input.scan_keys(0x01, 21);
+    input.scan_encoder_phase(0, 22);
+    uint32_t now = 23;
+    for (int index = 0; index < 31; ++index) add_encoder_detent(input, now);
+    input.scan_keys(0, now++);
+    input.scan_keys(0, now + kDebounceMs);
+    const uint32_t drops = input.take_event_drops();
+    CHECK(drops == 1);
+    input.discard_pending_events();
+    runtime.on_input_event_drops(drops);
+    runtime.recover_after_input_drop(0);
+    drain_input_events(input, runtime);
+
+    CHECK(runtime.queued_reports() == 1);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    const std::array<uint8_t, 8> zero_report{};
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+    CHECK(!runtime.front_report(report));
+}
+
+void event_ring_overflow_held_key_waits_for_release() {
+    InputCore input;
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    input.scan_keys(0, 0);
+    input.scan_keys(0x01, 1);
+    input.scan_keys(0x01, 21);
+    input.scan_encoder_phase(0, 22);
+    uint32_t now = 23;
+    for (int index = 0; index < 32; ++index) add_encoder_detent(input, now);
+    const uint32_t drops = input.take_event_drops();
+    CHECK(drops == 1);
+    input.discard_pending_events();
+    runtime.on_input_event_drops(drops);
+    runtime.recover_after_input_drop(0x01);
+    drain_input_events(input, runtime);
+
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    const std::array<uint8_t, 8> zero_report{};
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    runtime.on_input(key(0, true));
+    runtime.on_input(key(1, true));
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_input(key(0, false));
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_input(key(1, false));
+    runtime.on_input(key(1, true));
+    CHECK(runtime.queued_reports() == 1);
+}
 }
 
 int main() {
@@ -181,9 +411,12 @@ int main() {
     encoder_axis_vectors();
     lifetime_and_disconnect_safety();
     queue_failure_release_and_wheel_boundaries();
+    wheel_coalescing_boundaries_and_no_replay();
     descriptor_and_vendor_fail_closed();
     diagnostics_are_saturating_and_redacted();
     input_drop_recovery_waits_for_release();
+    event_ring_overflow_discards_stale_key_down();
+    event_ring_overflow_held_key_waits_for_release();
     if (failures) {
         std::cerr << "input_runtime_tests: " << failures << " failure(s)\n";
         return 1;

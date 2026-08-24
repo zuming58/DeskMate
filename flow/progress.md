@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · T03 first-audit rework ready for second audit
+
+- 状态与范围：继续 `codex/easyinput-usb-input-runtime`，针对 `b57d6671a921877835723eebee4252fcdc5c9b92` 的主线首轮审计报告完成限定返工；未合并 main，未开始 T04，未修改 Windows、小智、DeskMate Link、冻结合同或外部参考目录。任务状态为 `REWORK_COMPLETE_PENDING_SECOND_AUDIT`。
+- 溢出恢复：`InputCore` 新增显式 pending-event discard；owner 检测 `event_drops` 后先丢弃整个不完整 ring，再按当前 `key_mask` 执行 release/suppress 恢复，且该轮不再 drain 旧事件。端到端覆盖 S1 Release 丢失后只能留下全零报告，以及实体键仍按住时必须等全部释放才接受新 chord。
+- USB 与滚轮：HID `iInterface` 明确为 0；device/configuration/string/report descriptors 和键盘/滚轮序列化成为 Host 可读黄金向量，精确覆盖 VID/PID、总长度、Report ID 方向与 payload 长度。补齐同向合并、正负边界、HID 队列溢出与 remount 后滚轮不重放；模块 `.gitignore` 加入 `managed_components/`。
+- Host 验证：运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`，CTest `input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过。
+- 固件构建：新 PowerShell 激活 `C:\Espressif\tools\Microsoft.v5.5.5.PowerShell_profile.ps1`，`idf.py --version` 精确为 `ESP-IDF v5.5.5`；`idf.py -C firmware/easyinput-controller build` 成功，target `esp32s3`，应用镜像 `0x362a0`（221856 字节），最小 app 分区余量 `0xc9d60`（79%）。
+- 来源与下一步：更新 `docs/provenance/t03-easyinput-usb-input-runtime.md`，全部为合同驱动的独立重实现；Maker 固定参考仍为 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、PolyForm Noncommercial 1.0.0，未复制源码或 build 产物。静态检查完成后提交并推送同一分支，随后立即停止并等待本机第二轮独立审计。
+- 安全：未连接或识别设备，未扫描端口，未读取 Flash，未执行 flash、erase、monitor 或 HIL；本记录只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
+
 ## 2026-08-24 · T03 USB input runtime implementation handoff
 
 - 分支与范围：从最新 `origin/main` 创建并切换 `codex/easyinput-usb-input-runtime`，只修改 EasyInput 固件、根级来源记录、任务状态和本记录；未合并 T02 旧分支，未修改 Windows、小智、DeskMate Link、冻结合同或两个外部参考目录。

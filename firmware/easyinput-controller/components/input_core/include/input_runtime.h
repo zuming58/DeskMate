@@ -16,6 +16,14 @@ inline constexpr uint16_t kUsbVid = 0x303a;
 inline constexpr uint16_t kUsbPid = 0x1006;
 inline constexpr uint8_t kKeyboardReportId = 0x01;
 inline constexpr uint8_t kMouseReportId = 0x02;
+inline constexpr uint8_t kUsbInterfaceStringIndex = 0;
+inline constexpr size_t kUsbDeviceDescriptorLength = 18;
+inline constexpr size_t kUsbConfigurationDescriptorLength = 34;
+
+extern const std::array<uint8_t, kUsbDeviceDescriptorLength> kUsbDeviceDescriptor;
+extern const std::array<uint8_t, kUsbConfigurationDescriptorLength> kUsbConfigurationDescriptor;
+extern const char kUsbLanguageDescriptor[];
+extern std::array<const char*, 3> kUsbStringDescriptors;
 
 enum class InputSourceId : uint8_t { S1, S2, S3, S4, S5, S6, S7, S8, EncoderPress, Count };
 enum class ScrollAxis : uint8_t { Vertical, Horizontal };
@@ -24,6 +32,9 @@ struct MouseWheelSnapshot {
     int8_t vertical{0};
     int8_t horizontal{0};
 };
+
+std::array<uint8_t, 8> serialize_keyboard_report(const KeyboardSnapshot& snapshot);
+std::array<uint8_t, 5> serialize_mouse_report(const MouseWheelSnapshot& snapshot);
 
 struct RuntimeDiagnosticsSnapshot {
     uint32_t raw_edge_drops{0};

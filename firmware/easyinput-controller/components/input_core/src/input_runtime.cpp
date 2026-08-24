@@ -66,6 +66,18 @@ RoutedAction InputActionRouter::apply_key_source(InputSourceId source, bool pres
 void InputActionRouter::release_all() { owned_ = {}; }
 KeyboardSnapshot InputActionRouter::keyboard() const { return compose(); }
 
+std::array<uint8_t, 8> serialize_keyboard_report(const KeyboardSnapshot& snapshot) {
+    std::array<uint8_t, 8> bytes{};
+    bytes[0] = snapshot.modifier;
+    bytes[1] = snapshot.apple_fn;
+    std::copy(snapshot.usages.begin(), snapshot.usages.end(), bytes.begin() + 2);
+    return bytes;
+}
+
+std::array<uint8_t, 5> serialize_mouse_report(const MouseWheelSnapshot& snapshot) {
+    return {0, 0, 0, static_cast<uint8_t>(snapshot.vertical), static_cast<uint8_t>(snapshot.horizontal)};
+}
+
 void UsbInputRuntime::saturating_add(uint32_t& value, uint32_t amount) {
     const uint32_t max = std::numeric_limits<uint32_t>::max();
     value = amount > max - value ? max : value + amount;
@@ -108,9 +120,8 @@ void UsbInputRuntime::enqueue_keyboard(const KeyboardSnapshot& snapshot) {
     report.kind = HidReportKind::Keyboard;
     report.report_id = kKeyboardReportId;
     report.length = 8;
-    report.payload[0] = snapshot.modifier;
-    report.payload[1] = snapshot.apple_fn;
-    std::copy(snapshot.usages.begin(), snapshot.usages.end(), report.payload.begin() + 2);
+    const auto bytes = serialize_keyboard_report(snapshot);
+    std::copy(bytes.begin(), bytes.end(), report.payload.begin());
     report.epoch = diagnostics_.usb_mount_epoch;
     enqueue(report);
 }
@@ -139,8 +150,8 @@ enqueue_new_wheel:
     report.kind = HidReportKind::Mouse;
     report.report_id = kMouseReportId;
     report.length = 5;
-    report.payload[3] = static_cast<uint8_t>(snapshot.vertical);
-    report.payload[4] = static_cast<uint8_t>(snapshot.horizontal);
+    const auto bytes = serialize_mouse_report(snapshot);
+    std::copy(bytes.begin(), bytes.end(), report.payload.begin());
     report.epoch = diagnostics_.usb_mount_epoch;
     enqueue(report);
 }
@@ -214,5 +225,18 @@ const uint8_t kHidReportDescriptor[] = {
     0x85,0x15,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x06,0x81,0x02,0xc0,
 };
 const size_t kHidReportDescriptorSize = sizeof(kHidReportDescriptor);
+
+alignas(2) const std::array<uint8_t, kUsbDeviceDescriptorLength> kUsbDeviceDescriptor = {
+    18, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 64,
+    0x3a, 0x30, 0x06, 0x10, 0x00, 0x01, 0x01, 0x02, 0x00, 0x01};
+const std::array<uint8_t, kUsbConfigurationDescriptorLength> kUsbConfigurationDescriptor = {
+    9, 0x02, 34, 0, 1, 1, 0, 0xA0, 50,
+    9, 0x04, 0, 0, 1, 0x03, 0, 0, 0,
+    9, 0x21, 0x11, 0x01, 0, 1, 0x22,
+    static_cast<uint8_t>(kHidReportDescriptorSize), static_cast<uint8_t>(kHidReportDescriptorSize >> 8),
+    7, 0x05, 0x81, 0x03, 64, 0, 10};
+const char kUsbLanguageDescriptor[] = {0x09, 0x04};
+std::array<const char*, 3> kUsbStringDescriptors = {
+    kUsbLanguageDescriptor, "DeskMate", "EasyInput AI"};
 
 }  // namespace deskmate::easyinput

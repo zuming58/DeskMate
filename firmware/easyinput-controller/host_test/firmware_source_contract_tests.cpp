@@ -37,6 +37,8 @@ int main() {
     const std::string root_cmake = read_all(ROOT_CMAKE_PATH);
     const std::string runtime_source = read_all(RUNTIME_SOURCE_PATH);
     const std::string runtime_header = read_all(RUNTIME_HEADER_PATH);
+    const std::string input_core_header = read_all(INPUT_CORE_HEADER_PATH);
+    const std::string module_gitignore = read_all(MODULE_GITIGNORE_PATH);
     const std::string manifest = read_all(MANIFEST_PATH);
 
     CHECK(contains(main_source, "esp_timer_get_time()"));
@@ -52,6 +54,9 @@ int main() {
     CHECK(contains(main_source, "xQueueCreateStatic"));
     CHECK(contains(main_source, "kRawEdgeQueueCapacity"));
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));
+    CHECK(contains(main_source, "input.discard_pending_events()"));
+    CHECK(contains(main_source, "if (dropped_events != 0)"));
+    CHECK(contains(main_source, "} else {\n            InputEvent event{};"));
     CHECK(contains(main_source, "tud_mount_cb"));
     CHECK(contains(main_source, "tud_umount_cb"));
     CHECK(!contains(main_source, "ESP_LOG"));
@@ -63,7 +68,17 @@ int main() {
     CHECK(contains(runtime_header, "kRawEdgeQueueCapacity = 64"));
     CHECK(contains(runtime_header, "kInputEventQueueCapacity = 32"));
     CHECK(contains(runtime_header, "kHidReportQueueCapacity = 16"));
+    CHECK(contains(runtime_header, "kUsbInterfaceStringIndex = 0"));
+    CHECK(contains(runtime_header, "kUsbDeviceDescriptor"));
+    CHECK(contains(runtime_header, "kUsbConfigurationDescriptor"));
+    CHECK(contains(runtime_header, "kUsbStringDescriptors"));
+    CHECK(contains(input_core_header, "discard_pending_events()"));
     CHECK(contains(runtime_source, "kHidReportDescriptor"));
+    CHECK(contains(main_source, "kUsbDeviceDescriptor.data()"));
+    CHECK(contains(main_source, "kUsbConfigurationDescriptor.data()"));
+    CHECK(contains(main_source, "kUsbStringDescriptors.data()"));
+    CHECK(!contains(main_source, "TUD_HID_DESCRIPTOR"));
+    CHECK(contains(module_gitignore, "managed_components/"));
     CHECK(contains(manifest, "espressif/esp_tinyusb"));
 
     if (failures != 0) {

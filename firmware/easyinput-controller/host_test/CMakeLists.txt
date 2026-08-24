@@ -23,6 +23,8 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     ROOT_CMAKE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt"
     RUNTIME_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/input_runtime.cpp"
     RUNTIME_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/input_runtime.h"
+    INPUT_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/input_core.h"
+    MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     MANIFEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/idf_component.yml"
 )
 add_test(NAME firmware_source_contract_tests COMMAND firmware_source_contract_tests)

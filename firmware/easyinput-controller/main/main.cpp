@@ -60,36 +60,7 @@ void IRAM_ATTR encoder_edge_isr(void*) {
     if (higher_priority_woken == pdTRUE) portYIELD_FROM_ISR();
 }
 
-constexpr uint16_t kDeviceRelease = 0x0100;
-const tusb_desc_device_t device_descriptor = {
-    .bLength = sizeof(tusb_desc_device_t),
-    .bDescriptorType = TUSB_DESC_DEVICE,
-    .bcdUSB = 0x0200,
-    .bDeviceClass = 0,
-    .bDeviceSubClass = 0,
-    .bDeviceProtocol = 0,
-    .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = kUsbVid,
-    .idProduct = kUsbPid,
-    .bcdDevice = kDeviceRelease,
-    .iManufacturer = 1,
-    .iProduct = 2,
-    .iSerialNumber = 0,
-    .bNumConfigurations = 1,
-};
-
-#define DESKMATE_HID_CONFIG_LENGTH (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
-const uint8_t configuration_descriptor[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 1, 0, DESKMATE_HID_CONFIG_LENGTH,
-                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-    TUD_HID_DESCRIPTOR(0, 4, false, kHidReportDescriptorSize, 0x81, 64, 10),
-};
-const char language_descriptor[] = {0x09, 0x04};
-const char* string_descriptors[] = {
-    language_descriptor,
-    "DeskMate",
-    "EasyInput AI",
-};
+static_assert(sizeof(tusb_desc_device_t) == kUsbDeviceDescriptorLength);
 
 uint8_t read_encoder_phase() {
     return static_cast<uint8_t>(
@@ -159,12 +130,13 @@ void input_owner_task(void*) {
         }
         const uint32_t dropped_events = input.take_event_drops();
         if (dropped_events != 0) {
+            input.discard_pending_events();
             runtime.on_input_event_drops(dropped_events);
             runtime.recover_after_input_drop(key_mask);
+        } else {
+            InputEvent event{};
+            while (input.pop_event(event)) runtime.on_input(event);
         }
-
-        InputEvent event{};
-        while (input.pop_event(event)) runtime.on_input(event);
 
         QueuedHidReport report{};
         if (!report_in_flight && runtime.front_report(report) && tud_hid_ready()) {
@@ -218,12 +190,13 @@ extern "C" void app_main(void) {
         static_cast<gpio_num_t>(kEncoderBGpio), encoder_edge_isr, nullptr));
 
     const tinyusb_config_t usb_config = {
-        .device_descriptor = &device_descriptor,
-        .string_descriptor = string_descriptors,
+        .device_descriptor = reinterpret_cast<const tusb_desc_device_t*>(
+            kUsbDeviceDescriptor.data()),
+        .string_descriptor = kUsbStringDescriptors.data(),
         .string_descriptor_count =
-            sizeof(string_descriptors) / sizeof(string_descriptors[0]),
+            kUsbStringDescriptors.size(),
         .external_phy = false,
-        .configuration_descriptor = configuration_descriptor,
+        .configuration_descriptor = kUsbConfigurationDescriptor.data(),
         .self_powered = false,
         .vbus_monitor_io = GPIO_NUM_NC,
     };

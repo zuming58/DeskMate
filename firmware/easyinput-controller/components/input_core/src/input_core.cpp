@@ -108,6 +108,11 @@ bool InputCore::pop_event(InputEvent& event) {
     return true;
 }
 
+void InputCore::discard_pending_events() {
+    event_tail_ = event_head_;
+    event_count_ = 0;
+}
+
 uint32_t InputCore::take_event_drops() {
     const uint32_t drops = event_drops_;
     event_drops_ = 0;
