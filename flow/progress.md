@@ -2,6 +2,18 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-24 · 双电脑开发起点已推进入仓前状态
+
+- 做了什么：审计并提交此前的桌面修复、三端资料和 V1 硬件基线，形成提交 `dbae59e`；随后建立 `firmware/easyinput-controller/`、`firmware/xiaozhi-yuntai/`、两个合同目录、模拟器目录、局部 AGENTS/CLAUDE 入口、外部恢复基线索引和第一张无硬件任务卡 T02。
+- 为什么：另一台电脑必须从正式产品仓的同一事实起点开发，不能在 Maker 或小智参考目录中直接修改，也不能等整个固件写完再一次性审计。
+- 当前第一包：`flow/tasks/T02-easyinput-input-foundation.md`。只做 ESP-IDF 5.5.5 构建骨架、八键、旋钮、防抖、USB HID 内部表示和 host test；完成后推送 `codex/easyinput-input-foundation` 并停止。
+- 外部资料：另一台电脑按相同路径放置 `F:\Codex\easyinput-wzm\easy-input-maker` 和 `F:\Codex\xiaozhi-yuntai`。它们只读使用，不上传到 GitHub；产品仓只保存路径、提交/哈希和来源记录，见 `docs/provenance/reference-baselines-2026-08-24.md`。
+- 恢复证据：Maker 参考固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，但工作区有未提交资料/host-test 改动且尚无独立恢复镜像；小智无 Git 身份，本机 `build-baseline-20260823` 的五个候选二进制只记录大小和 SHA-256，不上传，也未冒充已验证恢复集合。
+- 交接产出：可直接复制给另一台电脑的提示词位于 `docs/handoffs/second-computer-easyinput-start-2026-08-24.md`；正式模块局部入口会把无硬件证据限定为 `TEST_CONFIRMED/BUILD_CONFIRMED`。
+- 验证：新增骨架前 `npm test` 66/66；`npm run build:desktop` 通过；候选提交通过密钥、ASCII 路径、构建产物与 `git diff --check` 检查。骨架只含 Markdown/规则，未修改运行时代码。
+- 安全边界：没有识别设备、没有接线、没有读取/写入 Flash、没有烧录、没有监视串口、没有驱动舵机；两个外部参考目录均未修改。
+- 下一步：提交并推送当前骨架和 T02；另一台电脑 clone 最新 `main` 后严格执行 T02。本机等待其分支，随后做独立代码审计和重复构建，不立即烧录。
+
 ## 2026-08-24 · V1 硬件基线与双电脑开发指导书 V2 落地
 
 - 做了什么：把用户确认的方案 A、音频归属、物理叠放、独立供电、三线 UART 和小智云端退出路线沉淀为独立硬件基线；生成并嵌入一张高密度信息图；把原三端指导书重排为“EasyInput 小包开发/审计/单板 HIL → 桌面闭环 → Link 模拟器 → 小智小包开发/审计/HIL → 首次三线联动”的可执行 V2。

@@ -11,6 +11,7 @@
 - [Desktop handoff](handoffs/desktop-handoff-2026-08-23.md)
 - [Project progress](../flow/progress.md)
 - [Development plan](../flow/plan.md)
+- [Second-computer EasyInput start prompt](handoffs/second-computer-easyinput-start-2026-08-24.md)
 
 ## Product
 
@@ -25,6 +26,15 @@
 - [V1 hardware baseline infographic](assets/hardware/deskmate-v1-hardware-baseline-infographic.png)
 - [EasyInput Maker protocol](contracts/easyinput-maker-protocol.md)
 - [Legacy audio investigation](contracts/legacy-audio-investigation.md)
+- [Reference and recovery baselines](provenance/reference-baselines-2026-08-24.md)
+
+## Production modules
+
+- [EasyInput controller firmware](../firmware/easyinput-controller/README.md)
+- [Xiaozhi yuntai firmware](../firmware/xiaozhi-yuntai/README.md)
+- [DeskMate host contract](../contracts/deskmate-host/README.md)
+- [DeskMate Link contract](../contracts/deskmate-link/README.md)
+- [Simulators](../tools/simulators/README.md)
 
 ## Setup and testing
 

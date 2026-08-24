@@ -23,3 +23,9 @@ recordings/
 audio-captures/
 user-data/
 diagnostics-private/
+firmware/**/build/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/**/*.map

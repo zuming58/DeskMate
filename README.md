@@ -1,6 +1,6 @@
 # DeskMate
 
-DeskMate 是一个 Windows 优先的软硬件 AI 工作伙伴。最终产品由桌面软件、运行在 EasyInput ESP32-S3 上的总控固件，以及运行在小智 ESP32-S3 云台上的表情/双舵机执行固件组成。当前仓库已交付桌面软件基线，正式固件模块将在跨板合同冻结后进入本仓库。
+DeskMate 是一个 Windows 优先的软硬件 AI 工作伙伴。最终产品由桌面软件、运行在 EasyInput ESP32-S3 上的总控固件，以及运行在小智 ESP32-S3 云台上的表情/双舵机执行固件组成。桌面软件基线和两套正式固件模块骨架已经进入本仓库；当前第一开发包是 EasyInput 八键、旋钮与 USB HID 输入基础。
 
 当前可用基线：
 
@@ -10,7 +10,7 @@ DeskMate 是一个 Windows 优先的软硬件 AI 工作伙伴。最终产品由�
 - 原样、智能和自定义文本整理。
 - 历史记录、剪贴板及当前窗口输出、系统托盘、正式 Windows 图标。
 - 板载麦克风与厂商 HID 协议已有源码级合同，尚待接入与真机验收。
-- EasyInput Maker 与小智云台参考工程的技术、安全和接口地图已完成；正式 DeskMate 固件与板间协议尚待建立。
+- EasyInput Maker 与小智云台参考工程的技术、安全和接口地图已完成；正式固件只在本仓 `firmware/` 开发，外部目录保持只读。
 
 ## Start here
 
@@ -43,7 +43,9 @@ electron/       Electron 主进程、IPC、系统托盘、千问与输入桥
 native/         Windows Raw Input 自包含辅助进程
 src/            React 界面、领域模型、适配器和状态管理
 tests/          自动化测试
-<firmware>/     规划中的总控与云台正式固件模块；目录冻结后创建
+firmware/       EasyInput 总控与小智云台正式固件模块
+contracts/      DeskMate host / DeskMate Link 机器合同与黄金向量
+tools/          无硬件模拟器和协议故障注入工具
 design/         自有概念图、界面稿与脱敏参考图
 docs/           产品、架构、协议、测试和交接文档
 flow/           Project Flow 项目控制面
