@@ -7,9 +7,9 @@
 - 做了什么：在既有唯一 `UsbInputRuntime` owner 状态机内修复 USB HID 在途报告身份竞态。TinyUSB 完成/失败回调现在复制 Report ID、payload 长度、payload 内容和当前 callback epoch；owner 只有在四项身份全部匹配时才退休队列头或执行失败恢复。新增旧连接 Ctrl 报告迟到、旧连接全零报告与新连接全零报告同字节、错误长度/Report ID 回归，保持实体按住期间 fail-closed，实体释放后强制追加全释放报告。
 - 为什么：真机第二、三次断线仍出现 Ctrl 粘连；仅按 epoch/布尔在途标记不足以解释旧 endpoint 回调迟到。相同全零报告无法仅靠字节区分，因此额外验证即使旧全零误命中新 mount 首帧，实体按住仍不能解锁，必须完成释放后的第二帧全零后才接受新 Ctrl+C。
 - 测试：精确 ESP-IDF v5.5.5 环境执行 Host CMake/build/CTest，`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过；新增 stale completion/failure、同字节 zero、持键屏障端到端覆盖。
-- 构建：`idf.py --version` 为 `ESP-IDF v5.5.5`；target `esp32s3` 隔离构建通过，app `0x36D10`（224,528 bytes），factory 余量 93%；分区仍为 NVS 24 KiB、PHY 4 KiB、factory 3 MiB、sound A/B 各 576 KiB。最终提交后仍需从干净 HEAD 重建并重新计算 app SHA-256。
-- 静态与安全：`git diff --check`、范围、ASCII 路径、来源、密钥和构建产物检查待提交前完成；未扫描端口、识别设备、flash、erase、monitor、读取 Flash/NVS，未修改外部参考、小智、桌面、冻结合同或分区。当前只能声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`，T03 保持开放，T04/T05 关闭。
-- 下一步：更新模块状态与 provenance，提交并推送同一分支；展示新 HEAD、最终 app SHA-256 和精确 app-only 写入范围，取得新的明确烧录授权后才做硬件验证。旧授权不适用。
+- 构建：`idf.py --version` 为 `ESP-IDF v5.5.5`；target `esp32s3` 隔离构建通过，app `0x36D10`（224,528 bytes），factory 余量 93%；分区仍为 NVS 24 KiB、PHY 4 KiB、factory 3 MiB、sound A/B 各 576 KiB。提交后从最终干净 HEAD 再建同一镜像并计算 SHA-256。
+- 静态与安全：`git diff --check`、范围、ASCII 路径、来源、密钥和构建产物检查通过；未扫描端口、识别设备、flash、erase、monitor、读取 Flash/NVS，未修改外部参考、小智、桌面、冻结合同或分区。当前只能声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`，T03 保持开放，T04/T05 关闭。
+- 下一步：提交并推送交接记录；展示最终 HEAD、app SHA-256 和精确 app-only 写入范围，取得新的明确烧录授权后才做硬件验证。旧授权不适用。
 
 ## 2026-08-25 · T03 GPIO40 physical USB lifetime rework passes Host gate; final build and authorization pending
 
