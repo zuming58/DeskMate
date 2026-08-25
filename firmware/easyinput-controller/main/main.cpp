@@ -93,6 +93,7 @@ void input_owner_task(void*) {
             }
         }
         input.scan_keys(key_mask, now_ms);
+        runtime.observe_physical_key_mask(input.stable_key_mask());
         input.scan_encoder_press(
             gpio_get_level(static_cast<gpio_num_t>(kEncoderPressGpio)) == 0,
             now_ms);
@@ -121,13 +122,11 @@ void input_owner_task(void*) {
         }
 
         QueuedHidReport report{};
-        if (!report_in_flight && runtime.front_report(report) && tud_hid_ready()) {
-            if (tud_hid_report(report.report_id, report.payload.data(), report.length)) {
-                report_in_flight = true;
-                report_in_flight_epoch = report.epoch;
-            } else {
-                runtime.on_transfer_failed();
-            }
+        if (prepare_hid_report(runtime, tud_hid_ready(), report_in_flight, report)) {
+            const bool accepted = tud_hid_report(
+                report.report_id, report.payload.data(), report.length);
+            finish_hid_send_attempt(runtime, report, accepted, report_in_flight,
+                                    report_in_flight_epoch);
         }
         ulTaskNotifyTake(pdTRUE, 1);
     }

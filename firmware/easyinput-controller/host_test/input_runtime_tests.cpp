@@ -74,6 +74,13 @@ void drain_input_events(InputCore& input, UsbInputRuntime& runtime) {
     while (input.pop_event(event)) runtime.on_input(event);
 }
 
+void scan_owner_inputs(InputCore& input, UsbInputRuntime& runtime,
+                       uint8_t raw_key_mask, uint32_t now_ms) {
+    input.scan_keys(raw_key_mask, now_ms);
+    runtime.observe_physical_key_mask(input.stable_key_mask());
+    drain_input_events(input, runtime);
+}
+
 void add_encoder_detent(InputCore& input, uint32_t& now) {
     for (const uint8_t phase : std::array<uint8_t, 4>{1, 3, 2, 0}) {
         input.scan_encoder_phase(phase, now++);
@@ -159,6 +166,163 @@ void lifetime_and_disconnect_safety() {
     runtime.on_input(key(0, false));
     runtime.on_input(key(0, true));
     CHECK(runtime.queued_reports() == 1);
+}
+
+void cold_boot_held_s6_release_barrier() {
+    constexpr uint8_t s6_mask = 1u << 5;
+    InputCore input;
+    UsbInputRuntime runtime;
+    UsbLifecycleEventQueue events;
+    UsbCallbackLifecycleState callback;
+    bool report_in_flight = false;
+    uint32_t report_epoch = 0;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero_report{};
+
+    // The key is already held before this fresh runtime sees its first scan.
+    scan_owner_inputs(input, runtime, s6_mask, 0);
+    CHECK(runtime.queued_reports() == 0);
+    const auto mount = callback.on_mount();
+    CHECK(events.publish(mount));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(runtime.mounted());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+
+    // HID not ready leaves the release barrier queued; readiness may be delayed.
+    CHECK(!prepare_hid_report(runtime, false, report_in_flight, report));
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(prepare_hid_report(runtime, true, report_in_flight, report));
+    finish_hid_send_attempt(runtime, report, true, report_in_flight, report_epoch);
+    CHECK(report_in_flight);
+
+    // A duplicate mount must not reset the in-flight release or epoch.
+    CHECK(events.publish(callback.on_mount()));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(report_in_flight);
+
+    // Every input remains suppressed while the boot-time key is held.
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.queued_reports() == 1);
+
+    CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferComplete)));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 0);
+    CHECK(runtime.mounted());
+
+    // Debounced physical release has no Press owner in this fresh runtime,
+    // but must enqueue a new all-released report after the first one completed.
+    scan_owner_inputs(input, runtime, 0, 10);
+    scan_owner_inputs(input, runtime, 0, 30);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+
+    // Exercise both local send rejection and callback failure; each retains a
+    // retryable release report and never replays the old wheel event.
+    CHECK(prepare_hid_report(runtime, true, report_in_flight, report));
+    finish_hid_send_attempt(runtime, report, false, report_in_flight, report_epoch);
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(prepare_hid_report(runtime, true, report_in_flight, report));
+    finish_hid_send_attempt(runtime, report, true, report_in_flight, report_epoch);
+    CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferFailed)));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(prepare_hid_report(runtime, true, report_in_flight, report));
+    finish_hid_send_attempt(runtime, report, true, report_in_flight, report_epoch);
+    CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferComplete)));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 0);
+
+    // Only a new physical press after the completed release barrier can emit Ctrl+C.
+    scan_owner_inputs(input, runtime, s6_mask, 40);
+    scan_owner_inputs(input, runtime, s6_mask, 60);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 1);
+    CHECK(report.payload[2] == 0x06);
+}
+
+void cold_boot_release_before_mount_report_complete() {
+    constexpr uint8_t s6_mask = 1u << 5;
+    InputCore input;
+    UsbInputRuntime runtime;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero_report{};
+
+    scan_owner_inputs(input, runtime, s6_mask, 0);
+    runtime.on_mount(1);
+    CHECK(runtime.queued_reports() == 1);
+
+    // The held key is released while the mount-time zero report is still at
+    // the queue head. The release must append a distinct confirmation report.
+    scan_owner_inputs(input, runtime, 0, 10);
+    scan_owner_inputs(input, runtime, 0, 30);
+    CHECK(runtime.queued_reports() == 2);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 1);
+
+    // Completing the old mount report cannot unlock input.
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 1);
+    CHECK(report.payload[2] == 0x06);
+}
+
+void mount_before_first_cold_boot_scan() {
+    constexpr uint8_t s6_mask = 1u << 5;
+    InputCore input;
+    UsbInputRuntime runtime;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero_report{};
+
+    runtime.on_mount(1);
+    CHECK(runtime.queued_reports() == 1);
+
+    // The owner observes the already-held S6 before the queued mount report
+    // can complete. That report cannot unlock the release barrier.
+    scan_owner_inputs(input, runtime, s6_mask, 0);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.queued_reports() == 0);
+
+    scan_owner_inputs(input, runtime, 0, 10);
+    scan_owner_inputs(input, runtime, 0, 30);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 1);
+    CHECK(report.payload[2] == 0x06);
 }
 
 void ordered_lifetime_events_and_stale_completion() {
@@ -545,6 +709,9 @@ int main() {
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
     lifetime_and_disconnect_safety();
+    cold_boot_held_s6_release_barrier();
+    cold_boot_release_before_mount_report_complete();
+    mount_before_first_cold_boot_scan();
     ordered_lifetime_events_and_stale_completion();
     lifecycle_duplicate_mount_and_overflow_recovery();
     queue_failure_release_and_wheel_boundaries();

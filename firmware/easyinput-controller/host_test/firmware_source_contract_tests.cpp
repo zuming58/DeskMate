@@ -77,6 +77,9 @@ int main() {
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));
     CHECK(contains(main_source, "UsbLifecycleEventQueue lifecycle_events"));
     CHECK(contains(main_source, "process_usb_lifecycle_events"));
+    CHECK(contains(main_source, "input.stable_key_mask()"));
+    CHECK(contains(main_source, "prepare_hid_report"));
+    CHECK(contains(main_source, "finish_hid_send_attempt"));
     CHECK(contains(main_source, "lifecycle_events.publish"));
     CHECK(!contains(main_source, "mount_pending"));
     CHECK(!contains(main_source, "unmount_pending"));
@@ -104,6 +107,7 @@ int main() {
     CHECK(contains(runtime_header, "kUsbConfigurationDescriptor"));
     CHECK(contains(runtime_header, "kUsbStringDescriptors"));
     CHECK(contains(input_core_header, "discard_pending_events()"));
+    CHECK(contains(input_core_header, "stable_key_mask()"));
     CHECK(contains(runtime_source, "kHidReportDescriptor"));
     CHECK(contains(main_source, "kUsbDeviceDescriptor.data()"));
     CHECK(contains(main_source, "kUsbConfigurationDescriptor.data()"));

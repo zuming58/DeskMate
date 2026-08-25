@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 cold-boot Ctrl release barrier passes Host and IDF build; authorized HIL pending
+
+- 做了什么：从最新 `main@39ac64e2dbd099f9de076a019e456f822c683aef` 建立并继续 `codex/easyinput-t03-cold-boot-reconnect`。在现有唯一 `UsbInputRuntime` 中接入 `InputCore` 防抖后的八键实体掩码，并增加冷启动释放确认屏障：mount 首帧全释放之后，若启动时曾观察到按键按住，必须等实体键释放后追加的全释放报告收到 transfer-complete，才重新接受按键和滚轮。没有建立第二套输入状态机。
+- 为什么：上一版只在 mount 时发送零报告，真实拔线会让 ESP32-S3 冷启动；S6 在第一次稳定扫描前已经按下时没有本次运行的 Press owner，后续释放可能没有第二个零报告，Windows 因而仍保留 Ctrl。
+- 测试：精确激活 `ESP-IDF v5.5.5` 环境后执行 Host CMake/build/CTest，`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过。新增回归覆盖 fresh InputCore/runtime 且 S6 上电已按住、mount 早于首次实体扫描、held 期间输入抑制、无 Press owner 的释放、HID 未 ready/延迟 ready、发送拒绝、transfer complete/failure、重复 mount、释放早于 mount 首帧完成、旧滚轮不重放，以及释放完成后的新 S6 才重新发送 Ctrl+C。
+- 构建：在 ESP-IDF v5.5.5 / target `esp32s3` 下使用隔离 sdkconfig 重建成功；冻结分区为 NVS `0x9000/24K`、PHY `0xF000/4K`、factory `0x10000/3M`、sound A/B 各 576K。当前工作树预构建 app 为 `0x368E0`（223,456 bytes），factory 余量 93%；它只用于代码构建门，不作为最终烧录哈希，最终镜像将在干净提交 HEAD 上重建。
+- 来源与范围：更新 `docs/provenance/t03-easyinput-usb-input-runtime.md`，本轮只修改 EasyInput T03 输入/runtime/Host test/模块状态与本记录；外部 Maker 与小智目录未修改、未复制，未使用其 build 产物。
+- 硬件状态：尚未扫描端口、识别设备、flash、erase、monitor 或读写 Flash。本轮只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`；必须先推送干净提交、重建最终 app、展示 HEAD/SHA-256/app-only 范围并取得用户明确授权，之后才可补刷和连续执行五次 `123`→按住 S6→拔线重连→等 3 秒→松开→`abc`。
+- 下一步：完成静态检查、提交和推送；从干净 HEAD 重建最终 app 并申请 app-only 烧录授权。五次结果均为 `123abc` 且旧功能回归通过后才能关闭 T03 并进入 T04。
+
 ## 2026-08-25 · Second laptop continuation clarified: T03 then independent T04/T05, original computer audits later
 
 - 做了什么：补充跨电脑交接的后半程，新增受门禁阻挡的 T04 配置/NVS 与 T05 Host Action 任务卡，并把第二台笔记本的叠加分支顺序写入 T03 交接：先修并锁定 T03，再独立完成 T04、T05 的合同冻结、开发、自审、获授权真机验收和推送。

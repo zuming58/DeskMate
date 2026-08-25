@@ -138,6 +138,8 @@ public:
     void on_unmount();
     void on_resume();
     void on_input(const InputEvent& event);
+    // Publishes the debounced physical key snapshot, including cold-boot state.
+    void observe_physical_key_mask(uint8_t active_key_mask);
     void on_raw_edge_drops(uint32_t count);
     void on_encoder_resync();
     void on_input_event_drops(uint32_t count);
@@ -161,12 +163,18 @@ private:
     size_t queue_size_{0};
     bool mounted_{false};
     bool suppress_until_all_released_{false};
+    bool release_barrier_pending_{false};
+    bool physical_snapshot_observed_{false};
+    bool release_confirmation_enqueued_{false};
+    bool mount_release_completed_{false};
     static void saturating_add(uint32_t& value, uint32_t amount);
     void clear_queue();
     bool enqueue(const QueuedHidReport& report);
     void enqueue_keyboard(const KeyboardSnapshot& snapshot);
     void enqueue_wheel(const MouseWheelSnapshot& snapshot);
     bool any_held() const;
+    void maybe_enqueue_release_report(bool had_snapshot, bool was_held,
+                                      bool now_held);
     void recover_release();
 };
 
@@ -174,6 +182,12 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
     bool& report_in_flight, uint32_t& report_epoch,
     UsbCallbackSnapshot callback);
+
+bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
+                        bool report_in_flight, QueuedHidReport& report);
+void finish_hid_send_attempt(UsbInputRuntime& runtime,
+                             const QueuedHidReport& report, bool accepted,
+                             bool& report_in_flight, uint32_t& report_epoch);
 
 extern const uint8_t kHidReportDescriptor[];
 extern const size_t kHidReportDescriptorSize;

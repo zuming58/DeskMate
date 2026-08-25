@@ -168,7 +168,10 @@ void UsbInputRuntime::on_mount(uint32_t epoch) {
     diagnostics_.usb_mount_epoch = epoch == 0 ? 1 : epoch;
     clear_queue();
     router_.release_all();
-    if (any_held()) suppress_until_all_released_ = true;
+    release_barrier_pending_ = true;
+    release_confirmation_enqueued_ = false;
+    mount_release_completed_ = false;
+    suppress_until_all_released_ = true;
     // Windows can retain a modifier from the previous HID lifetime when the
     // cable is removed while a chord is held. Every new mount starts with an
     // explicit all-released report before accepting new input.
@@ -179,10 +182,57 @@ void UsbInputRuntime::on_unmount() {
     mounted_ = false;
     clear_queue();
     suppress_until_all_released_ = any_held();
+    release_barrier_pending_ = false;
+    release_confirmation_enqueued_ = false;
+    mount_release_completed_ = false;
     router_.release_all();
 }
 
 void UsbInputRuntime::on_resume() {}
+
+void UsbInputRuntime::observe_physical_key_mask(uint8_t active_key_mask) {
+    const bool had_snapshot = physical_snapshot_observed_;
+    const bool was_held = any_held();
+    for (size_t index = 0; index < physically_held_.size(); ++index) {
+        physically_held_[index] = (active_key_mask & (1u << index)) != 0;
+    }
+    physical_snapshot_observed_ = true;
+    const bool now_held = any_held();
+    if (!had_snapshot && now_held && mount_release_completed_) {
+        release_barrier_pending_ = true;
+        release_confirmation_enqueued_ = false;
+        suppress_until_all_released_ = true;
+    }
+    maybe_enqueue_release_report(had_snapshot, was_held, now_held);
+    if (release_barrier_pending_) suppress_until_all_released_ = true;
+}
+
+void UsbInputRuntime::maybe_enqueue_release_report(
+    bool had_snapshot, bool was_held, bool now_held) {
+    if (!release_barrier_pending_) return;
+    if (now_held) {
+        release_confirmation_enqueued_ = false;
+        return;
+    }
+    if (!mounted_ || release_confirmation_enqueued_ ||
+        (had_snapshot && !was_held)) return;
+    if (!had_snapshot) {
+        for (size_t offset = 0; offset < queue_size_; ++offset) {
+            const auto& pending =
+                queue_[(queue_head_ + offset) % queue_.size()];
+            if (pending.kind == HidReportKind::Keyboard &&
+                pending.payload == serialize_keyboard_report({})) {
+                release_confirmation_enqueued_ = true;
+                return;
+            }
+        }
+    }
+    // A cold-boot key has no Press owner. Force a fresh all-released report
+    // after its physical release. It remains queued behind any mount-time
+    // zero report so an old transfer-complete cannot satisfy this barrier.
+    enqueue_keyboard({});
+    release_confirmation_enqueued_ = true;
+}
 
 bool UsbInputRuntime::enqueue(const QueuedHidReport& report) {
     if (!mounted_) return false;
@@ -241,15 +291,23 @@ void UsbInputRuntime::recover_release() {
     clear_queue();
     router_.release_all();
     suppress_until_all_released_ = any_held();
+    release_barrier_pending_ = true;
+    release_confirmation_enqueued_ =
+        physical_snapshot_observed_ && !any_held();
+    mount_release_completed_ = false;
     if (mounted_) enqueue_keyboard({});
 }
 
 void UsbInputRuntime::on_input(const InputEvent& event) {
+    const bool had_snapshot = physical_snapshot_observed_;
+    const bool was_held = any_held();
     if ((event.type == InputEventType::KeyPressed || event.type == InputEventType::KeyReleased) && event.index < physically_held_.size()) {
         physically_held_[event.index] = event.type == InputEventType::KeyPressed;
+        physical_snapshot_observed_ = true;
     }
+    maybe_enqueue_release_report(had_snapshot, was_held, any_held());
     if (suppress_until_all_released_) {
-        if (!any_held()) suppress_until_all_released_ = false;
+        if (!any_held() && !release_barrier_pending_) suppress_until_all_released_ = false;
         return;
     }
     if (!mounted_) return;
@@ -270,11 +328,16 @@ void UsbInputRuntime::reconcile_usb_lifecycle(UsbCallbackSnapshot callback) {
     // A lost lifecycle event makes the prior key state untrustworthy. Swallow
     // input until all observed keys are released before accepting a new press.
     suppress_until_all_released_ = true;
+    release_barrier_pending_ = true;
+    release_confirmation_enqueued_ = false;
+    mount_release_completed_ = false;
+    if (mounted_) enqueue_keyboard({});
 }
 void UsbInputRuntime::recover_after_input_drop(uint8_t active_key_mask) {
     for (size_t index = 0; index < physically_held_.size(); ++index) {
         physically_held_[index] = (active_key_mask & (1u << index)) != 0;
     }
+    physical_snapshot_observed_ = true;
     recover_release();
 }
 void UsbInputRuntime::on_transfer_failed() { saturating_add(diagnostics_.hid_report_drops, static_cast<uint32_t>(queue_size_)); recover_release(); }
@@ -287,8 +350,19 @@ bool UsbInputRuntime::front_report(QueuedHidReport& report) const {
 
 void UsbInputRuntime::complete_report() {
     if (queue_size_ == 0) return;
+    const QueuedHidReport completed = queue_[queue_head_];
     queue_head_ = (queue_head_ + 1) % queue_.size();
     --queue_size_;
+    if (release_barrier_pending_ && completed.kind == HidReportKind::Keyboard &&
+        completed.payload == serialize_keyboard_report({}) &&
+        queue_size_ == 0) {
+        mount_release_completed_ = true;
+        if (release_confirmation_enqueued_ || !physical_snapshot_observed_) {
+            release_barrier_pending_ = false;
+            release_confirmation_enqueued_ = false;
+            suppress_until_all_released_ = false;
+        }
+    }
 }
 
 bool UsbInputRuntime::reject_vendor_feature(uint8_t report_id, const uint8_t* data, size_t length) const {
@@ -350,6 +424,23 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
         }
     }
     return result;
+}
+
+bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
+                        bool report_in_flight, QueuedHidReport& report) {
+    return endpoint_ready && !report_in_flight && runtime.front_report(report);
+}
+
+void finish_hid_send_attempt(UsbInputRuntime& runtime,
+                             const QueuedHidReport& report, bool accepted,
+                             bool& report_in_flight, uint32_t& report_epoch) {
+    if (accepted) {
+        report_in_flight = true;
+        report_epoch = report.epoch;
+        return;
+    }
+    runtime.on_transfer_failed();
+    report_in_flight = false;
 }
 
 const uint8_t kHidReportDescriptor[] = {

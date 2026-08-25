@@ -2,11 +2,11 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`。首次写入、正常启动、`VID 303A / PID 1006` 枚举、S1～S7、旋钮纵向/横向和 DeskMate 基础回归已有真机证据；当前测试实板 S8 是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。`dd7bb69` 的 USB mount 首帧全释放修复已 app-only 写入并校验，但完整关机/开机后的真实 S6 断线场景仍出现 Ctrl 粘连；该修复未通过 HIL，下一轮需覆盖 MCU 冷启动且上电时按键已按住的真实模型。
+当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_COLD_BOOT_FIX_READY_FOR_AUTHORIZED_APP_ONLY_HIL`。首次写入、正常启动、`VID 303A / PID 1006` 枚举、S1～S7、旋钮纵向/横向和 DeskMate 基础回归已有上一轮真机证据；当前测试实板 S8 是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。上一版仅在 mount 发送全释放报告，仍会在 MCU 冷启动且 S6 已按住时复现 Ctrl 粘连；本分支已增加冷启动实体快照和释放确认屏障，并通过 Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建，但尚未补刷和执行五次真机断线复测。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
-当前唯一开放任务是 [`T03-easyinput-usb-input-runtime.md`](../../flow/tasks/T03-easyinput-usb-input-runtime.md)，按冻结的 [`INPUT_V1_FROZEN`](../../contracts/deskmate-host/easyinput-input-v1.md) 建立“实体输入 → USB HID”最小闭环。配置、音频、DeskMate Link 和真机阶段仍由后续独立任务逐包推进；T03 完成并经当前电脑复审前不烧录。
+当前唯一开放任务是 [`T03-easyinput-usb-input-runtime.md`](../../flow/tasks/T03-easyinput-usb-input-runtime.md)，按冻结的 [`INPUT_V1_FROZEN`](../../contracts/deskmate-host/easyinput-input-v1.md) 建立“实体输入 → USB HID”最小闭环。配置、音频和 DeskMate Link 仍由后续独立任务逐包推进；当前只允许在展示最终 HEAD、app SHA-256 和 app-only 写入范围并取得用户明确授权后补刷 T03。
 
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 
@@ -35,4 +35,4 @@ Firmware build (ESP-IDF 5.5.5, ESP32-S3; no `flash` or `monitor`):
 idf.py -C firmware/easyinput-controller build
 ```
 
-Evidence is limited to `TEST_CONFIRMED` and `BUILD_CONFIRMED`; recovery preparation, independent code audit and any later hardware authorization remain pending.
+当前自动化证据仅为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`；五次 Ctrl 断线复测及其后续回归必须在获授权的 app-only 补刷后完成，未通过前不得关闭 T03 或进入 T04。

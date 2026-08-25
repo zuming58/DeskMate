@@ -108,6 +108,16 @@ bool InputCore::pop_event(InputEvent& event) {
     return true;
 }
 
+uint8_t InputCore::stable_key_mask() const {
+    uint8_t mask = 0;
+    for (uint8_t index = 0; index < 8; ++index) {
+        if (debounce_[index].initialized && debounce_[index].stable) {
+            mask |= static_cast<uint8_t>(1u << index);
+        }
+    }
+    return mask;
+}
+
 void InputCore::discard_pending_events() {
     event_tail_ = event_head_;
     event_count_ = 0;

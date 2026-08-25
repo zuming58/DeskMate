@@ -42,6 +42,7 @@ public:
     void resync_encoder(uint8_t raw_phase);
 
     bool pop_event(InputEvent& event);
+    uint8_t stable_key_mask() const;
     // Drops the complete pending sequence after an event-ring overflow.
     void discard_pending_events();
     uint32_t take_event_drops();
