@@ -2,7 +2,7 @@
 
 Status: `T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`
 
-This is the only open development package. Do not start T04 or T05 until this T03 blocker is fixed, independently tested and explicitly locked.
+T03 is the only package open now. Do not start T04 or T05 while this blocker remains. After T03 is independently fixed, tested and locked on the second hardware laptop, continue T04 and then T05 on the same laptop under the staged-branch plan below; the original main computer will perform the later independent combined audit.
 
 ## Repository and local references
 
@@ -48,7 +48,7 @@ Also verify rather than assume that the mount release report is accepted after `
 5. Preserve all T03 frozen descriptors, VID/PID, Report IDs, default mappings, queue bounds, diagnostics and fail-closed Vendor behavior.
 6. Run all firmware Host tests, exact ESP-IDF v5.5.5 `esp32s3` build, `git diff --check`, source/license, secret, ASCII-path and build-artifact checks.
 7. Self-review the diff specifically for cold boot versus same-runtime reconnect, readiness/transfer ordering, suppressed-key release and retry loops.
-8. Push the branch and stop. Do not merge main, start T04/T05, access Xiaozhi, alter partitions or implement configuration features.
+8. Push the T03 branch. Do not merge `main`, access Xiaozhi, alter partitions or implement configuration features before T03 HIL is locked.
 
 ## Hardware gate on the second computer
 
@@ -67,11 +67,30 @@ After an authorized app-only reflash and full power-off/on, repeat exactly:
 
 Do not mark T03 HIL complete solely from Host tests or one successful reflash. Record exact observed evidence in `flow/progress.md`; S8 remains a separately documented current-unit hardware block/waiver decision.
 
-## Stop condition
+## Continued independent development after T03 passes
 
-Stop and hand back when either:
+The user's temporary two-computer arrangement is explicit: the EasyInput hardware moves with the second laptop. Once T03 passes five reconnect repetitions and the remaining T03 regression, the second laptop continues T04 and T05 independently instead of waiting for the original computer.
 
-- the branch is pushed with code review, Host and IDF build evidence, awaiting user-authorized HIL; or
-- authorized HIL has completed and all five reconnect repetitions pass, with remaining T03 evidence recorded.
+Use stacked branches so the original computer can audit each package later:
 
-Do not continue into T04/T05 in the same task.
+1. `codex/easyinput-t03-cold-boot-reconnect` from the handoff `main`.
+2. `codex/easyinput-t04-config-nvs` from the final T03 HEAD.
+3. `codex/easyinput-t05-host-actions` from the final T04 HEAD.
+
+For T04, read [`T04-easyinput-config-nvs.md`](../../flow/tasks/T04-easyinput-config-nvs.md). First propose and self-audit the complete configuration contract; the current `0x13` status/fingerprint is not a complete configuration read. Only after marking the slice `CONFIG_V1_FROZEN` may implementation begin. Finish code, Host/desktop tests, exact IDF build, separately authorized HIL and self-audit, then push T04 without merging main.
+
+For T05, read [`T05-easyinput-host-actions.md`](../../flow/tasks/T05-easyinput-host-actions.md). Start only from locked T04. First freeze `HOST_ACTION_V1_FROZEN`, then implement the hardware-key→UUID→Windows local application mapping/open loop, run all previous regressions, separately authorized HIL and self-audit, and push T05 without merging main.
+
+Do not start T06. Do not combine the three branches into `main`. When the user returns to the original computer, that computer will independently review main→T03, T03→T04 and T04→T05, rerun the combined build/test matrix and repeat hardware checks as needed before accepting or merging anything.
+
+If T03 cannot pass, stop there and do not enter T04. If a T04/T05 contract cannot be frozen without guessing, push the proposal/evidence as a blocked handoff rather than implementing a guessed wire format.
+
+## Final stop condition
+
+Stop the temporary second-computer run when either:
+
+- T03 remains genuinely blocked and its branch/evidence has been pushed; or
+- T03, T04 and T05 have each completed their own contract/code/test/build/HIL/self-audit gates and all three stacked branches are pushed; or
+- a later contract cannot be frozen safely, in which case push the completed earlier branches plus the blocked contract proposal and stop.
+
+Never merge `main` or start T06 on the second laptop.

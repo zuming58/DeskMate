@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · Second laptop continuation clarified: T03 then independent T04/T05, original computer audits later
+
+- 做了什么：补充跨电脑交接的后半程，新增受门禁阻挡的 T04 配置/NVS 与 T05 Host Action 任务卡，并把第二台笔记本的叠加分支顺序写入 T03 交接：先修并锁定 T03，再独立完成 T04、T05 的合同冻结、开发、自审、获授权真机验收和推送。
+- 为什么：上一版交接只强调“T03 失败时不得提前做 T04/T05”，容易被理解成另一台电脑永远不能继续；用户的真实安排是硬件临时随笔记本外出，由那台电脑连续推进三包，回来后再由原主电脑做独立综合审计。
+- 怎么理解：门禁顺序没有放松。T03 未通过不能进入 T04；T04 的完整配置读取合同未冻结，固定 Maker `0x13` 状态/指纹不能冒充完整配置；T05 必须建立在锁定的 T04 上。另一台电脑使用 T03→T04→T05 三个叠加分支，不合并 `main`、不开始 T06。
+- 产出路径：`flow/tasks/T04-easyinput-config-nvs.md`、`flow/tasks/T05-easyinput-host-actions.md`、`docs/handoffs/second-computer-t03-cold-boot-reconnect-handoff-2026-08-25.md`、`flow/plan.md`、`docs/README.md` 与本记录。
+- 验证：仅修改协作与任务文档；确认 T04/T05 在仓库中此前没有任务卡，确认当前 Host Contract 只有 `INPUT_V1_FROZEN`，配置和 Host Action 仍为 `NOT_FROZEN`。未访问硬件、未构建、未烧录。
+- 问题解决：交接现已同时表达“当前不能越过 T03”和“T03 通过后继续独立完成 T04/T05”；后续审计责任明确归回原主电脑，避免另一台自审被冒充为最终合并审计。
+- 下一步：第二台电脑拉取最新 `main`，按交接先开 T03 分支；T03 锁定后从其 HEAD 开 T04，再从 T04 HEAD 开 T05。每包推送证据但不合并，用户回来后由原主电脑依次审查三个 diff 和组合回归。
+
 ## 2026-08-25 · T03 app-only reconnect fix failed HIL; second hardware laptop takes over T03
 
 - 做了什么：用户按本板合同完整关机/开机后，Windows 只读枚举确认 `VID 303A / PID 1006` 的 Keyboard、Mouse、HID 状态正常且下载端口消失；随后重复“记事本 `123` → 按住 S6 → 拔 USB → 保持按住重连 → 等 3 秒 → 松开 → 电脑键盘输入 `abc`”，Ctrl 仍粘连，`A` 仍触发全选。新增第二台硬件笔记本专用交接文档并更新 T03 状态。

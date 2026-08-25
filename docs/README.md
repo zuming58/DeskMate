@@ -25,6 +25,8 @@
 - [T03 first-flash and HIL authorization card](testing/t03-first-flash-authorization-card-2026-08-24.md)
 - [T03 first-flash pre-write audit](reviews/t03-first-flash-prewrite-audit-2026-08-25.md)
 - [T03 cold-boot reconnect rework handoff](handoffs/second-computer-t03-cold-boot-reconnect-handoff-2026-08-25.md)
+- [T04 EasyInput configuration and NVS task](../flow/tasks/T04-easyinput-config-nvs.md)
+- [T05 EasyInput Host Action task](../flow/tasks/T05-easyinput-host-actions.md)
 
 ## Product
 
