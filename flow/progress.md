@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 cold-boot candidate fails second reconnect repetition after app-only reflash
+
+- 做了什么：用户明确授权后，重新核对 `codex/easyinput-t03-cold-boot-reconnect@a97d85e9bbafc6d76a7942d381d360d5ebd58d56` 与 app SHA-256 `20B1AF1D66D092E3BF17D6A16C4A22FF18F0D269F63149A251C3A6C737ADCE31`，只把 223,456-byte app 写入 `0x010000..0x0468DF`，写入工具完成数据哈希校验。完整关机/正常开机后，Windows Keyboard、Mouse 与 HID 接口均以 `VID 303A / PID 1006` 正常枚举。
+- 真机结果：按指定矩阵在记事本执行 `123`→按住 S6→拔 USB→保持按住重连→等待至少 3 秒→松开→电脑键盘输入 `abc`。第一次得到 `123abc`；第二次再次发生 Ctrl 粘连。测试立即停止，没有继续凑满五次。
+- 结论：`a97d85e` 的冷启动实体快照/释放确认屏障仍不是可靠 HIL 修复，状态改为 `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION`。Host 3/3 与 ESP-IDF v5.5.5 构建证据继续有效，但不能覆盖真实失败；T03 不关闭，T04/T05 继续关闭。
+- 安全边界：本次只写授权 app 范围；未擦除整片，未修改 bootloader、分区表、NVS、PHY、双声音 bank 或 eFuse，未操作小智。失败后未继续扫描端口、识别设备、monitor 或写 Flash。
+- 下一步：先基于这次间歇性失败重新审计 TinyUSB transfer-complete 与 Windows 实际接收之间的证据缺口，以及断电/重枚举时序；建立能够复现“第一次通过、第二次失败”的更严格模型和可观测证据后再提出新候选。任何再次补刷都必须重新展示 HEAD、app SHA-256、app-only 范围并取得明确授权。
+
 ## 2026-08-25 · T03 cold-boot Ctrl release barrier passes Host and IDF build; authorized HIL pending
 
 - 做了什么：从最新 `main@39ac64e2dbd099f9de076a019e456f822c683aef` 建立并继续 `codex/easyinput-t03-cold-boot-reconnect`。在现有唯一 `UsbInputRuntime` 中接入 `InputCore` 防抖后的八键实体掩码，并增加冷启动释放确认屏障：mount 首帧全释放之后，若启动时曾观察到按键按住，必须等实体键释放后追加的全释放报告收到 transfer-complete，才重新接受按键和滚轮。没有建立第二套输入状态机。

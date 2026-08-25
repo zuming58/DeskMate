@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`T03_COLD_BOOT_FIX_READY_FOR_AUTHORIZED_APP_ONLY_HIL`。首次三段写入与正常启动完成；S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获已有上一轮真机证据。当前测试实板 S8 是烧录前已知硬件阻断，固件仍保留 S8/GPIO48 与八键合同。上一版 mount 首帧全释放仍在 MCU 冷启动且 S6 已按住时复现 Ctrl 粘连；本分支已在唯一 runtime 中增加防抖实体快照和释放确认屏障，并覆盖 HID ready/延迟、发送拒绝、transfer complete/failure、重复 mount、释放早于 mount 首帧完成和旧滚轮不重放。Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过；尚未获得本修复的 app-only 补刷授权，也未执行连续五次真机断线复测。T03 真机通过前不得开始 T04。
+- 状态：`T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION`。冷启动实体快照与释放确认屏障候选 `a97d85e` 的 Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，并已获授权仅补刷 app；Windows `VID 303A / PID 1006` 正常枚举。连续断线矩阵第一次得到 `123abc`，第二次再次发生 Ctrl 粘连，因此该候选未通过 HIL。当前测试实板 S8 仍是烧录前已知硬件阻断，固件保留 S8/GPIO48 与八键合同。T03 保持开放，T04/T05 关闭。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

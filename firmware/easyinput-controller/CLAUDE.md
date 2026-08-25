@@ -23,7 +23,7 @@
 - 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
-- T03 冷启动断线修复当前为 `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_COLD_BOOT_FIX_READY_FOR_AUTHORIZED_APP_ONLY_HIL`：首次写入及 S1～S7、旋钮和桌面基础回归属于上一轮证据；本分支的冷启动实体快照与释放确认屏障尚未补刷和真机验证。当前实板 S8 仍是烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
+- T03 冷启动断线候选 `a97d85e` 为 `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION`：该候选已获授权仅补刷 app，Windows HID 正常枚举，但指定断线矩阵第一次通过、第二次再次发生 Ctrl 粘连，不能作为 HIL 修复。当前实板 S8 仍是烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
 - T03 未通过连续五次 Ctrl 断线复测及既有功能回归前，不得进入 T04。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现。补刷前必须展示最终分支 HEAD、app SHA-256 和 app-only 精确写入范围，并取得用户新的明确授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。

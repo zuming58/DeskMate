@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_COLD_BOOT_FIX_READY_FOR_AUTHORIZED_APP_ONLY_HIL`。首次写入、正常启动、`VID 303A / PID 1006` 枚举、S1～S7、旋钮纵向/横向和 DeskMate 基础回归已有上一轮真机证据；当前测试实板 S8 是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。上一版仅在 mount 发送全释放报告，仍会在 MCU 冷启动且 S6 已按住时复现 Ctrl 粘连；本分支已增加冷启动实体快照和释放确认屏障，并通过 Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建，但尚未补刷和执行五次真机断线复测。
+当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION`。冷启动实体快照与释放确认屏障候选 `a97d85e` 已按授权仅补刷 app，Windows 正常枚举；指定断线矩阵第一次得到 `123abc`，第二次再次发生 Ctrl 粘连，因此候选被真机证据否决。当前测试实板 S8 仍是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。T03 保持开放，禁止进入 T04。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
@@ -35,4 +35,4 @@ Firmware build (ESP-IDF 5.5.5, ESP32-S3; no `flash` or `monitor`):
 idf.py -C firmware/easyinput-controller build
 ```
 
-当前自动化证据仅为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`；五次 Ctrl 断线复测及其后续回归必须在获授权的 app-only 补刷后完成，未通过前不得关闭 T03 或进入 T04。
+当前自动化证据仍仅为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`；已授权 app-only 补刷后的第二次 Ctrl 断线复测失败，不得关闭 T03 或进入 T04。
