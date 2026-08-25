@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`FLASH_VERIFIED_PENDING_NORMAL_BOOT_RETEST`。首次三段写入与正常启动完成；S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获真机通过。当前测试实板 S8 是烧录前已知硬件阻断，固件仍保留 S8/GPIO48 与八键合同。用户已授权把 `dd7bb69` 的 mount 首帧全释放修复仅写入 app 区 `0x010000..0x04662F`；数据哈希与写后私有身份核对通过，未写其他区域。板子仍待手动下载模式后的完整关机/开机和原断线场景复测。20 次 S1 压力过程中出现一次可恢复的转写请求失败，后续会话成功；它按桌面服务异常记录，不作为 HID 粘键结论。
+- 状态：`T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`。首次三段写入与正常启动完成；S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获真机通过。当前测试实板 S8 是烧录前已知硬件阻断，固件仍保留 S8/GPIO48 与八键合同。`dd7bb69` 的 mount 首帧全释放修复经用户授权仅写入 app 区并验证，完整关机/开机后原 S6 断线场景仍产生 Windows Ctrl 粘连，因此该修复未通过 HIL。下一轮必须建立“USB 拔线导致 MCU 冷启动且上电时按键已按住”的测试模型并证明 HID readiness/transfer/release barrier；详见 `docs/handoffs/second-computer-t03-cold-boot-reconnect-handoff-2026-08-25.md`。T04/T05 不得开始。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

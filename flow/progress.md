@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 app-only reconnect fix failed HIL; second hardware laptop takes over T03
+
+- 做了什么：用户按本板合同完整关机/开机后，Windows 只读枚举确认 `VID 303A / PID 1006` 的 Keyboard、Mouse、HID 状态正常且下载端口消失；随后重复“记事本 `123` → 按住 S6 → 拔 USB → 保持按住重连 → 等 3 秒 → 松开 → 电脑键盘输入 `abc`”，Ctrl 仍粘连，`A` 仍触发全选。新增第二台硬件笔记本专用交接文档并更新 T03 状态。
+- 为什么：写入与镜像校验成功只证明 app 已正确落盘，真实断线行为仍失败，不能锁定 T03，更不能把 T04/T05 叠加到未解决输入合同上。用户即将携带硬件与另一台笔记本继续开发，需要把失败事实和安全边界先推到 GitHub。
+- 怎么理解：`dd7bb69` 的 mount 首帧全释放不是有效 HIL 修复。高可信但待证明的差异是 Host 测试保留同一运行时对象，而 USB 拔线让 ESP32-S3 冷启动且 S6 在启动时已按住；还需验证物理初始采样、`tud_hid_ready()`、transfer-complete 与释放屏障。当前状态为 `T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`，T04/T05 关闭。
+- 产出路径：`docs/handoffs/second-computer-t03-cold-boot-reconnect-handoff-2026-08-25.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、`firmware/easyinput-controller/README.md`、`flow/plan.md`、`flow/lessons.md` 与本记录。
+- 验证：补刷后 Windows HID 正常启动 PASS；相同 S6 断线测试 FAIL。既有自动化仍为桌面 68/68、固件 Host 3/3、ESP-IDF v5.5.5 构建通过，但这些证据已被真实 HIL 证明缺少冷启动向量。未进行新的 Flash/读取/擦除或小智操作。
+- 问题解决：未解决的问题已如实保持开放；S8 继续单列为当前样机烧录前硬件阻断，语音单次请求失败继续单列为可恢复服务异常。Git 外 Flash/NVS/私有身份/日志和构建镜像不上传。
+- 下一步：另一台电脑从最新 `origin/main` 创建 `codex/easyinput-t03-cold-boot-reconnect`，先补冷启动 held-key 与传输时序测试，再做最小固件修复、自审和构建；任何补刷需再次展示 app-only 清单并取得用户授权。五次真实断线复测全部通过前不锁定 T03，不开始 T04/T05。
+
 ## 2026-08-25 · T03 reconnect fix app-only reflash verified; normal boot retest pending
 
 - 做了什么：用户按精确授权句确认后，短按并松开当前 EasyInput 的 BOOT；本机重新核对唯一下载端口、ESP32-S3 型号、原完整备份中的私有身份和候选镜像哈希，只把 `dd7bb69` 的 app 镜像写入 `0x010000..0x04662F`，随后验证数据哈希并再次匹配私有身份。

@@ -24,6 +24,7 @@
 - [T03 third independent audit and local acceptance](reviews/t03-easyinput-usb-input-runtime-third-audit-2026-08-24.md)
 - [T03 first-flash and HIL authorization card](testing/t03-first-flash-authorization-card-2026-08-24.md)
 - [T03 first-flash pre-write audit](reviews/t03-first-flash-prewrite-audit-2026-08-25.md)
+- [T03 cold-boot reconnect rework handoff](handoffs/second-computer-t03-cold-boot-reconnect-handoff-2026-08-25.md)
 
 ## Product
 

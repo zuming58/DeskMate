@@ -1,5 +1,10 @@
 # Lessons learned
 
+## USB unplug HIL must model MCU cold boot, not only logical remount
+
+- 现象：同一个运行时对象上的 unmount→mount Host 测试和 mount 首帧全释放都通过，但实体 USB 拔线会同时切断板子供电；修复版真机仍复现 Windows modifier 粘连。
+- 做法：断线合同的自动化必须另建“固件状态全部丢失、上电时实体键已经按住”的冷启动向量，并验证初始物理采样、TinyUSB ready、传输完成、抑制期和实体释放之间的先后关系。测试通过前只能把冷启动基线遗漏标为假设，不能以同一对象 remount 代替真实断电证据。
+
 ## USB HID remount must explicitly clear host-visible modifiers
 
 - 现象：组合键按下时直接拔掉 USB，固件虽在 unmount/mount 清空内部队列和 held source，Windows 仍可能保留旧设备最后一次看到的 modifier；重新连接后普通字母会继续表现为 `Ctrl+A` 等组合键。

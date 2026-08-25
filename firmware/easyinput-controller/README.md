@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `FLASH_VERIFIED_PENDING_NORMAL_BOOT_RETEST`。首次写入、正常启动、`VID 303A / PID 1006` 枚举、S1～S7、旋钮纵向/横向和 DeskMate 基础回归已有真机证据；当前测试实板 S8 是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。`dd7bb69` 的 USB mount 首帧全释放修复已获用户授权并仅写入 app 区，写入校验通过；仍需正常启动并复测按住 modifier 拔线场景，不能声明 HIL 修复通过。
+当前状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`。首次写入、正常启动、`VID 303A / PID 1006` 枚举、S1～S7、旋钮纵向/横向和 DeskMate 基础回归已有真机证据；当前测试实板 S8 是烧录前已知的单板硬件阻断，不改八键/GPIO48 产品合同。`dd7bb69` 的 USB mount 首帧全释放修复已 app-only 写入并校验，但完整关机/开机后的真实 S6 断线场景仍出现 Ctrl 粘连；该修复未通过 HIL，下一轮需覆盖 MCU 冷启动且上电时按键已按住的真实模型。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
