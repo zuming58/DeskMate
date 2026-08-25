@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 reconnect blocker fixed in code; app-only reflash pending authorization
+
+- 做了什么：依据用户真机压力测试复现语义，确认“按住 S6 拔线并重连后，普通 `A` 仍触发全选”是 host-visible Ctrl 粘连；在 `UsbInputRuntime::on_mount()` 中让新 mount epoch 首先排入全释放键盘报告，并用生产路径 Host 测试锁定首帧、旧队列丢弃和 held-key 抑制。同期完善桌面转写失败分类与历史标记，并把胶囊转写阶段的误导性 `0%` 改为“处理中”。
+- 为什么：固件只清内部 router/queue 不能撤销 Windows 在设备突然消失前记住的 modifier；这是 T03 防粘键合同的真机阻断。语音压力中的一次请求失败随后恢复，属于可恢复服务异常，不能与 HID 生命周期缺陷混为同一根因。
+- 怎么理解：`main@dd7bb69` 是补刷候选，不是 HIL 已通过版本。当前已通过的真机项包括 S1～S7、旋钮纵向/横向、DeskMate 语音输出、历史复制和快捷键捕获；S8 仍是当前单板烧录前已知硬件阻断。T03 保持 `HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`，T04/T05 仍关闭。
+- 产出路径：`firmware/easyinput-controller/components/input_core/src/input_runtime.cpp`、`firmware/easyinput-controller/host_test/input_runtime_tests.cpp`、`src/services/voicePipeline.js`、`src/pages.jsx`、`electron/overlay-preload.cjs`、相关测试，以及 `docs/testing/t03-first-flash-authorization-card-2026-08-24.md`。
+- 验证：桌面 `npm test` 68/68；固件 Host CTest 3/3；ESP-IDF v5.5.5 / ESP32-S3 隔离构建通过，app 222,768 字节，SHA-256 `0F4ABC7FA9A3A1A1FCBF457FA468931468940AFDC49460B8302E1B1DFEB517C8`；`npm run build:desktop` 和打包版烟测通过。未访问设备、未补刷。
+- 问题解决：代码层已修复 remount 首帧缺少全释放的问题；语音失败现在以安全类别落历史，后续会话可恢复。仍需真机证明 Windows Ctrl 不再残留，并完成剩余 S1 压力次数。
+- 下一步：向用户展示 app-only 补刷范围 `0x010000..0x04662F` 并取得新的明确授权；随后只补刷 app，正常重启后复测 S6 断线场景、快速旋钮和剩余语音循环。全部通过并处理 S8 当前样机豁免后才锁定 T03、整理并推送交接基线，开放另一台电脑的 T04/T05。
+
 ## 2026-08-25 · DeskMate voice trigger confirmed; ASR blocked by migrated user-data identity
 
 - 做了什么：依据用户真机截图确认 S1 可正常开始/停止 DeskMate 录音，胶囊能观察到麦克风声音活动；只读追踪“录音完成，等待转写服务”到 STT 降级链路，并在当前 Windows 用户的两个限定应用配置区内仅核对加密凭据是否存在、JSON 是否完整和哪个 localStorage 最近活动，未读取、解密或输出 API Key。

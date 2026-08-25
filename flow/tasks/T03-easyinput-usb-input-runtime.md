@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`。首次三段写入与正常启动完成，Windows `VID 303A / PID 1006` 的 Keyboard/Mouse/HIDClass 枚举正常；S1～S7 冻结默认动作的按下/释放真机通过。用户确认当前测试实板的 S8 在烧录前即不亮、无输入，故标为单板硬件阻断；固件仍保留 S8/GPIO48 和八键产品合同，等待修板或后续健康实板复测。旋钮、断线恢复、20 次 S1 与 DeskMate 回归仍待完成。
+- 状态：`HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`。首次三段写入与正常启动完成；S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获真机通过。当前测试实板 S8 是烧录前已知硬件阻断，固件仍保留 S8/GPIO48 与八键合同。断线测试发现按住 S6 拔线后 Windows 残留 Ctrl；`main@dd7bb69` 已在每个 mount epoch 首先发送全释放报告并补齐 Host 回归，候选镜像仅待用户另行授权 app-only 补刷和同场景复测。20 次 S1 压力过程中出现一次可恢复的转写请求失败，后续会话成功；它按桌面服务异常记录，不作为 HID 粘键结论。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

@@ -1,5 +1,10 @@
 # Lessons learned
 
+## USB HID remount must explicitly clear host-visible modifiers
+
+- 现象：组合键按下时直接拔掉 USB，固件虽在 unmount/mount 清空内部队列和 held source，Windows 仍可能保留旧设备最后一次看到的 modifier；重新连接后普通字母会继续表现为 `Ctrl+A` 等组合键。
+- 做法：每个新的 mount epoch 在接受新实体输入前，先由唯一 USB owner 发送一份显式全释放键盘报告；同时清空旧报告/滚轮队列，并继续抑制重连时仍按住的实体键，直到它真实释放。Host 测试要锁定“按住 modifier 拔线 → 重连首帧全释放 → 释放旧键 → 新输入正常”。
+
 ## Electron app identity changes strand encrypted user data
 
 - 现象：项目迁移或打包名称变化后，Electron `app.getPath("userData")` 可能从旧 profile 切到新 profile；`safeStorage` 密文仍在旧目录，但当前应用的状态和凭据从新目录读取，于是用户明明“以前配置过”，新版本仍表现为未配置。

@@ -1,6 +1,6 @@
 # T03 first-flash and HIL authorization card
 
-Status: `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`
+Status: `HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`
 
 This card applies only to the EasyInput V2.0 board connected to the current main computer. It does not authorize Xiaozhi access, network scanning, eFuse changes, partition changes, erase-all, UART wiring or servo actions.
 
@@ -63,8 +63,23 @@ Only after every item passes may T03 be marked `HIL_CONFIRMED` and locked. Confi
 - The current physical test unit's S8 was already known to show no light and no input response before this flash. It is recorded as `CURRENT_UNIT_HARDWARE_BLOCK`, not as a T03 regression and not as a global change to the eight-key/GPIO48 contract.
 - T03 cannot be declared fully `HIL_CONFIRMED` yet. Encoder, reconnect/held-key recovery, 20 S1 cycles and DeskMate regression remain; S8 ultimately needs a repaired/healthy board retest or an explicit prototype-only hardware waiver.
 
-## User authorization sentence
+## 2026-08-25 pressure-test finding and rework candidate
+
+- Encoder vertical and horizontal scrolling, DeskMate voice output, history copy and shortcut capture passed user-observed HIL.
+- The held-key reconnect case failed: S6 was held during unplug/replug, and Windows retained `Ctrl`, so a later `A` acted as Select All. This blocks T03 lock.
+- Root cause: clearing firmware queues and held sources on mount does not clear an OS modifier retained when the previous USB instance disappeared before sending key-up. Commit `dd7bb69` makes the first keyboard report of every mount epoch an explicit all-released snapshot.
+- The rework candidate passed desktop 68/68, packaged desktop build and smoke, firmware Host CTest 3/3, and ESP-IDF v5.5.5 / ESP32-S3 build. Its app image is 222,768 bytes, SHA-256 `0F4ABC7FA9A3A1A1FCBF457FA468931468940AFDC49460B8302E1B1DFEB517C8`.
+- A follow-up write is not yet authorized. If separately authorized, only app range `0x010000..0x04662F` will be written. Bootloader, partition table, NVS, PHY, both sound banks, eFuse and Xiaozhi remain untouched.
+- During the voice pressure run, one transcription request failed and the following cycles recovered. The failure is preserved as a distinct safe history state; it is not counted as proof of a stuck HID trigger. T03 still requires reconnect retest and completion of the remaining voice cycles after the rework build runs on the board.
+
+## Original first-write authorization sentence
 
 To authorize the reversible backup, first write and T03 HIL on the connected EasyInput only, reply:
 
 > 我授权按 T03 首次烧录卡执行：只识别当前 EasyInput，先备份并校验 Flash/NVS，再展示目标和写入范围后烧录，随后执行 T03 真机测试；不擦除整片、不改分区、不写 eFuse、不操作小智。
+
+## App-only reflash authorization sentence
+
+To authorize only the reconnect fix app reflash and follow-up T03 HIL, reply:
+
+> 我确认只将 dd7bb69 的 T03 修复版写入当前 EasyInput 的 app 区 0x010000..0x04662F；不写其他区域、不擦除、不改分区、不写 eFuse、不操作小智。

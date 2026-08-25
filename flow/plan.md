@@ -6,8 +6,8 @@
 
 ### Current execution point
 
-- T03 首次写入及正常启动已确认：Windows 枚举 `VID 303A / PID 1006` 的 Keyboard、Mouse 与 HIDClass 接口且状态正常；S1～S7 默认动作及释放真机通过。当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。S1 已可驱动 DeskMate 录音和本地声音活动检测，但迁移后的当前 `deskmate` 用户配置区缺少百炼凭据，旧加密记录仍在 `deskmate-ui-demo`；用户需在当前应用重新加密保存自己的 Key 后再继续语音回归。当前状态为 `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK_ASR_CONFIG_REQUIRED`。
-- T03 最终代码已合入并推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
+- T03 首次写入、正常启动、S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获均已取得真机通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，继续记录为单板硬件阻断而不修改全局八键/GPIO48 合同。断线压力测试发现“按住 S6 拔线、重新连接后 Windows 残留 Ctrl”的阻断缺陷；`main@dd7bb69` 已增加 mount 首帧全释放并通过 Host、ESP-IDF、桌面自动化与打包烟测，当前状态为 `HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`。T03 补刷复测通过前不进入 T04。
+- T03 首次写入基线已推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`；断线修复候选为本机提交 `dd7bb69`，尚未推送、尚未补刷。该候选 Host CTest 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建、桌面 68/68、桌面打包和打包烟测通过，只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`，不冒充补刷后的 HIL。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
 - 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，代码门和首次写入门已关闭；下一道门是正常启动、HID 枚举与完整真机 HIL。T03 真机锁定前不进入 T04。
