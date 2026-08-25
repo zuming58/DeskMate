@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 normal boot and seven-key HIL confirmed; S8 current-unit hardware block recorded
+
+- 做了什么：用户按板级合同完成关机再开机后，本机只从 Windows PnP 侧确认新固件正常枚举为 `VID 303A / PID 1006`，得到 Keyboard、Mouse 和两个 HIDClass 记录且状态全部正常，下载模式设备已消失；随后用不记录文字的专用窗口逐项验证 S1～S7 正确产生并释放冻结默认动作。
+- 为什么：必须把“Flash 写入成功、应用正常启动、USB 枚举和实体输入真机行为”分层取证；同时用户补充当前测试实板的 S8 在烧录前即不亮、无响应，不能把它误记成 T03 回归或把当前单板缺陷扩大成所有 EasyInput 的八键设计变更。
+- 怎么理解：当前固件确已运行，S1～S7 为真机通过；S8/GPIO48 的固件路径和产品八键合同继续保留，但当前实板无法提供 S8 HIL，状态为 `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`。原 EasyInput 0.1.26 只能继续使用依赖标准 HID 快捷键的部分；T03 明确拒绝 Vendor Feature，并未实现配置/NVS、Host Action、网络、板载音频、灯光或声音，因此不能声明原软件完整兼容。
+- 产出路径：`docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、`docs/architecture/deskmate-v1-hardware-baseline.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`firmware/easyinput-controller/README.md`、局部 AGENTS/CLAUDE 与本记录；测试窗口只在 Git 外恢复目录，未记录输入正文或设备路径。
+- 验证：`303A:1006` 应用枚举 PASS，4 个接口记录、0 个非 OK、下载设备不存在；用户观察和截图确认 S1=`Ctrl+Shift+Space`、S2=`Enter`、S3=`Ctrl+Shift+E`、S4=`Backspace`、S5=`Ctrl+A`、S6=`Ctrl+C`、S7=`Ctrl+V` 均完成按下/释放，S8 无电气响应。
+- 问题解决：卡在 S8 的临时验收窗口已停止；S8 记录为“当前测试单元已知硬件阻断”，不改全局 GPIO/八键合同，也不阻塞 S1～S7、旋钮和断线恢复继续验收。是否把量产目标降为七键属于另一个产品决策，本轮不擅自修改。
+- 下一步：继续验证旋钮纵向双向、按压切换横向、快速旋转、断线/重连和 20 次 S1；随后启动 DeskMate 做语音/焦点/历史复制回归。全部可测项通过后再决定 S8 采用修板复测还是当前原型硬件豁免；T04 仍关闭。
+
 ## 2026-08-25 · T03 three-range first flash verified, pending normal boot and HIL
 
 - 做了什么：在用户对最终三段清单再次明确确认后，重新枚举唯一 EasyInput 下载端口，私下复核其 ESP32-S3 身份与备份对象一致，复验完整恢复备份、三份镜像哈希、干净源码提交和远端主线，然后只写入 bootloader、既有布局的分区表和 T03 app 三段；写后在下载模式再次私下核对同一硬件身份。

@@ -23,7 +23,7 @@
 - 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
-- T03 第三轮本机审计当前达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`：重复 mount epoch、生命周期队列真实容量和溢出恢复已修复，Host 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建通过，依赖为 esp_tinyusb 1.7.6~2；代码已合入并推送 `main`，任务状态为 `MERGED_PENDING_HIL_AUTHORIZATION`，不代表可烧录、HIL 或真机通过。
+- T03 已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，并完成首次三段写入、正常启动、`VID 303A / PID 1006` 枚举及 S1～S7 默认动作真机验证。当前状态为 `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`：当前测试实板的 S8 为烧录前已知无灯、无输入的单板缺陷，固件仍保留 S8/GPIO48；旋钮、断线恢复、20 次 S1、DeskMate 回归和 S8 健康实板复测/明确豁免未完成。
 - 无硬件电脑只运行 host test、静态检查和 build；最高证据为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现；任何真机操作由有硬件电脑另行申请授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。

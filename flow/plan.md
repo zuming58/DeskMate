@@ -6,7 +6,7 @@
 
 ### Current execution point
 
-- T03 首次烧录卡、恢复备份和预写门均已完成；用户再次确认最终 manifest 后，本机已向同一 ESP32-S3 仅写入 `0x0..0x515F`、`0x8000..0x8BFF`、`0x10000..0x4660F`，三段数据哈希校验通过，写后私有身份一致。NVS、PHY、双声音 bank、整片擦除和 eFuse 均未触及。当前状态为 `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`：等待用户关机再正常开机后验证 HID 枚举并执行 T03 真机矩阵。
+- T03 首次写入及正常启动已确认：Windows 枚举 `VID 303A / PID 1006` 的 Keyboard、Mouse 与 HIDClass 接口且状态正常；S1～S7 默认动作及释放真机通过。当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。当前状态为 `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`，继续旋钮、断线恢复、20 次语音键和 DeskMate 回归。
 - T03 最终代码已合入并推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。

@@ -1,6 +1,6 @@
 # T03 first-flash and HIL authorization card
 
-Status: `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`
+Status: `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`
 
 This card applies only to the EasyInput V2.0 board connected to the current main computer. It does not authorize Xiaozhi access, network scanning, eFuse changes, partition changes, erase-all, UART wiring or servo actions.
 
@@ -55,6 +55,13 @@ Only after every item passes may T03 be marked `HIL_CONFIRMED` and locked. Confi
 - No erase-all, eFuse write, partition migration, NVS/PHY write, sound-bank write, Xiaozhi access or network scan occurred.
 - The board remains in the manually entered download mode. The current evidence is `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`, not application-ready or `HIL_CONFIRMED`.
 - Next physical action: use the board power switch to turn it off, wait 2–3 seconds, then turn it on normally. Do not press BOOT again. After that, verify HID enumeration and run the full T03 HIL matrix.
+
+## 2026-08-25 normal-boot and key evidence
+
+- After a full power-off and normal power-on, Windows enumerated `VID 303A / PID 1006` with Keyboard, Mouse and HIDClass records; all reported OK and the download-mode device was absent.
+- User-observed dedicated HIL confirmed clean press/release for S1～S7: `Ctrl+Shift+Space`, Enter, `Ctrl+Shift+E`, Backspace, `Ctrl+A`, `Ctrl+C` and `Ctrl+V`.
+- The current physical test unit's S8 was already known to show no light and no input response before this flash. It is recorded as `CURRENT_UNIT_HARDWARE_BLOCK`, not as a T03 regression and not as a global change to the eight-key/GPIO48 contract.
+- T03 cannot be declared fully `HIL_CONFIRMED` yet. Encoder, reconnect/held-key recovery, 20 S1 cycles and DeskMate regression remain; S8 ultimately needs a repaired/healthy board retest or an explicit prototype-only hardware waiver.
 
 ## User authorization sentence
 

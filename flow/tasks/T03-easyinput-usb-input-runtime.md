@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`。用户已授权并再次确认最终三段清单；本机在写前/写后均私下核对同一 ESP32-S3 身份，只写入 `0x0..0x515F`、`0x8000..0x8BFF`、`0x10000..0x4660F`，三段 esptool 数据哈希校验通过。完整 Flash/NVS 备份保留在 Git 外，NVS、PHY、双声音 bank、整片擦除和 eFuse 均未触及；等待关机再正常开机后执行 HID 枚举和完整真机验收。
+- 状态：`HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`。首次三段写入与正常启动完成，Windows `VID 303A / PID 1006` 的 Keyboard/Mouse/HIDClass 枚举正常；S1～S7 冻结默认动作的按下/释放真机通过。用户确认当前测试实板的 S8 在烧录前即不亮、无输入，故标为单板硬件阻断；固件仍保留 S8/GPIO48 和八键产品合同，等待修板或后续健康实板复测。旋钮、断线恢复、20 次 S1 与 DeskMate 回归仍待完成。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

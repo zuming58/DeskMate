@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，任务状态为 `MERGED_PENDING_HIL_AUTHORIZATION`。T03 第三轮本机审计已直接修复 USB 生命周期重复回调与队列溢出恢复，代码已合入并推送 `main`，Host 3/3 与精确 ESP-IDF v5.5.5 / ESP32-S3 构建通过；仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
+当前状态：`CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `HIL_IN_PROGRESS_7_KEYS_PASS_S8_CURRENT_UNIT_HW_BLOCK`。T03 三段首次写入、正常启动和 `VID 303A / PID 1006` 枚举已通过，S1～S7 默认动作按下/释放真机通过；当前测试实板的 S8 为烧录前已知无灯、无输入的单板硬件阻断，不改八键/GPIO48 产品合同。旋钮、断线恢复、20 次 S1、DeskMate 回归和 S8 健康实板复测/明确豁免仍未完成。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
