@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 monitored reconnect failure captured; no new flash
+
+- 做了什么：在明确告知用户监控已启动后，运行一次有界的只读 `DeskMate.InputBridge --diagnose`，用户完成 `123`→按住 S6→拔 USB→保持按住重连→等待约 3 秒→松开→`abc`。结果仍为 Ctrl 粘连/全选；完整时间线记录于 `docs/handoffs/t03-cold-boot-reconnect-monitored-failure-2026-08-25.md`。
+- 证据：`14:41:46.547` EasyInput 断开，`14:41:50.741` 完整重连；断开前捕获连续 EasyInput Ctrl+C down，重连后电脑键盘 A/B 为 `other-keyboard`，未见 EasyInput Ctrl-up。PnP/Raw Input 证明 USB 确实重枚举，但桥接器不能读取原始 HID 报告字节。
+- 判断：T03 仍为 `T03_HIL_FAILED_CTRL_STICKY`。高可信方向是 TinyUSB transfer-complete 被错误当作 Windows 已应用全释放；重连首份全零报告可能与主机 HID 轮询/接口稳定存在时序竞态。该机制尚未由原始报告抓包最终证明，不能宣称已修复。
+- 本次状态：撤回了本轮尚未验证的二次全释放实验改动，工作树保持仅有文档记录；没有构建、提交、烧录、端口识别、Flash/NVS 读写或 monitor。T04/T05 继续关闭。
+- 明天起点：先补 Host 模型验证“实体仍按住的重连释放报告在 transfer complete 后重新确认”，对照 Maker 的 desired/accepted 传递语义做最小修复；通过 Host/IDF 自审后再申请新的烧录授权。
+
 ## 2026-08-25 · T03 reconnect transfer-identity rework passes Host and IDF gates; new flash authorization pending
 
 - 做了什么：在既有唯一 `UsbInputRuntime` owner 状态机内修复 USB HID 在途报告身份竞态。TinyUSB 完成/失败回调现在复制 Report ID、payload 长度、payload 内容和当前 callback epoch；owner 只有在四项身份全部匹配时才退休队列头或执行失败恢复。新增旧连接 Ctrl 报告迟到、旧连接全零报告与新连接全零报告同字节、错误长度/Report ID 回归，保持实体按住期间 fail-closed，实体释放后强制追加全释放报告。
