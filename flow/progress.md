@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · DeskMate voice trigger confirmed; ASR blocked by migrated user-data identity
+
+- 做了什么：依据用户真机截图确认 S1 可正常开始/停止 DeskMate 录音，胶囊能观察到麦克风声音活动；只读追踪“录音完成，等待转写服务”到 STT 降级链路，并在当前 Windows 用户的两个限定应用配置区内仅核对加密凭据是否存在、JSON 是否完整和哪个 localStorage 最近活动，未读取、解密或输出 API Key。
+- 为什么：该文案同时覆盖“未配置、密钥不可读、网络请求失败、响应无文字”等多种错误，不能凭截图把问题归咎于固件或 API 失效；项目迁移后应用身份变化也可能让 Windows 加密凭据留在旧 user-data 目录。
+- 怎么理解：按键、固件、电脑麦克风和本地声音活动检测均工作；“已听到声音，正在识别”是录音期的本地活动提示，不代表云端 ASR 已调用。当前运行的 `deskmate` 配置区最近活动但没有 `bailian-credentials.json`，旧 `deskmate-ui-demo` 配置区仍有格式完整的加密凭据，因此根因是迁移后的当前应用未配置百炼，不是已证明的 Key 失效。
+- 产出路径：`docs/setup/qwen-asr.md`、`flow/lessons.md` 与本记录；没有复制凭据、录音、识别正文或用户数据，也没有调用外部 ASR。
+- 验证：当前配置区凭据文件缺失；旧配置区凭据 JSON 存在、加密 Key 字段存在、模型为 `qwen3-asr-flash`；当前配置区 localStorage 在本轮运行时更新，旧配置区约 3.4 天未更新。代码确认所有非 success/no-text 结果都会保存统一占位文案。
+- 问题解决：推荐用户在当前 DeskMate 的“设置与诊断 → 账户”重新粘贴自己的百炼 Key并“加密保存并启用”；不直接复制或解密旧密文。后续软件任务应让历史和胶囊显示脱敏后的真实 STT 错误类型，并为 app identity 迁移设计显式、用户确认的安全迁移。
+- 下一步：用户重新保存 Key 后先做 1 次短语音验收；若仍失败，再查看脱敏诊断中的 `configuration/timeout/request-failed` 并运行不暴露密钥的连接测试。ASR 成功后继续 T03 的旋钮、断线重连与 20 次 S1；T04 仍关闭。
+
 ## 2026-08-25 · T03 normal boot and seven-key HIL confirmed; S8 current-unit hardware block recorded
 
 - 做了什么：用户按板级合同完成关机再开机后，本机只从 Windows PnP 侧确认新固件正常枚举为 `VID 303A / PID 1006`，得到 Keyboard、Mouse 和两个 HIDClass 记录且状态全部正常，下载模式设备已消失；随后用不记录文字的专用窗口逐项验证 S1～S7 正确产生并释放冻结默认动作。

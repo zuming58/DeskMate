@@ -1,5 +1,10 @@
 # Lessons learned
 
+## Electron app identity changes strand encrypted user data
+
+- 现象：项目迁移或打包名称变化后，Electron `app.getPath("userData")` 可能从旧 profile 切到新 profile；`safeStorage` 密文仍在旧目录，但当前应用的状态和凭据从新目录读取，于是用户明明“以前配置过”，新版本仍表现为未配置。
+- 做法：发布前冻结 app identity 和 user-data 目录；必须改名时设计显式、可审计且经用户确认的一次迁移，先只比较记录存在性和 schema，不输出或写日志记录密钥。未实现迁移时让用户在当前应用重新保存自己的 Key，不静默复制密文，也不要把所有配置/请求错误压成同一条等待文案。
+
 ## A new ESP-IDF build directory can still reuse a stale source sdkconfig
 
 - 现象：仅更换 `-B build-*` 目录时，ESP-IDF 仍默认读取源码根下被忽略的 `sdkconfig`；新增 `sdkconfig.defaults` 不会自动覆盖旧生成值，导致“全新 build”继续使用旧分区表。
