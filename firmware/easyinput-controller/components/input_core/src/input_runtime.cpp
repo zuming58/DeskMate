@@ -167,7 +167,12 @@ void UsbInputRuntime::on_mount(uint32_t epoch) {
     mounted_ = true;
     diagnostics_.usb_mount_epoch = epoch == 0 ? 1 : epoch;
     clear_queue();
+    router_.release_all();
     if (any_held()) suppress_until_all_released_ = true;
+    // Windows can retain a modifier from the previous HID lifetime when the
+    // cable is removed while a chord is held. Every new mount starts with an
+    // explicit all-released report before accepting new input.
+    enqueue_keyboard({});
 }
 
 void UsbInputRuntime::on_unmount() {

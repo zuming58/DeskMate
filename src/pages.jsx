@@ -306,10 +306,11 @@ export function VoicePage({ notify }) {
           if (phase === "organizing") dispatchSession({ type: "transition", state: "organizing", detail: { message: "正在使用千问整理文字" } });
           if (phase === "outputting") dispatchSession({ type: "transition", state: "outputting", detail: { message: "正在写入目标窗口" } });
         },
-        saveHistory: async ({ text, transcript: result, organized }) => {
+        saveHistory: async ({ text, transcript: result, organized, failure }) => {
           const organizer = organized ? { mode: organized.mode || "raw", model: organized.model || "unknown", durationMs: Number(organized.durationMs) || 0, status: organized.status || (organized.fallback ? "fallback" : "success"), fallback: Boolean(organized.fallback), errorType: organized.errorType || "" } : { mode: "raw", model: "none", durationMs: 0, status: "skipped", fallback: false };
-          const entry = { id, audioId, time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "待转写", rawText: result.text || "", text, organizer };
-          patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: result.provider, status: result.status, durationMs: result.durationMs, errorType: result.status === "error" ? result.message : "" }, organizer } });
+          const transcription = { status: result.status, provider: result.provider || "unknown", durationMs: Number(result.durationMs) || 0, errorType: failure?.code || "", label: failure?.label || "转写成功" };
+          const entry = { id, audioId, time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
+          patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: transcription.provider, status: transcription.status, durationMs: transcription.durationMs, errorType: transcription.errorType }, organizer } });
           return entry;
         },
       });
@@ -330,8 +331,8 @@ export function VoicePage({ notify }) {
         dispatchSession({ type: "reset" });
         notify("转写已取消，录音仍保存在历史中");
       } else {
-        dispatchSession({ type: "transition", state: "error", detail: { message: processed.transcript.message || "语音识别失败" } });
-        notify(audioId ? "录音已保存，但语音识别未完成" : "录音已完成，但语音识别未完成");
+        dispatchSession({ type: "transition", state: "error", detail: { message: processed.failure?.message || "语音识别失败" } });
+        notify(processed.failure?.message || (audioId ? "录音已保存，但语音识别未完成" : "录音已完成，但语音识别未完成"));
       }
     } catch (cause) {
       dispatchSession({ type: "transition", state: "error", detail: { message: cause.message || "语音处理失败" } });
@@ -527,11 +528,12 @@ export function HistoryPage({ notify }) {
         {audioUrl && <div className="history-player"><strong>正在试听本地录音</strong><audio controls autoPlay src={audioUrl} /><Button variant="ghost" onClick={() => { setAudioUrl(""); setActiveAudioId(null); }}>关闭</Button></div>}
         {filtered.length ? <div className="history-list">{filtered.map((item) => {
           const hasOriginal = Boolean(item.rawText && item.rawText !== item.text);
-          const organizerLabel = item.organizer?.fallback ? "已保留原文" : item.organizer?.mode === "smart" ? "智能整理" : item.organizer?.mode === "custom" ? "自定义整理" : "原样输出";
+          const transcriptionFailed = Boolean(item.transcription?.status && item.transcription.status !== "success");
+          const organizerLabel = transcriptionFailed ? item.transcription.label || "转写未完成" : item.organizer?.fallback ? "已保留原文" : item.organizer?.mode === "smart" ? "智能整理" : item.organizer?.mode === "custom" ? "自定义整理" : "原样输出";
           return <article className="history-item" key={item.id}>
             <time>{item.time}</time>
             <div className="history-copy">
-              <div className="history-badges"><StatusBadge tone={item.organizer?.fallback ? "demo" : "success"}>{organizerLabel}</StatusBadge>{item.organizer?.durationMs > 0 && <span>{item.organizer.durationMs} ms</span>}</div>
+              <div className="history-badges"><StatusBadge tone={transcriptionFailed || item.organizer?.fallback ? "demo" : "success"}>{organizerLabel}</StatusBadge>{!transcriptionFailed && item.organizer?.durationMs > 0 && <span>{item.organizer.durationMs} ms</span>}</div>
               <p>{item.text}</p>
               <small>{item.date} · {item.duration} · {item.count}</small>
               {hasOriginal && expandedId === item.id && <div className="history-original"><div><strong>原始转写</strong><Button variant="ghost" icon={Copy} onClick={() => copy(item.rawText)}>复制原文</Button></div><p>{item.rawText}</p></div>}

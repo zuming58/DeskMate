@@ -38,7 +38,12 @@ window.addEventListener("DOMContentLoaded", () => {
       const height = state === "recording" ? Math.max(3, Math.min(18, 3 + level * variation * 0.18)) : 3 + ((index * 5) % 7);
       return `<i style="--h:${height.toFixed(1)}px"></i>`;
     }).join("");
-    root.innerHTML = `<div class="shell ${escapeHtml(state)}"><span class="state-dot"></span><div class="wave" aria-label="当前麦克风音量">${bars}</div><div class="copy ${transcript ? "" : "placeholder"}">${escapeHtml(copy)}</div><div class="meter">${state === "recording" ? time : `${Math.round(level)}%`}</div><span class="escape">Esc 取消</span></div>`;
+    const meter = state === "recording" ? time
+      : ["transcribing", "organizing", "outputting"].includes(state) ? "处理中"
+        : state === "completed" ? "完成"
+          : state === "error" ? "失败"
+            : state === "cancelled" ? "取消" : "";
+    root.innerHTML = `<div class="shell ${escapeHtml(state)}"><span class="state-dot"></span><div class="wave" aria-label="当前麦克风音量">${bars}</div><div class="copy ${transcript ? "" : "placeholder"}">${escapeHtml(copy)}</div><div class="meter">${escapeHtml(meter)}</div><span class="escape">Esc 取消</span></div>`;
   };
   ipcRenderer.on("voice-state", (_event, value) => render(value));
 });

@@ -24,10 +24,12 @@ test("STT failure saves a redacted history fallback before any output attempt", 
     saveHistory: async (entry) => { saved.push(entry); return entry; },
     output: { output: async () => { outputCalls += 1; return { ok: true }; } },
   });
-  assert.equal(result.text, "录音完成，等待转写服务");
+  assert.equal(result.text, "录音已保存，语音识别请求超时");
+  assert.equal(result.failure.code, "timeout");
   assert.equal(saved.length, 1);
   assert.equal(outputCalls, 0);
   assert.equal(saved[0].transcript.message, "timeout");
+  assert.equal(saved[0].failure.message, "语音识别请求超时，请检查网络后重试");
 });
 
 test("cancelled processing keeps history and never writes output", async () => {

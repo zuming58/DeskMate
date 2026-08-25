@@ -5,7 +5,7 @@ import { DeviceSimulator } from "../src/adapters/deviceSimulator.js";
 import { ConfigurableTextOrganizer, HttpSttAdapter, MockSttAdapter, validateSttEndpoint } from "../src/adapters/sttAdapters.js";
 import { SttAdapter } from "../src/adapters/voiceAdapters.js";
 import { createDiagnosticReport } from "../src/services/diagnostics.js";
-import { processVoiceRecording } from "../src/services/voicePipeline.js";
+import { describeTranscriptionFailure, processVoiceRecording } from "../src/services/voicePipeline.js";
 import { defaultState, serializeConfig } from "../src/store/appStore.js";
 
 test("versioned events reject malformed input and duplicate simulator events", () => {
@@ -98,7 +98,26 @@ test("mock transcription is saved before clipboard failure", async () => {
 test("STT error keeps recording history fallback", async () => {
   const saved = [];
   await processVoiceRecording({ blob: new Blob(["audio"]), stt: { transcribe: async () => ({ status: "error", text: "", provider: "test", durationMs: 1, message: "failed" }) }, organizer: new ConfigurableTextOrganizer(), saveHistory: async (item) => { saved.push(item); return item; }, output: { output: async () => ({ ok: true }) } });
-  assert.equal(saved[0].text, "录音完成，等待转写服务");
+  assert.equal(saved[0].text, "录音已保存，语音识别请求失败");
+  assert.equal(saved[0].failure.code, "request-failed");
+});
+
+test("STT failures use distinct redacted user messages", () => {
+  assert.equal(describeTranscriptionFailure({ status: "pending", message: "转写服务未配置" }).code, "configuration");
+  assert.equal(describeTranscriptionFailure({ status: "error", message: "request timeout" }).code, "timeout");
+  assert.equal(describeTranscriptionFailure({ status: "error", message: "响应中没有识别文字" }).code, "empty-result");
+  assert.equal(describeTranscriptionFailure({ status: "error", message: "录音数据无效" }).code, "invalid-audio");
+  const remote = describeTranscriptionFailure({ status: "error", message: "remote secret detail" });
+  assert.equal(remote.code, "request-failed");
+  assert.doesNotMatch(JSON.stringify(remote), /remote secret detail/);
+});
+
+test("empty successful transcription is downgraded without output", async () => {
+  const saved = []; let outputCalls = 0;
+  const result = await processVoiceRecording({ blob: new Blob(["audio"]), stt: { transcribe: async () => ({ status: "success", text: "", provider: "test", durationMs: 1 }) }, organizer: new ConfigurableTextOrganizer(), saveHistory: async (item) => { saved.push(item); return item; }, output: { output: async () => { outputCalls += 1; return { ok: true }; } } });
+  assert.equal(result.failure.code, "empty-result");
+  assert.equal(saved[0].text, "录音已保存，但未识别到有效文字");
+  assert.equal(outputCalls, 0);
 });
 
 test("organizer exception safely falls back to raw transcription", async () => {

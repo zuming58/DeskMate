@@ -21,6 +21,16 @@ InputEvent key(uint8_t index, bool pressed) {
     return {pressed ? InputEventType::KeyPressed : InputEventType::KeyReleased, index, 0};
 }
 
+void consume_mount_release(UsbInputRuntime& runtime) {
+    CHECK(runtime.queued_reports() == 1);
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero_report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
+}
+
 struct ParsedReportLengths {
     std::array<uint16_t, 256> input_bits{};
     std::array<uint16_t, 256> output_bits{};
@@ -133,6 +143,7 @@ void lifetime_and_disconnect_safety() {
     CHECK(runtime.queued_reports() == 0);
     runtime.on_mount();
     CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    consume_mount_release(runtime);
     runtime.on_input(key(0, false));
     runtime.on_input(key(0, true));
     CHECK(runtime.queued_reports() == 1);
@@ -140,6 +151,7 @@ void lifetime_and_disconnect_safety() {
     CHECK(runtime.queued_reports() == 0);
     runtime.on_mount();
     CHECK(runtime.diagnostics().usb_mount_epoch == 2);
+    consume_mount_release(runtime);
     runtime.on_resume();
     CHECK(runtime.diagnostics().usb_mount_epoch == 2);
     runtime.on_input(key(0, true));
@@ -169,7 +181,7 @@ void ordered_lifetime_events_and_stale_completion() {
     process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {true, 2});
     CHECK(runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 2);
-    CHECK(runtime.queued_reports() == 0);
+    consume_mount_release(runtime);
 
     runtime.on_input(key(0, true));
     CHECK(runtime.queued_reports() == 1);
@@ -182,7 +194,7 @@ void ordered_lifetime_events_and_stale_completion() {
     process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {true, 3});
     CHECK(runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 3);
-    CHECK(runtime.queued_reports() == 0);
+    consume_mount_release(runtime);
     CHECK(!report_in_flight);
 
     runtime.on_input(key(0, true));
@@ -210,6 +222,7 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
         events, runtime, report_in_flight, report_epoch, callback.snapshot());
     CHECK(runtime.mounted());
     CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    consume_mount_release(runtime);
 
     runtime.on_input(key(0, true));
     CHECK(runtime.queued_reports() == 1);
@@ -242,6 +255,7 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
 void queue_failure_release_and_wheel_boundaries() {
     UsbInputRuntime runtime;
     runtime.on_mount();
+    consume_mount_release(runtime);
     for (int i = 0; i < 16; ++i) {
         runtime.on_input({InputEventType::EncoderStep, 0, static_cast<int8_t>(i % 2 == 0 ? 1 : -1)});
     }
@@ -266,6 +280,7 @@ void queue_failure_release_and_wheel_boundaries() {
 void wheel_coalescing_boundaries_and_no_replay() {
     UsbInputRuntime runtime;
     runtime.on_mount();
+    consume_mount_release(runtime);
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     CHECK(runtime.queued_reports() == 1);
@@ -318,7 +333,7 @@ void wheel_coalescing_boundaries_and_no_replay() {
     CHECK(runtime.queued_reports() == 0);
     runtime.on_unmount();
     runtime.on_mount();
-    CHECK(runtime.queued_reports() == 0);
+    consume_mount_release(runtime);
 }
 
 void descriptor_and_vendor_fail_closed() {
@@ -444,6 +459,7 @@ void diagnostics_are_saturating_and_redacted() {
 void input_drop_recovery_waits_for_release() {
     UsbInputRuntime runtime;
     runtime.on_mount();
+    consume_mount_release(runtime);
     runtime.on_input(key(0, true));
     runtime.recover_after_input_drop(0x01);
     CHECK(runtime.queued_reports() == 1);
@@ -463,6 +479,7 @@ void event_ring_overflow_discards_stale_key_down() {
     InputCore input;
     UsbInputRuntime runtime;
     runtime.on_mount();
+    consume_mount_release(runtime);
     input.scan_keys(0, 0);
     input.scan_keys(0x01, 1);
     input.scan_keys(0x01, 21);
@@ -493,6 +510,7 @@ void event_ring_overflow_held_key_waits_for_release() {
     InputCore input;
     UsbInputRuntime runtime;
     runtime.on_mount();
+    consume_mount_release(runtime);
     input.scan_keys(0, 0);
     input.scan_keys(0x01, 1);
     input.scan_keys(0x01, 21);
