@@ -39,6 +39,10 @@ enum class UsbLifecycleEventKind : uint8_t {
 struct UsbLifecycleEvent {
     UsbLifecycleEventKind kind{UsbLifecycleEventKind::Resume};
     uint32_t epoch{0};
+    uint8_t report_id{0};
+    uint8_t length{0};
+    std::array<uint8_t, 8> payload{};
+    bool report_identity_valid{false};
 };
 
 // Single-producer (TinyUSB callback task), single-consumer (input owner) queue.
@@ -152,6 +156,16 @@ struct QueuedHidReport {
     uint32_t epoch{0};
 };
 
+struct HidReportTransferState {
+    bool active{false};
+    QueuedHidReport report{};
+
+    void clear() {
+        active = false;
+        report = {};
+    }
+};
+
 class UsbInputRuntime {
 public:
     void on_mount();
@@ -202,14 +216,19 @@ private:
 
 UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
-    bool& report_in_flight, uint32_t& report_epoch,
+    HidReportTransferState& transfer,
     UsbCallbackSnapshot callback);
 
 bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
-                        bool report_in_flight, QueuedHidReport& report);
+                        const HidReportTransferState& transfer,
+                        QueuedHidReport& report);
 void finish_hid_send_attempt(UsbInputRuntime& runtime,
                              const QueuedHidReport& report, bool accepted,
-                             bool& report_in_flight, uint32_t& report_epoch);
+                             HidReportTransferState& transfer);
+uint16_t usb_wire_report_length(uint8_t report_id);
+UsbLifecycleEvent make_usb_transfer_event(
+    UsbLifecycleEventKind kind, uint32_t epoch,
+    const uint8_t* wire_report, uint16_t wire_length);
 
 extern const uint8_t kHidReportDescriptor[];
 extern const size_t kHidReportDescriptorSize;

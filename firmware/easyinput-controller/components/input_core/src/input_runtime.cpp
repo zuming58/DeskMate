@@ -422,13 +422,13 @@ bool UsbInputRuntime::reject_vendor_feature(uint8_t report_id, const uint8_t* da
 
 UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
-    bool& report_in_flight, uint32_t& report_epoch,
+    HidReportTransferState& transfer,
     UsbCallbackSnapshot callback) {
     UsbLifecycleProcessResult result{};
     result.dropped_events = events.take_drops();
     if (result.dropped_events != 0) {
         events.discard_pending();
-        report_in_flight = false;
+        transfer.clear();
         runtime.on_usb_lifecycle_drops(result.dropped_events);
         runtime.reconcile_usb_lifecycle(callback);
         return result;
@@ -442,14 +442,14 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                 if (!runtime.mounted() ||
                     event.epoch != runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_mount(event.epoch);
-                    report_in_flight = false;
+                    transfer.clear();
                 }
                 break;
             case UsbLifecycleEventKind::Unmount:
                 if (runtime.mounted() &&
                     event.epoch == runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_unmount();
-                    report_in_flight = false;
+                    transfer.clear();
                 }
                 break;
             case UsbLifecycleEventKind::Resume:
@@ -459,17 +459,29 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                 }
                 break;
             case UsbLifecycleEventKind::TransferComplete:
-                if (report_in_flight && event.epoch == report_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                if (transfer.active && event.report_identity_valid &&
+                    event.epoch == transfer.report.epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch &&
+                    event.report_id == transfer.report.report_id &&
+                    event.length == transfer.report.length &&
+                    std::equal(event.payload.begin(),
+                               event.payload.begin() + event.length,
+                               transfer.report.payload.begin())) {
                     runtime.complete_report();
-                    report_in_flight = false;
+                    transfer.clear();
                 }
                 break;
             case UsbLifecycleEventKind::TransferFailed:
-                if (report_in_flight && event.epoch == report_epoch &&
-                    event.epoch == runtime.diagnostics().usb_mount_epoch) {
+                if (transfer.active && event.report_identity_valid &&
+                    event.epoch == transfer.report.epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch &&
+                    event.report_id == transfer.report.report_id &&
+                    event.length == transfer.report.length &&
+                    std::equal(event.payload.begin(),
+                               event.payload.begin() + event.length,
+                               transfer.report.payload.begin())) {
                     runtime.on_transfer_failed();
-                    report_in_flight = false;
+                    transfer.clear();
                 }
                 break;
         }
@@ -478,20 +490,46 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
 }
 
 bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
-                        bool report_in_flight, QueuedHidReport& report) {
-    return endpoint_ready && !report_in_flight && runtime.front_report(report);
+                        const HidReportTransferState& transfer,
+                        QueuedHidReport& report) {
+    return endpoint_ready && !transfer.active && runtime.front_report(report);
 }
 
 void finish_hid_send_attempt(UsbInputRuntime& runtime,
                              const QueuedHidReport& report, bool accepted,
-                             bool& report_in_flight, uint32_t& report_epoch) {
+                             HidReportTransferState& transfer) {
     if (accepted) {
-        report_in_flight = true;
-        report_epoch = report.epoch;
+        transfer.active = true;
+        transfer.report = report;
         return;
     }
     runtime.on_transfer_failed();
-    report_in_flight = false;
+    transfer.clear();
+}
+
+uint16_t usb_wire_report_length(uint8_t report_id) {
+    switch (report_id) {
+        case kKeyboardReportId:
+            return 1u + 8u;
+        case kMouseReportId:
+            return 1u + 5u;
+        default:
+            return 0;
+    }
+}
+
+UsbLifecycleEvent make_usb_transfer_event(
+    UsbLifecycleEventKind kind, uint32_t epoch,
+    const uint8_t* wire_report, uint16_t wire_length) {
+    UsbLifecycleEvent event{kind, epoch};
+    if (wire_report == nullptr || wire_length == 0) return event;
+    const uint16_t expected_length = usb_wire_report_length(wire_report[0]);
+    if (expected_length == 0 || wire_length != expected_length) return event;
+    event.report_id = wire_report[0];
+    event.length = static_cast<uint8_t>(wire_length - 1u);
+    std::copy_n(wire_report + 1, event.length, event.payload.begin());
+    event.report_identity_valid = true;
+    return event;
 }
 
 const uint8_t kHidReportDescriptor[] = {

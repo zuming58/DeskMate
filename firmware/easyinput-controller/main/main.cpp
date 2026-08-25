@@ -79,12 +79,10 @@ UsbCallbackSnapshot callback_snapshot() {
 
 void input_owner_task(void*) {
     InputCore input;
-    bool report_in_flight = false;
-    uint32_t report_in_flight_epoch = 0;
+    HidReportTransferState transfer;
     for (;;) {
         const auto lifecycle = process_usb_lifecycle_events(
-            lifecycle_events, runtime, report_in_flight,
-            report_in_flight_epoch, callback_snapshot());
+            lifecycle_events, runtime, transfer, callback_snapshot());
         if (lifecycle.dropped_events != 0) {
             ESP_LOGW(kLogTag, "USB lifecycle queue recovered after %lu dropped events",
                      static_cast<unsigned long>(lifecycle.dropped_events));
@@ -135,11 +133,10 @@ void input_owner_task(void*) {
         }
 
         QueuedHidReport report{};
-        if (prepare_hid_report(runtime, tud_hid_ready(), report_in_flight, report)) {
+        if (prepare_hid_report(runtime, tud_hid_ready(), transfer, report)) {
             const bool accepted = tud_hid_report(
                 report.report_id, report.payload.data(), report.length);
-            finish_hid_send_attempt(runtime, report, accepted, report_in_flight,
-                                    report_in_flight_epoch);
+            finish_hid_send_attempt(runtime, report, accepted, transfer);
         }
         ulTaskNotifyTake(pdTRUE, 1);
     }
@@ -151,6 +148,14 @@ void notify_owner_from_callback() {
 
 void publish_lifecycle_event(UsbLifecycleEventKind kind) {
     lifecycle_events.publish(callback_lifecycle.current_event(kind));
+    notify_owner_from_callback();
+}
+
+void publish_transfer_event(UsbLifecycleEventKind kind,
+                            const uint8_t* wire_report,
+                            uint16_t wire_length) {
+    lifecycle_events.publish(make_usb_transfer_event(
+        kind, callback_lifecycle.snapshot().epoch, wire_report, wire_length));
     notify_owner_from_callback();
 }
 }  // namespace
@@ -232,13 +237,19 @@ extern "C" void tud_resume_cb(void) {
     publish_lifecycle_event(UsbLifecycleEventKind::Resume);
 }
 extern "C" void tud_hid_report_complete_cb(
-    uint8_t, uint8_t const*, uint16_t) {
-    publish_lifecycle_event(UsbLifecycleEventKind::TransferComplete);
+    uint8_t, uint8_t const* report, uint16_t length) {
+    publish_transfer_event(UsbLifecycleEventKind::TransferComplete,
+                           report, length);
 }
 extern "C" void tud_hid_report_failed_cb(
-    uint8_t, hid_report_type_t report_type, uint8_t const*, uint16_t) {
+    uint8_t, hid_report_type_t report_type, uint8_t const* report,
+    uint16_t) {
     if (report_type == HID_REPORT_TYPE_INPUT) {
-        publish_lifecycle_event(UsbLifecycleEventKind::TransferFailed);
+        const uint16_t wire_length = report == nullptr
+            ? 0
+            : usb_wire_report_length(report[0]);
+        publish_transfer_event(UsbLifecycleEventKind::TransferFailed,
+                               report, wire_length);
     }
 }
 extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t) {

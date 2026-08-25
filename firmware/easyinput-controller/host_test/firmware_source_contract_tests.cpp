@@ -84,6 +84,14 @@ int main() {
     CHECK(contains(main_source, "input.stable_key_mask()"));
     CHECK(contains(main_source, "prepare_hid_report"));
     CHECK(contains(main_source, "finish_hid_send_attempt"));
+    CHECK(contains(main_source, "publish_transfer_event"));
+    CHECK(contains(main_source, "tud_hid_report_complete_cb("));
+    CHECK(contains(main_source, "report, length"));
+    CHECK(contains(runtime_header, "HidReportTransferState"));
+    CHECK(contains(runtime_header, "report_identity_valid"));
+    CHECK(contains(runtime_source, "make_usb_transfer_event"));
+    CHECK(contains(runtime_source, "event.report_id == transfer.report.report_id"));
+    CHECK(contains(runtime_source, "event.length == transfer.report.length"));
     CHECK(contains(main_source, "lifecycle_events.publish"));
     CHECK(!contains(main_source, "mount_pending"));
     CHECK(!contains(main_source, "unmount_pending"));
