@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`TEST_CONFIRMED` / `T03_GPIO40_REWORK_PENDING_CLEAN_BUILD_AND_AUTHORIZATION`。冷启动候选 `a97d85e` 在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前返工使用 V2 GPIO40 低有效 USB 物理存在信号，以 25 ms 确认物理断开、撤销旧 endpoint，物理恢复不伪造 mount，并让每个真实 TinyUSB mount 建立新 epoch；Host 3/3 已通过，仍需干净提交重建、重新授权 app-only 补刷和连续五次真机复测。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。T03 保持开放，禁止进入 T04。
+当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_GPIO40_REWORK_PENDING_NEW_FLASH_AUTHORIZATION`。冷启动候选 `a97d85e` 在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前返工使用 V2 GPIO40 低有效 USB 物理存在信号，以 25 ms 确认物理断开、撤销旧 endpoint，物理恢复不伪造 mount，并让每个真实 TinyUSB mount 建立新 epoch；Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，仍需文档状态提交后的最终干净镜像、重新授权 app-only 补刷和连续五次真机复测。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。T03 保持开放，禁止进入 T04。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
@@ -35,4 +35,4 @@ Firmware build (ESP-IDF 5.5.5, ESP32-S3; no `flash` or `monitor`):
 idf.py -C firmware/easyinput-controller build
 ```
 
-当前自动化证据为 `TEST_CONFIRMED`；最终干净 HEAD 的 ESP-IDF v5.5.5 构建完成后才可声明新的 `BUILD_CONFIRMED`。旧授权不适用于新镜像，不得关闭 T03 或进入 T04。
+当前自动化证据为 `TEST_CONFIRMED` / `BUILD_CONFIRMED`；旧授权不适用于新镜像，必须重新展示最终 HEAD、app SHA-256 和 app-only 范围后才可补刷。不得关闭 T03 或进入 T04。
