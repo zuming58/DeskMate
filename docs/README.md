@@ -23,6 +23,7 @@
 - [T03 second-audit rework prompt](handoffs/second-computer-easyinput-usb-input-runtime-second-rework-2026-08-24.md)
 - [T03 third independent audit and local acceptance](reviews/t03-easyinput-usb-input-runtime-third-audit-2026-08-24.md)
 - [T03 first-flash and HIL authorization card](testing/t03-first-flash-authorization-card-2026-08-24.md)
+- [T03 first-flash pre-write audit](reviews/t03-first-flash-prewrite-audit-2026-08-25.md)
 
 ## Product
 

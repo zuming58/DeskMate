@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 first-flash recovery gate and partition correction completed
+
+- 做了什么：收到用户 T03 首次烧录卡授权后，只识别当前 EasyInput，确认单一 ESP32-S3/16 MB Flash，完成 16,777,216 字节整片 Flash/NVS 备份、可读性和重复 SHA-256 校验；烧录前解析实板分区表，发现 T03 默认 1 MiB factory 表会删除现有 3 MiB factory 与 `sound_a/sound_b`，因此保持零次写入并在本机修正分区合同。
+- 为什么：构建通过和应用空间充足不能证明可安全烧录；用户授权明确禁止改分区，且声音 bank 是后续 EasyInput 功能的既有存储合同，不能由当前输入包静默删除。
+- 怎么理解：T03 仍只实现实体输入到 USB HID；新增 `partitions.csv` 只是保持现有 Flash 布局，不初始化或改写 NVS/声音资源。首次烧录必须同时满足“完整可恢复备份、候选分区表与实板逐字节一致、写入范围不碰持久数据、最终用户确认”。
+- 产出路径：`firmware/easyinput-controller/partitions.csv`、CMake/sdkconfig/Host 分区保护、`docs/reviews/t03-first-flash-prewrite-audit-2026-08-25.md`、`docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、`docs/architecture/deskmate-v1-hardware-baseline.md`、`flow/decisions.md` D023 与本记录；私有备份只在 Git 外恢复目录，不提交、不上传。
+- 验证：完整备份 SHA-256 `51B0ECAD795E077FCB8F3964459733CA817FD68B4ACDD755E136549C5CE8C991`；安全修正提交 `2d2f867dba95835f19af35cd0fd872b96748c2db`；Host CTest 3/3；ESP-IDF v5.5.5/ESP32-S3 干净提交构建，app `0x36610`、3 MiB app 余量 93%；最终分区表 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278` 且与实板备份逐字节一致；板级扫描 1 PASS/1 已知 constexpr WARN/0 FAIL。设备写入次数仍为 0。
+- 问题解决：首次低速整片读取在执行上限前未完成，终止后遗留读取进程占用端口；仅结束与本次恢复路径、COM 口和 esptool 同时匹配的进程，重新核对相同硬件身份后以 921600 完整读取。另发现换 build 目录仍复用源码根生成 sdkconfig，改用隔离 `SDKCONFIG` 后构建保护生效，两项经验已写入 `flow/lessons.md`。
+- 下一步：向用户展示最终三段写入范围与哈希并取得最后一次确认；随后 fresh 复核同一私有身份，只写 `0x0..0x515F`、`0x8000..0x8BFF`、`0x10000..0x4660F`，关机再开机恢复正常启动，执行八键/旋钮/断线重连/20 次语音键及 DeskMate 回归。HIL 通过前不启动 T04。
+
 ## 2026-08-25 · T03 merge closure self-check completed
 
 - 做了什么：按根级 `AGENTS.md` 与 Project Flow 收工 Hook 复核 T03 合并后的仓库状态、最新交接、稳定决策、踩坑记录、模块入口、任务卡和首次烧录授权卡；确认 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9` 已与远程一致，并修正模块文档中仍残留的“等待合并”状态。

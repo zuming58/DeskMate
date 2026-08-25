@@ -56,6 +56,20 @@ EasyInput V2.0 总控板
 
 EasyInput 的 LED、麦克风和扬声器共享 `GPIO8` 高有效电源域。固件必须通过统一电源租约/仲裁器管理，不能把 `GPIO8` 当成单独灯开关，也不能在其他消费者仍工作时关闭该电源域。
 
+#### 3.1.1 EasyInput Flash 布局
+
+DeskMate 正式固件继承并冻结当前实板与 Maker 固定提交一致的 16 MB Flash 布局：
+
+| 分区 | 起始 | 大小 | V1 规则 |
+| --- | ---: | ---: | --- |
+| `nvs` | `0x9000` | `0x6000` | 配置包实现前只保留，不读取、不覆盖 |
+| `phy_init` | `0xF000` | `0x1000` | 保留 |
+| `factory` | `0x10000` | `0x300000` | DeskMate EasyInput 应用 |
+| `sound_a` | `0x310000` | `0x90000` | T03 不使用，保留给后续音频资源合同 |
+| `sound_b` | `0x3A0000` | `0x90000` | T03 不使用，保留给后续音频资源合同 |
+
+最小功能包也不得改用 ESP-IDF 默认 1 MiB factory 表。仓内 `partitions.csv`、CMake fail-closed 检查和 Host source-contract test 共同锁定该布局；首次写入前还必须把生成的分区表与授权备份中的实板分区表逐字节比较。
+
 ### 3.2 小智使用的硬件
 
 - SSD1306 128×64 OLED：大眼睛、表情和工作状态。

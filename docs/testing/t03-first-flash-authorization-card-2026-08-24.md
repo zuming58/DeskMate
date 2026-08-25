@@ -1,6 +1,6 @@
 # T03 first-flash and HIL authorization card
 
-Status: `AWAITING_USER_AUTHORIZATION`
+Status: `AUTHORIZED_BACKUP_CONFIRMED_PARTITION_FIX_VALIDATED_PENDING_FINAL_WRITE_CONFIRMATION`
 
 This card applies only to the EasyInput V2.0 board connected to the current main computer. It does not authorize Xiaozhi access, network scanning, eFuse changes, partition changes, erase-all, UART wiring or servo actions.
 
@@ -36,6 +36,16 @@ Authorization does not include reading user recordings or credentials. Diagnosti
 - Regress DeskMate voice input into the focused window, bottom capsule without page jump, history copy, shortcut capture and target-window behavior.
 
 Only after every item passes may T03 be marked `HIL_CONFIRMED` and locked. Configuration/NVS/Host Action/open-application work remains T04/T05 scope.
+
+## 2026-08-25 pre-write evidence
+
+- The user explicitly authorized the card and manually entered the current EasyInput download mode.
+- One ESP32-S3 target was identified; the private hardware identity is retained only in the Git-external recovery record and is omitted here.
+- Flash geometry is 16 MB. A complete 16,777,216-byte Flash image, including NVS, was read and verified readable. SHA-256: `51B0ECAD795E077FCB8F3964459733CA817FD68B4ACDD755E136549C5CE8C991`.
+- The first pre-write comparison blocked the old T03 default table because it reduced factory from 3 MiB to 1 MiB and removed `sound_a` / `sound_b`. No write occurred.
+- Commit `2d2f867dba95835f19af35cd0fd872b96748c2db` preserves the canonical table, adds CMake and Host fail-closed guards, and was rebuilt with ESP-IDF 5.5.5 / ESP32-S3. Host CTest is 3/3.
+- The final generated 3,072-byte partition table is byte-identical to the table in the board backup; NVS, PHY and both sound banks are outside all planned writes.
+- Exact final manifest and hashes are recorded in [`t03-first-flash-prewrite-audit-2026-08-25.md`](../reviews/t03-first-flash-prewrite-audit-2026-08-25.md). Flash write count remains zero pending one final user confirmation.
 
 ## User authorization sentence
 

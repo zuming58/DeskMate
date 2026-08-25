@@ -6,6 +6,7 @@
 
 ### Current execution point
 
+- T03 首次烧录卡已获授权并完成预写门：单一 ESP32-S3 目标、16 MB Flash 与完整 Flash/NVS 备份已确认。预写比较发现旧 T03 默认 1 MiB 分区表会删除 Maker 的 3 MiB factory 与双声音 bank，已由本机提交 `2d2f867dba95835f19af35cd0fd872b96748c2db` 修正为规范布局，Host 3/3、ESP-IDF 5.5.5 构建及实板分区表逐字节比较通过。当前仍为零次写入，等待展示最终 manifest 后的最后一次用户确认。
 - T03 最终代码已合入并推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。

@@ -1,5 +1,15 @@
 # Lessons learned
 
+## A new ESP-IDF build directory can still reuse a stale source sdkconfig
+
+- 现象：仅更换 `-B build-*` 目录时，ESP-IDF 仍默认读取源码根下被忽略的 `sdkconfig`；新增 `sdkconfig.defaults` 不会自动覆盖旧生成值，导致“全新 build”继续使用旧分区表。
+- 做法：需要验证 defaults 的隔离构建时，显式把 `SDKCONFIG` 指向新构建目录内的新文件；对分区、Flash 大小等恢复性合同同时增加 CMake fail-closed 检查和 Host source-contract 测试，不能只看 build 目录名称。
+
+## First-flash review must diff the live partition table
+
+- 现象：应用能够构建且空间充足，不代表烧录安全；T03 默认 1 MiB 表与实板 3 MiB factory + 双声音 bank 不同，直接执行标准 `flash` 会在功能代码正确的情况下破坏存储合同。
+- 做法：首次烧录先整片备份，再解析并逐项比较实板与候选分区表；保留布局时要求生成二进制逐字节一致，并证明 bootloader、partition table、app 三段写入不触及 NVS/PHY/资源 bank。
+
 ## Cross-task lifecycle callbacks must preserve order
 
 - 现象：用多个独立布尔 pending 标志把 mount/unmount 等 callback 交给 owner task，会把同一消费周期内的不同先后序列压成同一个集合；固定处理顺序可能让最终状态与最后一个真实事件相反。

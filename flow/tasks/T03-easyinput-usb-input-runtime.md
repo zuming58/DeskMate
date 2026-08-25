@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`MERGED_PENDING_HIL_AUTHORIZATION`。第三轮本机独立审计已完成，并直接修复重复 mount epoch、生命周期队列真实容量与溢出恢复；代码已合入并推送 `main`，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，尚未烧录或真机验收。
+- 状态：`AUTHORIZED_BACKUP_CONFIRMED_PENDING_FINAL_WRITE_CONFIRMATION`。用户已授权首次可恢复操作，当前实板身份与 16 MB Flash 已确认，完整 Flash/NVS 备份及校验通过。预写检查发现 T03 默认 1 MiB 分区表会改变实板的 3 MiB factory 与声音 bank，已在本机按既有硬件合同修正、补回归并重建；尚未写入或真机验收。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`
@@ -55,6 +55,8 @@
 - 不增加自定义诊断线协议，不向 Vendor HID 返回伪成功，不生成自动烧录入口。
 - 不扫描端口、不识别设备、不运行 flash/erase/monitor、不读写 Flash，不声明 HIL/真机通过。
 - 不提交 build、managed_components、sdkconfig、bin、elf、map、密钥、Wi-Fi、录音、用户数据或本机设备信息。
+
+首次烧录门的唯一分区相关例外不是新功能：必须采用仓内 `partitions.csv` 原样保留已记录的 NVS/PHY/3 MiB factory/双声音 bank 布局，并以 Host 测试、CMake fail-closed 检查和实板备份二进制比较证明没有改变分区。不得初始化或改写 NVS、声音 bank，也不得借此进入 T04/T08/T09。
 
 ## Host test gate
 
