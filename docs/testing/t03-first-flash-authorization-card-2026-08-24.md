@@ -1,6 +1,6 @@
 # T03 first-flash and HIL authorization card
 
-Status: `HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`
+Status: `FLASH_VERIFIED_PENDING_NORMAL_BOOT_RETEST`
 
 This card applies only to the EasyInput V2.0 board connected to the current main computer. It does not authorize Xiaozhi access, network scanning, eFuse changes, partition changes, erase-all, UART wiring or servo actions.
 
@@ -71,6 +71,13 @@ Only after every item passes may T03 be marked `HIL_CONFIRMED` and locked. Confi
 - The rework candidate passed desktop 68/68, packaged desktop build and smoke, firmware Host CTest 3/3, and ESP-IDF v5.5.5 / ESP32-S3 build. Its app image is 222,768 bytes, SHA-256 `0F4ABC7FA9A3A1A1FCBF457FA468931468940AFDC49460B8302E1B1DFEB517C8`.
 - A follow-up write is not yet authorized. If separately authorized, only app range `0x010000..0x04662F` will be written. Bootloader, partition table, NVS, PHY, both sound banks, eFuse and Xiaozhi remain untouched.
 - During the voice pressure run, one transcription request failed and the following cycles recovered. The failure is preserved as a distinct safe history state; it is not counted as proof of a stuck HID trigger. T03 still requires reconnect retest and completion of the remaining voice cycles after the rework build runs on the board.
+
+## 2026-08-25 app-only reflash execution evidence
+
+- The user explicitly authorized only `dd7bb69` app range `0x010000..0x04662F` and manually entered the EasyInput download mode.
+- The fresh ESP32-S3 identity matched the private identity in the original full-Flash recovery record before writing; the image SHA-256 matched the approved manifest.
+- Exactly 222,768 bytes were written at `0x010000`; esptool reported data-hash verification, and the post-write private identity matched again.
+- No bootloader, partition table, NVS, PHY, sound bank, eFuse or Xiaozhi range was written. The board remains in manual download mode and must be fully powered off/on before retest; this is not yet application or HIL confirmation.
 
 ## Original first-write authorization sentence
 

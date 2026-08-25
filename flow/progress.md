@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 reconnect fix app-only reflash verified; normal boot retest pending
+
+- 做了什么：用户按精确授权句确认后，短按并松开当前 EasyInput 的 BOOT；本机重新核对唯一下载端口、ESP32-S3 型号、原完整备份中的私有身份和候选镜像哈希，只把 `dd7bb69` 的 app 镜像写入 `0x010000..0x04662F`，随后验证数据哈希并再次匹配私有身份。
+- 为什么：T03 断线压力测试暴露 Windows 残留 Ctrl；只需替换 app 即可验证 mount 首帧全释放修复，不应再次改写已经校验一致的 bootloader、分区或用户持久区。
+- 怎么理解：写入成功不等于应用已启动或 HIL 已通过。当前板通过手动 BOOT 进入下载模式，必须按本板合同完整关机再开机；最终物理恢复后不再运行 esptool 验身，只用 Windows 枚举和用户行为证明新程序运行。
+- 产出路径：Git 外恢复目录保存私有写入日志与写后身份记录；Git 内更新 `docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、T03 任务、固件 README 和本记录。镜像及私有身份未进入 Git。
+- 验证：app 222,768 字节，SHA-256 `0F4ABC7FA9A3A1A1FCBF457FA468931468940AFDC49460B8302E1B1DFEB517C8`；esptool 数据哈希验证 PASS；写前/写后身份均与原备份匹配；其他写入范围为零。
+- 问题解决：补刷门已关闭，状态进入 `FLASH_VERIFIED_PENDING_NORMAL_BOOT_RETEST`。没有擦除、分区变更、NVS/PHY/声音区/eFuse 写入或小智访问。
+- 下一步：用户用板上电源开关关机，等待 2～3 秒后正常开机，绝不再次按 BOOT；随后验证 Windows HID 枚举并复测“按住 S6 拔线/重连/释放后输入 `abc`”、快速旋钮和剩余语音循环。通过后再处理 S8 当前样机豁免并锁定 T03。
+
 ## 2026-08-25 · T03 reconnect blocker fixed in code; app-only reflash pending authorization
 
 - 做了什么：依据用户真机压力测试复现语义，确认“按住 S6 拔线并重连后，普通 `A` 仍触发全选”是 host-visible Ctrl 粘连；在 `UsbInputRuntime::on_mount()` 中让新 mount epoch 首先排入全释放键盘报告，并用生产路径 Host 测试锁定首帧、旧队列丢弃和 held-key 抑制。同期完善桌面转写失败分类与历史标记，并把胶囊转写阶段的误导性 `0%` 改为“处理中”。

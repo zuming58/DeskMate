@@ -6,7 +6,7 @@
 
 ### Current execution point
 
-- T03 首次写入、正常启动、S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获均已取得真机通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，继续记录为单板硬件阻断而不修改全局八键/GPIO48 合同。断线压力测试发现“按住 S6 拔线、重新连接后 Windows 残留 Ctrl”的阻断缺陷；`main@dd7bb69` 已增加 mount 首帧全释放并通过 Host、ESP-IDF、桌面自动化与打包烟测，当前状态为 `HIL_REWORK_READY_PENDING_APP_ONLY_REFLASH`。T03 补刷复测通过前不进入 T04。
+- T03 首次写入、正常启动、S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获均已取得真机通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，继续记录为单板硬件阻断而不修改全局八键/GPIO48 合同。断线压力测试发现“按住 S6 拔线、重新连接后 Windows 残留 Ctrl”的阻断缺陷；用户已授权把 `dd7bb69` 的修复版仅写入 app 区，写入、数据哈希和写后身份核对通过，其他分区未写。当前状态为 `FLASH_VERIFIED_PENDING_NORMAL_BOOT_RETEST`；正常启动和断线复测通过前不进入 T04。
 - T03 首次写入基线已推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`；断线修复候选为本机提交 `dd7bb69`，尚未推送、尚未补刷。该候选 Host CTest 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建、桌面 68/68、桌面打包和打包烟测通过，只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`，不冒充补刷后的 HIL。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
