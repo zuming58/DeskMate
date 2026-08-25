@@ -1,12 +1,12 @@
 # T03 first-flash pre-write audit
 
-Status: `READY_FOR_FINAL_WRITE_CONFIRMATION`
+Status: `COMPLETED_FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`
 
 ## Scope and authorization
 
 The user authorized only the current EasyInput V2.0 first-flash card: identify one target, preserve and verify Flash/NVS, show the exact write plan, then flash and run T03 HIL. Erase-all, partition migration, eFuse, Xiaozhi, network scanning and unrelated device access remain forbidden.
 
-No device write has occurred during this audit.
+The pre-write audit originally stopped before any write. After the user separately confirmed the exact final manifest, the audited images were written as recorded in the execution result below.
 
 ## Recovery evidence
 
@@ -59,4 +59,6 @@ The plan preserves `0x9000..0xFFFF` NVS/PHY and all content from `0x310000` onwa
 
 ## Next gate
 
-Wait for one final user confirmation against the exact manifest above. Then revalidate the same ESP32-S3 identity, write only the three listed ranges, perform the EasyInput-specific normal-boot recovery (`power off → power on`, never press BOOT again), and run the T03 HIL matrix. T04 remains closed until HIL passes.
+The user gave the final confirmation. The same private ESP32-S3 identity was verified before and after writing only the three listed ranges; esptool reported data-hash verification for all three. No erase-all, eFuse, NVS/PHY, sound-bank or Xiaozhi operation occurred.
+
+The board is still in the manually entered download mode. Perform the EasyInput-specific normal-boot recovery (`power off → wait 2–3 seconds → power on`, never press BOOT again), then verify `VID 303A / PID 1006` and run the complete T03 HIL matrix. T04 remains closed until HIL passes.

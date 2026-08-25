@@ -1,6 +1,6 @@
 # T03 first-flash and HIL authorization card
 
-Status: `AUTHORIZED_BACKUP_CONFIRMED_PARTITION_FIX_VALIDATED_PENDING_FINAL_WRITE_CONFIRMATION`
+Status: `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`
 
 This card applies only to the EasyInput V2.0 board connected to the current main computer. It does not authorize Xiaozhi access, network scanning, eFuse changes, partition changes, erase-all, UART wiring or servo actions.
 
@@ -45,7 +45,16 @@ Only after every item passes may T03 be marked `HIL_CONFIRMED` and locked. Confi
 - The first pre-write comparison blocked the old T03 default table because it reduced factory from 3 MiB to 1 MiB and removed `sound_a` / `sound_b`. No write occurred.
 - Commit `2d2f867dba95835f19af35cd0fd872b96748c2db` preserves the canonical table, adds CMake and Host fail-closed guards, and was rebuilt with ESP-IDF 5.5.5 / ESP32-S3. Host CTest is 3/3.
 - The final generated 3,072-byte partition table is byte-identical to the table in the board backup; NVS, PHY and both sound banks are outside all planned writes.
-- Exact final manifest and hashes are recorded in [`t03-first-flash-prewrite-audit-2026-08-25.md`](../reviews/t03-first-flash-prewrite-audit-2026-08-25.md). Flash write count remains zero pending one final user confirmation.
+- Exact final manifest and hashes are recorded in [`t03-first-flash-prewrite-audit-2026-08-25.md`](../reviews/t03-first-flash-prewrite-audit-2026-08-25.md).
+
+## 2026-08-25 first-write execution evidence
+
+- The user explicitly confirmed the exact three-range manifest immediately before execution.
+- The single ESP32-S3 target was freshly re-enumerated; its private identity matched the backup target before and after the write. No unique identity is stored in Git.
+- Only `0x000000..0x00515F`, `0x008000..0x008BFF` and `0x010000..0x04660F` were written. Esptool verified the data hash for all three segments.
+- No erase-all, eFuse write, partition migration, NVS/PHY write, sound-bank write, Xiaozhi access or network scan occurred.
+- The board remains in the manually entered download mode. The current evidence is `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`, not application-ready or `HIL_CONFIRMED`.
+- Next physical action: use the board power switch to turn it off, wait 2–3 seconds, then turn it on normally. Do not press BOOT again. After that, verify HID enumeration and run the full T03 HIL matrix.
 
 ## User authorization sentence
 

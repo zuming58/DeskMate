@@ -6,11 +6,11 @@
 
 ### Current execution point
 
-- T03 首次烧录卡已获授权并完成预写门：单一 ESP32-S3 目标、16 MB Flash 与完整 Flash/NVS 备份已确认。预写比较发现旧 T03 默认 1 MiB 分区表会删除 Maker 的 3 MiB factory 与双声音 bank，已由本机提交 `2d2f867dba95835f19af35cd0fd872b96748c2db` 修正为规范布局，Host 3/3、ESP-IDF 5.5.5 构建及实板分区表逐字节比较通过。当前仍为零次写入，等待展示最终 manifest 后的最后一次用户确认。
+- T03 首次烧录卡、恢复备份和预写门均已完成；用户再次确认最终 manifest 后，本机已向同一 ESP32-S3 仅写入 `0x0..0x515F`、`0x8000..0x8BFF`、`0x10000..0x4660F`，三段数据哈希校验通过，写后私有身份一致。NVS、PHY、双声音 bank、整片擦除和 eFuse 均未触及。当前状态为 `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`：等待用户关机再正常开机后验证 HID 枚举并执行 T03 真机矩阵。
 - T03 最终代码已合入并推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`：另一台电脑补齐完整描述符黄金向量和有序生命周期队列，本机第三轮审计直接修复重复 mount epoch、16 槽真实容量及溢出安全恢复；Host 3/3 与 ESP-IDF v5.5.5 / ESP32-S3 构建通过，达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
-- 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，但代码门已关闭；下一道门是恢复证据、用户授权和首次真机 HIL。T03 真机锁定前不进入 T04。
+- 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，代码门和首次写入门已关闭；下一道门是正常启动、HID 枚举与完整真机 HIL。T03 真机锁定前不进入 T04。
 - T03 只允许实现 [`INPUT_V1_FROZEN`](../contracts/deskmate-host/easyinput-input-v1.md) 切片；完整 DeskMate host contract 仍未冻结，配置、NVS、Host Action、BLE、音频和 DeskMate Link 不得提前实现。
 - T03 分支推送后由当前电脑独立审计与重建。只有代码门通过、原 Maker 恢复方案准备完毕并获得用户单独授权后，才执行 EasyInput 第一次烧录和 HIL。
 

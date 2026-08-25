@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 three-range first flash verified, pending normal boot and HIL
+
+- 做了什么：在用户对最终三段清单再次明确确认后，重新枚举唯一 EasyInput 下载端口，私下复核其 ESP32-S3 身份与备份对象一致，复验完整恢复备份、三份镜像哈希、干净源码提交和远端主线，然后只写入 bootloader、既有布局的分区表和 T03 app 三段；写后在下载模式再次私下核对同一硬件身份。
+- 为什么：首次写入必须把“授权对象、可恢复证据、候选镜像、真实写入范围和写后对象”闭合，不能因用户已经按过 BOOT 就跳过身份与哈希门禁，也不能把烧录工具成功冒充应用/HIL 已通过。
+- 怎么理解：三段写入和 esptool 数据校验已经完成；NVS、PHY、双声音 bank、整片擦除、eFuse、分区迁移和小智均未触及。当前板仍在手动下载模式，状态仅为 `FLASH_VERIFIED_PENDING_NORMAL_BOOT_HIL`，还不是 `HIL_CONFIRMED`。
+- 产出路径：`docs/testing/t03-first-flash-authorization-card-2026-08-24.md`、`docs/reviews/t03-first-flash-prewrite-audit-2026-08-25.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md` 与本记录；完整 Flash/NVS 备份、私有身份、写入日志和写后 session 继续只保存在 Git 外恢复目录，不提交、不上传。
+- 验证：目标数量 1、芯片 ESP32-S3、写前/写后私有身份一致；三份镜像 SHA-256 与最终 manifest 一致；写入 `0x0..0x515F`、`0x8000..0x8BFF`、`0x10000..0x4660F`，三段均获 esptool `Hash of data verified`；未执行 erase-all 或 eFuse 写入。
+- 问题解决：本轮没有新的代码、结构、架构或视觉变更；预写阶段发现并修复的分区风险已由既有 D023 和回归覆盖，因此不新增决策或 lessons。
+- 下一步：用户用板上电源开关“关机 → 等 2～3 秒 → 正常开机”，不要再按 BOOT。恢复正常启动后，本机先验证 Windows 枚举 `VID 303A / PID 1006`，再逐项执行八键、旋钮、断线重连、20 次语音键和 DeskMate 回归；全部通过前不启动 T04。
+
 ## 2026-08-25 · T03 first-flash recovery gate and partition correction completed
 
 - 做了什么：收到用户 T03 首次烧录卡授权后，只识别当前 EasyInput，确认单一 ESP32-S3/16 MB Flash，完成 16,777,216 字节整片 Flash/NVS 备份、可读性和重复 SHA-256 校验；烧录前解析实板分区表，发现 T03 默认 1 MiB factory 表会删除现有 3 MiB factory 与 `sound_a/sound_b`，因此保持零次写入并在本机修正分区合同。
