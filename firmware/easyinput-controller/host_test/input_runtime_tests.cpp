@@ -198,19 +198,29 @@ void cold_boot_held_s6_release_barrier() {
     finish_hid_send_attempt(runtime, report, true, report_in_flight, report_epoch);
     CHECK(report_in_flight);
 
-    // A duplicate mount must not reset the in-flight release or epoch.
+    // Every mount callback starts a new endpoint lifetime, including a BUS
+    // reset that did not deliver an unmount first.
     CHECK(events.publish(callback.on_mount()));
     process_usb_lifecycle_events(events, runtime, report_in_flight,
                                  report_epoch, callback.snapshot());
-    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
-    CHECK(report_in_flight);
+    CHECK(runtime.diagnostics().usb_mount_epoch == 2);
+    CHECK(!report_in_flight);
 
     // Every input remains suppressed while the boot-time key is held.
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     CHECK(runtime.queued_reports() == 1);
 
+    // A completion from the old endpoint is ignored; the new mount release
+    // still needs its own completion.
+    CHECK(events.publish({UsbLifecycleEventKind::TransferComplete, 1}));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(!report_in_flight);
+    CHECK(runtime.queued_reports() == 1);
     CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferComplete)));
+    CHECK(prepare_hid_report(runtime, true, report_in_flight, report));
+    finish_hid_send_attempt(runtime, report, true, report_in_flight, report_epoch);
     process_usb_lifecycle_events(events, runtime, report_in_flight,
                                  report_epoch, callback.snapshot());
     CHECK(!report_in_flight);
@@ -335,7 +345,7 @@ void ordered_lifetime_events_and_stale_completion() {
     CHECK(events.publish({UsbLifecycleEventKind::Unmount, 1}));
     process_usb_lifecycle_events(events, runtime, report_in_flight, report_epoch, {false, 1});
     CHECK(!runtime.mounted());
-    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(runtime.diagnostics().usb_mount_epoch == 0);
     CHECK(runtime.queued_reports() == 0);
 
     CHECK(events.publish({UsbLifecycleEventKind::Mount, 2}));
@@ -378,20 +388,20 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
     const auto mount = callback.on_mount();
     const auto duplicate_mount = callback.on_mount();
     CHECK(mount.epoch == 1);
-    CHECK(duplicate_mount.epoch == mount.epoch);
+    CHECK(duplicate_mount.epoch == 2);
     CHECK(callback.snapshot().mounted);
     CHECK(events.publish(mount));
     CHECK(events.publish(duplicate_mount));
     process_usb_lifecycle_events(
         events, runtime, report_in_flight, report_epoch, callback.snapshot());
     CHECK(runtime.mounted());
-    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(runtime.diagnostics().usb_mount_epoch == 2);
     consume_mount_release(runtime);
 
     runtime.on_input(key(0, true));
     CHECK(runtime.queued_reports() == 1);
     report_in_flight = true;
-    report_epoch = 1;
+    report_epoch = 2;
     CHECK(events.publish(callback.current_event(UsbLifecycleEventKind::TransferComplete)));
     process_usb_lifecycle_events(
         events, runtime, report_in_flight, report_epoch, callback.snapshot());
@@ -399,7 +409,7 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
     CHECK(runtime.queued_reports() == 0);
 
     for (size_t index = 0; index < kUsbLifecycleQueueCapacity; ++index) {
-        CHECK(events.publish({UsbLifecycleEventKind::Resume, 1}));
+        CHECK(events.publish({UsbLifecycleEventKind::Resume, 2}));
     }
     CHECK(events.queued() == kUsbLifecycleQueueCapacity);
     const auto unmount = callback.on_unmount();
@@ -413,7 +423,140 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
     CHECK(runtime.diagnostics().usb_lifecycle_drops == 1);
 
     const auto remount = callback.on_mount();
-    CHECK(remount.epoch == 2);
+    CHECK(remount.epoch == 3);
+}
+
+void physical_presence_filters_loss_and_requires_real_mount() {
+    UsbPhysicalPresenceMonitor monitor{25};
+    monitor.reset(true, 100);
+    CHECK(monitor.present());
+    CHECK(!monitor.update(false, 101));
+    CHECK(monitor.disconnect_pending());
+    CHECK(!monitor.update(false, 125));
+    CHECK(monitor.present());
+    CHECK(monitor.update(false, 126));
+    CHECK(!monitor.present());
+    CHECK(!monitor.disconnect_pending());
+    CHECK(monitor.update(true, 127));
+    CHECK(monitor.present());
+
+    // Unsigned elapsed-time arithmetic preserves the same 25 ms boundary
+    // across the 32-bit millisecond counter wrap.
+    monitor.reset(true, UINT32_MAX - 10);
+    CHECK(!monitor.update(false, UINT32_MAX - 5));
+    CHECK(!monitor.update(false, 18));
+    CHECK(monitor.update(false, 19));
+    CHECK(!monitor.present());
+
+    UsbCallbackLifecycleState callback;
+    UsbLifecycleEvent event{};
+    CHECK(!callback.try_mount(false, event));
+    CHECK(!callback.snapshot().mounted);
+    CHECK(callback.snapshot().epoch == 0);
+    CHECK(callback.try_mount(true, event));
+    CHECK(event.kind == UsbLifecycleEventKind::Mount);
+    CHECK(event.epoch == 1);
+    CHECK(callback.try_mount(true, event));
+    CHECK(event.epoch == 2);
+
+    UsbLifecycleEventQueue events;
+    UsbInputRuntime runtime;
+    bool report_in_flight = false;
+    uint32_t report_epoch = 0;
+    CHECK(events.publish(callback.on_mount()));
+    callback.on_physical_disconnect();
+    runtime.observe_physical_presence(false);
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(!runtime.mounted());
+    CHECK(runtime.queued_reports() == 0);
+}
+
+void two_physical_reconnect_cycles_without_tinyusb_unmount() {
+    constexpr uint8_t s6_mask = 1u << 5;
+    UsbPhysicalPresenceMonitor monitor{25};
+    UsbCallbackLifecycleState callback;
+    UsbLifecycleEventQueue events;
+    UsbInputRuntime runtime;
+    bool report_in_flight = false;
+    uint32_t report_epoch = 0;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero{};
+    monitor.reset(true, 0);
+
+    CHECK(events.publish(callback.on_mount()));
+    process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                 report_epoch, callback.snapshot());
+    CHECK(runtime.diagnostics().usb_mount_epoch == 1);
+    runtime.observe_physical_key_mask(0);
+    consume_mount_release(runtime);
+
+    for (uint32_t cycle = 0; cycle < 2; ++cycle) {
+        runtime.observe_physical_key_mask(s6_mask);
+        runtime.on_input(key(5, true));
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload[0] == 1);
+        CHECK(report.payload[2] == 0x06);
+        runtime.complete_report();
+
+        // GPIO40 loss is confirmed although tud_umount_cb is absent. Any old
+        // wheel and keyboard state is discarded with the endpoint lifetime.
+        runtime.on_input({InputEventType::EncoderStep, 0, 1});
+        const uint32_t base = 100 + cycle * 100;
+        CHECK(!monitor.update(false, base));
+        CHECK(monitor.update(false, base + 25));
+        callback.on_physical_disconnect();
+        runtime.observe_physical_presence(false);
+        CHECK(!callback.snapshot().mounted);
+        CHECK(!runtime.mounted());
+        CHECK(runtime.queued_reports() == 0);
+
+        // Physical recovery does not mount and cannot replay held Ctrl or the
+        // old relative wheel displacement.
+        CHECK(monitor.update(true, base + 26));
+        runtime.observe_physical_presence(true);
+        runtime.on_input({InputEventType::EncoderStep, 0, 1});
+        CHECK(!runtime.mounted());
+        CHECK(runtime.queued_reports() == 0);
+
+        // A real TinyUSB mount creates a fresh epoch even if a BUS reset omitted
+        // the unmount callback. Held input remains suppressed behind zero.
+        CHECK(events.publish(callback.on_mount()));
+        process_usb_lifecycle_events(events, runtime, report_in_flight,
+                                     report_epoch, callback.snapshot());
+        CHECK(runtime.diagnostics().usb_mount_epoch == cycle + 2);
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload == zero);
+        runtime.complete_report();
+        runtime.on_input({InputEventType::EncoderStep, 0, 1});
+        CHECK(runtime.queued_reports() == 0);
+
+        // Release has no owner in this fresh lifetime, so it must produce and
+        // complete a second zero before a new Ctrl+C press can be admitted.
+        runtime.observe_physical_key_mask(0);
+        runtime.on_input(key(5, false));
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload == zero);
+        runtime.complete_report();
+        CHECK(runtime.queued_reports() == 0);
+
+        runtime.on_input(key(5, true));
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload[0] == 1);
+        CHECK(report.payload[2] == 0x06);
+        runtime.complete_report();
+        runtime.on_input(key(5, false));
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload == zero);
+        runtime.complete_report();
+        CHECK(runtime.queued_reports() == 0);
+    }
+
+    runtime.observe_physical_key_mask(s6_mask);
+    runtime.on_input(key(5, true));
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 1);
+    CHECK(report.payload[2] == 0x06);
 }
 
 void queue_failure_release_and_wheel_boundaries() {
@@ -714,6 +857,8 @@ int main() {
     mount_before_first_cold_boot_scan();
     ordered_lifetime_events_and_stale_completion();
     lifecycle_duplicate_mount_and_overflow_recovery();
+    physical_presence_filters_loss_and_requires_real_mount();
+    two_physical_reconnect_cycles_without_tinyusb_unmount();
     queue_failure_release_and_wheel_boundaries();
     wheel_coalescing_boundaries_and_no_replay();
     descriptor_and_vendor_fail_closed();

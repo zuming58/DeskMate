@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-25 · T03 GPIO40 physical USB lifetime rework passes Host gate; final build and authorization pending
+
+- 做了什么：第二次真实断线复测再次出现 Ctrl 粘连后，保持 T03 开放并停止真机操作。固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，确认 EasyInput V2 的 GPIO40 是低有效 USB/SEN_VIN 物理存在信号；在现有唯一 `UsbInputRuntime` 内清晰重实现 25 ms 断开确认、物理断开撤销旧 endpoint、物理恢复不伪造 mount，以及每个真实 TinyUSB mount callback 建立新 epoch。
+- 为什么：板子可由自身电源继续运行，拔 USB 不保证冷启动，也不保证 TinyUSB 先回调 unmount；旧实现把重复 mount 当作幂等并完全忽略 GPIO40，可能沿用旧 endpoint lifetime，符合第一次通过、第二次失败的间歇性真机事实。
+- 测试：Host CMake/build/CTest 3/3 通过。新增覆盖 GPIO40 低有效/25 ms 精确边界和计时回绕、物理不存在拒绝 mount、持续运行且缺失 TinyUSB unmount、物理恢复不 mount、不重放旧滚轮、真实重复 mount 推进 epoch、held S6 抑制、无 Press owner 的释放零报告、旧 completion/fail/stale mount，以及连续两个完整断线重连循环。
+- 构建：工作树候选已在精确 ESP-IDF v5.5.5 / `esp32s3`、隔离 sdkconfig 下构建通过，冻结分区仍为 NVS `0x9000/24K`、PHY `0xF000/4K`、factory `0x10000/3M`、sound A/B 各 576K；app 预构建大小 `0x36A40`，factory 余量 93%。最终烧录哈希必须从提交后的干净 HEAD 重新构建，当前不得复用旧授权。
+- 安全边界：未扫描端口、识别设备、flash、erase、monitor 或读写 Flash；未修改分区、NVS、PHY、声音区、eFuse、小智、桌面、冻结合同或外部参考目录。本轮仍只声明 `TEST_CONFIRMED`，最终构建重跑后才声明新的 `BUILD_CONFIRMED`。
+- 下一步：完成来源/范围/密钥/ASCII/构建产物检查，提交并推送原分支，从干净 HEAD 重建 app，展示 HEAD、SHA-256 和精确 app-only 范围并重新取得授权。获授权补刷后连续五次 `123`→按住 S6→拔线重连→等 3 秒→松开→`abc`，任一次失败立即停止；T03 通过前不进入 T04/T05。
+
 ## 2026-08-25 · T03 cold-boot candidate fails second reconnect repetition after app-only reflash
 
 - 做了什么：用户明确授权后，重新核对 `codex/easyinput-t03-cold-boot-reconnect@a97d85e9bbafc6d76a7942d381d360d5ebd58d56` 与 app SHA-256 `20B1AF1D66D092E3BF17D6A16C4A22FF18F0D269F63149A251C3A6C737ADCE31`，只把 223,456-byte app 写入 `0x010000..0x0468DF`，写入工具完成数据哈希校验。完整关机/正常开机后，Windows Keyboard、Mouse 与 HID 接口均以 `VID 303A / PID 1006` 正常枚举。

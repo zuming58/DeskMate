@@ -57,6 +57,7 @@ int main() {
     const std::string runtime_source = read_all(RUNTIME_SOURCE_PATH);
     const std::string runtime_header = read_all(RUNTIME_HEADER_PATH);
     const std::string input_core_header = read_all(INPUT_CORE_HEADER_PATH);
+    const std::string board_pins = read_all(BOARD_PINS_PATH);
     const std::string module_gitignore = read_all(MODULE_GITIGNORE_PATH);
     const std::string manifest = read_all(MANIFEST_PATH);
     const std::string sdkconfig_defaults = read_all(SDKCONFIG_DEFAULTS_PATH);
@@ -72,6 +73,9 @@ int main() {
     CHECK(contains(main_cmake, "esp_timer"));
     CHECK(contains(root_cmake, "idf_build_set_property(MINIMAL_BUILD ON)"));
     CHECK(contains(main_source, "GPIO_INTR_ANYEDGE"));
+    CHECK(contains(main_source, "kUsbPhysicalPresenceGpio"));
+    CHECK(contains(main_source, "usb_physical_presence.update"));
+    CHECK(contains(main_source, "callback_lifecycle.try_mount"));
     CHECK(contains(main_source, "xQueueCreateStatic"));
     CHECK(contains(main_source, "kRawEdgeQueueCapacity"));
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));
@@ -101,6 +105,9 @@ int main() {
     CHECK(contains(runtime_header, "kInputEventQueueCapacity = 32"));
     CHECK(contains(runtime_header, "kHidReportQueueCapacity = 16"));
     CHECK(contains(runtime_header, "kUsbLifecycleQueueCapacity = 16"));
+    CHECK(contains(runtime_header, "kUsbDisconnectConfirmMs = 25"));
+    CHECK(contains(board_pins, "kUsbPhysicalPresenceGpio = 40"));
+    CHECK(contains(board_pins, "kUsbPhysicalPresenceActiveLevel = 0"));
     CHECK(contains(runtime_header, "UsbLifecycleEventQueue"));
     CHECK(contains(runtime_header, "kUsbInterfaceStringIndex = 0"));
     CHECK(contains(runtime_header, "kUsbDeviceDescriptor"));

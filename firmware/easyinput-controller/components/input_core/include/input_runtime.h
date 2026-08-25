@@ -21,6 +21,7 @@ inline constexpr uint8_t kUsbInterfaceStringIndex = 0;
 inline constexpr size_t kUsbDeviceDescriptorLength = 18;
 inline constexpr size_t kUsbConfigurationDescriptorLength = 34;
 inline constexpr size_t kUsbLifecycleQueueCapacity = 16;
+inline constexpr uint32_t kUsbDisconnectConfirmMs = 25;
 
 extern const std::array<uint8_t, kUsbDeviceDescriptorLength> kUsbDeviceDescriptor;
 extern const std::array<uint8_t, kUsbConfigurationDescriptorLength> kUsbConfigurationDescriptor;
@@ -82,9 +83,29 @@ struct UsbCallbackSnapshot {
     uint32_t epoch{0};
 };
 
+class UsbPhysicalPresenceMonitor {
+public:
+    explicit UsbPhysicalPresenceMonitor(
+        uint32_t disconnect_confirm_ms = kUsbDisconnectConfirmMs)
+        : disconnect_confirm_ms_(disconnect_confirm_ms) {}
+    void reset(bool present, uint32_t now_ms);
+    bool update(bool raw_present, uint32_t now_ms);
+    bool present() const { return present_; }
+    bool disconnect_pending() const { return disconnect_pending_; }
+
+private:
+    uint32_t disconnect_confirm_ms_{25};
+    uint32_t candidate_since_ms_{0};
+    bool initialized_{false};
+    bool present_{false};
+    bool disconnect_pending_{false};
+};
+
 class UsbCallbackLifecycleState {
 public:
     UsbLifecycleEvent on_mount();
+    bool try_mount(bool physical_present, UsbLifecycleEvent& event);
+    void on_physical_disconnect();
     UsbLifecycleEvent on_unmount();
     UsbLifecycleEvent current_event(UsbLifecycleEventKind kind) const;
     UsbCallbackSnapshot snapshot() const;
@@ -140,6 +161,7 @@ public:
     void on_input(const InputEvent& event);
     // Publishes the debounced physical key snapshot, including cold-boot state.
     void observe_physical_key_mask(uint8_t active_key_mask);
+    void observe_physical_presence(bool present);
     void on_raw_edge_drops(uint32_t count);
     void on_encoder_resync();
     void on_input_event_drops(uint32_t count);

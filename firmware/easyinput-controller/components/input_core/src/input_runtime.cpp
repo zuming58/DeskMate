@@ -52,6 +52,40 @@ void UsbLifecycleEventQueue::discard_pending() {
     tail_.store(head_.load(std::memory_order_acquire), std::memory_order_release);
 }
 
+void UsbPhysicalPresenceMonitor::reset(bool present, uint32_t now_ms) {
+    initialized_ = true;
+    present_ = present;
+    disconnect_pending_ = false;
+    candidate_since_ms_ = now_ms;
+}
+
+bool UsbPhysicalPresenceMonitor::update(bool raw_present, uint32_t now_ms) {
+    if (!initialized_) {
+        reset(raw_present, now_ms);
+        return false;
+    }
+    if (raw_present) {
+        disconnect_pending_ = false;
+        if (present_) return false;
+        present_ = true;
+        return true;
+    }
+    if (!present_) {
+        disconnect_pending_ = false;
+        return false;
+    }
+    if (!disconnect_pending_) {
+        disconnect_pending_ = true;
+        candidate_since_ms_ = now_ms;
+    }
+    if (static_cast<uint32_t>(now_ms - candidate_since_ms_) < disconnect_confirm_ms_) {
+        return false;
+    }
+    present_ = false;
+    disconnect_pending_ = false;
+    return true;
+}
+
 uint32_t UsbCallbackLifecycleState::next_epoch() {
     uint32_t current = epoch_.load(std::memory_order_acquire);
     while (current != UINT32_MAX &&
@@ -61,11 +95,22 @@ uint32_t UsbCallbackLifecycleState::next_epoch() {
 }
 
 UsbLifecycleEvent UsbCallbackLifecycleState::on_mount() {
-    const bool duplicate = mounted_.exchange(true, std::memory_order_acq_rel);
-    const uint32_t epoch = duplicate
-        ? epoch_.load(std::memory_order_acquire)
-        : next_epoch();
-    return {UsbLifecycleEventKind::Mount, epoch};
+    mounted_.store(true, std::memory_order_release);
+    return {UsbLifecycleEventKind::Mount, next_epoch()};
+}
+
+bool UsbCallbackLifecycleState::try_mount(
+    bool physical_present, UsbLifecycleEvent& event) {
+    if (!physical_present) {
+        on_physical_disconnect();
+        return false;
+    }
+    event = on_mount();
+    return true;
+}
+
+void UsbCallbackLifecycleState::on_physical_disconnect() {
+    mounted_.store(false, std::memory_order_release);
 }
 
 UsbLifecycleEvent UsbCallbackLifecycleState::on_unmount() {
@@ -205,6 +250,11 @@ void UsbInputRuntime::observe_physical_key_mask(uint8_t active_key_mask) {
     }
     maybe_enqueue_release_report(had_snapshot, was_held, now_held);
     if (release_barrier_pending_) suppress_until_all_released_ = true;
+}
+
+void UsbInputRuntime::observe_physical_presence(bool present) {
+    if (present || !mounted_) return;
+    on_unmount();
 }
 
 void UsbInputRuntime::maybe_enqueue_release_report(
@@ -388,6 +438,7 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
     while (events.consume(event)) {
         switch (event.kind) {
             case UsbLifecycleEventKind::Mount:
+                if (!callback.mounted || event.epoch != callback.epoch) break;
                 if (!runtime.mounted() ||
                     event.epoch != runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_mount(event.epoch);

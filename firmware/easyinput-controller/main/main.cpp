@@ -33,6 +33,7 @@ std::atomic<uint32_t> raw_edge_drops{0};
 UsbLifecycleEventQueue lifecycle_events;
 UsbCallbackLifecycleState callback_lifecycle;
 UsbInputRuntime runtime;
+UsbPhysicalPresenceMonitor usb_physical_presence{kUsbDisconnectConfirmMs};
 constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -67,6 +68,11 @@ uint8_t read_encoder_phase() {
         gpio_get_level(static_cast<gpio_num_t>(kEncoderBGpio)));
 }
 
+bool usb_physical_presence_present() {
+    return gpio_get_level(static_cast<gpio_num_t>(kUsbPhysicalPresenceGpio)) ==
+           kUsbPhysicalPresenceActiveLevel;
+}
+
 UsbCallbackSnapshot callback_snapshot() {
     return callback_lifecycle.snapshot();
 }
@@ -86,6 +92,13 @@ void input_owner_task(void*) {
 
         const uint32_t now_ms = monotonic_milliseconds(
             static_cast<uint64_t>(esp_timer_get_time()));
+        const bool raw_usb_present = usb_physical_presence_present();
+        if (usb_physical_presence.update(raw_usb_present, now_ms)) {
+            if (!usb_physical_presence.present()) {
+                callback_lifecycle.on_physical_disconnect();
+            }
+            runtime.observe_physical_presence(usb_physical_presence.present());
+        }
         uint8_t key_mask = 0;
         for (uint8_t index = 0; index < kKeyGpios.size(); ++index) {
             if (gpio_get_level(static_cast<gpio_num_t>(kKeyGpios[index])) == 0) {
@@ -157,6 +170,17 @@ extern "C" void app_main(void) {
     inputs.intr_type = GPIO_INTR_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&inputs));
 
+    gpio_config_t usb_presence_input{};
+    usb_presence_input.pin_bit_mask = 1ULL << kUsbPhysicalPresenceGpio;
+    usb_presence_input.mode = GPIO_MODE_INPUT;
+    usb_presence_input.pull_up_en = GPIO_PULLUP_ENABLE;
+    usb_presence_input.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    usb_presence_input.intr_type = GPIO_INTR_DISABLE;
+    ESP_ERROR_CHECK(gpio_config(&usb_presence_input));
+    usb_physical_presence.reset(usb_physical_presence_present(),
+                                monotonic_milliseconds(
+                                    static_cast<uint64_t>(esp_timer_get_time())));
+
     gpio_config_t encoder_inputs{};
     encoder_inputs.pin_bit_mask =
         (1ULL << kEncoderAGpio) | (1ULL << kEncoderBGpio);
@@ -191,7 +215,13 @@ extern "C" void app_main(void) {
 }
 
 extern "C" void tud_mount_cb(void) {
-    lifecycle_events.publish(callback_lifecycle.on_mount());
+    UsbLifecycleEvent event{};
+    if (!callback_lifecycle.try_mount(
+            usb_physical_presence_present(), event)) {
+        notify_owner_from_callback();
+        return;
+    }
+    lifecycle_events.publish(event);
     notify_owner_from_callback();
 }
 extern "C" void tud_umount_cb(void) {
