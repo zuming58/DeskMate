@@ -15,10 +15,12 @@
 - 编码器 A/B/按压：GPIO `17/16/18`；A/B 必须按正交相位解码。
 - 原生 USB：GPIO19/20。GPIO8 是 LED、麦克风和扬声器共享电源域，不是单独灯开关。
 - J4：`3V3/RXD0/TXD0/GND`；V1 只计划使用 `RXD0/TXD0/GND`，`3V3` 不接小智。
+- Flash 分区固定为 `0x9000/0x6000` NVS、`0xF000/0x1000` PHY、`0x10000/0x300000` factory app、`0x310000/0x90000` sound_a、`0x3A0000/0x90000` sound_b；功能包不得退回默认分区或重排这些范围。
 
 ## Development and safety
 
 - 目标工具链由项目冻结为 ESP-IDF 5.5.5；若本机版本不匹配，停止并报告，不静默换版本。
+- 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
 - T03 第三轮本机审计当前达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`：重复 mount epoch、生命周期队列真实容量和溢出恢复已修复，Host 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建通过，依赖为 esp_tinyusb 1.7.6~2；代码已合入并推送 `main`，任务状态为 `MERGED_PENDING_HIL_AUTHORIZATION`，不代表可烧录、HIL 或真机通过。
