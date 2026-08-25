@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-26 · T03 cold-boot release reassertion candidate passes local gates; HIL pending
+
+- 做了什么：在现有唯一 `UsbInputRuntime` 内补充有序的 mount 释放序列。每次真实 mount 先排一份全释放报告；若冷启动扫描发现实体键仍按住，首份报告完成后再排一份全释放报告，释放屏障完成前继续抑制按键和滚轮。普通空 mount 仍只发送一份零报告；unmount/reset 会清理序列状态。新增冷启动晚到扫描、重连持键、旧完成事件、实体释放后新 Ctrl+C 和滚轮不重放回归。
+- 为什么：昨日监控确认 USB 确实重枚举，但重连后没有观察到 EasyInput Ctrl-up；TinyUSB transfer-complete 只证明控制器接受，不能证明 Windows 已消费并清除旧 Ctrl 状态。对持键重连重复一次全释放报告，补足现有状态机的主机清除窗口，不建立第二套输入状态机。
+- 测试：Host CMake/build/CTest 共 3/3 通过（`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests`）；`git diff --check`、AGENTS/CLAUDE 逐字一致、范围/密钥/构建产物检查通过。
+- 构建：精确 `ESP-IDF v5.5.5`、target `esp32s3` 隔离构建通过，仓内分区为 NVS `0x9000/24K`、PHY `0xF000/4K`、factory `0x10000/3M`、sound A/B 各 576K；dirty 工作树候选 app `0x36DA0`（224,672 bytes），提交后从干净 HEAD 重建最终镜像并计算 SHA-256。
+- 状态：只能声明 `TEST_CONFIRMED / BUILD_CONFIRMED`；T03 仍为 `T03_COLD_BOOT_RELEASE_REASSERTION_PENDING_HIL`，真机 Ctrl 断线矩阵尚未通过，T04/T05 继续关闭。未扫描端口、未识别设备、未 flash/erase/monitor、未读取 Flash/NVS，未修改外部参考、小智、桌面、冻结合同或分区。
+- 下一步：提交并推送当前分支，干净 HEAD 重建后展示最终 HEAD、app SHA-256 和精确 app-only 范围；只有取得针对该新镜像的明确授权后才可进行硬件验证。连续五次 `123`→按住 S6→拔线重连→等 3 秒→松开→`abc` 全部得到 `123abc` 且旧功能回归通过前，不关闭 T03、不进入 T04/T05。
+
 ## 2026-08-25 · T03 monitored reconnect failure captured; no new flash
 
 - 做了什么：在明确告知用户监控已启动后，运行一次有界的只读 `DeskMate.InputBridge --diagnose`，用户完成 `123`→按住 S6→拔 USB→保持按住重连→等待约 3 秒→松开→`abc`。结果仍为 Ctrl 粘连/全选；完整时间线记录于 `docs/handoffs/t03-cold-boot-reconnect-monitored-failure-2026-08-25.md`。

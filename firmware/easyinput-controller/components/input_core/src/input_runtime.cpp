@@ -216,7 +216,9 @@ void UsbInputRuntime::on_mount(uint32_t epoch) {
     release_barrier_pending_ = true;
     release_confirmation_enqueued_ = false;
     mount_release_completed_ = false;
+    mount_release_sequence_active_ = true;
     suppress_until_all_released_ = true;
+    mount_release_repeat_pending_ = any_held();
     // Windows can retain a modifier from the previous HID lifetime when the
     // cable is removed while a chord is held. Every new mount starts with an
     // explicit all-released report before accepting new input.
@@ -230,6 +232,8 @@ void UsbInputRuntime::on_unmount() {
     release_barrier_pending_ = false;
     release_confirmation_enqueued_ = false;
     mount_release_completed_ = false;
+    mount_release_sequence_active_ = false;
+    mount_release_repeat_pending_ = false;
     router_.release_all();
 }
 
@@ -247,6 +251,15 @@ void UsbInputRuntime::observe_physical_key_mask(uint8_t active_key_mask) {
         release_barrier_pending_ = true;
         release_confirmation_enqueued_ = false;
         suppress_until_all_released_ = true;
+        // The first mount report may have completed before the owner task
+        // observed a key that was already held at enumeration. Reassert one
+        // release report for that newly discovered physical state.
+        enqueue_keyboard({});
+    } else if (mount_release_sequence_active_ && now_held &&
+               !mount_release_completed_) {
+        // A cold-boot key can become visible after the mount callback but
+        // before its first release report completes.
+        mount_release_repeat_pending_ = true;
     }
     maybe_enqueue_release_report(had_snapshot, was_held, now_held);
     if (release_barrier_pending_) suppress_until_all_released_ = true;
@@ -345,6 +358,8 @@ void UsbInputRuntime::recover_release() {
     release_confirmation_enqueued_ =
         physical_snapshot_observed_ && !any_held();
     mount_release_completed_ = false;
+    mount_release_sequence_active_ = false;
+    mount_release_repeat_pending_ = false;
     if (mounted_) enqueue_keyboard({});
 }
 
@@ -381,6 +396,8 @@ void UsbInputRuntime::reconcile_usb_lifecycle(UsbCallbackSnapshot callback) {
     release_barrier_pending_ = true;
     release_confirmation_enqueued_ = false;
     mount_release_completed_ = false;
+    mount_release_sequence_active_ = true;
+    mount_release_repeat_pending_ = any_held();
     if (mounted_) enqueue_keyboard({});
 }
 void UsbInputRuntime::recover_after_input_drop(uint8_t active_key_mask) {
@@ -404,8 +421,20 @@ void UsbInputRuntime::complete_report() {
     queue_head_ = (queue_head_ + 1) % queue_.size();
     --queue_size_;
     if (release_barrier_pending_ && completed.kind == HidReportKind::Keyboard &&
-        completed.payload == serialize_keyboard_report({}) &&
-        queue_size_ == 0) {
+        completed.payload == serialize_keyboard_report({})) {
+        if (mount_release_sequence_active_) {
+            const bool repeat = mount_release_repeat_pending_;
+            mount_release_repeat_pending_ = false;
+            mount_release_sequence_active_ = false;
+            if (repeat && queue_size_ == 0) {
+                // TinyUSB completion is controller-local. Reassert the
+                // initial release once before accepting a held reconnect.
+                mount_release_sequence_active_ = true;
+                enqueue_keyboard({});
+                return;
+            }
+        }
+        if (queue_size_ != 0) return;
         mount_release_completed_ = true;
         if (release_confirmation_enqueued_ || !physical_snapshot_observed_) {
             release_barrier_pending_ = false;

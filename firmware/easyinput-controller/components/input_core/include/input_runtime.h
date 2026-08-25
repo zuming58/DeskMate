@@ -203,6 +203,10 @@ private:
     bool physical_snapshot_observed_{false};
     bool release_confirmation_enqueued_{false};
     bool mount_release_completed_{false};
+    bool mount_release_sequence_active_{false};
+    // TinyUSB completion only confirms controller-side acceptance. Reassert
+    // the first all-released state once before opening the lifetime barrier.
+    bool mount_release_repeat_pending_{false};
     static void saturating_add(uint32_t& value, uint32_t amount);
     void clear_queue();
     bool enqueue(const QueuedHidReport& report);

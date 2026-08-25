@@ -22,13 +22,15 @@ InputEvent key(uint8_t index, bool pressed) {
 }
 
 void consume_mount_release(UsbInputRuntime& runtime) {
-    CHECK(runtime.queued_reports() == 1);
     QueuedHidReport report{};
     const std::array<uint8_t, 8> zero_report{};
-    CHECK(runtime.front_report(report));
-    CHECK(report.kind == HidReportKind::Keyboard);
-    CHECK(report.payload == zero_report);
-    runtime.complete_report();
+    CHECK(runtime.queued_reports() >= 1);
+    while (runtime.queued_reports() != 0) {
+        CHECK(runtime.front_report(report));
+        CHECK(report.kind == HidReportKind::Keyboard);
+        CHECK(report.payload == zero_report);
+        runtime.complete_report();
+    }
 }
 
 std::array<uint8_t, 9> wire_keyboard_report(
@@ -241,6 +243,15 @@ void cold_boot_held_s6_release_barrier() {
     process_usb_lifecycle_events(events, runtime, transfer,
                                  callback.snapshot());
     CHECK(!transfer.active);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(prepare_hid_report(runtime, true, transfer, report));
+    finish_hid_send_attempt(runtime, report, true, transfer);
+    CHECK(events.publish(transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, report)));
+    process_usb_lifecycle_events(events, runtime, transfer,
+                                 callback.snapshot());
+    CHECK(!transfer.active);
     CHECK(runtime.queued_reports() == 0);
     CHECK(runtime.mounted());
 
@@ -338,6 +349,10 @@ void mount_before_first_cold_boot_scan() {
     CHECK(runtime.front_report(report));
     CHECK(report.payload == zero_report);
     runtime.complete_report();
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero_report);
+    runtime.complete_report();
     CHECK(runtime.queued_reports() == 0);
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     CHECK(runtime.queued_reports() == 0);
@@ -354,6 +369,52 @@ void mount_before_first_cold_boot_scan() {
     CHECK(runtime.front_report(report));
     CHECK(report.payload[0] == 1);
     CHECK(report.payload[2] == 0x06);
+}
+
+void mount_release_repeat_requires_held_state() {
+    constexpr uint8_t s6_mask = 1u << 5;
+    UsbInputRuntime runtime;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero{};
+
+    // A normal empty mount has exactly one release report.
+    runtime.on_mount(1);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+
+    // If the first scan discovers a key only after that report completed,
+    // one additional zero report re-establishes the new physical baseline.
+    runtime.observe_physical_key_mask(s6_mask);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+    runtime.observe_physical_key_mask(0);
+    runtime.on_input(key(5, false));
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+
+    // A reconnect with S6 held requires the post-completion reassertion.
+    runtime.on_input(key(5, true));
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 1);
+    CHECK(report.payload[2] == 0x06);
+    runtime.complete_report();
+    runtime.on_unmount();
+    runtime.on_mount(2);
+    CHECK(runtime.queued_reports() == 1);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
 }
 
 void ordered_lifetime_events_and_stale_completion() {
@@ -550,6 +611,10 @@ void two_physical_reconnect_cycles_without_tinyusb_unmount() {
         CHECK(runtime.front_report(report));
         CHECK(report.payload == zero);
         runtime.complete_report();
+        CHECK(runtime.queued_reports() == 1);
+        CHECK(runtime.front_report(report));
+        CHECK(report.payload == zero);
+        runtime.complete_report();
         runtime.on_input({InputEventType::EncoderStep, 0, 1});
         CHECK(runtime.queued_reports() == 0);
 
@@ -661,6 +726,15 @@ void stale_ctrl_completion_cannot_retire_reconnect_release() {
         process_usb_lifecycle_events(events, runtime, transfer,
                                      callback.snapshot());
         CHECK(!transfer.active);
+        CHECK(runtime.queued_reports() == 1);
+        CHECK(prepare_hid_report(runtime, true, transfer, report));
+        finish_hid_send_attempt(runtime, report, true, transfer);
+        CHECK(events.publish(transfer_event(
+            UsbLifecycleEventKind::TransferComplete,
+            callback.snapshot().epoch, transfer.report)));
+        process_usb_lifecycle_events(events, runtime, transfer,
+                                     callback.snapshot());
+        CHECK(!transfer.active);
         CHECK(runtime.queued_reports() == 0);
 
         runtime.observe_physical_key_mask(0);
@@ -743,16 +817,20 @@ void stale_zero_completion_cannot_unlock_held_reconnect() {
     process_usb_lifecycle_events(events, runtime, transfer,
                                  callback.snapshot());
     CHECK(!transfer.active);
-    CHECK(runtime.queued_reports() == 0);
+    CHECK(runtime.queued_reports() == 1);
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
-    CHECK(runtime.queued_reports() == 0);
+    CHECK(runtime.queued_reports() == 1);
 
-    // The real completion for the already-retired mount transfer is harmless.
+    // The stale completion only retires the first zero. The fresh endpoint
+    // still needs to send and complete the reasserted zero.
+    CHECK(prepare_hid_report(runtime, true, transfer, report));
+    finish_hid_send_attempt(runtime, report, true, transfer);
     CHECK(events.publish(transfer_event(
         UsbLifecycleEventKind::TransferComplete,
         callback.snapshot().epoch, reconnect_mount_release)));
     process_usb_lifecycle_events(events, runtime, transfer,
                                  callback.snapshot());
+    CHECK(!transfer.active);
     CHECK(runtime.queued_reports() == 0);
 
     // Physical release has no Press owner in this lifetime and therefore must
@@ -1072,6 +1150,7 @@ int main() {
     cold_boot_held_s6_release_barrier();
     cold_boot_release_before_mount_report_complete();
     mount_before_first_cold_boot_scan();
+    mount_release_repeat_requires_held_state();
     ordered_lifetime_events_and_stale_completion();
     lifecycle_duplicate_mount_and_overflow_recovery();
     physical_presence_filters_loss_and_requires_real_mount();
