@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-26 · T03 second reconnect still leaves Ctrl sticky after 8ce5712 flash
+
+- 做了什么：用户授权后，将 `8ce571228c4814e684ea1d5119b21413c8bf8428` 的 app-only 镜像写入 `0x010000`，数据长度 `0x36DA0`，esptool 数据哈希校验通过；正常重启后 Windows 重新枚举 `VID 303A / PID 1006` Keyboard、Mouse 和 Vendor HID。完整证据写入 `docs/handoffs/t03-second-reconnect-failure-2026-08-26.md`。
+- 真机结果：按 `123`→按住 S6→拔 USB→保持按住重连→等待 3 秒→松开→输入 `abc`，第一次通过，第二次再次发生 Ctrl 粘连，A 触发全选；立即停止，没有继续凑五次。
+- 结论：`8ce5712` 的 mount 首帧全释放加持键重连二次全释放仍不是可靠 HIL 修复。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建证据有效，但不能覆盖真实失败；T03 状态为 `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION_AFTER_8CE5712_FLASH`，T04/T05 继续关闭。
+- 下一步：先补真实 USB 生命周期的有界观测或更强 desired/accepted 键盘交付状态，确认 mount、`tud_hid_ready`、报告接受/完成/失败、GPIO40 物理存在和 Windows HID 消费的顺序，再提出新候选。新镜像必须重新展示 HEAD、SHA-256、精确 app-only 范围并重新授权；不再盲目重复烧录。
+
 ## 2026-08-26 · T03 cold-boot release reassertion candidate passes local gates; HIL pending
 
 - 做了什么：在现有唯一 `UsbInputRuntime` 内补充有序的 mount 释放序列。每次真实 mount 先排一份全释放报告；若冷启动扫描发现实体键仍按住，首份报告完成后再排一份全释放报告，释放屏障完成前继续抑制按键和滚轮。普通空 mount 仍只发送一份零报告；unmount/reset 会清理序列状态。新增冷启动晚到扫描、重连持键、旧完成事件、实体释放后新 Ctrl+C 和滚轮不重放回归。

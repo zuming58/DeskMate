@@ -23,7 +23,7 @@
 - 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - 当前唯一开放任务是 `../../flow/tasks/T03-easyinput-usb-input-runtime.md`，实现范围只以 `../../contracts/deskmate-host/easyinput-input-v1.md` 的 `INPUT_V1_FROZEN` 切片为准。
-- T03 冷启动断线候选 `a97d85e` 在指定矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前 GPIO40 物理 USB 生命周期返工为 `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_GPIO40_REWORK_PENDING_NEW_FLASH_AUTHORIZATION`：Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，仍需文档状态提交后的最终干净镜像、重新授权 app-only 补刷和连续五次真机复测。当前实板 S8 仍是烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
+- T03 冷启动断线候选 `a97d85e`、`dd7bb69` 和 `8ce5712` 均在指定矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前 GPIO40 物理 USB 生命周期返工为 `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION_AFTER_8CE5712_FLASH`：Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，但仍缺真实 HID 生命周期顺序证据。当前实板 S8 仍为烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
 - T03 未通过连续五次 Ctrl 断线复测及既有功能回归前，不得进入 T04。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现。补刷前必须展示最终分支 HEAD、app SHA-256 和 app-only 精确写入范围，并取得用户新的明确授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。
