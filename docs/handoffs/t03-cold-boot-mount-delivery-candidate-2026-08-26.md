@@ -19,8 +19,8 @@ protocol was added.
 - Host CMake/build/CTest: 3/3 passed.
 - Exact environment: `ESP-IDF v5.5.5`, target `esp32s3`.
 - Firmware build: `build-codex-v5.5.5/deskmate_easyinput_controller.bin`,
-  224,928 bytes (`0x36EA0`), SHA-256
-  `365F472744592116A10827403EA2474F7A7A819668A5750A9E99471FB84D6FC8`.
+  224,928 bytes (`0x36EA0`); SHA-256 is calculated from the final clean
+  candidate build and reported with the resulting HEAD.
 - App-only candidate range: `0x010000..0x046E9F` inclusive.
 - Static checks: `git diff --check`, scope, ASCII paths, source/secret/build
   artifact checks, and byte-identical `AGENTS.md`/`CLAUDE.md` passed.
