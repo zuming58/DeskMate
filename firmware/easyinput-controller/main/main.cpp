@@ -94,6 +94,9 @@ void input_owner_task(void*) {
         if (usb_physical_presence.update(raw_usb_present, now_ms)) {
             if (!usb_physical_presence.present()) {
                 callback_lifecycle.on_physical_disconnect();
+                ESP_LOGI(kLogTag, "USB physical disconnect confirmed");
+            } else {
+                ESP_LOGI(kLogTag, "USB physical presence restored");
             }
             runtime.observe_physical_presence(usb_physical_presence.present());
         }
@@ -220,17 +223,18 @@ extern "C" void app_main(void) {
 }
 
 extern "C" void tud_mount_cb(void) {
-    UsbLifecycleEvent event{};
-    if (!callback_lifecycle.try_mount(
-            usb_physical_presence_present(), event)) {
-        notify_owner_from_callback();
-        return;
-    }
+    const UsbLifecycleEvent event = callback_lifecycle.on_mount();
     lifecycle_events.publish(event);
+    ESP_LOGI(kLogTag, "USB mount epoch=%lu physical_sample=%u",
+             static_cast<unsigned long>(event.epoch),
+             usb_physical_presence_present() ? 1u : 0u);
     notify_owner_from_callback();
 }
 extern "C" void tud_umount_cb(void) {
-    lifecycle_events.publish(callback_lifecycle.on_unmount());
+    const UsbLifecycleEvent event = callback_lifecycle.on_unmount();
+    lifecycle_events.publish(event);
+    ESP_LOGI(kLogTag, "USB unmount epoch=%lu",
+             static_cast<unsigned long>(event.epoch));
     notify_owner_from_callback();
 }
 extern "C" void tud_resume_cb(void) {

@@ -511,7 +511,7 @@ void lifecycle_duplicate_mount_and_overflow_recovery() {
     CHECK(remount.epoch == 3);
 }
 
-void physical_presence_filters_loss_and_requires_real_mount() {
+void physical_presence_filters_loss_and_real_mount_is_authoritative() {
     UsbPhysicalPresenceMonitor monitor{25};
     monitor.reset(true, 100);
     CHECK(monitor.present());
@@ -534,15 +534,37 @@ void physical_presence_filters_loss_and_requires_real_mount() {
     CHECK(!monitor.present());
 
     UsbCallbackLifecycleState callback;
-    UsbLifecycleEvent event{};
-    CHECK(!callback.try_mount(false, event));
-    CHECK(!callback.snapshot().mounted);
-    CHECK(callback.snapshot().epoch == 0);
-    CHECK(callback.try_mount(true, event));
+    const auto event = callback.on_mount();
     CHECK(event.kind == UsbLifecycleEventKind::Mount);
     CHECK(event.epoch == 1);
-    CHECK(callback.try_mount(true, event));
-    CHECK(event.epoch == 2);
+    CHECK(callback.snapshot().mounted);
+
+    // GPIO40 may still read absent when TinyUSB reports a real mount. That
+    // callback is authoritative and must not be discarded: production gets
+    // only this one mount notification, so the release report must remain
+    // deliverable without a synthetic retry after the sense input recovers.
+    UsbLifecycleEventQueue transient_events;
+    UsbInputRuntime transient_runtime;
+    HidReportTransferState transient_transfer;
+    QueuedHidReport report{};
+    transient_runtime.observe_physical_presence(false);
+    CHECK(transient_events.publish(event));
+    process_usb_lifecycle_events(transient_events, transient_runtime,
+                                 transient_transfer, callback.snapshot());
+    CHECK(transient_runtime.mounted());
+    CHECK(transient_runtime.diagnostics().usb_mount_epoch == 1);
+    CHECK(transient_runtime.front_report(report));
+    const std::array<uint8_t, 8> zero{};
+    CHECK(report.payload == zero);
+    CHECK(!prepare_hid_report(transient_runtime, false, transient_transfer,
+                              report));
+    transient_runtime.observe_physical_presence(true);
+    CHECK(callback.snapshot().epoch == 1);
+    CHECK(prepare_hid_report(transient_runtime, true, transient_transfer,
+                             report));
+    finish_hid_send_attempt(transient_runtime, report, true,
+                            transient_transfer);
+    CHECK(transient_transfer.active);
 
     UsbLifecycleEventQueue events;
     UsbInputRuntime runtime;
@@ -1153,7 +1175,7 @@ int main() {
     mount_release_repeat_requires_held_state();
     ordered_lifetime_events_and_stale_completion();
     lifecycle_duplicate_mount_and_overflow_recovery();
-    physical_presence_filters_loss_and_requires_real_mount();
+    physical_presence_filters_loss_and_real_mount_is_authoritative();
     two_physical_reconnect_cycles_without_tinyusb_unmount();
     stale_ctrl_completion_cannot_retire_reconnect_release();
     stale_zero_completion_cannot_unlock_held_reconnect();

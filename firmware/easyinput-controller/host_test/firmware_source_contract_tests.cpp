@@ -75,7 +75,8 @@ int main() {
     CHECK(contains(main_source, "GPIO_INTR_ANYEDGE"));
     CHECK(contains(main_source, "kUsbPhysicalPresenceGpio"));
     CHECK(contains(main_source, "usb_physical_presence.update"));
-    CHECK(contains(main_source, "callback_lifecycle.try_mount"));
+    CHECK(contains(main_source, "callback_lifecycle.on_mount"));
+    CHECK(!contains(main_source, "try_mount"));
     CHECK(contains(main_source, "xQueueCreateStatic"));
     CHECK(contains(main_source, "kRawEdgeQueueCapacity"));
     CHECK(contains(main_source, "xQueueReset(raw_edge_queue)"));

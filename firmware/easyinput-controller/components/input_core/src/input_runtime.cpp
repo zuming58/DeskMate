@@ -99,16 +99,6 @@ UsbLifecycleEvent UsbCallbackLifecycleState::on_mount() {
     return {UsbLifecycleEventKind::Mount, next_epoch()};
 }
 
-bool UsbCallbackLifecycleState::try_mount(
-    bool physical_present, UsbLifecycleEvent& event) {
-    if (!physical_present) {
-        on_physical_disconnect();
-        return false;
-    }
-    event = on_mount();
-    return true;
-}
-
 void UsbCallbackLifecycleState::on_physical_disconnect() {
     mounted_.store(false, std::memory_order_release);
 }

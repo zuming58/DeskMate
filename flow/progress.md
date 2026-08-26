@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-26 · T03 cold-boot reconnect mount delivery rework passes local gates
+
+- 做了什么：修复真实 TinyUSB mount 回调被 GPIO40 单次物理存在采样拒绝的生命周期缺口。mount callback 现在始终建立并发布新 endpoint epoch；GPIO40 只继续承担 25 ms 断开确认和旧生命周期撤销，不再伪造或丢弃 mount。增加有界的 mount/unmount/物理状态日志，未记录按键、报告内容或用户数据。
+- 测试：Host CMake/build/CTest 3/3 通过（`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests`）；新增回归覆盖 mount 到达时物理存在采样暂时为 false、没有第二个 mount callback 时全释放报告仍可在 HID ready 后交付，并更新 source contract 断言不再存在 `try_mount`。
+- 构建：精确 `ESP-IDF v5.5.5`、target `esp32s3`，独立构建目录 `build-codex-v5.5.5` 通过；app `0x36EA0`（224,928 bytes），factory 余量 93%；SHA-256 `365F472744592116A10827403EA2474F7A7A819668A5750A9E99471FB84D6FC8`；精确 app-only 范围为 `0x010000..0x046E9F`（结束地址含）。
+- 静态与安全：`git diff --check`、T03 范围、ASCII 路径、来源/密钥/用户数据和构建产物检查通过；`firmware/easyinput-controller/AGENTS.md` 与 `CLAUDE.md` 逐字一致。未扫描端口、识别设备、flash、erase、monitor 或读取 Flash/NVS，未修改外部参考、小智、桌面、冻结合同或分区。
+- 状态：只能声明 `TEST_CONFIRMED / BUILD_CONFIRMED`；T03 仍为 `T03_COLD_BOOT_MOUNT_DELIVERY_PENDING_HIL`，真机尚未验证，T04/T05 继续关闭。新镜像如需硬件验证，必须展示本提交 HEAD、SHA-256 和上述 app-only 范围后重新取得明确烧录授权。
+
 ## 2026-08-26 · T03 second reconnect still leaves Ctrl sticky after 8ce5712 flash
 
 - 做了什么：用户授权后，将 `8ce571228c4814e684ea1d5119b21413c8bf8428` 的 app-only 镜像写入 `0x010000`，数据长度 `0x36DA0`，esptool 数据哈希校验通过；正常重启后 Windows 重新枚举 `VID 303A / PID 1006` Keyboard、Mouse 和 Vendor HID。完整证据写入 `docs/handoffs/t03-second-reconnect-failure-2026-08-26.md`。

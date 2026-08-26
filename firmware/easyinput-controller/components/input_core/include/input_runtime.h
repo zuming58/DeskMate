@@ -108,7 +108,6 @@ private:
 class UsbCallbackLifecycleState {
 public:
     UsbLifecycleEvent on_mount();
-    bool try_mount(bool physical_present, UsbLifecycleEvent& event);
     void on_physical_disconnect();
     UsbLifecycleEvent on_unmount();
     UsbLifecycleEvent current_event(UsbLifecycleEventKind kind) const;
