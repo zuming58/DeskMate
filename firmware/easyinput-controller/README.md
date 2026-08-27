@@ -6,7 +6,7 @@
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
-T03 已锁定。当前下一任务是 [`T04-easyinput-config-nvs.md`](../../flow/tasks/T04-easyinput-config-nvs.md)：先做固定 Maker 配置/NVS 参考差异表并冻结 `CONFIG_V1_FROZEN`，再进入实现。配置、音频和 DeskMate Link 仍由后续独立任务逐包推进；任何新镜像仍须展示最终 HEAD、app SHA-256 和 app-only 写入范围并取得用户明确授权后才能烧录。
+T03 已锁定。当前下一任务是 [`T04-easyinput-input-led-feedback.md`](../../flow/tasks/T04-easyinput-input-led-feedback.md)：按冻结的 [`INPUT_LED_V1_FROZEN`](../../docs/contracts/easyinput-input-led-feedback-v1.md) 实现 5 颗 WS2812 的按键/旋钮反馈及 GPIO8 最小共享电源安全底座。配置/NVS 顺延为 T05，Host Action/打开应用顺延为 T06；任何新镜像仍须展示最终 HEAD、app SHA-256 和 app-only 写入范围并取得用户明确授权后才能烧录。
 
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 

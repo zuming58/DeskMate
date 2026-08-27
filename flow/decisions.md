@@ -157,3 +157,10 @@
 - 决策：S1/S3 继续使用实体来源拥有的 held chord，满足语音 PTT；S2/S4/S5～S8 在稳定按下边沿把临时 chord 叠加到当前 held snapshot，并在同一 USB keyboard FIFO 原子排入 press 与精确 restore。实体释放只重新武装下一次 tap。
 - 原因：多轮 HIL 证明，按住 S6 拔掉一个 HID lifetime 后，Windows 可能保留旧设备的 Ctrl；新设备的 mount 全释放、重复全释放、transfer-complete、GPIO40 生命周期和 DCD 软重连都不能可靠替旧 lifetime 产生 key-up。普通命令没有持续按住的产品需求，应在用户仍按住实体键时就完成主机可见释放。
 - 兼容：默认动作、VID/PID、Report ID、报告布局、GPIO 和队列总容量不变；S2/S4/S5～S8 长按不再产生 host typematic 或持续 modifier。两帧必须预留两个槽，容量不足、发送失败或断线时 fail closed；T03 五次真机矩阵通过前本决策不构成 HIL 结论。
+
+## D025 · Input LED feedback is an independent T04 package
+
+- 日期：2026-08-27
+- 决策：把 EasyInput 的 5 颗 WS2812 实体输入反馈独立设为 T04，并同时建立 GPIO8 最小共享电源安全底座；原配置/NVS 顺延为 T05，Host Action/打开应用顺延为 T06。
+- 原因：灯效能直接显示实体按键是否经过防抖被固件识别，属于 T03 输入闭环的紧邻反馈，不应与配置事务混在一个包。固定 Maker 参考已经提供按键颜色、动画、旋钮反馈、RMT 和共享电源证据，继续从零猜测会重复 T03 的教训。
+- 边界：T04 只实现 `INPUT_LED_V1_FROZEN` 的输入灯效；GPIO8 由唯一控制器持有，Awake 期间保持共享域开启，灯灭使用黑帧。不开音频、不做 Boot/连接/Agent 灯效、不改 T03 HID。T04 经原主电脑独立审计与真机锁定前，不开始 T05。

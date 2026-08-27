@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T04 rebased to physical-input LED feedback and handed to the second computer
+
+- 做了什么：按用户新增需求固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `input_feedback`、`led_strip_status`、`peripheral_power` 与对应 Host tests，确认原功能是 GPIO12 上 5 颗 GRB WS2812：S1～S8 八种低亮度 140 ms 波纹、旋钮方向流和按压确认脉冲。现已冻结 `INPUT_LED_V1_FROZEN`，建立新的 T04 任务卡、参考审计和第二台电脑交接。
+- 为什么：灯光能直接说明实体输入是否经过防抖被固件识别，尤其可区分当前样机 S8 的硬件无事件与上层动作失败；它是 T03 输入闭环的紧邻功能，应在配置/NVS 前独立完成。参考固件已经有成熟实现与测试，不能重复 T03 的从零猜测和多轮真机返工。
+- 怎么理解：T04 只增加输入灯效与 GPIO8 最小共享电源安全底座，不改变 T03 HID。GPIO8 是 LED/麦克风/扬声器共享域，由唯一控制器在 Awake 期间保持开启；灯灭发送黑帧，不按键开关电源。音频、Boot/连接/Agent 灯效和配置均不进入本包。原配置/NVS 顺延为 T05，Host Action/打开应用顺延为 T06。
+- 产出路径：`docs/contracts/easyinput-input-led-feedback-v1.md`、`docs/provenance/t04-easyinput-input-led-feedback-reference-audit.md`、`flow/tasks/T04-easyinput-input-led-feedback.md`、`flow/tasks/T05-easyinput-config-nvs.md`、`flow/tasks/T06-easyinput-host-actions.md`、`docs/handoffs/second-computer-t04-input-led-feedback-2026-08-27.md`、`flow/plan.md`、`flow/decisions.md`、根级/固件局部规则和本记录。
+- 验证：本轮只做只读参考审计和项目文档/合同变更；固定参考提交的关键源文件与测试已核对。执行 Markdown 相对链接、ASCII 路径、AGENTS/CLAUDE 局部一致、旧活动任务链接和 `git diff --check` 检查；未访问硬件，未扫描端口，未读取或写入 Flash/NVS，未 flash/erase/monitor，未修改固件或桌面代码。
+- 问题解决：避免把灯效塞进配置事务导致故障面扩大；S8 仍保留 GPIO48/八键产品合同，当前坏样机没有稳定输入就自然不亮，不为灯效伪造事件。共享电源的 50 ms 等待明确只是同板固定参考的当前策略，仍需后续 HIL，而不是普适电气常数。
+- 下一步：另一台笔记本从最新 `origin/main` 创建 `codex/easyinput-t04-input-led-feedback`，严格按 T04 任务卡完成代码、Host/source-contract tests、精确 ESP-IDF v5.5.5 构建、来源和自审后推送并停止；不接触硬件、不开始 T05。原主电脑随后独立审计、重建，并在另行取得 app-only 烧录授权后执行灯效与 T03 完整真机回归。
+
 ## 2026-08-27 · T03 independently audited, accepted and locked on the original computer
 
 - 做了什么：原主电脑从 `origin/codex/easyinput-t03-cold-boot-reconnect@ed842aa` 建立隔离工作树，逐项审查 `39ac64e..ed842aa` 的合同、来源、28 个变更文件和最终 atomic tap 实现；固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `HidTap`、snapshot 与 FIFO 测试，确认 DeskMate 只采用行为结构并在自身单一路由/队列中清晰重实现。审计未发现阻断性代码问题，T03 现正式锁定。

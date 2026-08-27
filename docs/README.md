@@ -28,8 +28,10 @@
 - [T03 final laptop handoff](handoffs/t03-complete-to-original-codex-2026-08-27.md)
 - [T03 five-round reconnect acceptance](testing/t03-cold-boot-reconnect-acceptance-2026-08-27.md)
 - [T03 final independent audit and lock](reviews/t03-final-independent-audit-2026-08-27.md)
-- [T04 EasyInput configuration and NVS task](../flow/tasks/T04-easyinput-config-nvs.md)
-- [T05 EasyInput Host Action task](../flow/tasks/T05-easyinput-host-actions.md)
+- [T04 EasyInput input LED feedback task](../flow/tasks/T04-easyinput-input-led-feedback.md)
+- [T04 second-computer handoff](handoffs/second-computer-t04-input-led-feedback-2026-08-27.md)
+- [T05 EasyInput configuration and NVS task](../flow/tasks/T05-easyinput-config-nvs.md)
+- [T06 EasyInput Host Action task](../flow/tasks/T06-easyinput-host-actions.md)
 
 ## Product
 
@@ -46,6 +48,8 @@
 - [Legacy audio investigation](contracts/legacy-audio-investigation.md)
 - [Reference and recovery baselines](provenance/reference-baselines-2026-08-24.md)
 - [Frozen EasyInput input v1 contract](../contracts/deskmate-host/easyinput-input-v1.md)
+- [Frozen EasyInput input LED feedback v1 contract](contracts/easyinput-input-led-feedback-v1.md)
+- [T04 Maker LED reference audit](provenance/t04-easyinput-input-led-feedback-reference-audit.md)
 
 ## Production modules
 

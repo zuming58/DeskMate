@@ -56,6 +56,7 @@
 - 不向未知 HID 接口写数据，不扫描整个局域网，不猜测 IP、端口或包格式。
 - 板载音频协议以 `docs/contracts/easyinput-maker-protocol.md` 固定合同为准。
 - EasyInput 正式固件必须保留既有 16 MB Flash 布局：24 KiB NVS、4 KiB PHY、3 MiB factory app、两个 576 KiB 声音 bank；功能包不得退回 ESP-IDF 默认分区或重排范围，构建产物必须在首次写入前与实板备份分区表逐字节核对。
+- EasyInput 的 5 颗串联 WS2812 使用 GPIO12；GPIO8 是 LED、麦克风和扬声器共享的高有效电源域。GPIO8 只能由统一电源控制器写入，按键灯效只能发送 RGB/黑帧，不得按键级开关共享电源。
 - 小智参考板的舵机供电、峰值电流和机械中心/限位当前仍是 UNKNOWN；板间排针虽已选择 `GND/TX/RX`，但未完成电平、独立供电、共地和恢复性验收前不接线、不驱动舵机、不假定其他空闲 GPIO/UART。
 - EasyInput 与小智使用不同板级 GPIO、BOOT、工具链和分区合同，不得互相套用烧录或恢复步骤。
 - 诊断不得含 API Key、录音、识别文本、Wi-Fi 凭据、IP、MAC、SSID、设备序列号、窗口标题或完整设备路径。

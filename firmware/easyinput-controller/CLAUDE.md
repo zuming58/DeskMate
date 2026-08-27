@@ -22,9 +22,9 @@
 - 目标工具链由项目冻结为 ESP-IDF 5.5.5；若本机版本不匹配，停止并报告，不静默换版本。
 - 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
-- T03 已锁定；当前只允许按 `../../flow/tasks/T04-easyinput-config-nvs.md` 做参考核对与配置合同冻结，`CONFIG_V1_FROZEN` 前不得实现配置/NVS。
+- T03 已锁定；当前只允许按 `../../flow/tasks/T04-easyinput-input-led-feedback.md` 实现冻结的 `INPUT_LED_V1_FROZEN`。配置/NVS 顺延为 T05，Host Action 顺延为 T06。
 - T03 冷启动、mount 全释放、transfer identity、GPIO40 生命周期和 DCD 重连候选均被真实 Ctrl 粘连证据否决。最终 `5c09880` 参考固定 Maker synthetic tap 结构清晰重实现：S1/S3 保持 held PTT，S2/S4/S5～S8 使用原子 press→restore tap；连续五次 Ctrl 断线矩阵、Host、ESP-IDF 构建和桌面组合回归均通过，原主电脑独立审计已确认，状态为 `T03_LOCKED`。当前实板 S8 仍为烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
-- 下一包是 T04；编码前先对照固定 Maker 的配置/NVS 源码与测试形成差异表，再冻结 `CONFIG_V1_FROZEN`。任何首个 HIL 失败候选不得直接进入第二轮猜测性修复。
+- 下一包是 T04；固定 Maker 的 `input_feedback`、`led_strip_status`、`peripheral_power` 及对应 Host tests 必须先读。5 颗 WS2812 使用 GPIO12；GPIO8 只能由唯一共享电源控制器写入，按键灯效不得开关共享电源。任何首个 HIL 失败候选不得直接进入第二轮猜测性修复。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现。补刷前必须展示最终分支 HEAD、app SHA-256 和 app-only 精确写入范围，并取得用户新的明确授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。
 - 不在本模块建立第二套 `flow/`、`docs/`、hook 或嵌套 Git。
@@ -32,7 +32,8 @@
 ## Module entry points
 
 - 说明：`README.md`
-- 当前任务卡：`../../flow/tasks/T03-easyinput-usb-input-runtime.md`
+- 当前任务卡：`../../flow/tasks/T04-easyinput-input-led-feedback.md`
 - 冻结输入合同：`../../contracts/deskmate-host/easyinput-input-v1.md`
+- 冻结输入灯效合同：`../../docs/contracts/easyinput-input-led-feedback-v1.md`
 - 参考基线：`../../docs/provenance/reference-baselines-2026-08-24.md`
 - 测试和构建入口：从仓库根运行 `cmake -S firmware/easyinput-controller/host_test -B firmware/easyinput-controller/host_test/build -DCMAKE_BUILD_TYPE=Debug`、`cmake --build firmware/easyinput-controller/host_test/build --config Debug`、`ctest --test-dir firmware/easyinput-controller/host_test/build -C Debug --output-on-failure`；在已激活且精确为 ESP-IDF 5.5.5 的环境中运行 `idf.py -C firmware/easyinput-controller build`。两者均不访问设备。
