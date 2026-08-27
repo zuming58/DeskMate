@@ -24,7 +24,7 @@ No files were modified, copied from, or built in either external reference direc
 - `native/DeskMate.InputBridge/Program.cs`: registers reads before sending the HID request, resets pending state on device disconnect, validates complete 64-byte reports, reserved zero padding, metadata before duplicate-last handling, and rejects stale/partial streams.
 - `electron/config-merge.cjs`, `electron/main.cjs`, `src/pages.jsx`: desktop capabilities advertise the frozen config read/write gates; preview returns sanitized JSON Pointer diffs and the UI displays those paths before confirmation.
 
-Third-rework verification: Host CTest `6/6`; desktop `npm ci --include=dev`, `npm test` `71/71`, and `npm run build:desktop` passed. Exact isolated ESP-IDF `v5.5.5` / `esp32s3` build passed with app size `0x4A130` (303,408 bytes), SHA-256 `2ACC20B6229ACF83941F8EDD45D39F68891606CFBBB4B397FD135CF5A5C2C350`; partition table SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`. No hardware operation was performed.
+Third-rework verification: Host CTest `6/6`; desktop `npm ci --include=dev`, `npm test` `71/71`, and `npm run build:desktop` passed. Exact isolated ESP-IDF `v5.5.5` / `esp32s3` build passed with the final app size and SHA-256 recorded in the delivery report; partition table SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`. No hardware operation was performed.
 
 ## Second rework delta
 
