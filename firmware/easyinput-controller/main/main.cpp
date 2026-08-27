@@ -34,6 +34,8 @@ UsbLifecycleEventQueue lifecycle_events;
 UsbCallbackLifecycleState callback_lifecycle;
 UsbInputRuntime runtime;
 UsbPhysicalPresenceMonitor usb_physical_presence{kUsbDisconnectConfirmMs};
+UsbDeviceConnectionGate usb_device_connection;
+std::atomic<bool> tinyusb_driver_ready{false};
 constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -56,6 +58,12 @@ void IRAM_ATTR encoder_edge_isr(void*) {
                !raw_edge_drops.compare_exchange_weak(
                    current, current + 1, std::memory_order_relaxed)) {}
     }
+    notify_owner_from_isr(&higher_priority_woken);
+    if (higher_priority_woken == pdTRUE) portYIELD_FROM_ISR();
+}
+
+void IRAM_ATTR usb_presence_edge_isr(void*) {
+    BaseType_t higher_priority_woken = pdFALSE;
     notify_owner_from_isr(&higher_priority_woken);
     if (higher_priority_woken == pdTRUE) portYIELD_FROM_ISR();
 }
@@ -91,6 +99,7 @@ void input_owner_task(void*) {
         const uint32_t now_ms = monotonic_milliseconds(
             static_cast<uint64_t>(esp_timer_get_time()));
         const bool raw_usb_present = usb_physical_presence_present();
+        runtime.observe_raw_physical_presence(raw_usb_present);
         if (usb_physical_presence.update(raw_usb_present, now_ms)) {
             if (!usb_physical_presence.present()) {
                 callback_lifecycle.on_physical_disconnect();
@@ -99,6 +108,22 @@ void input_owner_task(void*) {
                 ESP_LOGI(kLogTag, "USB physical presence restored");
             }
             runtime.observe_physical_presence(usb_physical_presence.present());
+        }
+        const UsbDeviceConnectionAction usb_connection_action =
+            usb_device_connection.next_action(
+                tinyusb_driver_ready.load(std::memory_order_acquire),
+                usb_physical_presence.present());
+        if (usb_connection_action != UsbDeviceConnectionAction::None) {
+            const bool applied =
+                usb_connection_action == UsbDeviceConnectionAction::Connect
+                    ? tud_connect()
+                    : tud_disconnect();
+            if (applied) {
+                usb_device_connection.mark_applied(usb_connection_action);
+            } else {
+                ESP_LOGW(kLogTag, "USB physical connection action failed kind=%u",
+                         static_cast<unsigned>(usb_connection_action));
+            }
         }
         uint8_t key_mask = 0;
         for (uint8_t index = 0; index < kKeyGpios.size(); ++index) {
@@ -134,6 +159,8 @@ void input_owner_task(void*) {
             InputEvent event{};
             while (input.pop_event(event)) runtime.on_input(event);
         }
+
+        runtime.service_release_reassertion(now_ms);
 
         QueuedHidReport report{};
         if (prepare_hid_report(runtime, tud_hid_ready(), transfer, report)) {
@@ -183,7 +210,7 @@ extern "C" void app_main(void) {
     usb_presence_input.mode = GPIO_MODE_INPUT;
     usb_presence_input.pull_up_en = GPIO_PULLUP_ENABLE;
     usb_presence_input.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    usb_presence_input.intr_type = GPIO_INTR_DISABLE;
+    usb_presence_input.intr_type = GPIO_INTR_ANYEDGE;
     ESP_ERROR_CHECK(gpio_config(&usb_presence_input));
     usb_physical_presence.reset(usb_physical_presence_present(),
                                 monotonic_milliseconds(
@@ -207,6 +234,9 @@ extern "C" void app_main(void) {
         static_cast<gpio_num_t>(kEncoderAGpio), encoder_edge_isr, nullptr));
     ESP_ERROR_CHECK(gpio_isr_handler_add(
         static_cast<gpio_num_t>(kEncoderBGpio), encoder_edge_isr, nullptr));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(
+        static_cast<gpio_num_t>(kUsbPhysicalPresenceGpio),
+        usb_presence_edge_isr, nullptr));
 
     const tinyusb_config_t usb_config = {
         .device_descriptor = reinterpret_cast<const tusb_desc_device_t*>(
@@ -220,6 +250,8 @@ extern "C" void app_main(void) {
         .vbus_monitor_io = GPIO_NUM_NC,
     };
     ESP_ERROR_CHECK(tinyusb_driver_install(&usb_config));
+    tinyusb_driver_ready.store(true, std::memory_order_release);
+    xTaskNotifyGive(owner_task);
 }
 
 extern "C" void tud_mount_cb(void) {

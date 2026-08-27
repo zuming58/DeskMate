@@ -75,6 +75,14 @@ int main() {
     CHECK(contains(main_source, "GPIO_INTR_ANYEDGE"));
     CHECK(contains(main_source, "kUsbPhysicalPresenceGpio"));
     CHECK(contains(main_source, "usb_physical_presence.update"));
+    CHECK(contains(main_source, "usb_presence_edge_isr"));
+    CHECK(contains(main_source, "runtime.observe_raw_physical_presence"));
+    CHECK(contains(main_source, "runtime.service_release_reassertion(now_ms)"));
+    CHECK(contains(main_source, "UsbDeviceConnectionGate usb_device_connection"));
+    CHECK(contains(main_source, "tud_disconnect()"));
+    CHECK(contains(main_source, "tud_connect()"));
+    CHECK(contains(main_source, "tinyusb_driver_ready.store"));
+    CHECK(contains(main_source, ".vbus_monitor_io = GPIO_NUM_NC"));
     CHECK(contains(main_source, "callback_lifecycle.on_mount"));
     CHECK(!contains(main_source, "try_mount"));
     CHECK(contains(main_source, "xQueueCreateStatic"));
@@ -115,6 +123,9 @@ int main() {
     CHECK(contains(runtime_header, "kHidReportQueueCapacity = 16"));
     CHECK(contains(runtime_header, "kUsbLifecycleQueueCapacity = 16"));
     CHECK(contains(runtime_header, "kUsbDisconnectConfirmMs = 25"));
+    CHECK(contains(runtime_header, "kUsbReleaseReassertIntervalMs = 25"));
+    CHECK(contains(runtime_header, "kUsbReleaseReassertWindowMs = 500"));
+    CHECK(contains(runtime_header, "UsbDeviceConnectionGate"));
     CHECK(contains(board_pins, "kUsbPhysicalPresenceGpio = 40"));
     CHECK(contains(board_pins, "kUsbPhysicalPresenceActiveLevel = 0"));
     CHECK(contains(runtime_header, "UsbLifecycleEventQueue"));

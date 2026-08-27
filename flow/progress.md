@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T03 battery-powered USB DCD reconnect candidate passes local gates
+
+- 做了什么：在既有唯一 `UsbInputRuntime` 和 owner task 内修复电池供电拔插的底层 USB 生命周期。GPIO40 低有效 SEN_VIN 继续由 25 ms 稳定滤波确认；稳定失去 USB 时 owner 调用 TinyUSB `tud_disconnect()`，稳定恢复时调用 `tud_connect()`，平台动作失败会重试且重复状态幂等。mount、输入丢失恢复和无 Press owner 的实体释放还会在首份全零键盘报告完成后，以 25 ms 间隔做 500 ms 有界全释放重申；HID 未 ready 或首份报告仍在途时不会提前消耗该窗口。
+- 为什么：监控已经证明旧连接发送过 S6 的 Ctrl+C，重枚举后 Windows 没交付对应 Ctrl-up；候选 `a97d85e`、`dd7bb69`、`8ce5712` 和 `16bad4f` 的应用层 mount/epoch/一次性零报告均在第二次断线矩阵失败。样机有电池，拔 USB 不会重启，而旧实现只撤销应用层 endpoint，未让 TinyUSB DCD 物理软断开；这会让底层端点状态跨拔插存活。本候选首次关闭该缺口，同时保留冻结的八键、默认动作和不重放 held chord 合同。
+- 测试：在每个 PowerShell 进程加载 EIM 登记的精确 v5.5.5 环境后，执行任务卡规定的 CMake configure/build/CTest，`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过。新增覆盖 DCD connect/disconnect 去重与失败重试、HID 延迟 ready 不消耗恢复窗口、25 ms/500 ms 精确边界、`uint32_t` 回绕、GPIO40 原始掉线幂等恢复和旧滚轮清除。
+- 构建：`idf.py --version` 为精确 `ESP-IDF v5.5.5`，target `esp32s3`；隔离目录 `build-usb-lifecycle-v5.5.5` 全新构建通过。dirty 候选 app 为 `0x371E0`（225,760 bytes），3 MiB factory 余量 93%；分区仍为 NVS 24 KiB、PHY 4 KiB、factory 3 MiB、sound A/B 各 576 KiB。最终提交后必须从干净 HEAD 重建并重新计算 SHA-256 与 app-only 结束地址。
+- 来源与安全：固定只读核对 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `board_pins.h`、`app_main.cpp`、`usb_hid.cpp/.h`、snapshot delivery 和 queue 代码；同时核对锁定 ESP-IDF/esp_tinyusb/tinyusb 的 VBUS、`tud_disconnect/connect` 与 DWC2 实现，逐文件采用方式见 `docs/provenance/t03-easyinput-usb-input-runtime.md`。未修改外部参考、小智、桌面、冻结合同、分区、NVS、音频或 GPIO8；未扫描端口、识别设备、flash、erase、monitor 或读取 Flash。
+- 状态：只能声明 `TEST_CONFIRMED / BUILD_CONFIRMED / T03_USB_DCD_RECONNECT_PENDING_HIL`。T03 仍开放，T04/T05 关闭。提交、推送和干净重建后，必须先展示最终 HEAD、app SHA-256 和精确 app-only 范围并取得新授权，才可补刷并连续执行五次断线矩阵。
+
 ## 2026-08-26 · T03 cold-boot reconnect mount delivery rework passes local gates
 
 - 做了什么：修复真实 TinyUSB mount 回调被 GPIO40 单次物理存在采样拒绝的生命周期缺口。mount callback 现在始终建立并发布新 endpoint epoch；GPIO40 只继续承担 25 ms 断开确认和旧生命周期撤销，不再伪造或丢弃 mount。增加有界的 mount/unmount/物理状态日志，未记录按键、报告内容或用户数据。

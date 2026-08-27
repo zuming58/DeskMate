@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_HIL_FAILED_CTRL_STICKY_SECOND_REPETITION_AFTER_8CE5712_FLASH`。冷启动候选 `a97d85e`、`dd7bb69` 和 `8ce5712` 均在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前返工使用 V2 GPIO40 低有效 USB 物理存在信号，以 25 ms 确认物理断开、撤销旧 endpoint，物理恢复不伪造 mount，并让每个真实 TinyUSB mount 建立新 epoch；在途 HID 完成/失败事件匹配 epoch、Report ID、长度和 payload，实体释放后追加全释放报告。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，但仍缺真实 HID 生命周期顺序证据。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。T03 保持开放，禁止进入 T04。
+当前状态：`TEST_CONFIRMED` / `BUILD_CONFIRMED` / `T03_USB_DCD_RECONNECT_PENDING_HIL`。冷启动候选 `a97d85e`、`dd7bb69`、`8ce5712` 和 `16bad4f` 均在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。当前返工针对电池供电时拔 USB 不会复位的事实：V2 GPIO40 低有效 USB 物理存在信号经 25 ms 确认后显式驱动 TinyUSB DCD 软断开/软连接，真实 mount 继续建立新 epoch；mount、恢复和无 Press owner 的实体释放在首份全零报告完成后还会做 500 ms 有界重申。在途 HID 完成/失败仍匹配 epoch、Report ID、长度和 payload。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，尚未烧录或真机验证。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。T03 保持开放，禁止进入 T04。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 

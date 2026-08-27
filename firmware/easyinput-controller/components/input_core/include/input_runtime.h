@@ -22,6 +22,8 @@ inline constexpr size_t kUsbDeviceDescriptorLength = 18;
 inline constexpr size_t kUsbConfigurationDescriptorLength = 34;
 inline constexpr size_t kUsbLifecycleQueueCapacity = 16;
 inline constexpr uint32_t kUsbDisconnectConfirmMs = 25;
+inline constexpr uint32_t kUsbReleaseReassertIntervalMs = 25;
+inline constexpr uint32_t kUsbReleaseReassertWindowMs = 500;
 
 extern const std::array<uint8_t, kUsbDeviceDescriptorLength> kUsbDeviceDescriptor;
 extern const std::array<uint8_t, kUsbConfigurationDescriptorLength> kUsbConfigurationDescriptor;
@@ -105,6 +107,26 @@ private:
     bool disconnect_pending_{false};
 };
 
+enum class UsbDeviceConnectionAction : uint8_t {
+    None,
+    Connect,
+    Disconnect,
+};
+
+// esp_tinyusb starts the device controller connected. GPIO40 is an active-low
+// board signal, so it cannot be passed to the PHY's active-high B-valid input.
+// The owner task applies each physical state once and retries failed actions.
+class UsbDeviceConnectionGate {
+public:
+    UsbDeviceConnectionAction next_action(bool driver_ready,
+                                          bool physical_present);
+    void mark_applied(UsbDeviceConnectionAction action);
+
+private:
+    bool driver_ready_observed_{false};
+    bool connected_{true};
+};
+
 class UsbCallbackLifecycleState {
 public:
     UsbLifecycleEvent on_mount();
@@ -174,7 +196,11 @@ public:
     void on_input(const InputEvent& event);
     // Publishes the debounced physical key snapshot, including cold-boot state.
     void observe_physical_key_mask(uint8_t active_key_mask);
+    // A raw loss edge may precede the debounced lifetime change. It can only
+    // arm fail-closed release recovery; the 25 ms monitor still owns unmount.
+    void observe_raw_physical_presence(bool present);
     void observe_physical_presence(bool present);
+    void service_release_reassertion(uint32_t now_ms);
     void on_raw_edge_drops(uint32_t count);
     void on_encoder_resync();
     void on_input_event_drops(uint32_t count);
@@ -203,9 +229,14 @@ private:
     bool release_confirmation_enqueued_{false};
     bool mount_release_completed_{false};
     bool mount_release_sequence_active_{false};
-    // TinyUSB completion only confirms controller-side acceptance. Reassert
-    // the first all-released state once before opening the lifetime barrier.
+    // Keep release delivery active across the host's reconnect window. The
+    // timer starts only after the first queued zero report completes.
     bool mount_release_repeat_pending_{false};
+    bool release_reassert_active_{false};
+    bool release_reassert_started_{false};
+    bool raw_disconnect_release_armed_{false};
+    uint32_t release_reassert_started_ms_{0};
+    uint32_t release_reassert_last_ms_{0};
     static void saturating_add(uint32_t& value, uint32_t amount);
     void clear_queue();
     bool enqueue(const QueuedHidReport& report);
@@ -214,6 +245,7 @@ private:
     bool any_held() const;
     void maybe_enqueue_release_report(bool had_snapshot, bool was_held,
                                       bool now_held);
+    void begin_release_reassertion();
     void recover_release();
 };
 

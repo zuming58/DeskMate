@@ -31,6 +31,8 @@ void consume_mount_release(UsbInputRuntime& runtime) {
         CHECK(report.payload == zero_report);
         runtime.complete_report();
     }
+    runtime.service_release_reassertion(0);
+    runtime.service_release_reassertion(kUsbReleaseReassertWindowMs);
 }
 
 std::array<uint8_t, 9> wire_keyboard_report(
@@ -96,6 +98,7 @@ void scan_owner_inputs(InputCore& input, UsbInputRuntime& runtime,
     input.scan_keys(raw_key_mask, now_ms);
     runtime.observe_physical_key_mask(input.stable_key_mask());
     drain_input_events(input, runtime);
+    runtime.service_release_reassertion(now_ms);
 }
 
 void add_encoder_detent(InputCore& input, uint32_t& now) {
@@ -417,6 +420,63 @@ void mount_release_repeat_requires_held_state() {
     CHECK(runtime.queued_reports() == 0);
 }
 
+void timed_release_reassertion_and_raw_loss() {
+    UsbInputRuntime runtime;
+    HidReportTransferState transfer;
+    QueuedHidReport report{};
+    const std::array<uint8_t, 8> zero{};
+
+    runtime.observe_physical_key_mask(0);
+    runtime.on_mount(1);
+    constexpr uint32_t start = UINT32_MAX - 200;
+    runtime.service_release_reassertion(start);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+
+    // Delayed HID readiness cannot consume or age out the required release.
+    CHECK(!prepare_hid_report(runtime, false, transfer, report));
+    runtime.service_release_reassertion(start + kUsbReleaseReassertWindowMs);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(prepare_hid_report(runtime, true, transfer, report));
+    finish_hid_send_attempt(runtime, report, true, transfer);
+    runtime.complete_report();
+    transfer.clear();
+
+    // The 500 ms window starts only after delayed delivery completes. Exercise
+    // its exact interval and end boundaries across uint32_t wraparound.
+    constexpr uint32_t delivered_at =
+        start + kUsbReleaseReassertWindowMs;
+    runtime.service_release_reassertion(delivered_at);
+    runtime.service_release_reassertion(delivered_at + 24);
+    CHECK(runtime.queued_reports() == 0);
+    runtime.service_release_reassertion(delivered_at + 25);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+    runtime.service_release_reassertion(delivered_at + 499);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == zero);
+    runtime.complete_report();
+    runtime.service_release_reassertion(delivered_at + 500);
+    CHECK(runtime.queued_reports() == 0);
+
+    // A raw GPIO40 loss edge clears queued wheel/key state immediately but is
+    // idempotent until physical presence returns. Debounced unmount is separate.
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Mouse);
+    runtime.observe_raw_physical_presence(false);
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload == zero);
+    runtime.observe_raw_physical_presence(false);
+    CHECK(runtime.queued_reports() == 1);
+    runtime.observe_physical_presence(false);
+    CHECK(!runtime.mounted());
+    CHECK(runtime.queued_reports() == 0);
+}
+
 void ordered_lifetime_events_and_stale_completion() {
     UsbLifecycleEventQueue events;
     UsbInputRuntime runtime;
@@ -532,6 +592,25 @@ void physical_presence_filters_loss_and_real_mount_is_authoritative() {
     CHECK(!monitor.update(false, 18));
     CHECK(monitor.update(false, 19));
     CHECK(!monitor.present());
+
+    UsbDeviceConnectionGate connection;
+    CHECK(connection.next_action(false, false) ==
+          UsbDeviceConnectionAction::None);
+    CHECK(connection.next_action(true, true) ==
+          UsbDeviceConnectionAction::None);
+    CHECK(connection.next_action(true, false) ==
+          UsbDeviceConnectionAction::Disconnect);
+    // Failed platform actions remain pending for an owner-task retry.
+    CHECK(connection.next_action(true, false) ==
+          UsbDeviceConnectionAction::Disconnect);
+    connection.mark_applied(UsbDeviceConnectionAction::Disconnect);
+    CHECK(connection.next_action(true, false) ==
+          UsbDeviceConnectionAction::None);
+    CHECK(connection.next_action(true, true) ==
+          UsbDeviceConnectionAction::Connect);
+    connection.mark_applied(UsbDeviceConnectionAction::Connect);
+    CHECK(connection.next_action(true, true) ==
+          UsbDeviceConnectionAction::None);
 
     UsbCallbackLifecycleState callback;
     const auto event = callback.on_mount();
@@ -1173,6 +1252,7 @@ int main() {
     cold_boot_release_before_mount_report_complete();
     mount_before_first_cold_boot_scan();
     mount_release_repeat_requires_held_state();
+    timed_release_reassertion_and_raw_loss();
     ordered_lifetime_events_and_stale_completion();
     lifecycle_duplicate_mount_and_overflow_recovery();
     physical_presence_filters_loss_and_real_mount_is_authoritative();

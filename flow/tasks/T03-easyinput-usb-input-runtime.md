@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / T03_COLD_BOOT_MOUNT_DELIVERY_PENDING_HIL`。候选 `a97d85e`、`dd7bb69` 和 `8ce5712` 均在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。本候选修复真实 TinyUSB mount callback 不再被 GPIO40 单次采样拒绝；GPIO40 仍负责 25 ms 断开确认和旧 endpoint 撤销。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，但仍缺真实 HID 生命周期顺序证据。当前样机 S8 仍为烧录前已知硬件阻断，固件保留 S8/GPIO48 与八键合同。T03 保持开放，T04/T05 关闭。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / T03_USB_DCD_RECONNECT_PENDING_HIL`。候选 `a97d85e`、`dd7bb69`、`8ce5712` 和 `16bad4f` 均在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。本候选保持真实 mount callback 建立 epoch，并首次让 GPIO40 的 25 ms 稳定物理状态显式驱动 TinyUSB DCD `disconnect/connect`；mount、恢复和无 Press owner 的实体释放还会在首份零报告完成后以 25 ms 间隔做 500 ms 有界全释放重申。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，尚未烧录或真机验证。当前样机 S8 仍为烧录前已知硬件阻断，固件保留 S8/GPIO48 与八键合同。T03 保持开放，T04/T05 关闭。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`

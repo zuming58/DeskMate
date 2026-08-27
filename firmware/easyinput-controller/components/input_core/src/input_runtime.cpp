@@ -86,6 +86,33 @@ bool UsbPhysicalPresenceMonitor::update(bool raw_present, uint32_t now_ms) {
     return true;
 }
 
+UsbDeviceConnectionAction UsbDeviceConnectionGate::next_action(
+    bool driver_ready, bool physical_present) {
+    if (!driver_ready) {
+        driver_ready_observed_ = false;
+        return UsbDeviceConnectionAction::None;
+    }
+    if (!driver_ready_observed_) {
+        // tinyusb_driver_install() leaves the DCD connected by default.
+        driver_ready_observed_ = true;
+        connected_ = true;
+    }
+    if (connected_ == physical_present) {
+        return UsbDeviceConnectionAction::None;
+    }
+    return physical_present ? UsbDeviceConnectionAction::Connect
+                            : UsbDeviceConnectionAction::Disconnect;
+}
+
+void UsbDeviceConnectionGate::mark_applied(
+    UsbDeviceConnectionAction action) {
+    if (action == UsbDeviceConnectionAction::Connect) {
+        connected_ = true;
+    } else if (action == UsbDeviceConnectionAction::Disconnect) {
+        connected_ = false;
+    }
+}
+
 uint32_t UsbCallbackLifecycleState::next_epoch() {
     uint32_t current = epoch_.load(std::memory_order_acquire);
     while (current != UINT32_MAX &&
@@ -209,6 +236,8 @@ void UsbInputRuntime::on_mount(uint32_t epoch) {
     mount_release_sequence_active_ = true;
     suppress_until_all_released_ = true;
     mount_release_repeat_pending_ = any_held();
+    raw_disconnect_release_armed_ = false;
+    begin_release_reassertion();
     // Windows can retain a modifier from the previous HID lifetime when the
     // cable is removed while a chord is held. Every new mount starts with an
     // explicit all-released report before accepting new input.
@@ -224,6 +253,8 @@ void UsbInputRuntime::on_unmount() {
     mount_release_completed_ = false;
     mount_release_sequence_active_ = false;
     mount_release_repeat_pending_ = false;
+    release_reassert_active_ = false;
+    release_reassert_started_ = false;
     router_.release_all();
 }
 
@@ -237,6 +268,9 @@ void UsbInputRuntime::observe_physical_key_mask(uint8_t active_key_mask) {
     }
     physical_snapshot_observed_ = true;
     const bool now_held = any_held();
+    if (release_barrier_pending_ && had_snapshot && was_held && !now_held) {
+        begin_release_reassertion();
+    }
     if (!had_snapshot && now_held && mount_release_completed_) {
         release_barrier_pending_ = true;
         release_confirmation_enqueued_ = false;
@@ -255,9 +289,57 @@ void UsbInputRuntime::observe_physical_key_mask(uint8_t active_key_mask) {
     if (release_barrier_pending_) suppress_until_all_released_ = true;
 }
 
+void UsbInputRuntime::observe_raw_physical_presence(bool present) {
+    if (present) {
+        raw_disconnect_release_armed_ = false;
+        return;
+    }
+    if (!mounted_ || raw_disconnect_release_armed_) return;
+    raw_disconnect_release_armed_ = true;
+    recover_release();
+}
+
 void UsbInputRuntime::observe_physical_presence(bool present) {
     if (present || !mounted_) return;
     on_unmount();
+}
+
+void UsbInputRuntime::begin_release_reassertion() {
+    release_reassert_active_ = true;
+    release_reassert_started_ = false;
+}
+
+void UsbInputRuntime::service_release_reassertion(uint32_t now_ms) {
+    if (!mounted_ || !release_reassert_active_) return;
+    if (!release_reassert_started_) {
+        // Do not consume the recovery window while the endpoint is not ready
+        // or the first all-released report is still in flight.
+        if (queue_size_ != 0) return;
+        release_reassert_started_ = true;
+        release_reassert_started_ms_ = now_ms;
+        release_reassert_last_ms_ = now_ms;
+        return;
+    }
+
+    const uint32_t elapsed = now_ms - release_reassert_started_ms_;
+    if (elapsed >= kUsbReleaseReassertWindowMs) {
+        if (queue_size_ != 0) return;
+        release_reassert_active_ = false;
+        release_reassert_started_ = false;
+        if (!any_held()) {
+            release_barrier_pending_ = false;
+            release_confirmation_enqueued_ = false;
+            suppress_until_all_released_ = false;
+        }
+        return;
+    }
+
+    if (queue_size_ == 0 &&
+        static_cast<uint32_t>(now_ms - release_reassert_last_ms_) >=
+            kUsbReleaseReassertIntervalMs) {
+        enqueue_keyboard({});
+        release_reassert_last_ms_ = now_ms;
+    }
 }
 
 void UsbInputRuntime::maybe_enqueue_release_report(
@@ -350,6 +432,7 @@ void UsbInputRuntime::recover_release() {
     mount_release_completed_ = false;
     mount_release_sequence_active_ = false;
     mount_release_repeat_pending_ = false;
+    begin_release_reassertion();
     if (mounted_) enqueue_keyboard({});
 }
 
@@ -366,6 +449,13 @@ void UsbInputRuntime::on_input(const InputEvent& event) {
         return;
     }
     if (!mounted_) return;
+    if (release_reassert_active_ &&
+        (event.type == InputEventType::KeyPressed ||
+         event.type == InputEventType::EncoderPressed ||
+         event.type == InputEventType::EncoderStep)) {
+        release_reassert_active_ = false;
+        release_reassert_started_ = false;
+    }
     const RoutedAction action = router_.apply(event);
     if (action.keyboard_changed) enqueue_keyboard(action.keyboard);
     if (action.wheel_changed) enqueue_wheel(action.wheel);
@@ -388,6 +478,7 @@ void UsbInputRuntime::reconcile_usb_lifecycle(UsbCallbackSnapshot callback) {
     mount_release_completed_ = false;
     mount_release_sequence_active_ = true;
     mount_release_repeat_pending_ = any_held();
+    begin_release_reassertion();
     if (mounted_) enqueue_keyboard({});
 }
 void UsbInputRuntime::recover_after_input_drop(uint8_t active_key_mask) {
@@ -417,8 +508,8 @@ void UsbInputRuntime::complete_report() {
             mount_release_repeat_pending_ = false;
             mount_release_sequence_active_ = false;
             if (repeat && queue_size_ == 0) {
-                // TinyUSB completion is controller-local. Reassert the
-                // initial release once before accepting a held reconnect.
+                // Keep a held reconnect closed across at least one additional
+                // all-released transfer before the timed reassertion window.
                 mount_release_sequence_active_ = true;
                 enqueue_keyboard({});
                 return;
