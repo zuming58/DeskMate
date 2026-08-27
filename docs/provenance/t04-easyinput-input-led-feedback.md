@@ -19,4 +19,5 @@ copied from either external reference checkout.
 | `sdkconfig.defaults`, `tools/write-release-manifest.ps1` | ESP-IDF v5.5.5 reproducible build option and DeskMate T03 reproducibility lesson | Enables reproducible application metadata and generates a path-free manifest only when the clean HEAD, project path, build directory and embedded app version all match, recording exact version, target, app hash/size/range and partition hash. Generated manifests and images remain ignored build artifacts. |
 
 The Maker checkout remains read-only and is not a build dependency. No Xiaozhi
-source was used. Hardware acceptance remains pending on the original computer.
+source was used. Hardware acceptance completed on the original computer on
+2026-08-27; see `docs/testing/t04-input-led-feedback-acceptance-2026-08-27.md`.

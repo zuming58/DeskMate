@@ -30,7 +30,11 @@
 - [T03 final independent audit and lock](reviews/t03-final-independent-audit-2026-08-27.md)
 - [T04 EasyInput input LED feedback task](../flow/tasks/T04-easyinput-input-led-feedback.md)
 - [T04 second-computer handoff](handoffs/second-computer-t04-input-led-feedback-2026-08-27.md)
+- [T04 hardware acceptance and lock](testing/t04-input-led-feedback-acceptance-2026-08-27.md)
 - [T05 EasyInput configuration and NVS task](../flow/tasks/T05-easyinput-config-nvs.md)
+- [T05 frozen configuration contract](../contracts/deskmate-host/easyinput-config-v1.md)
+- [T05 Maker configuration/NVS reference audit](provenance/t05-easyinput-config-nvs-reference-audit.md)
+- [T05 second-computer handoff](handoffs/second-computer-t05-config-nvs-2026-08-27.md)
 - [T06 EasyInput Host Action task](../flow/tasks/T06-easyinput-host-actions.md)
 
 ## Product
@@ -49,7 +53,9 @@
 - [Reference and recovery baselines](provenance/reference-baselines-2026-08-24.md)
 - [Frozen EasyInput input v1 contract](../contracts/deskmate-host/easyinput-input-v1.md)
 - [Frozen EasyInput input LED feedback v1 contract](contracts/easyinput-input-led-feedback-v1.md)
+- [Frozen EasyInput configuration v1 contract](../contracts/deskmate-host/easyinput-config-v1.md)
 - [T04 Maker LED reference audit](provenance/t04-easyinput-input-led-feedback-reference-audit.md)
+- [T05 Maker configuration/NVS reference audit](provenance/t05-easyinput-config-nvs-reference-audit.md)
 
 ## Production modules
 

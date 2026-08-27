@@ -1,6 +1,6 @@
 # T04 · EasyInput physical-input LED feedback
 
-- 状态：`AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / PENDING_HIL / INPUT_LED_V1_FROZEN`
+- 状态：`AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T04_LOCKED / INPUT_LED_V1_FROZEN`
 - 前置：T03 已在 2026-08-27 完成 Host、ESP-IDF、桌面、五次断线 HIL 和原主电脑独立审计，状态为 `T03_LOCKED`。
 - 计划分支：`codex/easyinput-t04-input-led-feedback`，从包含本任务卡的最新 `origin/main` 创建。
 - 目标：在不改变 T03 输入/HID 行为的前提下，让 5 颗板载 WS2812 对 S1～S8、旋钮左右转和旋钮按压提供明确、低亮度、短时反馈，并建立 GPIO8 共享电源域的唯一安全底座。
@@ -86,4 +86,4 @@
 - 重跑 T03 五次 `123`/S6 断线/`abc` 矩阵、快速旋钮和连续 20 次语音键；
 - 回归 DeskMate 语音输入、目标窗口、历史复制与快捷键捕获。
 
-全部代码、构建和真机门通过后才标记 `T04_LOCKED`，再从其锁定 HEAD 开始 T05 配置/NVS。
+2026-08-27 已在原主电脑完成全部代码、构建和真机门并标记 `T04_LOCKED`。已烧录并验收的固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`；详细证据见 [`T04 hardware acceptance`](../../docs/testing/t04-input-led-feedback-acceptance-2026-08-27.md)。T05 只能从包含本锁定记录和冻结配置合同的最新交接基线开始。

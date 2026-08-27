@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T04 locked and T05 configuration/NVS opened for the second computer
+
+- 做了什么：依据用户确认的完整压力矩阵，把 T04 从 `PENDING_HIL` 锁定为 `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T04_LOCKED`，并将 `codex/easyinput-t04-input-led-feedback` 快进合入 `main`。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`。随后冻结 `CONFIG_V1_FROZEN`，完成 T05 Maker 配置/NVS 差异审计、任务卡和第二电脑交接；准确的 GitHub `origin/main` 交接哈希随本次提交推送结果和用户复制文字交付。
+- 为什么：T04 的 S1～S7/旋钮灯效、长按、50 次输入、五轮断线、20 次语音键及 DeskMate 组合回归均已通过，继续停留在 T04 没有收益。T05 必须先解决 Maker 整份配置覆盖、`0x13` 只有状态指纹、未知网络/音频字段保护和掉电恢复，才能安全开放软件“同步到键盘”。
+- 怎么理解：T05 复用 Maker `0x10` 写入兼容格式，新增冻结的 `0x13` flag `0x02` 完整读取和 `0x11` kind `0x06` 响应；Electron 主进程独占原始配置并做无损合并，固件使用 `deskmate` 双槽 NVS，旧 `ai_keyboard/config_v2` 只读导入且禁止 `nvs_flash_erase`。本包只激活纯 HID 映射；固定文字、Host Action/打开应用及其他 Windows 动作统一留到 T06。
+- 产出路径：`docs/testing/t04-input-led-feedback-acceptance-2026-08-27.md`、`contracts/deskmate-host/easyinput-config-v1.md`、`docs/provenance/t05-easyinput-config-nvs-reference-audit.md`、`flow/tasks/T05-easyinput-config-nvs.md`、`docs/handoffs/second-computer-t05-config-nvs-2026-08-27.md`、更新后的 `flow/plan.md`、`flow/decisions.md`、T06 任务卡、文档索引和固件局部入口。
+- 验证：T04 合并前确认 `main` 是分支祖先且两个工作树干净；固定 Maker 提交的 config receiver/payload/state/status、status HID、NVS store 和 Host tests 已只读核对。合并后固件 Host CTest 5/5、桌面 `npm test` 68/68、`npm run build:desktop` 和精确 ESP-IDF v5.5.5 / `esp32s3` 隔离构建通过；隔离构建逐项输出固定 NVS/PHY/3 MiB factory/双声音 bank。Markdown 链接、ASCII 路径、AGENTS/CLAUDE 一致、密钥/构建产物和 `git diff --check` 继续作为提交门。本轮没有扫描端口、识别设备、读取或写入 Flash/NVS、flash、erase 或 monitor。
+- 问题解决：完整配置中的 Wi-Fi/音频/未知字段不会进入 renderer 或被局部 JSON 覆盖；NVS 不再采用单槽写入或初始化失败整片擦除；T05 与 T06 按“纯 HID 配置”及“Windows 主机动作”拆包，避免配置事务和应用执行同时扩大故障面。默认 IDF 构建首次被根目录旧 `sdkconfig` 的单分区值触发 fail-closed，未修改该生成文件，改用显式 `-DSDKCONFIG=<隔离目录>` 后按仓内 defaults 构建通过。当前样机 S8 仍是单板硬件阻断，健康替换板到货后补测，不修改八键/GPIO48 合同。
+- 下一步：另一台笔记本从用户复制文字给出的准确 `origin/main` 全哈希创建 `codex/easyinput-t05-config-nvs`，按冻结合同完成固件、Windows 主进程/桥、React 脱敏 UI、Host/桌面/IDF 测试和自审，推送后立即停止；不得接触硬件、合并 `main` 或开始 T06。原主电脑随后独立审计，另行申请 app/NVS 备份、烧录与配置写入授权。
+
 ## 2026-08-27 · T04 independently audited and prepared for the clean release gate
 
 - 做了什么：原主电脑在隔离 worktree 审查 `fbd4c20` 的完整 T04 diff、冻结合同、任务卡及固定 Maker 参考。确认 T03 语义事件先进入唯一 USB runtime，灯效随后异步消费；GPIO8 只有一个物理写入口，GPIO12 RMT、颜色/时序、fail-soft 边界和固定分区方向正确。审计补齐四 owner 的共享电源租约底座，使 `DeviceAwake`、LED 以及未来麦克风/扬声器具有同一所有权模型；本包仍未初始化音频。

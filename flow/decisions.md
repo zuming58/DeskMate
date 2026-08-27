@@ -164,3 +164,10 @@
 - 决策：把 EasyInput 的 5 颗 WS2812 实体输入反馈独立设为 T04，并同时建立 GPIO8 最小共享电源安全底座；原配置/NVS 顺延为 T05，Host Action/打开应用顺延为 T06。
 - 原因：灯效能直接显示实体按键是否经过防抖被固件识别，属于 T03 输入闭环的紧邻反馈，不应与配置事务混在一个包。固定 Maker 参考已经提供按键颜色、动画、旋钮反馈、RMT 和共享电源证据，继续从零猜测会重复 T03 的教训。
 - 边界：T04 只实现 `INPUT_LED_V1_FROZEN` 的输入灯效；GPIO8 由唯一控制器持有，Awake 期间保持共享域开启，灯灭使用黑帧。不开音频、不做 Boot/连接/Agent 灯效、不改 T03 HID。T04 经原主电脑独立审计与真机锁定前，不开始 T05。
+
+## D026 · T05 configuration is lossless, transactional and pure-HID only
+
+- 日期：2026-08-27
+- 决策：T05 冻结 `CONFIG_V1_FROZEN`，通过完整板载配置读取、Electron 主进程无损 read-modify-write、脱敏差异确认、DeskMate 双槽 NVS 和写后回读开放配置同步；React 不接触完整配置、网络/音频字段或设备路径。
+- 原因：Maker `ai_keyboard.v1` 是整份覆盖，`0x13` 的状态/指纹不是完整配置；局部构造 JSON 会破坏既有字段，单槽直接覆盖也无法对掉电和坏配置提供确定恢复。
+- 边界：T05 只激活纯 HID 按键与旋钮动作，继续复用 T03 held PTT/atomic tap 和 T04 灯效/GPIO8 owner。固定文字、Host Action/打开应用及其他 Windows 主机动作保留原始配置但不执行，统一留到 T06；旧 `ai_keyboard/config_v2` 只读导入，禁止自动擦除 NVS。
