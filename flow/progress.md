@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T05 second independent audit returns the candidate; reference-first gate reinforced
+
+- 做了什么：在隔离 worktree 独立审计 `origin/codex/easyinput-t05-config-nvs@c6c6c64d7c595375eb74f3651b50df2950801aff`，逐项复核固件 Feature callback、配置解析/运行时投影、USB epoch、NVS 双槽、Windows 原生分块、Electron token 与 React 确认流程，并固定对照 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `config_payload`、`config_state` 和 Host 负向测试。完整结论写入 `docs/reviews/t05-easyinput-config-nvs-second-audit-2026-08-27.md`。
+- 为什么：用户明确纠正“正式固件重新开发”不等于忽略已有成熟参考从零猜测；候选虽然 Host 6/6、桌面 71/71 和 IDF 构建通过，但自行编写的简化 JSON/`std::stoi` 解析、Feature 长度复制、配置切换、分块生命周期和 NVS 恢复仍未满足冻结合同，不能用正常路径绿测替代畸形输入、断线和掉电证据。
+- 怎么理解：T05 的产品功能是“读取板上整份配置，只修改用户确认的纯 HID 键位/旋钮路径，双槽事务保存，重启恢复并回读确认”，不是重新发明按键和旋钮。T03/T04 输入与灯效已经锁定；T05 只是让原来可用的映射变成安全可配置。当前问题主要来自实现流程没有在编码前先移植 Maker 适用失败向量，而不是产品功能本身发生了大变化。
+- 产出路径：`docs/reviews/t05-easyinput-config-nvs-second-audit-2026-08-27.md`、`docs/handoffs/second-computer-t05-config-nvs-second-rework-2026-08-27.md`、更新后的 `flow/tasks/T05-easyinput-config-nvs.md`、`flow/plan.md`、`flow/lessons.md`、`docs/README.md` 和本记录。根级 `AGENTS.md` 已含固定参考优先规则，无需重复修改；没有新合同决策需要写入 `flow/decisions.md`。
+- 验证：`npm ci --include=dev`、桌面 71/71、桌面 Release 构建、固件 Host CTest 6/6、ESP-IDF v5.5.5/`esp32s3` 固定分区构建和 `git diff --check` 均通过。独立 app 为 299456 字节、SHA-256 `C9C7625EB4142668879BAA15FB2CD38E1BE4E93800B2D5103E4271AF55374993`，未复现笔记本报告的 299536 字节/`FFD1...E13`，因此尚不能形成发布镜像。ASCII 路径、跟踪构建产物和密钥检查通过；仅发现安全存储字段名与合成测试值。
+- 问题解决：确认第一轮修复确实关闭了快照事件丢失、旧 IPC 绕过和同步 NVS owner 等问题，同时把剩余阻断收敛为一次测试先行返工：精确 Feature 长度、Maker 负向解析向量、旋钮 cursor/配置切换全释放、原生读取有序生命周期、epoch 绑定、能力状态、完整 NVS 故障矩阵和路径级确认差异。它们跨越固件、原生桥、Electron 和 UI，不属于适合本机零碎修复的小问题。
+- 下一步：另一台电脑继续原 `codex/easyinput-t05-config-nvs` 分支，先补上述红测和 Maker→DeskMate 行为差异表，再修生产代码并推送后停止；原主电脑做第三轮独立审计。状态为 `SECOND_AUDIT_REWORK_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED`。本轮未扫描端口、识别设备、读取或写入 Flash/NVS、erase、monitor、烧录或 HIL；T05 真机锁定前不得开始 T06。
+
 ## 2026-08-27 · T05 first independent audit requires rework; no flash and no T06
 
 - 做了什么：从 GitHub 精确取得 `origin/codex/easyinput-t05-config-nvs` 的 `a795d309cb88a3a740c25c159e132609e1583d73`，确认它基于锁定交接 `a2adc9818da07119e59a6f14d125fc23576696c9`，在隔离 worktree 完成固件、原生桥、Electron、React、NVS 与测试审计，并写入 `docs/reviews/t05-easyinput-config-nvs-first-audit-2026-08-27.md`。

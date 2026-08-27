@@ -36,6 +36,8 @@
 - [T05 Maker configuration/NVS reference audit](provenance/t05-easyinput-config-nvs-reference-audit.md)
 - [T05 second-computer handoff](handoffs/second-computer-t05-config-nvs-2026-08-27.md)
 - [T05 first independent audit and rework gate](reviews/t05-easyinput-config-nvs-first-audit-2026-08-27.md)
+- [T05 second independent audit and rework gate](reviews/t05-easyinput-config-nvs-second-audit-2026-08-27.md)
+- [T05 second-computer second rework handoff](handoffs/second-computer-t05-config-nvs-second-rework-2026-08-27.md)
 - [T06 EasyInput Host Action task](../flow/tasks/T06-easyinput-host-actions.md)
 
 ## Product

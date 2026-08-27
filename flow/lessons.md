@@ -6,6 +6,7 @@
 - 做法：先固定读取 Maker 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的相关 `usb_hid`、keymap、held state、queue 和 host test，再判断产品合同是否适合采用其结构。最终采用的是 Maker synthetic `HidTap` 的 bounded press→restore 思路，按 DeskMate 合同独立重实现；不复制 Maker 运行时、工作区未提交内容或 build 产物。
 - 规则：后续固件问题先做参考实现的行为核对和差异说明，再提出最小产品侧改动；参考逻辑不是盲目照搬，但不能在没有核对已有成熟路径前重复猜测。
 - 止损门：若首个候选被真机证据否决，而固定参考覆盖同一子系统，下一候选开工前必须完成参考源码/测试差异表并补缺失向量；不得连续提交第二个猜测性修复。参考实现不适合产品合同时，也要先写明“不采用什么、为什么”。
+- T05 再次验证：候选自行实现的简化 JSON/`std::stoi` 解析在 71/71 常规测试通过时仍可被畸形数值、UTF-8、转义和嵌套结构击穿，而 Maker 固定提交已经有非抛异常解析和完整负向用例。以后“参考优先”必须发生在写生产代码之前：先把适用的参考失败向量变成本仓红测，再做独立实现；不得等审计发现后才回头读参考。
 
 ## Firmware image hashes are not reproducible while compile timestamps are enabled
 

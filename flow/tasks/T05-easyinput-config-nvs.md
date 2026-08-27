@@ -1,11 +1,13 @@
 # T05 · EasyInput configuration and NVS
 
-- 状态：`REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / CONFIG_V1_FROZEN`
+- 状态：`SECOND_AUDIT_REWORK_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / CONFIG_V1_FROZEN / T06_BLOCKED`
 - 前置：T04 已在原主电脑完成独立审计、构建、烧录、完整真机矩阵并锁定；当前样机 S8 为既有单板硬件阻断，八键/GPIO48 产品合同不变。
 - 计划分支：`codex/easyinput-t05-config-nvs`，从本任务交接时用户收到的准确 `origin/main` 哈希创建。
 - 目标：建立“读取板上完整配置 → 校验 → 无损合并用户改动 → 明示差异 → 事务保存 → 重启恢复 → 回读确认”的 Windows↔EasyInput 闭环。
 
 ## Contract gate
+
+第二轮独立审计的可执行阻断项见 [`T05 second independent audit`](../../docs/reviews/t05-easyinput-config-nvs-second-audit-2026-08-27.md)。现有绿测只确认已覆盖路径，不构成冻结合同通过；原分支必须按该审计补齐失败向量后再提交第三轮审计。
 
 T05 必须严格实现 [`CONFIG_V1_FROZEN`](../../contracts/deskmate-host/easyinput-config-v1.md)，不得在开发分支重新解释或扩展 wire/NVS/renderer 合同。合同变更须停止编码并返回原主电脑重新冻结。
 
