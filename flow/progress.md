@@ -2,13 +2,23 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T03 independently audited, accepted and locked on the original computer
+
+- 做了什么：原主电脑从 `origin/codex/easyinput-t03-cold-boot-reconnect@ed842aa` 建立隔离工作树，逐项审查 `39ac64e..ed842aa` 的合同、来源、28 个变更文件和最终 atomic tap 实现；固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `HidTap`、snapshot 与 FIFO 测试，确认 DeskMate 只采用行为结构并在自身单一路由/队列中清晰重实现。审计未发现阻断性代码问题，T03 现正式锁定。
+- 为什么：此前 6～7 轮猜测性 USB lifetime 修复耗费大量时间，且 Host 通过仍被真机否决；本次把“参考优先、一次 HIL 失败后停止继续猜测”固化进根级和固件局部规则，避免 T04/T05 重复同类过程。
+- 怎么理解：S1/S3 仍是 held PTT；S2/S4/S5～S8 在稳定按下时原子排入 press 与精确 restore，实体释放只 rearm。用户在最终 `5c09880` 镜像上连续五次得到 `123abc`；S8 仅是当前样机既有硬件阻断，软件八键/GPIO48 合同继续保留。T03 状态为 `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_LOCKED`。
+- 产出路径：`docs/reviews/t03-final-independent-audit-2026-08-27.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`flow/tasks/T04-easyinput-config-nvs.md`、`flow/plan.md`、`flow/lessons.md`、根级及固件局部 `AGENTS.md`、固件 `README.md` 与本记录。
+- 验证：精确 `5c09880` 干净工作树 Host CTest 3/3、ESP-IDF v5.5.5/esp32s3 构建通过，app 大小 `0x37310`，固定分区 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`；交接 HEAD `ed842aa` 再构建通过；桌面 `npm test` 68/68、`npm run build:desktop` 通过；板级扫描 1 PASS/1 已知声明识别 WARN/0 FAIL；范围、来源、ASCII 路径、构建产物和 AGENTS/CLAUDE 一致检查通过。没有访问或写入硬件。
+- 问题解决：清除了返回文档中不应进入 Git 的端口/MAC 后缀；确认当前构建启用编译时间戳，所以同一 `5c09880` 的新构建大小一致但 SHA-256 不会复现已烧录镜像，不能把源码重建冒充逐字节镜像复现。该构建可复现性缺口已写入 lessons，须在下一次烧录前关闭。
+- 下一步：另一台笔记本从锁定后的最新 `main` 建立 `codex/easyinput-t04-config-nvs`，先做 Maker 配置/NVS 参考差异表与 `CONFIG_V1_FROZEN` 合同评审，再编码；T04 完成后推送并停止，由原主电脑独立审计和回归，T04 锁定前不开始 T05。
+
 ## 2026-08-27 · T03 atomic HID tap passes five reconnect repetitions
 
 - 结果：当前分支 `codex/easyinput-t03-cold-boot-reconnect` 的最终提交 `5c0988097c44194269bb1c7b23fa24277fae6680` 已烧录并完成 app-only 数据哈希校验。用户在正常断电重启后完成五次断线矩阵：记事本输入 `123`，按住 S6 拔 USB，保持按住重连，等待约 3 秒，松开 S6，再用电脑键盘输入 `abc`；五次均得到 `123abc`，未出现全选或 Ctrl 残留。第 1、2 轮由只读 Raw Input/PnP 监控同步确认，第 3～5 轮由用户连续操作后确认通过。
 - 监控证据：第 1、2 轮均观察到 EasyInput 的 `Ctrl` 与 `C` 在约 5 ms 内成对 down/up，随后设备断开并重新连接；重连后的 `A/B/C` 均来自 `other-keyboard`。监控进程为只读诊断，未读取 Flash、未输出用户文本或设备敏感资料，测试完成后已停止。
 - 根因与修复：旧版 stateful S6 在 HID lifetime 消失时可能只留下旧设备的 Ctrl-down；新 lifetime 的全零报告、重复释放、transfer-complete、GPIO40 DCD 重连均不能可靠替旧 lifetime 产生 Ctrl-up。最终按 Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 中 synthetic tap 的结构清晰重实现：S2/S4/S5～S8 在稳定 Press 时原子排入临时 chord 与精确 restore，S1/S3 仍为 held PTT。
 - 本轮证据：Host CTest `3/3` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3` 构建通过，app `0x37310`（226,064 bytes），3 MiB factory 余量 93%；镜像 SHA-256 `82731f1a72892fcefedf3f3dc920013de8110c384cab2f6a0edea4ec97e2913e`。
-- 烧录边界：仅向已识别 ESP32-S3（COM5，MAC 尾号 `D9:A0`）写入 app `0x010000..0x04730F`；工具按 4 KiB 扇区擦除至 `0x047FFF`，仍在 factory app 分区内。未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse。
+- 烧录边界：仅向用户确认的 EasyInput 写入 app `0x010000..0x04730F`；工具按 4 KiB 扇区擦除至 `0x047FFF`，仍在 factory app 分区内。端口与硬件身份只保存在 Git 外私有恢复记录。未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse。
 - 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_COMPLETE`。S8/GPIO48 仍保留原软件合同，当前样机 S8 的既有硬件问题不纳入本次软件结论。T04/T05 尚未实现，资料已准备交还原主电脑独立审计。
 
 ## 2026-08-27 · T03 ordinary command keys reworked as atomic HID taps

@@ -1,6 +1,6 @@
 # T03 rework · EasyInput atomic command taps
 
-- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_COMPLETE`
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_LOCKED`（2026-08-27 原主电脑独立审计通过）
 - 分支：`codex/easyinput-t03-cold-boot-reconnect`
 - 基线失败候选：`cf9fdf877753791393f753e3913f46bfe4f825ce`
 - 合同：2026-08-27 修订后的 [`INPUT_V1_FROZEN`](../../contracts/deskmate-host/easyinput-input-v1.md)

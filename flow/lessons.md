@@ -5,6 +5,12 @@
 - 现象：T03 早期多轮修复围绕新 HID lifetime 的全零报告、mount 顺序、transfer-complete、GPIO40 DCD 重连和重复释放反复试验，Host 测试可通过但真机仍在第二次或后续断线留下 Ctrl。
 - 做法：先固定读取 Maker 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的相关 `usb_hid`、keymap、held state、queue 和 host test，再判断产品合同是否适合采用其结构。最终采用的是 Maker synthetic `HidTap` 的 bounded press→restore 思路，按 DeskMate 合同独立重实现；不复制 Maker 运行时、工作区未提交内容或 build 产物。
 - 规则：后续固件问题先做参考实现的行为核对和差异说明，再提出最小产品侧改动；参考逻辑不是盲目照搬，但不能在没有核对已有成熟路径前重复猜测。
+- 止损门：若首个候选被真机证据否决，而固定参考覆盖同一子系统，下一候选开工前必须完成参考源码/测试差异表并补缺失向量；不得连续提交第二个猜测性修复。参考实现不适合产品合同时，也要先写明“不采用什么、为什么”。
+
+## Firmware image hashes are not reproducible while compile timestamps are enabled
+
+- 现象：原主电脑在精确 `5c09880`、ESP-IDF v5.5.5 和相同依赖下干净重建，app 大小仍为 `0x37310`，但 SHA-256 与已烧录镜像不同；生成配置显示 `CONFIG_APP_COMPILE_TIME_DATE=y` 且未启用 `CONFIG_APP_REPRODUCIBLE_BUILD`。
+- 做法：把“源码提交可重建”和“已烧录二进制逐字节可复现”分开陈述。下一次申请烧录前启用并验证可复现构建，或明确保存受控、脱敏的发布产物与 manifest；在此之前不得用同提交的新构建哈希替代已烧录镜像哈希。
 
 ## T03 reconnect evidence must separate monitored and user-observed facts
 

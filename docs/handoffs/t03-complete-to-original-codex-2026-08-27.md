@@ -11,7 +11,7 @@ Status: `T03_COMPLETE`
 
 ## Hardware evidence
 
-The final app image was built with ESP-IDF `v5.5.5` for `esp32s3`, then written only to the factory app on the identified ESP32-S3 (COM5, MAC suffix `D9:A0`) after explicit user authorization.
+The final app image was built with ESP-IDF `v5.5.5` for `esp32s3`, then written only to the factory app on the user-confirmed EasyInput after explicit authorization. Port and hardware identity details remain in the private recovery record and are not stored in Git.
 
 - Image: `build-atomic-tap-final-v5.5.5/deskmate_easyinput_controller.bin`
 - SHA-256: `82731f1a72892fcefedf3f3dc920013de8110c384cab2f6a0edea4ec97e2913e`
