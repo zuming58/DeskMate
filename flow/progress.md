@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T03 atomic HID tap passes five reconnect repetitions
+
+- 结果：当前分支 `codex/easyinput-t03-cold-boot-reconnect` 的最终提交 `5c0988097c44194269bb1c7b23fa24277fae6680` 已烧录并完成 app-only 数据哈希校验。用户在正常断电重启后完成五次断线矩阵：记事本输入 `123`，按住 S6 拔 USB，保持按住重连，等待约 3 秒，松开 S6，再用电脑键盘输入 `abc`；五次均得到 `123abc`，未出现全选或 Ctrl 残留。第 1、2 轮由只读 Raw Input/PnP 监控同步确认，第 3～5 轮由用户连续操作后确认通过。
+- 监控证据：第 1、2 轮均观察到 EasyInput 的 `Ctrl` 与 `C` 在约 5 ms 内成对 down/up，随后设备断开并重新连接；重连后的 `A/B/C` 均来自 `other-keyboard`。监控进程为只读诊断，未读取 Flash、未输出用户文本或设备敏感资料，测试完成后已停止。
+- 根因与修复：旧版 stateful S6 在 HID lifetime 消失时可能只留下旧设备的 Ctrl-down；新 lifetime 的全零报告、重复释放、transfer-complete、GPIO40 DCD 重连均不能可靠替旧 lifetime 产生 Ctrl-up。最终按 Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 中 synthetic tap 的结构清晰重实现：S2/S4/S5～S8 在稳定 Press 时原子排入临时 chord 与精确 restore，S1/S3 仍为 held PTT。
+- 本轮证据：Host CTest `3/3` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3` 构建通过，app `0x37310`（226,064 bytes），3 MiB factory 余量 93%；镜像 SHA-256 `82731f1a72892fcefedf3f3dc920013de8110c384cab2f6a0edea4ec97e2913e`。
+- 烧录边界：仅向已识别 ESP32-S3（COM5，MAC 尾号 `D9:A0`）写入 app `0x010000..0x04730F`；工具按 4 KiB 扇区擦除至 `0x047FFF`，仍在 factory app 分区内。未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_COMPLETE`。S8/GPIO48 仍保留原软件合同，当前样机 S8 的既有硬件问题不纳入本次软件结论。T04/T05 尚未实现，资料已准备交还原主电脑独立审计。
+
 ## 2026-08-27 · T03 ordinary command keys reworked as atomic HID taps
 
 - 根因：`cf9fdf8` 的 GPIO40/TinyUSB DCD 软断开/连接和 500 ms 全释放重申在第一轮真机断线测试仍留下 Ctrl。结合此前多轮监控，结论是新 HID lifetime 的零报告不能可靠替已经消失的旧 lifetime 产生 Ctrl-up；第一次偶尔通过只是 Windows/PnP 时序差异。固定 Maker 默认 S6 同样是 stateful down/up，不能直接解决该 HIL；可采用的是其独立 synthetic `HidTap` 的 press/restore 结构。

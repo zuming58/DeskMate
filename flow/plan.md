@@ -6,13 +6,13 @@
 
 ### Current execution point
 
-- T03 首次写入、正常启动、S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获均已取得真机通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，继续记录为单板硬件阻断而不修改全局八键/GPIO48 合同。断线压力测试发现“按住 S6 拔线、重新连接后 Windows 残留 Ctrl”；`dd7bb69` 的 mount 首帧全释放修复经 app-only 补刷、完整关机/开机后，同一场景仍复现。当前状态为 `T03_HIL_FAILED_CTRL_STICKY_AFTER_APP_REFLASH`，已交接另一台硬件笔记本继续 T03 冷启动模型修复；T04/T05 继续关闭。
-- T03 首次写入基线已推送 `main@fb9a17573a8cf4be76db6aadc8ce4e67fa8c0bd9`；断线修复候选为本机提交 `dd7bb69`，尚未推送、尚未补刷。该候选 Host CTest 3/3、ESP-IDF v5.5.5 / ESP32-S3 构建、桌面 68/68、桌面打包和打包烟测通过，只声明 `TEST_CONFIRMED` / `BUILD_CONFIRMED`，不冒充补刷后的 HIL。
+- T03 已完成五次真机断线矩阵：最终 atomic tap 镜像在正常断电重启后均得到 `123abc`，未出现全选或残留 Ctrl；第 1、2 轮有只读 Raw Input/PnP 监控，第 3～5 轮为用户观察确认。S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获继续保留通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。T03 状态为 `HIL_CONFIRMED / T03_COMPLETE`，等待原主电脑独立审计后再按任务卡进入 T04。
+- T03 的历史失败候选和验证过程保留在 `flow/progress.md` 与 `docs/handoffs/`；最终 atomic tap 提交已推送并完成授权 app-only 烧录及五次断线 HIL。旧候选只作为审计历史，不代表当前状态。
 
 - T02 已锁定：工程骨架、八键/旋钮纯逻辑、held-key HID 内部状态、Host 测试和 ESP-IDF v5.5.5 构建通过；未做硬件访问或真机验收。
-- 当前唯一开放任务仍是 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md)，代码门和首次写入门已关闭；下一道门是正常启动、HID 枚举与完整真机 HIL。T03 真机锁定前不进入 T04。
+- T03 [`T03-easyinput-usb-input-runtime.md`](tasks/T03-easyinput-usb-input-runtime.md) 的代码、测试、构建和五次真机 HIL 门已关闭；下一步由原主电脑独立审计本分支并重跑组合回归，之后才可从 T03 最终 HEAD 建立 T04。
 - T03 只允许实现 [`INPUT_V1_FROZEN`](../contracts/deskmate-host/easyinput-input-v1.md) 切片；完整 DeskMate host contract 仍未冻结，配置、NVS、Host Action、BLE、音频和 DeskMate Link 不得提前实现。
-- T03 分支推送后由当前电脑独立审计与重建。只有代码门通过、原 Maker 恢复方案准备完毕并获得用户单独授权后，才执行 EasyInput 第一次烧录和 HIL。
+- 原主电脑现在接收已推送的 T03 分支和完整交接资料，需独立审计、重建并做三包组合回归；T04/T05 只应在该审计完成后按各自任务卡从 T03 最终 HEAD 建立。
 
 1. 冻结单仓三模块目录、来源/许可证、恢复基线和 V1 硬件职责；不整仓复制两个参考工程。
 2. V1 使用方案 A：EasyInput 是唯一启用的麦克风/扬声器端点；小智只做 OLED、表情、状态和安全动作，本板音频不初始化。

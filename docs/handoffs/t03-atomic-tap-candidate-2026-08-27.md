@@ -1,6 +1,6 @@
 # T03 atomic-tap candidate handoff · 2026-08-27
 
-Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`
+Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_COMPLETE`
 
 ## Confirmed failure mechanism
 
@@ -38,6 +38,6 @@ Board/source scan found the frozen S1-S8 GPIOs `2,47,38,41,1,6,7,48`, encoder `1
 
 ## Hardware gate
 
-This document is not flash authorization and does not claim HIL. After commit/push, rebuild from the clean final HEAD and publish its exact app SHA-256 and inclusive app-only range. Obtain a fresh confirmation for that exact image, identify the already-selected EasyInput again after USB re-enumeration, and write only the factory app at `0x010000`. Do not erase or write the bootloader, partition table, NVS, PHY, sound banks or eFuse.
+The exact image described above was subsequently authorized, identified on the target ESP32-S3, written only to the factory app at `0x010000`, and verified by the tool data hash. Do not erase or write the bootloader, partition table, NVS, PHY, sound banks or eFuse.
 
-After normal power recovery, start read-only monitoring before asking the user to run the five reconnect repetitions. Stop on the first failure. Do not start T04/T05 until T03 passes.
+After normal power recovery, read-only monitoring was started before the five reconnect repetitions. T03 passed all five repetitions; do not start T04/T05 until the original main computer independently audits this branch.

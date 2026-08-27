@@ -1,5 +1,16 @@
 # Lessons learned
 
+## Maker reference logic must be consulted before inventing a replacement
+
+- 现象：T03 早期多轮修复围绕新 HID lifetime 的全零报告、mount 顺序、transfer-complete、GPIO40 DCD 重连和重复释放反复试验，Host 测试可通过但真机仍在第二次或后续断线留下 Ctrl。
+- 做法：先固定读取 Maker 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的相关 `usb_hid`、keymap、held state、queue 和 host test，再判断产品合同是否适合采用其结构。最终采用的是 Maker synthetic `HidTap` 的 bounded press→restore 思路，按 DeskMate 合同独立重实现；不复制 Maker 运行时、工作区未提交内容或 build 产物。
+- 规则：后续固件问题先做参考实现的行为核对和差异说明，再提出最小产品侧改动；参考逻辑不是盲目照搬，但不能在没有核对已有成熟路径前重复猜测。
+
+## T03 reconnect evidence must separate monitored and user-observed facts
+
+- 现象：五次 HIL 中，前两轮由 Raw Input/PnP 诊断记录了连接状态和键事件，后三轮由用户连续完成后统一报告通过；诊断程序不能读取固件 HID 报告字节。
+- 做法：交接文档分别标记底层监控证据与用户可见结果，不把未采集的每一轮报告伪装成监控事实；只有五次完整用户结果和既有功能回归共同通过后才关闭 T03。
+
 ## A new HID lifetime cannot reliably release an old lifetime's modifier
 
 - 现象：Windows 已经从旧 USB HID lifetime 接收 Ctrl-down 后，物理移除设备再枚举同 VID/PID 的新 lifetime；新设备发送一次或反复全零报告、等待 TinyUSB transfer-complete，甚至显式 DCD disconnect/connect，仍可能留下旧 Ctrl。第一次通过、后续失败只是 PnP/消费时序差异，不能当作修复证据。

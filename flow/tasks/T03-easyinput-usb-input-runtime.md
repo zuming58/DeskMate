@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / T03_ATOMIC_TAP_PENDING_CLEAN_HEAD_AND_HIL`。候选 `a97d85e`、`dd7bb69`、`8ce5712`、`16bad4f` 和 `cf9fdf8` 均被指定断线矩阵的真机 Ctrl 粘连证据否决。2026-08-27 经用户确认，`INPUT_V1_FROZEN` 修订为 S1/S3 保持 hold、S2/S4/S5～S8 使用原子 press→restore tap；本轮实施细则见 [`T03-easyinput-atomic-tap-rework.md`](T03-easyinput-atomic-tap-rework.md)。Host 3/3 与 ESP-IDF v5.5.5 / esp32s3 dirty-tree 构建通过，等待提交后干净 HEAD 重建和获授权 HIL。T03 保持开放，T04/T05 关闭。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T03_COMPLETE`。候选 `a97d85e`、`dd7bb69`、`8ce5712`、`16bad4f` 和 `cf9fdf8` 均被指定断线矩阵的真机 Ctrl 粘连证据否决；最终 `5c0988097c44194269bb1c7b23fa24277fae6680` 的 atomic tap 修复已通过五次真机断线矩阵。第 1、2 轮有只读 Raw Input/PnP 监控，第 3～5 轮为用户观察确认。T04/T05 未开始，等待原主电脑独立审计。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`
