@@ -2,6 +2,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session,
 const path = require("path");
 const { fileURLToPath } = require("url");
 const { spawn } = require("child_process");
+const { randomUUID } = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const { summarizeNetworkInterfaces } = require("./network-summary.cjs");
@@ -12,6 +13,7 @@ const { organize: organizeBailian } = require("./bailian-organizer.cjs");
 const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { AppActionStore } = require("./app-actions.cjs");
+const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch } = require("./config-merge.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
@@ -35,12 +37,52 @@ let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
 let appActionStore;
 let isQuitting = false;
+let keyboardConfigState = { raw: null, fingerprint: "", source: 2, token: null };
 let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
+
+function configFingerprint(value) {
+  return stableConfigFingerprint(value);
+}
+
+function sanitizeKeyboardConfig(value) {
+  return stableSanitizeKeyboardConfig(value);
+  /* const profile = Array.isArray(value?.profiles) ? value.profiles[0] : null;
+  const keys = profile?.keys && typeof profile.keys === "object" ? Object.keys(profile.keys).sort().map((key) => {
+    const press = profile.keys[key]?.press;
+    if (typeof press === "string") return { action: press.startsWith("host_action:") ? "open-app" : press };
+    if (press && typeof press === "object" && typeof press.hotkey === "string") return { action: "hotkey", shortcut: press.hotkey };
+    return { action: press && typeof press.text === "string" ? "fixed-text" : "disabled" };
+  }) : [];
+  const scroll = profile?.encoder?.scroll || {};
+  return { keymap: keys, encoder: { mode: scroll.mode === "cursor" ? "cursor" : "scroll", axis: scroll.axis === "horizontal" ? "horizontal" : "vertical", speed: Math.max(1, Math.min(5, Number(scroll.speed) || 3)), reverseVertical: Boolean(scroll.windows_reverse_vertical), reverseHorizontal: Boolean(scroll.windows_reverse_horizontal), press: typeof profile?.encoder?.press === "string" ? { action: profile.encoder.press } : { action: "disabled" } } }; */
+}
+
+function mergeKeyboardPatch(raw, patch) {
+  return strictMergeKeyboardPatch(raw, patch);
+  /* if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("配置修改格式无效");
+  const merged = structuredClone(raw); const profile = Array.isArray(merged.profiles) && merged.profiles[0];
+  if (!profile || typeof profile !== "object") throw new Error("配置缺少默认 Profile");
+  if (patch.encoder && typeof patch.encoder === "object") {
+    profile.encoder = profile.encoder || {}; profile.encoder.scroll = profile.encoder.scroll || {};
+    const e = patch.encoder;
+    for (const [source, target] of [["mode", "mode"], ["axis", "axis"], ["speed", "speed"], ["reverseVertical", "windows_reverse_vertical"], ["reverseHorizontal", "windows_reverse_horizontal"]]) if (e[source] !== undefined) profile.encoder.scroll[target] = e[source];
+    if (e.press !== undefined) profile.encoder.press = typeof e.press === "string" ? e.press : e.press?.action || "disabled";
+  }
+  if (Array.isArray(patch.keymap)) {
+    profile.keys = profile.keys || {};
+    for (let index = 0; index < Math.min(8, patch.keymap.length); index += 1) {
+      const item = patch.keymap[index]; if (!item || typeof item !== "object") continue; const action = item.action;
+      if (["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled"].includes(action)) profile.keys[`KEY${index + 1}`] = { ...(profile.keys[`KEY${index + 1}`] || {}), press: ({ "voice-input": "voice_ptt_hold", "voice-edit": "edit_ptt_hold", "select-all": "select_all", copy: "copy", paste: "paste", undo: "undo", disabled: "disabled" })[action] };
+      else if (action === "enter" || action === "backspace" || action === "hotkey") profile.keys[`KEY${index + 1}`] = { ...(profile.keys[`KEY${index + 1}`] || {}), press: { hotkey: action === "enter" ? "Return" : action === "backspace" ? "Backspace" : String(item.shortcut || "") } };
+    }
+  }
+  return merged; */
+}
 const smokeMode = process.argv.includes("--deskmate-smoke-test");
 const bailianTestAudio = process.argv.find((value) => value.startsWith("--bailian-test-audio="))?.slice("--bailian-test-audio=".length) || "";
 const bailianTestOrganizer = process.argv.find((value) => value.startsWith("--bailian-test-organizer="))?.slice("--bailian-test-organizer=".length) || "";
@@ -379,7 +421,7 @@ app.whenReady().then(async () => {
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => ({ supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: false, reason: "full-config-merge-required", transport: "vendor-hid-0x10" }, inputBridge: inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false } }));
+  handleTrusted("desktop:get-capabilities", () => ({ supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: true, transport: "vendor-hid-0x10", read: "vendor-hid-0x13" }, inputBridge: inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false } }));
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
@@ -387,11 +429,35 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
   handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
-  handleTrusted("desktop:sync-keyboard-config", () => ({
-    ok: false,
-    reason: "full-config-merge-required",
-    message: "需要先读取并合并键盘现有的网络、音频和按键配置；本次已阻止覆盖写入。",
-  }));
+  handleTrusted("desktop:sync-keyboard-config", (value) => inputBridge?.syncConfig(value) || { ok: false, reason: "input-bridge-unavailable" });
+  handleTrusted("desktop:read-keyboard-config", async () => {
+    const result = await inputBridge?.readConfig?.() || { ok: false, reason: "input-bridge-unavailable" };
+    if (!result.ok) return result;
+    let raw; try { raw = JSON.parse(result.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (raw.schema !== "ai_keyboard.v1") return { ok: false, reason: "config-schema-invalid" };
+    keyboardConfigState = { raw, fingerprint: configFingerprint(raw), source: result.source, token: null };
+    return { ok: true, config: sanitizeKeyboardConfig(raw), source: result.source, fingerprint: keyboardConfigState.fingerprint };
+  });
+  handleTrusted("desktop:preview-keyboard-config-patch", (patch) => {
+    if (!keyboardConfigState.raw) return { ok: false, reason: "config-read-required" };
+    let merged; try { merged = mergeKeyboardPatch(keyboardConfigState.raw, patch); } catch (error) { return { ok: false, reason: error.message }; }
+    const token = randomUUID(); keyboardConfigState.token = { value: token, expires: Date.now() + 60000, fingerprint: keyboardConfigState.fingerprint, merged };
+    return { ok: true, token, expiresInMs: 60000, fingerprint: keyboardConfigState.fingerprint, config: sanitizeKeyboardConfig(merged) };
+  });
+  handleTrusted("desktop:commit-keyboard-config", async (token) => {
+    const pending = keyboardConfigState.token;
+    if (!pending || token !== pending.value || Date.now() > pending.expires) return { ok: false, reason: "config-confirmation-expired" };
+    keyboardConfigState.token = null;
+    const fresh = await inputBridge?.readConfig?.(); if (!fresh?.ok) return { ok: false, reason: "config-device-disconnected" };
+    let current; try { current = JSON.parse(fresh.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (configFingerprint(current) !== pending.fingerprint) return { ok: false, reason: "config-changed-concurrently" };
+    const written = await inputBridge.syncConfig(pending.merged); if (!written?.ok) return written;
+    const readback = await inputBridge.readConfig(); if (!readback?.ok) return { ok: false, reason: "config-readback-failed" };
+    let readbackJson; try { readbackJson = JSON.parse(readback.json); } catch { return { ok: false, reason: "config-readback-invalid" }; }
+    if (configFingerprint(readbackJson) !== configFingerprint(pending.merged)) return { ok: false, reason: "config-readback-mismatch" };
+    keyboardConfigState = { raw: readbackJson, fingerprint: configFingerprint(readbackJson), source: readback.source, token: null };
+    return { ok: true, source: readback.source, fingerprint: keyboardConfigState.fingerprint };
+  });
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
   handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));

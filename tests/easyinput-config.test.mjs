@@ -7,7 +7,8 @@ import path from "node:path";
 import { createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction, normalizeEncoder } from "../src/domain/keymap.js";
 
 const require = createRequire(import.meta.url);
-const { crc16Ccitt, encodeKeyboardConfig, parseAppCommandReport } = require("../electron/easyinput-config.cjs");
+const { crc16Ccitt, encodeKeyboardConfig, parseAppCommandReport, parseConfigSnapshot } = require("../electron/easyinput-config.cjs");
+const { configFingerprint, mergeKeyboardPatch, sanitizeKeyboardConfig } = require("../electron/config-merge.cjs");
 const { AppActionStore } = require("../electron/app-actions.cjs");
 
 test("DeskMate key bindings produce the frozen Maker ai_keyboard.v1 payload", () => {
@@ -59,4 +60,29 @@ test("application actions persist only in the Electron-side registry and open by
   assert.deepEqual(opened, [target]);
   const reloaded = new AppActionStore({ userDataPath: root, dialog: {}, shell: { openPath: async () => "" } });
   assert.deepEqual(await reloaded.execute(action.id), { ok: true, label: "Demo" });
+});
+
+test("configuration merge changes only approved pure-HID paths and preserves unknown data", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.wifi = { ssid: "preserve", password: "secret" };
+  raw.profiles.push({ id: "secondary", keys: { KEY1: { press: "fixed-text" } } });
+  const before = structuredClone(raw);
+  const merged = mergeKeyboardPatch(raw, { keymap: Array(8).fill(null).map(() => ({ action: "copy" })), encoder: { speed: 5 } });
+  assert.equal(merged.wifi.password, before.wifi.password);
+  assert.deepEqual(merged.profiles.slice(1), before.profiles.slice(1));
+  assert.equal(merged.profiles[0].encoder.scroll.speed, 5);
+  assert.notEqual(configFingerprint(merged), configFingerprint(raw));
+  assert.deepEqual(sanitizeKeyboardConfig(merged).keymap[0], { action: "copy" });
+  assert.throws(() => mergeKeyboardPatch(raw, { wifi: { ssid: "no" } }), /未批准/);
+  assert.throws(() => mergeKeyboardPatch(raw, { keymap: [] }), /八项/);
+});
+
+test("configuration snapshot parser enforces UTF-8, source and CRC boundaries", () => {
+  const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
+  const base = { type: "config-snapshot", jsonBase64: data.toString("base64"), bytes: data.length, crc16: crc16Ccitt(data), sourceId: 0, requestId: "read-12345678" };
+  assert.equal(parseConfigSnapshot(base).json, data.toString("utf8"));
+  assert.equal(parseConfigSnapshot({ ...base, sourceId: 4 }), null);
+  assert.equal(parseConfigSnapshot({ ...base, jsonBase64: "!!!" }), null);
+  const invalid = Buffer.from([0xc3, 0x28]);
+  assert.equal(parseConfigSnapshot({ ...base, jsonBase64: invalid.toString("base64"), bytes: invalid.length, crc16: crc16Ccitt(invalid) }), null);
 });

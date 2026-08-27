@@ -3,7 +3,7 @@ const { spawn } = require("child_process");
 const readline = require("readline");
 const { parseBridgeLine, InputTriggerFilter } = require("./input-bridge-protocol.cjs");
 const { randomUUID } = require("crypto");
-const { encodeKeyboardConfig } = require("./easyinput-config.cjs");
+const { encodeKeyboardConfig, encodeConfigReadRequest, parseConfigSnapshot } = require("./easyinput-config.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -18,6 +18,7 @@ class InputBridgeManager extends EventEmitter {
     this.restartAttempts = 0;
     this.restartTimer = null;
     this.pendingConfig = null;
+    this.pendingRead = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "" };
   }
 
@@ -57,6 +58,10 @@ class InputBridgeManager extends EventEmitter {
       const matches = event.bytes === this.pendingConfig.bytes && event.crc16 === this.pendingConfig.crc16;
       if (matches) this.finishConfig(event.ok && event.saved ? { ok: true, bytes: event.bytes, crc16: event.crc16, saved: true } : { ok: false, reason: event.ok ? "config-not-saved" : "config-rejected", bytes: event.bytes, crc16: event.crc16 });
     }
+    if (result.kind === "config-snapshot" && this.pendingRead?.requestId === event.requestId) {
+      const snapshot = parseConfigSnapshot(event);
+      this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
+    }
     if (result.kind === "host-action") this.emit("host-action", event);
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
@@ -76,6 +81,21 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
+  readConfig() {
+    if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    const requestId = `read-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishRead({ ok: false, reason: "config-read-timeout" }), 3000);
+      this.pendingRead = { requestId, timeout, resolve };
+      const numericId = (Date.now() >>> 0) || 1;
+      this.pendingRead.numericId = numericId;
+      const report = encodeConfigReadRequest(numericId);
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "read-config", requestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishRead({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
   finishConfig(result) {
     const pending = this.pendingConfig;
     if (!pending) return;
@@ -84,10 +104,19 @@ class InputBridgeManager extends EventEmitter {
     pending.resolve(result);
   }
 
+  finishRead(result) {
+    const pending = this.pendingRead;
+    if (!pending) return;
+    this.pendingRead = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
   handleExit(error) {
     if (!this.child && this.stopping) return;
     this.child = null;
     this.finishConfig({ ok: false, reason: "input-bridge-exited" });
+    this.finishRead({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -105,6 +134,7 @@ class InputBridgeManager extends EventEmitter {
     const child = this.child;
     this.child = null;
     this.finishConfig({ ok: false, reason: "input-bridge-stopped" });
+    this.finishRead({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false };

@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T05 implementation pass awaiting independent audit
+
+- 做了什么：在 `codex/easyinput-t05-config-nvs` 上完成 `CONFIG_V1_FROZEN` 的第一版实现：0x10 分块写入、0x13/0x11 kind 0x06 完整读取、CRC16、静态 callback 命令队列、输入优先的配置响应 transfer 生命周期、纯 HID 配置投影、双槽 `deskmate` NVS 事务/回读/marker 恢复、只读 legacy 导入，以及 Electron 主进程的脱敏读取、严格白名单合并和确认 token 接口。
+- 来源与边界：依据 Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的配置 receiver/payload/state/status/NVS 行为审计重实现；未修改或复制两个外部参考目录。T06 Host Action/固定文字执行、BLE/Wi-Fi、音频、DeskMate Link、桌面 UI 业务均未实现。
+- 验证：已激活并真实检查 `ESP-IDF v5.5.5`、Python `3.11.15`、target `esp32s3`；`cmake`/`ctest` 6/6 Host tests 通过；隔离目录 `firmware/easyinput-controller/build-t05` 的 `idf.py -C firmware/easyinput-controller -B firmware/easyinput-controller/build-t05 build` 通过，应用镜像 `0x48e00` 字节，最小 factory app 余量 91%。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，等待原主电脑独立审计；当前未执行端口扫描、设备识别、Flash/NVS 读写、烧录、擦除、monitor 或 HIL。
+- 交接：详见 `docs/handoffs/second-computer-t05-config-nvs-implementation-2026-08-27.md`。
+
 ## 2026-08-27 · T04 locked and T05 configuration/NVS opened for the second computer
 
 - 做了什么：依据用户确认的完整压力矩阵，把 T04 从 `PENDING_HIL` 锁定为 `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T04_LOCKED`，并将 `codex/easyinput-t04-input-led-feedback` 快进合入 `main`。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`。随后冻结 `CONFIG_V1_FROZEN`，完成 T05 Maker 配置/NVS 差异审计、任务卡和第二电脑交接；准确的 GitHub `origin/main` 交接哈希随本次提交推送结果和用户复制文字交付。

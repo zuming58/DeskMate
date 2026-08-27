@@ -7,6 +7,7 @@
 
 #include "hid_report.h"
 #include "input_core.h"
+#include "config_core.h"
 
 namespace deskmate::easyinput {
 
@@ -43,7 +44,7 @@ struct UsbLifecycleEvent {
     uint32_t epoch{0};
     uint8_t report_id{0};
     uint8_t length{0};
-    std::array<uint8_t, 8> payload{};
+    std::array<uint8_t, 63> payload{};
     bool report_identity_valid{false};
 };
 
@@ -158,6 +159,7 @@ class InputActionRouter {
 public:
     struct Chord { HidUsage usage; uint8_t modifiers; };
     RoutedAction apply(const InputEvent& event);
+    void set_configuration(const ConfigProjection& projection);
     RoutedAction apply_key_source(InputSourceId source, bool pressed, Chord chord);
     RoutedAction apply_tap_source(InputSourceId source, bool pressed, Chord chord);
     void release_all();
@@ -168,6 +170,14 @@ private:
     struct OwnedChord { bool held{false}; Chord chord{HidUsage::None, 0}; };
     std::array<OwnedChord, 8> owned_{};
     std::array<bool, 8> tap_pressed_{};
+    std::array<Chord, 8> configured_chords_{};
+    std::array<bool, 8> configured_hold_{};
+    Chord encoder_press_chord_{HidUsage::None, 0};
+    bool encoder_cursor_{false};
+    bool reverse_vertical_{false};
+    bool reverse_horizontal_{false};
+    uint8_t encoder_speed_{3};
+    bool configured_{false};
     ScrollAxis axis_{ScrollAxis::Vertical};
     KeyboardSnapshot compose() const;
     static bool compose_tap(const KeyboardSnapshot& held, Chord chord,
@@ -193,8 +203,32 @@ struct HidReportTransferState {
     }
 };
 
+// Configuration responses use the same HID input endpoint but have a
+// different payload length and must not consume the keyboard/mouse queue.
+struct ConfigTransferReport {
+    uint8_t report_id{0};
+    uint8_t length{0};
+    std::array<uint8_t, 63> payload{};
+    uint32_t epoch{0};
+};
+
+struct ConfigTransferState {
+    bool active{false};
+    ConfigTransferReport report{};
+    bool advances_read_stream{false};
+    bool completed{false};
+    bool failed{false};
+    void clear() {
+        active = false;
+        report = {};
+        advances_read_stream = false;
+    }
+    void reset_outcome() { completed = false; failed = false; }
+};
+
 class UsbInputRuntime {
 public:
+    void set_configuration(const ConfigProjection& projection) { router_.set_configuration(projection); }
     void on_mount();
     void on_mount(uint32_t epoch);
     void on_unmount();
@@ -260,7 +294,8 @@ private:
 UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
     HidReportTransferState& transfer,
-    UsbCallbackSnapshot callback);
+    UsbCallbackSnapshot callback,
+    ConfigTransferState* config_transfer = nullptr);
 
 bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
                         const HidReportTransferState& transfer,

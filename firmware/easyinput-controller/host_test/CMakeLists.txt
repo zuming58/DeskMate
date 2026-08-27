@@ -33,6 +33,10 @@ add_executable(peripheral_power_lease_tests
 target_include_directories(peripheral_power_lease_tests PRIVATE ../components/input_core/include)
 add_test(NAME peripheral_power_lease_tests COMMAND peripheral_power_lease_tests)
 
+add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp)
+target_include_directories(config_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME config_core_tests COMMAND config_core_tests)
+
 add_executable(firmware_source_contract_tests firmware_source_contract_tests.cpp)
 target_compile_definitions(firmware_source_contract_tests PRIVATE
     MAIN_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/main.cpp"

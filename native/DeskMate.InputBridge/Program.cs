@@ -57,6 +57,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         ok: ok, saved: saved, bytes: bytes, crc16: crc16, phase: phase));
 
+    public void ConfigSnapshot(string requestId, int bytes, int crc16, int source, string jsonBase64) => Write(new BridgeEvent(
+        1, "config-snapshot", "easyinput-hid", "Config", "snapshot",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, bytes: bytes, crc16: crc16, sourceId: source, jsonBase64: jsonBase64));
+
     private void Write(BridgeEvent value)
     {
         lock (_sync)
@@ -83,7 +88,9 @@ internal sealed record BridgeEvent(
     bool? saved = null,
     int? bytes = null,
     int? crc16 = null,
-    int? phase = null);
+    int? phase = null,
+    int? sourceId = null,
+    string? jsonBase64 = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -115,10 +122,21 @@ internal sealed class ConfigCommandListener : IDisposable
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
-                !root.TryGetProperty("type", out var type) || type.GetString() != "sync-config" ||
+                !root.TryGetProperty("type", out var type) ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
+            if (type.GetString() == "read-config") {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] != 2) throw new InvalidOperationException("invalid-read-report");
+                var readAccepted = HidFeatureDevice.RequestConfigRead(report);
+                if (!readAccepted) _writer.ConfigWrite(requestId, false, "config-read-request-failed");
+                RawInputWindow.PendingReadRequest = readAccepted ? requestId : null;
+                return Task.CompletedTask;
+            }
+            if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
             if (!root.TryGetProperty("reports", out var reportsValue) || reportsValue.ValueKind != JsonValueKind.Array || reportsValue.GetArrayLength() is < 1 or > 40)
                 throw new InvalidOperationException("invalid-reports");
             var reports = new List<byte[]>();
@@ -170,6 +188,12 @@ internal static class HidFeatureDevice
             Thread.Sleep(12);
         }
         return (true, "");
+    }
+
+    public static bool RequestConfigRead(byte[] report)
+    {
+        using var handle = OpenConfigInterface();
+        return handle is not null && !handle.IsInvalid && HidD_SetFeature(handle, report, report.Length);
     }
 
     private static SafeFileHandle? OpenConfigInterface()
@@ -279,6 +303,7 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
+    public static string? PendingReadRequest { get; set; }
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -310,6 +335,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private IntPtr _keyboardHook;
     private bool _boardConnected;
     private bool _disposed;
+    private readonly List<byte[]> _configChunks = new();
+    private int _configTotal;
+    private int _configLength;
+    private int _configCrc16;
+    private int _configSource;
+    private int _configNextChunk;
+    private uint _configNumericRequest;
 
     public RawInputWindow(EventWriter writer, bool diagnosticMode = false)
     {
@@ -403,10 +435,11 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
-        if (report.Length < 5 || report[0] != 0x11 || report[2] != 0 || report[3] != 1) return;
+        if (report.Length < 5 || report[0] != 0x11) return;
         var kind = report[1];
         var length = report[4];
         if (5 + length > report.Length) return;
+        if (kind != 0x06 && (report[2] != 0 || report[3] != 1)) return;
         if (kind == 0x05 && length == 36)
         {
             var id = Encoding.ASCII.GetString(report.Slice(5, 36));
@@ -418,6 +451,38 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var crc16 = report[9] | (report[10] << 8);
             _writer.ConfigAck(report[6] == 1, report[11] == 1, bytes, crc16, report[5]);
         }
+        else if (kind == 0x06 && length >= 10 && PendingReadRequest is not null)
+        {
+            var chunk = report[2];
+            var total = report[3];
+            var declared = report[9] | (report[10] << 8);
+            var crc = report[11] | (report[12] << 8);
+            var source = report[13];
+            var count = length - 10;
+            if (total is < 1 or > 42 || chunk != _configNextChunk || declared is < 1 or > 2048 || count > 49 || 14 + count > report.Length || (chunk == 0 && report[5] == 0)) { ResetConfigRead(); return; }
+            if (chunk == 0) { _configChunks.Clear(); _configTotal = total; _configLength = declared; _configCrc16 = crc; _configSource = source; _configNextChunk = 0; _configNumericRequest = BitConverter.ToUInt32(report.Slice(5, 4)); }
+            if (total != _configTotal || declared != _configLength || crc != _configCrc16 || source > 3 || BitConverter.ToUInt32(report.Slice(5, 4)) != _configNumericRequest) { ResetConfigRead(); return; }
+            _configChunks.Add(report.Slice(14, count).ToArray());
+            _configNextChunk++;
+            if (_configNextChunk != _configTotal) return;
+            var data = _configChunks.SelectMany(value => value).Take(_configLength).ToArray();
+            if (data.Length != _configLength || Crc16Ccitt(data) != _configCrc16) { ResetConfigRead(); return; }
+            _writer.ConfigSnapshot(PendingReadRequest, data.Length, _configCrc16, _configSource, Convert.ToBase64String(data));
+            ResetConfigRead();
+        }
+    }
+
+    private void ResetConfigRead()
+    {
+        PendingReadRequest = null;
+        _configChunks.Clear(); _configTotal = _configLength = _configCrc16 = _configSource = _configNextChunk = 0; _configNumericRequest = 0;
+    }
+
+    private static int Crc16Ccitt(byte[] data)
+    {
+        var crc = 0xffff;
+        foreach (var value in data) { crc ^= value << 8; for (var bit = 0; bit < 8; bit++) crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff; }
+        return crc;
     }
 
     private static bool IsCanonicalUuid(string value)

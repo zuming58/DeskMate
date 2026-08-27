@@ -5,7 +5,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
 
 function parseBridgeLine(line) {
-  if (typeof line !== "string" || !line.trim() || line.length > 2048) return null;
+  if (typeof line !== "string" || !line.trim() || line.length > 4096) return null;
   let value;
   try { value = JSON.parse(line); } catch { return null; }
   if (!value || value.version !== 1) return null;
@@ -20,6 +20,10 @@ function parseBridgeLine(line) {
   if (value.type === "config-ack") {
     if (value.source !== "easyinput-hid" || typeof value.ok !== "boolean" || typeof value.saved !== "boolean" || !Number.isInteger(value.bytes) || value.bytes < 0 || value.bytes > 2048 || !Number.isInteger(value.crc16) || value.crc16 < 0 || value.crc16 > 0xffff || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     return Object.freeze({ version: 1, type: "config-ack", source: "easyinput-hid", ok: value.ok, saved: value.saved, bytes: value.bytes, crc16: value.crc16, phase: Number(value.phase) || 0, time: value.time, sequence: value.sequence });
+  }
+  if (value.type === "config-snapshot") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.jsonBase64 !== "string" || value.jsonBase64.length > 4096 || !Number.isInteger(value.bytes) || value.bytes < 1 || value.bytes > 2048 || !Number.isInteger(value.crc16) || value.crc16 < 0 || value.crc16 > 0xffff || !Number.isInteger(value.sourceId) || value.sourceId < 0 || value.sourceId > 3 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "config-snapshot", source: "easyinput-hid", requestId: value.requestId, bytes: value.bytes, crc16: value.crc16, sourceId: value.sourceId, jsonBase64: value.jsonBase64, time: value.time, sequence: value.sequence });
   }
   if (!["input", "status"].includes(value.type)) return null;
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;
