@@ -42,4 +42,6 @@ T04 开始编码前必须先在 `contracts/deskmate-host/easyinput-config-v1.md`
 
 ## Delivery
 
-完成后自行做代码审计和真机回归，更新 `flow/progress.md`，推送 T04 分支；不得合并 `main`。T04 锁定后才从其 HEAD 创建 T05 分支。
+另一台开发笔记本完成参考差异表、合同冻结、实现、自审、Host/IDF/桌面构建和静态检查后，更新 `flow/progress.md`，推送 T04 分支并立即停止；不得扫描端口、访问硬件、烧录、合并 `main` 或开始 T05，也不得把模拟/构建证据声明为 HIL。
+
+原主电脑随后独立审查完整 diff，重跑 Host/IDF/桌面组合回归；只有再次展示 HEAD、镜像 SHA-256、app-only 范围并获得用户明确授权后，才执行真机配置/NVS 验收。代码、构建和 HIL 全部通过后才锁定 T04，并允许从其锁定 HEAD 创建 T05。

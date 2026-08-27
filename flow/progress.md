@@ -10,7 +10,7 @@
 - 产出路径：`docs/reviews/t03-final-independent-audit-2026-08-27.md`、`flow/tasks/T03-easyinput-usb-input-runtime.md`、`flow/tasks/T04-easyinput-config-nvs.md`、`flow/plan.md`、`flow/lessons.md`、根级及固件局部 `AGENTS.md`、固件 `README.md` 与本记录。
 - 验证：精确 `5c09880` 干净工作树 Host CTest 3/3、ESP-IDF v5.5.5/esp32s3 构建通过，app 大小 `0x37310`，固定分区 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`；交接 HEAD `ed842aa` 再构建通过；桌面 `npm test` 68/68、`npm run build:desktop` 通过；板级扫描 1 PASS/1 已知声明识别 WARN/0 FAIL；范围、来源、ASCII 路径、构建产物和 AGENTS/CLAUDE 一致检查通过。没有访问或写入硬件。
 - 问题解决：清除了返回文档中不应进入 Git 的端口/MAC 后缀；确认当前构建启用编译时间戳，所以同一 `5c09880` 的新构建大小一致但 SHA-256 不会复现已烧录镜像，不能把源码重建冒充逐字节镜像复现。该构建可复现性缺口已写入 lessons，须在下一次烧录前关闭。
-- 下一步：另一台笔记本从锁定后的最新 `main` 建立 `codex/easyinput-t04-config-nvs`，先做 Maker 配置/NVS 参考差异表与 `CONFIG_V1_FROZEN` 合同评审，再编码；T04 完成后推送并停止，由原主电脑独立审计和回归，T04 锁定前不开始 T05。
+- 下一步：另一台笔记本从锁定后的最新 `main` 建立 `codex/easyinput-t04-config-nvs`，先做 Maker 配置/NVS 参考差异表与 `CONFIG_V1_FROZEN` 合同评审，再编码；完成代码、自审和无硬件验证后推送并停止，由原主电脑独立审计、获授权烧录和真机回归，T04 锁定前不开始 T05。
 
 ## 2026-08-27 · T03 atomic HID tap passes five reconnect repetitions
 
