@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T05 third rework awaiting independent audit
+
+- 分支：`codex/easyinput-t05-config-nvs`，未合并或 rebase `main`；本轮继续修复第二轮审计阻断，未开始 T06。
+- 修复：0x13/0x10 Feature Report 精确 63-byte payload 边界和尾部填充；有界非异常 JSON/UTF-8/escape/surrogate/number parser；合法读取 flags `0x00/0x01/0x02`；旋钮 cursor projection 生效；配置替换先排队全零 HID 报告；保存命令/结果绑定 USB epoch；NVS legacy 只读导入可在新 namespace 不可用时继续，持久损坏来源标记为 Recovery；原生读取先登记、断线清理、完整 64-byte/metadata/padding 校验；桌面能力门与脱敏 JSON Pointer diff。
+- 新增回归：固件严格 JSON 畸形/重复键/非法 UTF-8/代理项/尾部数据、读取 flags/reserved、配置切换全释放与 cursor 行为；保留完整 T02～T04 回归。Host CTest `6/6`，桌面 `npm test` `71/71`。
+- 构建：精确 ESP-IDF `v5.5.5` / `esp32s3`，隔离绝对 SDKCONFIG、固定 16 MB 分区构建通过；app `0x4A130`（303,408 bytes），SHA-256 `2ACC20B6229ACF83941F8EDD45D39F68891606CFBBB4B397FD135CF5A5C2C350`；分区表 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `HIL_NOT_AUTHORIZED` / `T06_BLOCKED`，等待原主电脑第三轮独立审计；未扫描端口、未识别设备、未读取或写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 来源：Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，PolyForm Noncommercial 1.0.0；本轮产品侧清晰重实现，外部参考目录未修改、未复制、未使用其 build 产物。详见 `docs/provenance/t05-easyinput-config-nvs-implementation-2026-08-27.md`。
+
 ## 2026-08-27 · T05 second rework awaiting independent audit
 
 - 分支：`codex/easyinput-t05-config-nvs`，基于原候选 `a795d309cb88a3a740c25c159e132609e1583d73`，未合并或 rebase `main`。

@@ -130,6 +130,29 @@ void default_action_vectors() {
     }
 }
 
+void configuration_replacement_releases_host_and_applies_cursor() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+    runtime.on_input(key(0, true));
+    ConfigProjection projection{};
+    projection.encoder_cursor = true;
+    projection.encoder_speed = 4;
+    projection.keys[0] = {ConfigActionKind::VoiceInput, 3, 0x2c};
+    runtime.set_configuration(projection);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload[2] == 0x51 || report.payload[2] == 0x52);
+}
+
 void physical_source_ownership_and_overflow() {
     InputActionRouter router;
     const InputActionRouter::Chord same{HidUsage::A, 1};
@@ -1418,6 +1441,7 @@ void event_ring_overflow_held_key_waits_for_release() {
 
 int main() {
     default_action_vectors();
+    configuration_replacement_releases_host_and_applies_cursor();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
     tap_actions_restore_without_waiting_for_physical_release();

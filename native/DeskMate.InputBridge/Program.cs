@@ -131,9 +131,11 @@ internal sealed class ConfigCommandListener : IDisposable
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
                 var report = Convert.FromBase64String(reportValue.GetString() ?? "");
                 if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] != 2) throw new InvalidOperationException("invalid-read-report");
+                // Register the request before issuing the feature report. HID
+                // devices may answer synchronously on the first transfer.
+                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5));
                 var readAccepted = HidFeatureDevice.RequestConfigRead(report);
                 if (!readAccepted) { _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
-                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5));
                 return Task.CompletedTask;
             }
             if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
@@ -438,7 +440,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
-        if (report.Length < 5 || report[0] != 0x11) return;
+        if (report.Length != 64 || report[0] != 0x11) return;
         var kind = report[1];
         var length = report[4];
         if (5 + length > report.Length) return;
@@ -464,11 +466,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var count = length - 10;
             var numericRequest = BitConverter.ToUInt32(report.Slice(5, 4));
             if (total is < 1 or > 42 || declared is < 1 or > 2048 || count > 49 || 14 + count > report.Length || source > 3 || numericRequest == 0 || numericRequest != PendingReadNumericRequest) { ResetConfigRead(); return; }
-            var chunkBytes = report.Slice(14, count).ToArray();
-            if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
-            if (chunk != _configNextChunk || (chunk == 0 && PendingReadRequest is null)) { ResetConfigRead(); return; }
+            if (14 + count > report.Length || report.Slice(14 + count).ToArray().Any(value => value != 0)) { ResetConfigRead(); return; }
+            if (chunk == 0 && PendingReadRequest is null) { ResetConfigRead(); return; }
             if (chunk == 0) { _configChunks.Clear(); _configTotal = total; _configLength = declared; _configCrc16 = crc; _configSource = source; _configNextChunk = 0; _configNumericRequest = numericRequest; }
             if (total != _configTotal || declared != _configLength || crc != _configCrc16 || source != _configSource || numericRequest != _configNumericRequest) { ResetConfigRead(); return; }
+            var chunkBytes = report.Slice(14, count).ToArray();
+            if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
+            if (chunk != _configNextChunk) { ResetConfigRead(); return; }
             _configChunks.Add(chunkBytes); _configLastChunk = chunkBytes;
             _configNextChunk++;
             if (_configNextChunk != _configTotal) return;
@@ -508,6 +512,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         var connected = EnumerateDeviceNames().Any(name => name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase));
         if (!force && connected == _boardConnected) return;
         _boardConnected = connected;
+        if (!connected) ResetConfigRead();
         _writer.Status(connected);
     }
 

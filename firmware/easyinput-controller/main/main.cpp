@@ -36,8 +36,8 @@ struct ConfigFeatureCommand {
     uint32_t epoch;
     std::array<uint8_t, kConfigFeaturePayloadBytes> payload;
 };
-struct ConfigSaveCommand { ConfigDocument document{}; ConfigSlot active{ConfigSlot::Invalid}; uint32_t generation{0}; };
-struct ConfigSaveResult { ConfigSaveStatus status{ConfigSaveStatus::WriteFailed}; ConfigDocument document{}; ConfigSlot slot{ConfigSlot::Invalid}; uint32_t generation{0}; };
+struct ConfigSaveCommand { ConfigDocument document{}; ConfigSlot active{ConfigSlot::Invalid}; uint32_t generation{0}; uint32_t epoch{0}; };
+struct ConfigSaveResult { ConfigSaveStatus status{ConfigSaveStatus::WriteFailed}; ConfigDocument document{}; ConfigSlot slot{ConfigSlot::Invalid}; uint32_t generation{0}; uint32_t epoch{0}; };
 
 StaticQueue_t raw_edge_queue_control{};
 std::array<uint8_t, kRawEdgeQueueCapacity * sizeof(RawEdge)> raw_edge_queue_storage{};
@@ -74,6 +74,20 @@ std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
 bool config_ack_pending = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_ack_payload{};
+bool config_status_pending = false;
+std::array<uint8_t, kConfigFeaturePayloadBytes> config_status_payload{};
+
+void queue_config_status() {
+    config_status_payload.fill(0);
+    config_status_payload[0] = 0x04;
+    config_status_payload[1] = 0;
+    config_status_payload[2] = 1;
+    config_status_payload[3] = 3;
+    config_status_payload[4] = 1;
+    config_status_payload[5] = 1;
+    config_status_payload[6] = 1;
+    config_status_pending = true;
+}
 
 void queue_config_ack(uint8_t phase, bool ok, bool saved, uint16_t bytes,
                       uint16_t crc16) {
@@ -193,6 +207,7 @@ void config_owner_task(void*) {
         if (xQueueReceive(config_save_queue, &command, portMAX_DELAY) != pdTRUE) continue;
         ConfigSaveResult result{};
         result.document = command.document;
+        result.epoch = command.epoch;
         result.status = config_store.save(command.document, command.active, command.generation);
         if (result.status == ConfigSaveStatus::Saved) {
             const auto loaded = config_store.load();
@@ -299,6 +314,9 @@ void input_owner_task(void*) {
 
         ConfigSaveResult save_result{};
         while (xQueueReceive(config_result_queue, &save_result, 0) == pdTRUE) {
+            if (save_result.epoch != runtime.diagnostics().usb_mount_epoch || !runtime.mounted()) {
+                continue;
+            }
             if (save_result.status == ConfigSaveStatus::Saved) {
                 ConfigProjection projection{};
                 if (parse_config_projection(save_result.document.view(), projection)) {
@@ -328,7 +346,8 @@ void input_owner_task(void*) {
                     config_command.epoch);
                 if (result == ConfigReceiveStatus::Complete) {
                     const ConfigDocument candidate = config_write_assembler.document();
-                    ConfigSaveCommand save{candidate, active_config_slot, active_config_generation};
+                    ConfigSaveCommand save{candidate, active_config_slot, active_config_generation,
+                                           config_command.epoch};
                     if (xQueueSend(config_save_queue, &save, 0) != pdTRUE) queue_config_ack(4, false, false, candidate.length, candidate.crc16);
                 } else if (result == ConfigReceiveStatus::Rejected) {
                     queue_config_ack(1, false, false, 0, 0);
@@ -337,6 +356,7 @@ void input_owner_task(void*) {
                 ConfigReadRequest request{};
                 if (decode_config_read_request(config_command.payload.data(),
                                                config_command.length, request)) {
+                    queue_config_status();
                     (void)config_read_stream.replace(
                         request.request_id, active_config, config_command.epoch);
                 }
@@ -362,6 +382,20 @@ void input_owner_task(void*) {
                 config_transfer.report.length = static_cast<uint8_t>(config_ack_payload.size());
                 config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
                 std::copy(config_ack_payload.begin(), config_ack_payload.end(), config_transfer.report.payload.begin());
+            }
+        }
+        if (config_status_pending && tud_hid_ready() && !transfer.active &&
+            !config_transfer.active && !config_ack_pending) {
+            if (tud_hid_report(0x11, config_status_payload.data(),
+                               config_status_payload.size())) {
+                config_status_pending = false;
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.report.report_id = 0x11;
+                config_transfer.report.length = static_cast<uint8_t>(config_status_payload.size());
+                config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
+                std::copy(config_status_payload.begin(), config_status_payload.end(),
+                          config_transfer.report.payload.begin());
             }
         }
         if (!config_ack_pending && config_read_stream.pending() && tud_hid_ready() &&
@@ -531,10 +565,10 @@ extern "C" void tud_hid_set_report_cb(
     uint8_t const* buffer, uint16_t length) {
     if (report_type != HID_REPORT_TYPE_FEATURE || buffer == nullptr) return;
     if ((report_id != 0x10 || length != kConfigFeaturePayloadBytes) &&
-        (report_id != 0x13 || length < 16)) return;
+        (report_id != 0x13 || length != kConfigFeaturePayloadBytes)) return;
     ConfigFeatureCommand command{};
     command.report_id = report_id;
-    command.length = report_id == 0x13 ? 16 : static_cast<uint8_t>(length);
+    command.length = static_cast<uint8_t>(length);
     command.epoch = callback_lifecycle.snapshot().epoch;
     std::copy_n(buffer, length, command.payload.begin());
     if (config_command_queue != nullptr &&

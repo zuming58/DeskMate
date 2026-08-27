@@ -577,6 +577,7 @@ export function KeymapPage({ notify }) {
   const { state, patch } = useAppStore();
   const [selectedInput, setSelectedInput] = useState({ kind: "key", index: 0 });
   const [diagnostics, setDiagnostics] = useState([]);
+  const [previewDiff, setPreviewDiff] = useState([]);
   const [syncState, setSyncState] = useState({ status: "idle", label: "本机配置 · 未同步" });
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
   const encoder = normalizeEncoder(state.encoder);
@@ -588,7 +589,9 @@ export function KeymapPage({ notify }) {
       const patch = { keymap: bindings, encoder };
       const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
       if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
-      const approved = window.confirm("确认应用按键与旋钮修改？");
+      setPreviewDiff(Array.isArray(preview.diff) ? preview.diff : []);
+      const summary = (preview.diff || []).map((item) => item.path).join("\n") || "无变化";
+      const approved = window.confirm(`将修改以下脱敏路径：\n${summary}\n\n确认应用按键与旋钮修改？`);
       if (!approved) { setSyncState({ status: "idle", label: "等待确认" }); return; }
       const result = await voiceAdapters.desktop.commitKeyboardConfig(preview.token);
       if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
@@ -604,7 +607,8 @@ export function KeymapPage({ notify }) {
   return (
     <div className="page">
       <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : syncState.status === "error" ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>同步到键盘</Button></>} />
-      <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。当前配置报告会整份覆盖板上配置，因此在读取并合并板上的网络、音频和按键配置前，“同步到键盘”会安全拦截，不会误删已有设置。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
+      <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。同步前会重新读取板上配置，只提交按键与旋钮路径；网络、音频和未知字段保持原值。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
+      {previewDiff.length > 0 && <Card><SectionTitle index="差异" title="待确认的脱敏路径" description="仅显示按键与旋钮字段，不显示原始配置。" /><pre>{previewDiff.map((item) => `${item.path}: ${JSON.stringify(item.before)} -> ${JSON.stringify(item.after)}`).join("\n")}</pre></Card>}
       <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
       <div className="keymap-grid">

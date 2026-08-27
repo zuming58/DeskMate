@@ -228,7 +228,7 @@ struct ConfigTransferState {
 
 class UsbInputRuntime {
 public:
-    void set_configuration(const ConfigProjection& projection) { router_.set_configuration(projection); }
+    void set_configuration(const ConfigProjection& projection);
     void on_mount();
     void on_mount(uint32_t epoch);
     void on_unmount();

@@ -16,6 +16,16 @@
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
 
+## Third rework delta
+
+- `firmware/easyinput-controller/components/input_core/src/config_core.cpp`: replaced the compact string search and throwing integer conversion with a bounded recursive JSON parser. It rejects duplicate/nested ambiguity, malformed JSON, invalid UTF-8, invalid escape/surrogate sequences, non-integer or out-of-range speeds, trailing data, non-zero padding, and invalid request flags without exceptions; read/write assembly remains CRC- and epoch-bound.
+- `firmware/easyinput-controller/main/main.cpp`, `main/config_store.cpp`: Feature Reports are copied only at the exact 63-byte payload boundary; config save results carry the originating USB epoch; stale results are discarded; legacy import remains read-only when the new namespace is unavailable; persisted-but-invalid state reports `Recovery` rather than `Default`.
+- `firmware/easyinput-controller/components/input_core/src/input_runtime.cpp`, `host_test/input_runtime_tests.cpp`: encoder cursor projection is applied and configuration replacement queues a host-visible all-zero keyboard report before activating the new projection.
+- `native/DeskMate.InputBridge/Program.cs`: registers reads before sending the HID request, resets pending state on device disconnect, validates complete 64-byte reports, reserved zero padding, metadata before duplicate-last handling, and rejects stale/partial streams.
+- `electron/config-merge.cjs`, `electron/main.cjs`, `src/pages.jsx`: desktop capabilities advertise the frozen config read/write gates; preview returns sanitized JSON Pointer diffs and the UI displays those paths before confirmation.
+
+Third-rework verification: Host CTest `6/6`; desktop `npm ci --include=dev`, `npm test` `71/71`, and `npm run build:desktop` passed. Exact isolated ESP-IDF `v5.5.5` / `esp32s3` build passed with app size `0x4A130` (303,408 bytes), SHA-256 `2ACC20B6229ACF83941F8EDD45D39F68891606CFBBB4B397FD135CF5A5C2C350`; partition table SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`. No hardware operation was performed.
+
 ## Second rework delta
 
 - `electron/input-bridge-protocol.cjs`: `config-snapshot` remains a control event so the complete read chain can resolve.

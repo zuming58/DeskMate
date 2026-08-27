@@ -215,11 +215,19 @@ void InputActionRouter::set_configuration(const ConfigProjection& projection) {
         configured_hold_[index] = projection.keys[index].kind == ConfigActionKind::VoiceInput || projection.keys[index].kind == ConfigActionKind::VoiceEdit;
     }
     encoder_press_chord_ = {static_cast<HidUsage>(projection.encoder_press.usage), projection.encoder_press.modifiers};
+    encoder_cursor_ = projection.encoder_cursor;
     axis_ = projection.encoder_horizontal ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
     reverse_vertical_ = projection.reverse_vertical;
     reverse_horizontal_ = projection.reverse_horizontal;
     encoder_speed_ = projection.encoder_speed;
     configured_ = true;
+}
+
+void UsbInputRuntime::set_configuration(const ConfigProjection& projection) {
+    // Make the replacement observable to the host before any new projection
+    // can produce a report. This prevents old modifiers from surviving a save.
+    if (mounted_) enqueue_keyboard({});
+    router_.set_configuration(projection);
 }
 
 RoutedAction InputActionRouter::apply_key_source(InputSourceId source, bool pressed, Chord chord) {
