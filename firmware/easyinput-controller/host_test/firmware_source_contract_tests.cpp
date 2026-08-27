@@ -32,6 +32,16 @@ bool contains(const std::string& text, const char* value) {
     return text.find(value) != std::string::npos;
 }
 
+size_t occurrences(const std::string& text, const char* value) {
+    size_t count = 0;
+    size_t position = 0;
+    while ((position = text.find(value, position)) != std::string::npos) {
+        ++count;
+        position += std::string(value).size();
+    }
+    return count;
+}
+
 std::string normalize_partition_entries(const std::string& text) {
     std::istringstream input(text);
     std::ostringstream normalized;
@@ -58,6 +68,10 @@ int main() {
     const std::string runtime_header = read_all(RUNTIME_HEADER_PATH);
     const std::string input_core_header = read_all(INPUT_CORE_HEADER_PATH);
     const std::string board_pins = read_all(BOARD_PINS_PATH);
+    const std::string led_feedback_header = read_all(LED_FEEDBACK_HEADER_PATH);
+    const std::string led_feedback_source = read_all(LED_FEEDBACK_SOURCE_PATH);
+    const std::string led_strip_source = read_all(LED_STRIP_SOURCE_PATH);
+    const std::string power_source = read_all(POWER_SOURCE_PATH);
     const std::string module_gitignore = read_all(MODULE_GITIGNORE_PATH);
     const std::string manifest = read_all(MANIFEST_PATH);
     const std::string sdkconfig_defaults = read_all(SDKCONFIG_DEFAULTS_PATH);
@@ -71,6 +85,7 @@ int main() {
     CHECK(!contains(main_source, "tick++"));
     CHECK(contains(main_cmake, "esp_driver_gpio"));
     CHECK(contains(main_cmake, "esp_timer"));
+    CHECK(contains(main_cmake, "esp_driver_rmt"));
     CHECK(contains(root_cmake, "idf_build_set_property(MINIMAL_BUILD ON)"));
     CHECK(contains(main_source, "GPIO_INTR_ANYEDGE"));
     CHECK(contains(main_source, "kUsbPhysicalPresenceGpio"));
@@ -133,6 +148,9 @@ int main() {
     CHECK(contains(runtime_header, "UsbDeviceConnectionGate"));
     CHECK(contains(board_pins, "kUsbPhysicalPresenceGpio = 40"));
     CHECK(contains(board_pins, "kUsbPhysicalPresenceActiveLevel = 0"));
+    CHECK(contains(board_pins, "kPeripheralPowerGpio = 8"));
+    CHECK(contains(board_pins, "kLedDataGpio = 12"));
+    CHECK(contains(board_pins, "kLedPixelCount = 5"));
     CHECK(contains(runtime_header, "UsbLifecycleEventQueue"));
     CHECK(contains(runtime_header, "kUsbInterfaceStringIndex = 0"));
     CHECK(contains(runtime_header, "kUsbDeviceDescriptor"));
@@ -145,9 +163,74 @@ int main() {
     CHECK(contains(main_source, "kUsbConfigurationDescriptor.data()"));
     CHECK(contains(main_source, "kUsbStringDescriptors.data()"));
     CHECK(!contains(main_source, "TUD_HID_DESCRIPTOR"));
+
+    // T04 remains a fail-soft consumer of confirmed T03 events.
+    CHECK(contains(main_source,
+                   "runtime.on_input(event);\n                publish_led_feedback(event);"));
+    CHECK(contains(main_source, "void led_feedback_task(void*)"));
+    CHECK(contains(main_source, "xTaskCreate(led_feedback_task"));
+    CHECK(contains(main_source, "LedFeedbackMailbox led_feedback_mailbox"));
+    CHECK(contains(main_source, "led_feedback_diagnostics.record_init_failure()"));
+    CHECK(contains(main_source, "led_feedback_diagnostics.record_tx_failure()"));
+    CHECK(!contains(main_source, "publish_led_feedback(event);\n                runtime.on_input"));
+    const size_t first_isr = main_source.find("void IRAM_ATTR encoder_edge_isr");
+    const size_t after_isrs = main_source.find("static_assert", first_isr);
+    CHECK(first_isr < after_isrs);
+    CHECK(!contains(main_source.substr(first_isr, after_isrs - first_isr),
+                    "strip.transmit"));
+    CHECK(!contains(main_source.substr(first_isr, after_isrs - first_isr),
+                    "publish_led_feedback"));
+    CHECK(contains(led_feedback_header, "LedFeedbackDiagnosticsSnapshot"));
+    CHECK(contains(led_feedback_header, "std::atomic_flag lock_"));
+    CHECK(contains(led_feedback_source, "pending_.store(true"));
+    CHECK(contains(led_feedback_source, "diagnostics.record_feedback_drop()"));
+
+    // GPIO8 has one physical write site and is held high while Awake.
+    CHECK(occurrences(power_source, "gpio_set_level(") == 2);
+    CHECK(occurrences(power_source,
+                      "gpio_set_level(static_cast<gpio_num_t>(kPeripheralPowerGpio)") == 1);
+    const size_t preload_position = power_source.find("write_enable_latch(false)");
+    const size_t safe_position = power_source.find("configure_safe_command_pins()",
+                                                   preload_position);
+    const size_t output_position = power_source.find("gpio_config(&power)", safe_position);
+    const size_t enable_position = power_source.find("write_enable_latch(true)",
+                                                     output_position);
+    const size_t settle_position = power_source.find("vTaskDelay(settle_ticks())",
+                                                     enable_position);
+    CHECK(preload_position < safe_position);
+    CHECK(safe_position < output_position);
+    CHECK(output_position < enable_position);
+    CHECK(enable_position < settle_position);
+    CHECK(contains(power_source, "kPeripheralPowerSettleMs = 50"));
+    CHECK(contains(power_source, "kSharedPowerCommandGpios"));
+    CHECK(contains(power_source, "kSharedPowerInputGpio"));
+    CHECK(contains(power_source, "GPIO_MODE_DISABLE"));
+    CHECK(contains(power_source, "GPIO_PULLUP_DISABLE"));
+    CHECK(contains(power_source, "GPIO_PULLDOWN_DISABLE"));
+    CHECK(!contains(power_source, "i2s"));
+    CHECK(!contains(main_source, "i2s"));
+
+    // The five-pixel GRB RMT transfer is fixed-capacity and bounded.
+    CHECK(contains(led_strip_source, "kRmtResolutionHz = 20'000'000"));
+    CHECK(contains(led_strip_source, "kT0HighTicks = 6"));
+    CHECK(contains(led_strip_source, "kT0LowTicks = 18"));
+    CHECK(contains(led_strip_source, "kT1HighTicks = 16"));
+    CHECK(contains(led_strip_source, "kT1LowTicks = 12"));
+    CHECK(contains(led_strip_source, "kResetTicks = 6000"));
+    CHECK(contains(led_strip_source,
+                   "kWs2812SymbolCount = kLedPixelCount * 24u + 1u"));
+    CHECK(contains(led_strip_source, "serialize_led_frame_grb(frame)"));
+    CHECK(contains(led_strip_source, "std::array<rmt_symbol_word_t"));
+    CHECK(contains(led_strip_source, "trans_queue_depth = 1"));
+    CHECK(contains(led_strip_source, "rmt_tx_wait_all_done"));
+    CHECK(contains(led_strip_source, "kRmtCompletionWaitMs"));
+    CHECK(contains(led_strip_source, "rmt_disable(channel_)"));
+    CHECK(!contains(led_strip_source, "new "));
+    CHECK(!contains(led_strip_source, "malloc"));
     CHECK(contains(module_gitignore, "managed_components/"));
     CHECK(contains(manifest, "espressif/esp_tinyusb"));
     CHECK(contains(sdkconfig_defaults, "CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_APP_REPRODUCIBLE_BUILD=y"));
     CHECK(contains(sdkconfig_defaults, "CONFIG_PARTITION_TABLE_CUSTOM=y"));
     CHECK(contains(sdkconfig_defaults,
                    "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\""));

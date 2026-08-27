@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T04 input LED feedback passes development-laptop gates
+
+- 做了什么：在 `codex/easyinput-t04-input-led-feedback` 按 `INPUT_LED_V1_FROZEN` 完成 T04。T03 已确认语义事件先进入原 USB runtime，再非阻塞发布到独立 LED 任务；新增 S1～S8 八色 140/35 ms 波纹、旋钮 160/40 ms 左右方向流、300/60 ms 按压脉冲、5 像素 GRB 序列化和最终黑帧。灯效使用最新事件优先的有界邮箱，初始化、邮箱或 RMT 失败只增加脱敏饱和计数，不改变 HID、输入 ring 或 USB 生命周期。
+- 电源与传输：建立 GPIO8 唯一物理写入口。冷启动依次预装 GPIO8 inactive latch、将 GPIO9/10/12/13/14/15 置低并让 GPIO11 禁用/浮空、配置 GPIO8 output/high、用调度器阻塞至少 50 ms，再初始化 GPIO12 RMT。Awake 期间共享域保持开启，灯灭只发黑帧；未初始化麦克风、扬声器、I2S、BLE、Wi-Fi、NVS、分区或其他外设。RMT 固定 20 MHz、5 像素/121 symbols、WS2812 `6/18` 与 `16/12` tick、300 us reset、一项 TX queue 和有界完成等待。
+- 测试：在真实 `ESP-IDF v5.5.5` 环境的 CMake 3.30.2/MSVC 下执行规定的 configure、build、CTest，`input_core_tests`、`input_runtime_tests`、`led_feedback_tests`、`firmware_source_contract_tests` 共 4/4 通过。新增覆盖八色/时序/逐帧黄金向量、释放静默、长按、同时按键、最新事件替换、非法编码器半步、GRB、计时回绕、fail-soft 隔离，以及 GPIO8 顺序/唯一所有权、GPIO11、RMT 和固定分区源码合同。
+- 构建：每个 PowerShell 进程先加载 EIM 登记的精确 v5.5.5 并真实运行 `idf.py --version`。使用全新隔离 sdkconfig 对 `esp32s3`、Minimal build 执行 `idf.py ... build` 通过；`CONFIG_APP_REPRODUCIBLE_BUILD=y` 已真实生效。dirty-tree 候选 app 为 `0x3E440`（255,040 bytes），3 MiB factory 余量 92%，只作为构建证据，不作为烧录授权镜像；分区表 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- 来源与发布：逐目标文件来源、固定 Maker 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、PolyForm Noncommercial 1.0.0、ESP-IDF Apache-2.0、采用方式和排除项记录于 `docs/provenance/t04-easyinput-input-led-feedback.md`。新增 `tools/write-release-manifest.ps1`，只允许从干净 HEAD 生成不含本机路径/设备信息的 app 大小、SHA-256、写入范围和分区哈希清单；生成清单与镜像保持 Git 忽略。
+- 自审：任务范围、板级声明、禁止运行时、AGENTS/CLAUDE 逐字一致、来源/许可证、密钥、ASCII 路径、构建产物忽略和 `git diff --check` 通过。固定参考只读 HEAD 正确；未修改 Windows、小智、DeskMate Link、冻结合同、T03 输入/USB语义或两个外部参考目录。
+- 状态与下一步：仅声明 `TEST_CONFIRMED / BUILD_CONFIRMED / PENDING_INDEPENDENT_AUDIT_AND_HIL`。本轮没有扫描端口、识别设备、读取 Flash/NVS、flash、erase、monitor 或 HIL。提交推送后从最终干净 HEAD 再构建并生成 release manifest；原主电脑仍须独立审计、重建并展示最终 HEAD、app SHA-256、app-only 范围和恢复方案，取得用户明确授权后才可烧录。T04 锁定前不开始 T05。
+
 ## 2026-08-27 · T04 rebased to physical-input LED feedback and handed to the second computer
 
 - 做了什么：按用户新增需求固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `input_feedback`、`led_strip_status`、`peripheral_power` 与对应 Host tests，确认原功能是 GPIO12 上 5 颗 GRB WS2812：S1～S8 八种低亮度 140 ms 波纹、旋钮方向流和按压确认脉冲。现已冻结 `INPUT_LED_V1_FROZEN`，建立新的 T04 任务卡、参考审计和第二台电脑交接。

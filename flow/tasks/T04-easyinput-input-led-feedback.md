@@ -1,6 +1,6 @@
 # T04 · EasyInput physical-input LED feedback
 
-- 状态：`READY_FOR_IMPLEMENTATION / INPUT_LED_V1_FROZEN`
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / PENDING_INDEPENDENT_AUDIT_AND_HIL / INPUT_LED_V1_FROZEN`
 - 前置：T03 已在 2026-08-27 完成 Host、ESP-IDF、桌面、五次断线 HIL 和原主电脑独立审计，状态为 `T03_LOCKED`。
 - 计划分支：`codex/easyinput-t04-input-led-feedback`，从包含本任务卡的最新 `origin/main` 创建。
 - 目标：在不改变 T03 输入/HID 行为的前提下，让 5 颗板载 WS2812 对 S1～S8、旋钮左右转和旋钮按压提供明确、低亮度、短时反馈，并建立 GPIO8 共享电源域的唯一安全底座。

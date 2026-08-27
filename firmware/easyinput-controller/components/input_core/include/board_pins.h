@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace deskmate::easyinput {
@@ -15,5 +16,10 @@ inline constexpr int kUsbDpGpio = 20;
 // board signal; it is not a substitute for a TinyUSB mount callback.
 inline constexpr int kUsbPhysicalPresenceGpio = 40;
 inline constexpr int kUsbPhysicalPresenceActiveLevel = 0;
+inline constexpr int kPeripheralPowerGpio = 8;
+inline constexpr int kLedDataGpio = 12;
+inline constexpr size_t kLedPixelCount = 5;
+inline constexpr std::array<int, 6> kSharedPowerCommandGpios = {9, 10, 12, 13, 14, 15};
+inline constexpr int kSharedPowerInputGpio = 11;
 
 }  // namespace deskmate::easyinput

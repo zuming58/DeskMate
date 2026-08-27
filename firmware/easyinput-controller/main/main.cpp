@@ -1,6 +1,9 @@
 #include "board_pins.h"
 #include "input_core.h"
 #include "input_runtime.h"
+#include "led_feedback.h"
+#include "led_strip.h"
+#include "peripheral_power.h"
 
 #include "class/hid/hid_device.h"
 #include "driver/gpio.h"
@@ -29,6 +32,7 @@ StaticQueue_t raw_edge_queue_control{};
 std::array<uint8_t, kRawEdgeQueueCapacity * sizeof(RawEdge)> raw_edge_queue_storage{};
 QueueHandle_t raw_edge_queue = nullptr;
 TaskHandle_t owner_task = nullptr;
+TaskHandle_t led_task_handle = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
 UsbLifecycleEventQueue lifecycle_events;
 UsbCallbackLifecycleState callback_lifecycle;
@@ -36,6 +40,8 @@ UsbInputRuntime runtime;
 UsbPhysicalPresenceMonitor usb_physical_presence{kUsbDisconnectConfirmMs};
 UsbDeviceConnectionGate usb_device_connection;
 std::atomic<bool> tinyusb_driver_ready{false};
+LedFeedbackMailbox led_feedback_mailbox;
+LedFeedbackDiagnostics led_feedback_diagnostics;
 constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -83,6 +89,51 @@ bool usb_physical_presence_present() {
 
 UsbCallbackSnapshot callback_snapshot() {
     return callback_lifecycle.snapshot();
+}
+
+void publish_led_feedback(const InputEvent& event) {
+    const LedFeedbackEvent feedback = feedback_for_input_event(event);
+    if (led_feedback_mailbox.publish(feedback, led_feedback_diagnostics) &&
+        led_task_handle != nullptr) {
+        xTaskNotifyGive(led_task_handle);
+    }
+}
+
+void led_feedback_task(void*) {
+    PeripheralPowerController power;
+    LedStrip strip;
+    if (power.begin_awake() != ESP_OK || strip.begin() != ESP_OK) {
+        led_feedback_diagnostics.record_init_failure();
+        for (;;) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    }
+
+    const LedFrame black{};
+    if (strip.transmit(black) != ESP_OK) {
+        led_feedback_diagnostics.record_tx_failure();
+    }
+
+    LedFeedbackAnimator animator;
+    for (;;) {
+        LedFeedbackEvent event{};
+        if (led_feedback_mailbox.consume(event)) {
+            animator.start(event, monotonic_milliseconds(
+                static_cast<uint64_t>(esp_timer_get_time())));
+        }
+
+        const uint32_t now_ms = monotonic_milliseconds(
+            static_cast<uint64_t>(esp_timer_get_time()));
+        LedFrame frame{};
+        if (animator.update(now_ms, frame) &&
+            strip.transmit(frame) != ESP_OK) {
+            led_feedback_diagnostics.record_tx_failure();
+        }
+
+        if (led_feedback_mailbox.pending()) continue;
+        const TickType_t wait_ticks = animator.active()
+            ? static_cast<TickType_t>(1)
+            : portMAX_DELAY;
+        ulTaskNotifyTake(pdTRUE, wait_ticks);
+    }
 }
 
 void input_owner_task(void*) {
@@ -157,7 +208,10 @@ void input_owner_task(void*) {
             runtime.recover_after_input_drop(key_mask);
         } else {
             InputEvent event{};
-            while (input.pop_event(event)) runtime.on_input(event);
+            while (input.pop_event(event)) {
+                runtime.on_input(event);
+                publish_led_feedback(event);
+            }
         }
 
         runtime.service_release_reassertion(now_ms);
@@ -195,6 +249,12 @@ extern "C" void app_main(void) {
         kRawEdgeQueueCapacity, sizeof(RawEdge), raw_edge_queue_storage.data(),
         &raw_edge_queue_control);
     ESP_ERROR_CHECK(raw_edge_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+
+    if (xTaskCreate(led_feedback_task, "led_feedback", 4096, nullptr, 5,
+                    &led_task_handle) != pdPASS) {
+        led_feedback_diagnostics.record_init_failure();
+        led_task_handle = nullptr;
+    }
 
     gpio_config_t inputs{};
     for (int pin : kKeyGpios) inputs.pin_bit_mask |= 1ULL << pin;

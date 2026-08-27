@@ -16,6 +16,16 @@ add_executable(input_runtime_tests
 target_include_directories(input_runtime_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_runtime_tests COMMAND input_runtime_tests)
 
+add_executable(led_feedback_tests
+    led_feedback_tests.cpp
+    ../components/input_core/src/led_feedback.cpp
+    ../components/input_core/src/input_runtime.cpp
+    ../components/input_core/src/input_core.cpp
+    ../components/input_core/src/hid_report.cpp
+)
+target_include_directories(led_feedback_tests PRIVATE ../components/input_core/include)
+add_test(NAME led_feedback_tests COMMAND led_feedback_tests)
+
 add_executable(firmware_source_contract_tests firmware_source_contract_tests.cpp)
 target_compile_definitions(firmware_source_contract_tests PRIVATE
     MAIN_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/main.cpp"
@@ -25,6 +35,10 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     RUNTIME_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/input_runtime.h"
     INPUT_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/input_core.h"
     BOARD_PINS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/board_pins.h"
+    LED_FEEDBACK_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/led_feedback.h"
+    LED_FEEDBACK_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/led_feedback.cpp"
+    LED_STRIP_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/led_strip.cpp"
+    POWER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/peripheral_power.cpp"
     MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     MANIFEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/idf_component.yml"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
