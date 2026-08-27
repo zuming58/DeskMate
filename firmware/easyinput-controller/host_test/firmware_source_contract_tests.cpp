@@ -101,6 +101,11 @@ int main() {
     CHECK(contains(runtime_source, "make_usb_transfer_event"));
     CHECK(contains(runtime_source, "event.report_id == transfer.report.report_id"));
     CHECK(contains(runtime_source, "event.length == transfer.report.length"));
+    CHECK(contains(runtime_source, "DefaultKeyMode::Tap"));
+    CHECK(contains(runtime_source, "enqueue_keyboard_pair"));
+    CHECK(contains(runtime_source, "queue_.size() - queue_size_ < 2"));
+    CHECK(contains(runtime_header, "tap_pressed_"));
+    CHECK(contains(runtime_header, "keyboard_restore_pending"));
     CHECK(contains(main_source, "lifecycle_events.publish"));
     CHECK(!contains(main_source, "mount_pending"));
     CHECK(!contains(main_source, "unmount_pending"));

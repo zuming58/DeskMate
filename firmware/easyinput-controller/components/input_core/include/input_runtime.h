@@ -148,6 +148,8 @@ struct UsbLifecycleProcessResult {
 struct RoutedAction {
     bool keyboard_changed{false};
     KeyboardSnapshot keyboard{};
+    bool keyboard_restore_pending{false};
+    KeyboardSnapshot keyboard_restore{};
     bool wheel_changed{false};
     MouseWheelSnapshot wheel{};
 };
@@ -157,6 +159,7 @@ public:
     struct Chord { HidUsage usage; uint8_t modifiers; };
     RoutedAction apply(const InputEvent& event);
     RoutedAction apply_key_source(InputSourceId source, bool pressed, Chord chord);
+    RoutedAction apply_tap_source(InputSourceId source, bool pressed, Chord chord);
     void release_all();
     KeyboardSnapshot keyboard() const;
     ScrollAxis axis() const { return axis_; }
@@ -164,8 +167,11 @@ public:
 private:
     struct OwnedChord { bool held{false}; Chord chord{HidUsage::None, 0}; };
     std::array<OwnedChord, 8> owned_{};
+    std::array<bool, 8> tap_pressed_{};
     ScrollAxis axis_{ScrollAxis::Vertical};
     KeyboardSnapshot compose() const;
+    static bool compose_tap(const KeyboardSnapshot& held, Chord chord,
+                            KeyboardSnapshot& pressed);
 };
 
 enum class HidReportKind : uint8_t { Keyboard, Mouse };
@@ -241,6 +247,8 @@ private:
     void clear_queue();
     bool enqueue(const QueuedHidReport& report);
     void enqueue_keyboard(const KeyboardSnapshot& snapshot);
+    void enqueue_keyboard_pair(const KeyboardSnapshot& pressed,
+                               const KeyboardSnapshot& restored);
     void enqueue_wheel(const MouseWheelSnapshot& snapshot);
     bool any_held() const;
     void maybe_enqueue_release_report(bool had_snapshot, bool was_held,

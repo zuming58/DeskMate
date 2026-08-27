@@ -1,5 +1,10 @@
 # Lessons learned
 
+## A new HID lifetime cannot reliably release an old lifetime's modifier
+
+- 现象：Windows 已经从旧 USB HID lifetime 接收 Ctrl-down 后，物理移除设备再枚举同 VID/PID 的新 lifetime；新设备发送一次或反复全零报告、等待 TinyUSB transfer-complete，甚至显式 DCD disconnect/connect，仍可能留下旧 Ctrl。第一次通过、后续失败只是 PnP/消费时序差异，不能当作修复证据。
+- 做法：没有持续 hold 产品语义的命令键应在旧 lifetime 存活时完成 press→restore，并原子预留两份 FIFO 报告；恢复帧必须精确恢复并发 held snapshot，而不是无条件全零。只有 PTT 等确需持续 hold 的键保留 stateful down/up，断线时继续 fail closed 并通过真实 HIL 验证。
+
 ## USB unplug HIL must model MCU cold boot, not only logical remount
 
 - 现象：同一个运行时对象上的 unmount→mount Host 测试和 mount 首帧全释放都通过，但实体 USB 拔线会同时切断板子供电；修复版真机仍复现 Windows modifier 粘连。

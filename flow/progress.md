@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T03 ordinary command keys reworked as atomic HID taps
+
+- 根因：`cf9fdf8` 的 GPIO40/TinyUSB DCD 软断开/连接和 500 ms 全释放重申在第一轮真机断线测试仍留下 Ctrl。结合此前多轮监控，结论是新 HID lifetime 的零报告不能可靠替已经消失的旧 lifetime 产生 Ctrl-up；第一次偶尔通过只是 Windows/PnP 时序差异。固定 Maker 默认 S6 同样是 stateful down/up，不能直接解决该 HIL；可采用的是其独立 synthetic `HidTap` 的 press/restore 结构。
+- 合同与实现：用户确认修订 `INPUT_V1_FROZEN`。S1/S3 继续 held PTT；S2/S4/S5～S8 在稳定 Press 上把临时 chord 叠加当前 held snapshot，并在现有 16 项 USB FIFO 原子排入 press 和精确 restore；实体 Release 只 rearm。只剩一个槽时整对拒绝并全释放恢复，不新增第二套输入状态机、USB owner 或传输。
+- Host：精确 v5.5.5 环境下执行规定 CMake configure/build/CTest，`input_core_tests`、`input_runtime_tests`、`firmware_source_contract_tests` 共 3/3 通过。新增覆盖物理松键前已恢复、重复/rearm、S1 并发精确恢复、两槽准入、HID 延迟 ready、发送失败和旧 endpoint 最后完成报告为全零。
+- 构建：`idf.py --version` 为 `ESP-IDF v5.5.5`，target `esp32s3`，Minimal build ON；隔离 sdkconfig 构建通过。dirty-tree app `0x37310`（226,064 bytes），3 MiB factory 余量 93%；分区仍为 NVS 24 KiB、PHY 4 KiB、factory 3 MiB、sound A/B 各 576 KiB。
+- 来源与静态检查：逐文件来源更新于 `docs/provenance/t03-easyinput-usb-input-runtime.md`，固定 Maker 提交与 PolyForm Noncommercial 1.0.0 已记录；没有复制 Maker 复杂运行时或 build 产物。板级源码复核、任务范围、密钥、ASCII 路径、构建产物、AGENTS/CLAUDE 一致和 `git diff --check` 通过；未修改两个外部参考、小智、桌面、配置/NVS、音频、BLE/Wi-Fi、DeskMate Link 或分区。
+- 状态：只能声明 `TEST_CONFIRMED / BUILD_CONFIRMED / T03_ATOMIC_TAP_PENDING_CLEAN_HEAD_AND_HIL`。本轮尚未扫描端口、识别设备、读取 Flash、flash/erase/monitor 或执行 HIL。提交推送并从干净 HEAD 重建后，必须展示最终 HEAD、app SHA-256 和 app-only 精确范围，取得针对该镜像的新确认后才可补刷；T03 通过前 T04/T05 关闭。
+
 ## 2026-08-27 · T03 battery-powered USB DCD reconnect candidate passes local gates
 
 - 做了什么：在既有唯一 `UsbInputRuntime` 和 owner task 内修复电池供电拔插的底层 USB 生命周期。GPIO40 低有效 SEN_VIN 继续由 25 ms 稳定滤波确认；稳定失去 USB 时 owner 调用 TinyUSB `tud_disconnect()`，稳定恢复时调用 `tud_connect()`，平台动作失败会重试且重复状态幂等。mount、输入丢失恢复和无 Press owner 的实体释放还会在首份全零键盘报告完成后，以 25 ms 间隔做 500 ms 有界全释放重申；HID 未 ready 或首份报告仍在途时不会提前消耗该窗口。

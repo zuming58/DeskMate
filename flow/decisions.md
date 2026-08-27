@@ -150,3 +150,10 @@
 - 决策：DeskMate EasyInput 固件永久保留当前实板与固定 Maker 基线一致的分区：24 KiB NVS、4 KiB PHY、3 MiB factory app、两个 576 KiB 声音 bank。即使当前功能包不使用 NVS 或声音资源，也不得退回 ESP-IDF 默认 1 MiB factory 表或重排范围。
 - 原因：T03 首次预写检查证明默认最小构建会静默删除双声音 bank，并缩小后续正式固件可用的应用合同；这既破坏恢复性，也会让后续音频功能被迫迁移分区。
 - 门禁：仓内 `partitions.csv` 为构建真相源，CMake 与 Host 测试 fail closed；首次写入和分区相关升级都必须与实板/恢复镜像比较。改变布局属于独立迁移任务，需要新的备份、升级/回退方案和用户授权。
+
+## D024 · Ordinary EasyInput command keys use atomic HID taps
+
+- 日期：2026-08-27
+- 决策：S1/S3 继续使用实体来源拥有的 held chord，满足语音 PTT；S2/S4/S5～S8 在稳定按下边沿把临时 chord 叠加到当前 held snapshot，并在同一 USB keyboard FIFO 原子排入 press 与精确 restore。实体释放只重新武装下一次 tap。
+- 原因：多轮 HIL 证明，按住 S6 拔掉一个 HID lifetime 后，Windows 可能保留旧设备的 Ctrl；新设备的 mount 全释放、重复全释放、transfer-complete、GPIO40 生命周期和 DCD 软重连都不能可靠替旧 lifetime 产生 key-up。普通命令没有持续按住的产品需求，应在用户仍按住实体键时就完成主机可见释放。
+- 兼容：默认动作、VID/PID、Report ID、报告布局、GPIO 和队列总容量不变；S2/S4/S5～S8 长按不再产生 host typematic 或持续 modifier。两帧必须预留两个槽，容量不足、发送失败或断线时 fail closed；T03 五次真机矩阵通过前本决策不构成 HIL 结论。

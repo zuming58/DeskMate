@@ -1,6 +1,6 @@
 # T03 · EasyInput USB input runtime
 
-- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / T03_USB_DCD_RECONNECT_PENDING_HIL`。候选 `a97d85e`、`dd7bb69`、`8ce5712` 和 `16bad4f` 均在指定断线矩阵第二次再次发生 Ctrl 粘连，已被真机证据否决。本候选保持真实 mount callback 建立 epoch，并首次让 GPIO40 的 25 ms 稳定物理状态显式驱动 TinyUSB DCD `disconnect/connect`；mount、恢复和无 Press owner 的实体释放还会在首份零报告完成后以 25 ms 间隔做 500 ms 有界全释放重申。Host 3/3 与 ESP-IDF v5.5.5 / `esp32s3` 构建已通过，尚未烧录或真机验证。当前样机 S8 仍为烧录前已知硬件阻断，固件保留 S8/GPIO48 与八键合同。T03 保持开放，T04/T05 关闭。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / T03_ATOMIC_TAP_PENDING_CLEAN_HEAD_AND_HIL`。候选 `a97d85e`、`dd7bb69`、`8ce5712`、`16bad4f` 和 `cf9fdf8` 均被指定断线矩阵的真机 Ctrl 粘连证据否决。2026-08-27 经用户确认，`INPUT_V1_FROZEN` 修订为 S1/S3 保持 hold、S2/S4/S5～S8 使用原子 press→restore tap；本轮实施细则见 [`T03-easyinput-atomic-tap-rework.md`](T03-easyinput-atomic-tap-rework.md)。Host 3/3 与 ESP-IDF v5.5.5 / esp32s3 dirty-tree 构建通过，等待提交后干净 HEAD 重建和获授权 HIL。T03 保持开放，T04/T05 关闭。
 - 背景：T02 已完成输入纯逻辑和构建基线，但固件入口仍轮询编码器并丢弃全部 `InputEvent`，没有真实 USB HID 闭环，当前镜像没有烧录验收价值。
 - 目标：建立“实体八键/旋钮 → 边沿安全采集 → 唯一默认动作路由 → TinyUSB HID”最小纵向闭环，并提供不含用户数据的只读运行诊断快照。
 - 分支：`codex/easyinput-usb-input-runtime`
@@ -38,7 +38,7 @@
 1. 把 `InputCore` 的按键、编码器相位、旋钮按压采样入口拆开；保留 20 ms 防抖和现有合法 Gray-code 语义。
 2. 编码器 A/B 配置 any-edge ISR。ISR 把相位和 `esp_timer_get_time()` 单调时间写入 64 项有界队列；owner task 每 tick 采样八键和旋钮按压、顺序消费相位边沿。
 3. 实现 raw-edge overflow resync：记录丢弃、清半步、用当前相位重建，不生成虚假 detent；不得在 ISR 中日志、分配或调用 TinyUSB。
-4. 建立唯一 `InputActionRouter`，按冻结默认表把物理来源转换为 `KeyboardSnapshot`/`MouseWheelSnapshot`；held chord 由物理来源拥有，重复按下幂等，单来源释放不误伤其他来源。
+4. 建立唯一 `InputActionRouter`，按冻结默认表把物理来源转换为 `KeyboardSnapshot`/`MouseWheelSnapshot`；S1/S3 held chord 由物理来源拥有，普通命令键按修订合同原子投递 tap，重复按下幂等，单来源释放不误伤其他来源。
 5. 修订键盘报告内部布局为 modifier + apple_fn + 6 usages；第七 usage fail closed。旋钮按压只在稳定 pressed edge 切换轴一次。
 6. 加入 TinyUSB HID transport，保持冻结 VID/PID、Keyboard/Mouse/Vendor Report descriptor；通过受管依赖声明 `espressif/esp_tinyusb` 并提交解析后的 `dependencies.lock`，不得提交 managed components 或 build。
 7. 实现 16 项 USB report queue 与单 task owner；mount/unmount/transfer callback 只发布 lifetime/完成状态和通知 owner。
@@ -60,7 +60,7 @@
 
 ## Host test gate
 
-- 八键默认动作黄金向量，包含 S1/S3 快捷键和 S5～S8 modifier chord。
+- 八键默认动作黄金向量，包含 S1/S3 held 快捷键和 S2/S4/S5～S8 原子 tap/restore。
 - 多键、重复按下、重复释放、相同 usage 不同来源、第七 usage、全释放和 reset。
 - 编码器顺/逆、快速合法边沿、抖动、非法跳变、半步 reset、raw queue overflow/resync、旋钮按压防抖与单次轴切换。
 - USB 未挂载不排队；mount epoch、unmount、resume、断开时 held chord、重连不重放、全部释放后新 chord 可用。

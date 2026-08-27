@@ -7,11 +7,18 @@ namespace deskmate::easyinput {
 namespace {
 constexpr uint8_t kLeftCtrl = 0x01;
 constexpr uint8_t kLeftShift = 0x02;
+enum class DefaultKeyMode : uint8_t { Hold, Tap };
 constexpr std::array<InputActionRouter::Chord, 8> kDefaultChords{{
     {HidUsage::Space, kLeftCtrl | kLeftShift}, {HidUsage::Enter, 0},
     {HidUsage::E, kLeftCtrl | kLeftShift}, {HidUsage::Backspace, 0},
     {HidUsage::A, kLeftCtrl}, {HidUsage::C, kLeftCtrl},
     {HidUsage::V, kLeftCtrl}, {HidUsage::Z, kLeftCtrl},
+}};
+constexpr std::array<DefaultKeyMode, 8> kDefaultKeyModes{{
+    DefaultKeyMode::Hold, DefaultKeyMode::Tap,
+    DefaultKeyMode::Hold, DefaultKeyMode::Tap,
+    DefaultKeyMode::Tap, DefaultKeyMode::Tap,
+    DefaultKeyMode::Tap, DefaultKeyMode::Tap,
 }};
 }
 
@@ -164,9 +171,12 @@ KeyboardSnapshot InputActionRouter::compose() const {
 RoutedAction InputActionRouter::apply(const InputEvent& event) {
     RoutedAction result{};
     if ((event.type == InputEventType::KeyPressed || event.type == InputEventType::KeyReleased) && event.index < owned_.size()) {
-        return apply_key_source(static_cast<InputSourceId>(event.index),
-                                event.type == InputEventType::KeyPressed,
-                                kDefaultChords[event.index]);
+        const auto source = static_cast<InputSourceId>(event.index);
+        const bool pressed = event.type == InputEventType::KeyPressed;
+        if (kDefaultKeyModes[event.index] == DefaultKeyMode::Tap) {
+            return apply_tap_source(source, pressed, kDefaultChords[event.index]);
+        }
+        return apply_key_source(source, pressed, kDefaultChords[event.index]);
     } else if (event.type == InputEventType::EncoderStep) {
         result.wheel_changed = event.value != 0;
         if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = event.value > 0 ? -3 : 3;
@@ -195,7 +205,50 @@ RoutedAction InputActionRouter::apply_key_source(InputSourceId source, bool pres
     return result;
 }
 
-void InputActionRouter::release_all() { owned_ = {}; }
+bool InputActionRouter::compose_tap(const KeyboardSnapshot& held, Chord chord,
+                                    KeyboardSnapshot& pressed) {
+    pressed = held;
+    pressed.modifier = static_cast<uint8_t>(pressed.modifier | chord.modifiers);
+    const uint8_t usage = static_cast<uint8_t>(chord.usage);
+    if (usage == 0 ||
+        std::find(pressed.usages.begin(), pressed.usages.end(), usage) !=
+            pressed.usages.end()) {
+        return true;
+    }
+    const auto slot =
+        std::find(pressed.usages.begin(), pressed.usages.end(), 0);
+    if (slot == pressed.usages.end()) return false;
+    *slot = usage;
+    return true;
+}
+
+RoutedAction InputActionRouter::apply_tap_source(InputSourceId source,
+                                                  bool pressed,
+                                                  Chord chord) {
+    RoutedAction result{};
+    const size_t index = static_cast<size_t>(source);
+    if (index >= tap_pressed_.size() || tap_pressed_[index] == pressed) {
+        return result;
+    }
+    tap_pressed_[index] = pressed;
+    if (!pressed) return result;
+
+    const KeyboardSnapshot held = compose();
+    KeyboardSnapshot temporary{};
+    if (!compose_tap(held, chord, temporary) || temporary == held) {
+        return result;
+    }
+    result.keyboard_changed = true;
+    result.keyboard = temporary;
+    result.keyboard_restore_pending = true;
+    result.keyboard_restore = held;
+    return result;
+}
+
+void InputActionRouter::release_all() {
+    owned_ = {};
+    tap_pressed_ = {};
+}
 KeyboardSnapshot InputActionRouter::keyboard() const { return compose(); }
 
 std::array<uint8_t, 8> serialize_keyboard_report(const KeyboardSnapshot& snapshot) {
@@ -392,6 +445,35 @@ void UsbInputRuntime::enqueue_keyboard(const KeyboardSnapshot& snapshot) {
     enqueue(report);
 }
 
+void UsbInputRuntime::enqueue_keyboard_pair(
+    const KeyboardSnapshot& pressed, const KeyboardSnapshot& restored) {
+    if (!mounted_) return;
+    if (queue_.size() - queue_size_ < 2) {
+        saturating_add(diagnostics_.hid_report_drops, 2);
+        recover_release();
+        return;
+    }
+
+    QueuedHidReport pressed_report{};
+    pressed_report.kind = HidReportKind::Keyboard;
+    pressed_report.report_id = kKeyboardReportId;
+    pressed_report.length = 8;
+    const auto pressed_bytes = serialize_keyboard_report(pressed);
+    std::copy(pressed_bytes.begin(), pressed_bytes.end(),
+              pressed_report.payload.begin());
+    pressed_report.epoch = diagnostics_.usb_mount_epoch;
+
+    QueuedHidReport restored_report = pressed_report;
+    const auto restored_bytes = serialize_keyboard_report(restored);
+    std::copy(restored_bytes.begin(), restored_bytes.end(),
+              restored_report.payload.begin());
+
+    queue_[(queue_head_ + queue_size_) % queue_.size()] = pressed_report;
+    ++queue_size_;
+    queue_[(queue_head_ + queue_size_) % queue_.size()] = restored_report;
+    ++queue_size_;
+}
+
 void UsbInputRuntime::enqueue_wheel(const MouseWheelSnapshot& snapshot) {
     if (queue_size_ != 0) {
         auto& tail = queue_[(queue_head_ + queue_size_ - 1) % queue_.size()];
@@ -457,7 +539,11 @@ void UsbInputRuntime::on_input(const InputEvent& event) {
         release_reassert_started_ = false;
     }
     const RoutedAction action = router_.apply(event);
-    if (action.keyboard_changed) enqueue_keyboard(action.keyboard);
+    if (action.keyboard_changed && action.keyboard_restore_pending) {
+        enqueue_keyboard_pair(action.keyboard, action.keyboard_restore);
+    } else if (action.keyboard_changed) {
+        enqueue_keyboard(action.keyboard);
+    }
     if (action.wheel_changed) enqueue_wheel(action.wheel);
 }
 

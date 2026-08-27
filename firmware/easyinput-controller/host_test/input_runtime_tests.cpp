@@ -10,6 +10,7 @@ using namespace deskmate::easyinput;
 
 namespace {
 int failures = 0;
+constexpr std::array<uint8_t, 8> kZeroKeyboardPayload{};
 #define CHECK(value) check((value), #value, __FILE__, __LINE__)
 void check(bool value, const char* expression, const char* file, int line) {
     if (value) return;
@@ -110,17 +111,21 @@ void add_encoder_detent(InputCore& input, uint32_t& now) {
 void default_action_vectors() {
     constexpr std::array<uint8_t, 8> usages{0x2c, 0x28, 0x08, 0x2a, 0x04, 0x06, 0x19, 0x1d};
     constexpr std::array<uint8_t, 8> modifiers{3, 0, 3, 0, 1, 1, 1, 1};
+    constexpr std::array<bool, 8> tap{false, true, false, true,
+                                      true, true, true, true};
     for (uint8_t index = 0; index < 8; ++index) {
         InputActionRouter router;
         const auto pressed = router.apply(key(index, true));
         CHECK(pressed.keyboard_changed);
         CHECK(pressed.keyboard.modifier == modifiers[index]);
         CHECK(pressed.keyboard.usages[0] == usages[index]);
+        CHECK(pressed.keyboard_restore_pending == tap[index]);
+        if (tap[index]) CHECK(pressed.keyboard_restore == KeyboardSnapshot{});
         const auto duplicate = router.apply(key(index, true));
         CHECK(!duplicate.keyboard_changed);
         const auto released = router.apply(key(index, false));
-        CHECK(released.keyboard_changed);
-        CHECK(released.keyboard == KeyboardSnapshot{});
+        CHECK(released.keyboard_changed == !tap[index]);
+        if (!tap[index]) CHECK(released.keyboard == KeyboardSnapshot{});
         CHECK(!router.apply(key(index, false)).keyboard_changed);
     }
 }
@@ -146,6 +151,18 @@ void physical_source_ownership_and_overflow() {
     CHECK(router.keyboard() == full);
     router.release_all();
     CHECK(router.keyboard() == KeyboardSnapshot{});
+
+    for (size_t i = 0; i < 6; ++i) {
+        CHECK(router.apply_key_source(static_cast<InputSourceId>(i), true,
+                                      {usages[i], 0}).keyboard_changed);
+    }
+    const auto held_full = router.keyboard();
+    const auto rejected_tap = router.apply_tap_source(
+        InputSourceId::S7, true, {usages[6], 0x01});
+    CHECK(!rejected_tap.keyboard_changed);
+    CHECK(router.keyboard() == held_full);
+    CHECK(!router.apply_tap_source(InputSourceId::S7, false,
+                                   {usages[6], 0x01}).keyboard_changed);
 }
 
 void encoder_axis_vectors() {
@@ -162,6 +179,161 @@ void encoder_axis_vectors() {
     CHECK(router.axis() == ScrollAxis::Horizontal);
     router.apply({InputEventType::EncoderPressed, 0, 0});
     CHECK(router.axis() == ScrollAxis::Vertical);
+}
+
+void tap_actions_restore_without_waiting_for_physical_release() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 2);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload[0] == 0x01);
+    CHECK(report.payload[2] == 0x06);
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+
+    // The physical key is still held. A duplicate edge cannot create another
+    // tap, and physical release is a local source-state conclusion only.
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 0);
+    runtime.on_input(key(5, false));
+    CHECK(runtime.queued_reports() == 0);
+
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 2);
+    runtime.complete_report();
+    runtime.complete_report();
+}
+
+void tap_actions_restore_concurrent_held_voice_snapshot() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+
+    runtime.on_input(key(0, true));
+    CHECK(runtime.queued_reports() == 1);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 0x03);
+    CHECK(report.payload[2] == 0x2c);
+    runtime.complete_report();
+
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 2);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 0x03);
+    CHECK(report.payload[2] == 0x2c);
+    CHECK(report.payload[3] == 0x06);
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 0x03);
+    CHECK(report.payload[2] == 0x2c);
+    CHECK(report.payload[3] == 0);
+    runtime.complete_report();
+
+    runtime.on_input(key(5, false));
+    runtime.on_input(key(0, false));
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+}
+
+void tap_pair_admission_and_transfer_fail_closed() {
+    UsbInputRuntime exact_fit;
+    exact_fit.on_mount();
+    consume_mount_release(exact_fit);
+    for (int index = 0; index < 14; ++index) {
+        exact_fit.on_input({InputEventType::EncoderStep, 0,
+                            static_cast<int8_t>(index % 2 == 0 ? 1 : -1)});
+    }
+    exact_fit.on_input(key(5, true));
+    CHECK(exact_fit.queued_reports() == kHidReportQueueCapacity);
+    QueuedHidReport report{};
+    for (int index = 0; index < 14; ++index) exact_fit.complete_report();
+    CHECK(exact_fit.front_report(report));
+    CHECK(report.payload[0] == 0x01);
+    CHECK(report.payload[2] == 0x06);
+    exact_fit.complete_report();
+    CHECK(exact_fit.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+
+    // Fifteen alternating wheel reports leave only one slot. A tap requires
+    // two consecutive slots, so neither Ctrl+C report is admitted.
+    for (int index = 0; index < 15; ++index) {
+        runtime.on_input({InputEventType::EncoderStep, 0,
+                          static_cast<int8_t>(index % 2 == 0 ? 1 : -1)});
+    }
+    CHECK(runtime.queued_reports() == 15);
+    runtime.on_input(key(5, true));
+    CHECK(runtime.diagnostics().hid_report_drops == 2);
+    CHECK(runtime.queued_reports() == 1);
+    report = {};
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+    runtime.on_input(key(5, false));
+
+    // Delayed readiness leaves both reports intact. A failed accepted press
+    // clears its pending restore and replaces the sequence with all-released.
+    runtime.on_unmount();
+    runtime.on_mount();
+    consume_mount_release(runtime);
+    runtime.on_input(key(5, true));
+    HidReportTransferState transfer{};
+    CHECK(!prepare_hid_report(runtime, false, transfer, report));
+    CHECK(runtime.queued_reports() == 2);
+    CHECK(prepare_hid_report(runtime, true, transfer, report));
+    finish_hid_send_attempt(runtime, report, true, transfer);
+    CHECK(transfer.active);
+    runtime.on_transfer_failed();
+    transfer.clear();
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+}
+
+void completed_tap_precedes_disconnect_while_key_remains_held() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 2);
+
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload[0] == 0x01);
+    runtime.complete_report();
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+    CHECK(runtime.queued_reports() == 0);
+
+    // At unplug time the last report accepted by the old endpoint is already
+    // all-released even though S6 is physically still down.
+    runtime.on_unmount();
+    runtime.on_mount();
+    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.front_report(report));
+    CHECK(report.payload == kZeroKeyboardPayload);
+    while (runtime.queued_reports() != 0) runtime.complete_report();
+    runtime.on_input(key(5, false));
+    while (runtime.queued_reports() != 0) runtime.complete_report();
+    runtime.service_release_reassertion(0);
+    runtime.service_release_reassertion(kUsbReleaseReassertWindowMs);
+    runtime.on_input(key(5, true));
+    CHECK(runtime.queued_reports() == 2);
 }
 
 void lifetime_and_disconnect_safety() {
@@ -291,10 +463,11 @@ void cold_boot_held_s6_release_barrier() {
     CHECK(!transfer.active);
     CHECK(runtime.queued_reports() == 0);
 
-    // Only a new physical press after the completed release barrier can emit Ctrl+C.
+    // Only a new physical press after the completed release barrier can emit
+    // the atomic Ctrl+C then all-released tap pair.
     scan_owner_inputs(input, runtime, s6_mask, 40);
     scan_owner_inputs(input, runtime, s6_mask, 60);
-    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.queued_reports() == 2);
     CHECK(runtime.front_report(report));
     CHECK(report.payload[0] == 1);
     CHECK(report.payload[2] == 0x06);
@@ -330,7 +503,7 @@ void cold_boot_release_before_mount_report_complete() {
     CHECK(runtime.queued_reports() == 0);
 
     runtime.on_input(key(5, true));
-    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.queued_reports() == 2);
     CHECK(runtime.front_report(report));
     CHECK(report.payload[0] == 1);
     CHECK(report.payload[2] == 0x06);
@@ -368,7 +541,7 @@ void mount_before_first_cold_boot_scan() {
     runtime.complete_report();
 
     runtime.on_input(key(5, true));
-    CHECK(runtime.queued_reports() == 1);
+    CHECK(runtime.queued_reports() == 2);
     CHECK(runtime.front_report(report));
     CHECK(report.payload[0] == 1);
     CHECK(report.payload[2] == 0x06);
@@ -1247,6 +1420,10 @@ int main() {
     default_action_vectors();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
+    tap_actions_restore_without_waiting_for_physical_release();
+    tap_actions_restore_concurrent_held_voice_snapshot();
+    tap_pair_admission_and_transfer_fail_closed();
+    completed_tap_precedes_disconnect_while_key_remains_held();
     lifetime_and_disconnect_safety();
     cold_boot_held_s6_release_barrier();
     cold_boot_release_before_mount_report_complete();
