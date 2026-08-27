@@ -132,8 +132,8 @@ internal sealed class ConfigCommandListener : IDisposable
                 var report = Convert.FromBase64String(reportValue.GetString() ?? "");
                 if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] != 2) throw new InvalidOperationException("invalid-read-report");
                 var readAccepted = HidFeatureDevice.RequestConfigRead(report);
-                if (!readAccepted) _writer.ConfigWrite(requestId, false, "config-read-request-failed");
-                RawInputWindow.PendingReadRequest = readAccepted ? requestId : null;
+                if (!readAccepted) { _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
+                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5));
                 return Task.CompletedTask;
             }
             if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
@@ -303,7 +303,9 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
-    public static string? PendingReadRequest { get; set; }
+    public static string? PendingReadRequest { get; private set; }
+    public static void BeginRead(string requestId, uint numericRequest) { PendingReadRequest = requestId; PendingReadNumericRequest = numericRequest; }
+    private static uint PendingReadNumericRequest { get; set; }
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -342,6 +344,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private int _configSource;
     private int _configNextChunk;
     private uint _configNumericRequest;
+    private byte[]? _configLastChunk;
 
     public RawInputWindow(EventWriter writer, bool diagnosticMode = false)
     {
@@ -459,13 +462,17 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var crc = report[11] | (report[12] << 8);
             var source = report[13];
             var count = length - 10;
-            if (total is < 1 or > 42 || chunk != _configNextChunk || declared is < 1 or > 2048 || count > 49 || 14 + count > report.Length || (chunk == 0 && report[5] == 0)) { ResetConfigRead(); return; }
-            if (chunk == 0) { _configChunks.Clear(); _configTotal = total; _configLength = declared; _configCrc16 = crc; _configSource = source; _configNextChunk = 0; _configNumericRequest = BitConverter.ToUInt32(report.Slice(5, 4)); }
-            if (total != _configTotal || declared != _configLength || crc != _configCrc16 || source > 3 || BitConverter.ToUInt32(report.Slice(5, 4)) != _configNumericRequest) { ResetConfigRead(); return; }
-            _configChunks.Add(report.Slice(14, count).ToArray());
+            var numericRequest = BitConverter.ToUInt32(report.Slice(5, 4));
+            if (total is < 1 or > 42 || declared is < 1 or > 2048 || count > 49 || 14 + count > report.Length || source > 3 || numericRequest == 0 || numericRequest != PendingReadNumericRequest) { ResetConfigRead(); return; }
+            var chunkBytes = report.Slice(14, count).ToArray();
+            if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
+            if (chunk != _configNextChunk || (chunk == 0 && PendingReadRequest is null)) { ResetConfigRead(); return; }
+            if (chunk == 0) { _configChunks.Clear(); _configTotal = total; _configLength = declared; _configCrc16 = crc; _configSource = source; _configNextChunk = 0; _configNumericRequest = numericRequest; }
+            if (total != _configTotal || declared != _configLength || crc != _configCrc16 || source != _configSource || numericRequest != _configNumericRequest) { ResetConfigRead(); return; }
+            _configChunks.Add(chunkBytes); _configLastChunk = chunkBytes;
             _configNextChunk++;
             if (_configNextChunk != _configTotal) return;
-            var data = _configChunks.SelectMany(value => value).Take(_configLength).ToArray();
+            var data = _configChunks.SelectMany(value => value).ToArray();
             if (data.Length != _configLength || Crc16Ccitt(data) != _configCrc16) { ResetConfigRead(); return; }
             _writer.ConfigSnapshot(PendingReadRequest, data.Length, _configCrc16, _configSource, Convert.ToBase64String(data));
             ResetConfigRead();
@@ -474,8 +481,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ResetConfigRead()
     {
-        PendingReadRequest = null;
-        _configChunks.Clear(); _configTotal = _configLength = _configCrc16 = _configSource = _configNextChunk = 0; _configNumericRequest = 0;
+        PendingReadRequest = null; PendingReadNumericRequest = 0;
+        _configChunks.Clear(); _configLastChunk = null; _configTotal = _configLength = _configCrc16 = _configSource = _configNextChunk = 0; _configNumericRequest = 0;
     }
 
     private static int Crc16Ccitt(byte[] data)

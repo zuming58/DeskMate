@@ -65,7 +65,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
-    if (["host-action", "config-write", "config-ack"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "config-write", "config-ack", "config-snapshot"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) this.reset("easyinput-hid", "F22");
       return { kind: "status", event };

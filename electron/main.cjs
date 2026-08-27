@@ -429,7 +429,7 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
   handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
-  handleTrusted("desktop:sync-keyboard-config", (value) => inputBridge?.syncConfig(value) || { ok: false, reason: "input-bridge-unavailable" });
+  handleTrusted("desktop:sync-keyboard-config", () => ({ ok: false, reason: "config-write-requires-preview-and-confirmation" }));
   handleTrusted("desktop:read-keyboard-config", async () => {
     const result = await inputBridge?.readConfig?.() || { ok: false, reason: "input-bridge-unavailable" };
     if (!result.ok) return result;
@@ -438,9 +438,13 @@ app.whenReady().then(async () => {
     keyboardConfigState = { raw, fingerprint: configFingerprint(raw), source: result.source, token: null };
     return { ok: true, config: sanitizeKeyboardConfig(raw), source: result.source, fingerprint: keyboardConfigState.fingerprint };
   });
-  handleTrusted("desktop:preview-keyboard-config-patch", (patch) => {
-    if (!keyboardConfigState.raw) return { ok: false, reason: "config-read-required" };
-    let merged; try { merged = mergeKeyboardPatch(keyboardConfigState.raw, patch); } catch (error) { return { ok: false, reason: error.message }; }
+  handleTrusted("desktop:preview-keyboard-config-patch", async (patch) => {
+    const fresh = await inputBridge?.readConfig?.();
+    if (!fresh?.ok) return { ok: false, reason: "config-device-disconnected" };
+    let current; try { current = JSON.parse(fresh.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (current.schema !== "ai_keyboard.v1") return { ok: false, reason: "config-schema-invalid" };
+    keyboardConfigState = { raw: current, fingerprint: configFingerprint(current), source: fresh.source, token: null };
+    let merged; try { merged = mergeKeyboardPatch(current, patch); } catch (error) { return { ok: false, reason: error.message }; }
     const token = randomUUID(); keyboardConfigState.token = { value: token, expires: Date.now() + 60000, fingerprint: keyboardConfigState.fingerprint, merged };
     return { ok: true, token, expiresInMs: 60000, fingerprint: keyboardConfigState.fingerprint, config: sanitizeKeyboardConfig(merged) };
   });

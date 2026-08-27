@@ -181,11 +181,29 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
         return apply_key_source(source, pressed, chord);
     } else if (event.type == InputEventType::EncoderStep) {
         result.wheel_changed = event.value != 0;
-        const int8_t amount = static_cast<int8_t>(encoder_speed_);
-        if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = ((event.value > 0) ^ reverse_vertical_) ? -amount : amount;
-        else result.wheel.horizontal = ((event.value > 0) ^ reverse_horizontal_) ? amount : -amount;
+        if (encoder_cursor_) {
+            const HidUsage usage = axis_ == ScrollAxis::Vertical
+                ? (((event.value > 0) ^ reverse_vertical_) ? HidUsage::Down : HidUsage::Up)
+                : (((event.value > 0) ^ reverse_horizontal_) ? HidUsage::Right : HidUsage::Left);
+            result.wheel_changed = false;
+            result.keyboard_changed = true;
+            result.keyboard_restore_pending = true;
+            result.keyboard_restore = compose();
+            compose_tap(result.keyboard_restore, {usage, 0}, result.keyboard);
+        } else {
+            const int8_t amount = static_cast<int8_t>(encoder_speed_);
+            if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = ((event.value > 0) ^ reverse_vertical_) ? -amount : amount;
+            else result.wheel.horizontal = ((event.value > 0) ^ reverse_horizontal_) ? amount : -amount;
+        }
     } else if (event.type == InputEventType::EncoderPressed) {
+        if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
+            return apply_tap_source(InputSourceId::EncoderPress, true, encoder_press_chord_);
+        }
         axis_ = axis_ == ScrollAxis::Vertical ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+    } else if (event.type == InputEventType::EncoderReleased) {
+        if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
+            return apply_tap_source(InputSourceId::EncoderPress, false, encoder_press_chord_);
+        }
     }
     return result;
 }

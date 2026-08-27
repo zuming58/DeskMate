@@ -44,7 +44,6 @@ export class DesktopBridgeAdapter {
   async registerApplication(token) { return this.bridge?.registerApplication ? this.bridge.registerApplication(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async chooseApplication() { return this.bridge?.chooseApplication ? this.bridge.chooseApplication() : { cancelled: true }; }
   async testApplication(id) { return this.bridge?.testApplication ? this.bridge.testApplication(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
-  async syncKeyboardConfig(value) { return this.bridge?.syncKeyboardConfig ? this.bridge.syncKeyboardConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async readKeyboardConfig() { return this.bridge?.readKeyboardConfig ? this.bridge.readKeyboardConfig() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async previewKeyboardConfigPatch(patch) { return this.bridge?.previewKeyboardConfigPatch ? this.bridge.previewKeyboardConfigPatch(patch) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async commitKeyboardConfig(token) { return this.bridge?.commitKeyboardConfig ? this.bridge.commitKeyboardConfig(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }

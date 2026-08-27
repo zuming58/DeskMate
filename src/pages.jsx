@@ -583,17 +583,17 @@ export function KeymapPage({ notify }) {
   const updateKey = (value) => patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) });
   const updateEncoder = (value) => patch({ encoder: normalizeEncoder({ ...encoder, ...value }) });
   const syncKeyboard = async () => {
-    setSyncState({ status: "syncing", label: "正在同步…" });
+    setSyncState({ status: "syncing", label: "正在读取…" });
     try {
-      const config = createKeyboardConfig({ keymap: bindings, encoder, voiceShortcut: state.settings.voiceShortcut });
-      const result = await voiceAdapters.desktop.syncKeyboardConfig(config);
-      if (!result?.ok) throw new Error(result?.message || result?.reason || "键盘未确认配置");
-      setSyncState({ status: "success", label: `键盘已确认 · ${result.bytes} 字节` });
-      notify("按键与旋钮配置已同步到键盘并保存");
-    } catch (error) {
-      setSyncState({ status: "error", label: "同步失败" });
-      notify(`同步失败：${error.message}`);
-    }
+      const patch = { keymap: bindings, encoder };
+      const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
+      if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
+      const approved = window.confirm("确认应用按键与旋钮修改？");
+      if (!approved) { setSyncState({ status: "idle", label: "等待确认" }); return; }
+      const result = await voiceAdapters.desktop.commitKeyboardConfig(preview.token);
+      if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
+      setSyncState({ status: "success", label: "键盘已确认" }); notify("按键与旋钮配置已同步到键盘并保存");
+    } catch (error) { setSyncState({ status: "error", label: "同步失败" }); notify(`同步失败：${error.message}`); }
   };
   useEffect(() => {
     return deviceEventBus.subscribe((event) => {

@@ -27,6 +27,24 @@ test("bridge protocol accepts sanitized Host Action and config acknowledgements"
   assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 })), { ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 });
 });
 
+test("config snapshots remain control events through the trigger filter", () => {
+  const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
+  const event = JSON.stringify({
+    version: 1,
+    type: "config-snapshot",
+    source: "easyinput-hid",
+    requestId: "read-12345678",
+    bytes: data.length,
+    crc16: require("../electron/easyinput-config.cjs").crc16Ccitt(data),
+    sourceId: 0,
+    jsonBase64: data.toString("base64"),
+    time: "2026-08-21T10:00:00.000Z",
+    sequence: 2,
+  });
+  const parsed = parseBridgeLine(event);
+  assert.equal(new InputTriggerFilter().accept(parsed).kind, "config-snapshot");
+});
+
 test("F22 triggers only on release and filters repeat, debounce, stuck release, and disconnect", () => {
   let now = 1000;
   const filter = new InputTriggerFilter({ now: () => now });

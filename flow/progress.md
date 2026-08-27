@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T05 second rework awaiting independent audit
+
+- 分支：`codex/easyinput-t05-config-nvs`，基于原候选 `a795d309cb88a3a740c25c159e132609e1583d73`，未合并或 rebase `main`。
+- 本轮关闭：`config-snapshot` 作为控制事件传递；旧整份 `syncKeyboardConfig` IPC fail closed 且 renderer 不再暴露；preview 前重读设备；原生读取绑定 textual/numeric request ID、严格递增与 duplicate-last 幂等、冲突/旧块/超长拒绝；配置 NVS 工作移入独立 `config_owner` 队列；旋钮配置的按压 chord、cursor HID 方向和既有 router 路由。
+- 新增测试：桌面 `config-snapshot` parser/filter 控制链回归；桌面全量 `71/71`；固件 Host CTest `6/6`；精确 ESP-IDF `v5.5.5` / `esp32s3` build 通过，app `0x49210` 字节。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `HIL_NOT_AUTHORIZED`。严格 JSON/UTF-8/schema 异常矩阵与 NVS 掉电/故障注入仍需原主电脑第二轮独立审计，不能锁定 T05。
+- 安全：未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL；不得开始 T06。
+
 ## 2026-08-27 · T05 implementation pass awaiting independent audit
 
 - 做了什么：在 `codex/easyinput-t05-config-nvs` 上完成 `CONFIG_V1_FROZEN` 的第一版实现：0x10 分块写入、0x13/0x11 kind 0x06 完整读取、CRC16、静态 callback 命令队列、输入优先的配置响应 transfer 生命周期、纯 HID 配置投影、双槽 `deskmate` NVS 事务/回读/marker 恢复、只读 legacy 导入，以及 Electron 主进程的脱敏读取、严格白名单合并和确认 token 接口。

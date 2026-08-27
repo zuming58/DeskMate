@@ -9,7 +9,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   registerApplication: (token) => ipcRenderer.invoke("desktop:register-application", token),
   chooseApplication: () => ipcRenderer.invoke("desktop:choose-application"),
   testApplication: (id) => ipcRenderer.invoke("desktop:test-application", id),
-  syncKeyboardConfig: (value) => ipcRenderer.invoke("desktop:sync-keyboard-config", value),
   readKeyboardConfig: () => ipcRenderer.invoke("desktop:read-keyboard-config"),
   previewKeyboardConfigPatch: (patch) => ipcRenderer.invoke("desktop:preview-keyboard-config-patch", patch),
   commitKeyboardConfig: (token) => ipcRenderer.invoke("desktop:commit-keyboard-config", token),

@@ -36,6 +36,8 @@ struct ConfigFeatureCommand {
     uint32_t epoch;
     std::array<uint8_t, kConfigFeaturePayloadBytes> payload;
 };
+struct ConfigSaveCommand { ConfigDocument document{}; ConfigSlot active{ConfigSlot::Invalid}; uint32_t generation{0}; };
+struct ConfigSaveResult { ConfigSaveStatus status{ConfigSaveStatus::WriteFailed}; ConfigDocument document{}; ConfigSlot slot{ConfigSlot::Invalid}; uint32_t generation{0}; };
 
 StaticQueue_t raw_edge_queue_control{};
 std::array<uint8_t, kRawEdgeQueueCapacity * sizeof(RawEdge)> raw_edge_queue_storage{};
@@ -45,6 +47,11 @@ constexpr size_t kConfigCommandQueueCapacity = 8;
 std::array<uint8_t, kConfigCommandQueueCapacity * sizeof(ConfigFeatureCommand)>
     config_command_queue_storage{};
 QueueHandle_t config_command_queue = nullptr;
+QueueHandle_t config_save_queue = nullptr;
+QueueHandle_t config_result_queue = nullptr;
+StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
+std::array<uint8_t, sizeof(ConfigSaveCommand) * 2> config_save_queue_storage{};
+std::array<uint8_t, sizeof(ConfigSaveResult) * 2> config_result_queue_storage{};
 TaskHandle_t owner_task = nullptr;
 TaskHandle_t led_task_handle = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
@@ -180,6 +187,28 @@ void led_feedback_task(void*) {
     }
 }
 
+void config_owner_task(void*) {
+    ConfigSaveCommand command{};
+    for (;;) {
+        if (xQueueReceive(config_save_queue, &command, portMAX_DELAY) != pdTRUE) continue;
+        ConfigSaveResult result{};
+        result.document = command.document;
+        result.status = config_store.save(command.document, command.active, command.generation);
+        if (result.status == ConfigSaveStatus::Saved) {
+            const auto loaded = config_store.load();
+            ConfigProjection projection{};
+            if (loaded.slot == ConfigSlot::Invalid || !parse_config_projection(loaded.document.view(), projection)) {
+                result.status = ConfigSaveStatus::ReadbackFailed;
+            } else {
+                result.document = loaded.document;
+                result.slot = loaded.slot;
+                result.generation = loaded.generation;
+            }
+        }
+        (void)xQueueSend(config_result_queue, &result, portMAX_DELAY);
+    }
+}
+
 void input_owner_task(void*) {
     InputCore input;
     HidReportTransferState transfer;
@@ -268,6 +297,24 @@ void input_owner_task(void*) {
             }
         }
 
+        ConfigSaveResult save_result{};
+        while (xQueueReceive(config_result_queue, &save_result, 0) == pdTRUE) {
+            if (save_result.status == ConfigSaveStatus::Saved) {
+                ConfigProjection projection{};
+                if (parse_config_projection(save_result.document.view(), projection)) {
+                    active_config = save_result.document;
+                    active_config_slot = save_result.slot;
+                    active_config_generation = save_result.generation;
+                    runtime.set_configuration(projection);
+                    queue_config_ack(2, true, true, save_result.document.length, save_result.document.crc16);
+                } else {
+                    queue_config_ack(3, false, false, save_result.document.length, save_result.document.crc16);
+                }
+            } else {
+                queue_config_ack(static_cast<uint8_t>(save_result.status), false, false,
+                                 save_result.document.length, save_result.document.crc16);
+            }
+        }
         ConfigFeatureCommand config_command{};
         while (xQueueReceive(config_command_queue, &config_command, 0) == pdTRUE) {
             if (config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
@@ -281,27 +328,8 @@ void input_owner_task(void*) {
                     config_command.epoch);
                 if (result == ConfigReceiveStatus::Complete) {
                     const ConfigDocument candidate = config_write_assembler.document();
-                    const auto save = config_store.save(
-                        candidate, active_config_slot, active_config_generation);
-                    if (save == ConfigSaveStatus::Saved) {
-                        const auto loaded = config_store.load();
-                        ConfigProjection projection{};
-                        if (loaded.slot != ConfigSlot::Invalid &&
-                            parse_config_projection(loaded.document.view(), projection)) {
-                            active_config = loaded.document;
-                            active_config_slot = loaded.slot;
-                            active_config_generation = loaded.generation;
-                            runtime.set_configuration(projection);
-                            queue_config_ack(2, true, true, candidate.length,
-                                             candidate.crc16);
-                        } else {
-                            queue_config_ack(3, false, false, candidate.length,
-                                             candidate.crc16);
-                        }
-                    } else {
-                        queue_config_ack(static_cast<uint8_t>(save), false, false,
-                                         candidate.length, candidate.crc16);
-                    }
+                    ConfigSaveCommand save{candidate, active_config_slot, active_config_generation};
+                    if (xQueueSend(config_save_queue, &save, 0) != pdTRUE) queue_config_ack(4, false, false, candidate.length, candidate.crc16);
                 } else if (result == ConfigReceiveStatus::Rejected) {
                     queue_config_ack(1, false, false, 0, 0);
                 }
@@ -388,6 +416,10 @@ extern "C" void app_main(void) {
         kConfigCommandQueueCapacity, sizeof(ConfigFeatureCommand),
         config_command_queue_storage.data(), &config_command_queue_control);
     ESP_ERROR_CHECK(config_command_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
+    config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
+    ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    ESP_ERROR_CHECK(xTaskCreate(config_owner_task, "config_owner", 4096, nullptr, 8, nullptr) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     if (xTaskCreate(led_feedback_task, "led_feedback", 4096, nullptr, 5,
                     &led_task_handle) != pdPASS) {

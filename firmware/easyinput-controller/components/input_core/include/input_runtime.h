@@ -169,7 +169,7 @@ public:
 private:
     struct OwnedChord { bool held{false}; Chord chord{HidUsage::None, 0}; };
     std::array<OwnedChord, 8> owned_{};
-    std::array<bool, 8> tap_pressed_{};
+    std::array<bool, 9> tap_pressed_{};
     std::array<Chord, 8> configured_chords_{};
     std::array<bool, 8> configured_hold_{};
     Chord encoder_press_chord_{HidUsage::None, 0};

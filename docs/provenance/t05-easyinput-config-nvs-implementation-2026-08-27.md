@@ -15,3 +15,13 @@
 | `firmware/easyinput-controller/host_test/config_core_tests.cpp`, `tests/easyinput-config.test.mjs` | Maker Host tests | Product-side transport, projection, storage and privacy regression coverage. |
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
+
+## Second rework delta
+
+- `electron/input-bridge-protocol.cjs`: `config-snapshot` remains a control event so the complete read chain can resolve.
+- `electron/main.cjs`, `electron/preload.cjs`, `src/pages.jsx`, `src/adapters/voiceAdapters.js`: legacy direct sync IPC is fail-closed and no longer renderer-exposed; preview re-reads the device and commit re-reads before write.
+- `native/DeskMate.InputBridge/Program.cs`: binds textual and numeric request IDs, rejects stale/conflicting chunks, allows only identical last-chunk duplicates, and never truncates excess payload bytes.
+- `firmware/easyinput-controller/main/main.cpp`: configuration persistence is queued to a dedicated `config_owner` task; input/USB/LED owner remains responsive while storage work runs.
+- `firmware/easyinput-controller/components/input_core/*`: configured encoder press, cursor-mode HID arrows, and the encoder source tap state are routed through the existing input router.
+- Added desktop regression: `config-snapshot` parser/filter control-event propagation. Full desktop suite: 71/71.
+- Verification remains development-only: Host CTest 6/6, ESP-IDF v5.5.5/esp32s3 build passed (`0x49210` app image). Strict JSON parser rewrite was not retained after compatibility regression; malformed-schema and NVS fault-injection expansion remains an explicit second-audit item.
