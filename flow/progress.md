@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T05 first independent audit requires rework; no flash and no T06
+
+- 做了什么：从 GitHub 精确取得 `origin/codex/easyinput-t05-config-nvs` 的 `a795d309cb88a3a740c25c159e132609e1583d73`，确认它基于锁定交接 `a2adc9818da07119e59a6f14d125fc23576696c9`，在隔离 worktree 完成固件、原生桥、Electron、React、NVS 与测试审计，并写入 `docs/reviews/t05-easyinput-config-nvs-first-audit-2026-08-27.md`。
+- 为什么：T05 是首次允许完整配置和 NVS 持久写入的安全门；仅凭 6/6、70/70 和可构建不能证明读取、无损合并、事务恢复与 T03/T04 实时输入边界成立，必须先检查测试是否真正覆盖冻结合同。
+- 怎么理解：候选存在六组阻断：`config-snapshot` 被 filter 降级导致读取必超时；UI/IPC 仍直接整份写入而绕过预览与 token；NVS 同步事务阻塞唯一输入 owner；旋钮 press/cursor 配置未执行且配置切换缺少可观察全释放；原生分块未绑定 numeric request/epoch、重复和长度处理不符合合同；Feature callback 越界风险与手写 JSON/`stoi` 非失败关闭。状态为 `REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`。
+- 产出路径：`docs/reviews/t05-easyinput-config-nvs-first-audit-2026-08-27.md`、更新后的 `flow/tasks/T05-easyinput-config-nvs.md`、`docs/README.md` 和本记录；候选分支未合并，`main` 产品代码未改变。
+- 验证：固件 Host CTest 6/6；桌面 `npm test` 70/70、`npm run build:desktop`；精确 ESP-IDF v5.5.5 / `esp32s3` 隔离构建通过，固定五分区不变，审计 app 298432 字节、SHA-256 `4CDD04118F32AC1A0B0EE4F5606322B159AF41C80D088882A50345B61F15E022`。新增只读复现证明合法 `config-snapshot` 经 parser/filter 后得到 `diagnostic`。`git diff --check`、AGENTS/CLAUDE 一致通过。
+- 问题解决：本轮把“工具链通过”和“产品合同通过”分开，拒绝把覆盖不足的绿测升级为可烧录证据；未扫描端口、识别设备、读取或写入 Flash/NVS、flash、erase、monitor 或 HIL。
+- 下一步：另一台电脑继续原 `codex/easyinput-t05-config-nvs` 分支按审计文档返工，补齐读取 manager、原生分块、UI 安全确认、独立配置 owner、旋钮投影和 NVS 故障矩阵后推送并停止。本机第二轮独立审计通过后才准备 T05 app/NVS 授权卡；真机验收并锁定 T05 前不得开始 T06。
+
 ## 2026-08-27 · T04 locked and T05 configuration/NVS opened for the second computer
 
 - 做了什么：依据用户确认的完整压力矩阵，把 T04 从 `PENDING_HIL` 锁定为 `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_CONFIRMED / T04_LOCKED`，并将 `codex/easyinput-t04-input-led-feedback` 快进合入 `main`。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`。随后冻结 `CONFIG_V1_FROZEN`，完成 T05 Maker 配置/NVS 差异审计、任务卡和第二电脑交接；准确的 GitHub `origin/main` 交接哈希随本次提交推送结果和用户复制文字交付。
