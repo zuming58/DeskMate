@@ -57,11 +57,22 @@ esp_err_t PeripheralPowerController::configure_safe_command_pins() {
 esp_err_t PeripheralPowerController::begin_awake() {
     if (ready_) return ESP_OK;
 
+    leases_.clear();
+    if (!leases_.acquire(PeripheralPowerOwner::DeviceAwake)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
     // Preload the inactive latch before GPIO8 becomes an output.
     esp_err_t error = write_enable_latch(false);
-    if (error != ESP_OK) return error;
+    if (error != ESP_OK) {
+        leases_.clear();
+        return error;
+    }
     error = configure_safe_command_pins();
-    if (error != ESP_OK) return error;
+    if (error != ESP_OK) {
+        leases_.clear();
+        return error;
+    }
 
     gpio_config_t power{};
     power.pin_bit_mask = 1ULL << kPeripheralPowerGpio;
@@ -70,17 +81,36 @@ esp_err_t PeripheralPowerController::begin_awake() {
     power.pull_down_en = GPIO_PULLDOWN_DISABLE;
     power.intr_type = GPIO_INTR_DISABLE;
     error = gpio_config(&power);
-    if (error != ESP_OK) return error;
+    if (error != ESP_OK) {
+        leases_.clear();
+        return error;
+    }
 
     error = gpio_sleep_sel_dis(
         static_cast<gpio_num_t>(kPeripheralPowerGpio));
-    if (error != ESP_OK) return error;
+    if (error != ESP_OK) {
+        leases_.clear();
+        return error;
+    }
     error = write_enable_latch(true);
-    if (error != ESP_OK) return error;
+    if (error != ESP_OK) {
+        leases_.clear();
+        return error;
+    }
 
     vTaskDelay(settle_ticks());
     ready_ = true;
     return ESP_OK;
+}
+
+bool PeripheralPowerController::acquire_consumer(PeripheralPowerOwner owner) {
+    if (!ready_ || owner == PeripheralPowerOwner::DeviceAwake) return false;
+    return leases_.acquire(owner);
+}
+
+bool PeripheralPowerController::release_consumer(PeripheralPowerOwner owner) {
+    if (!ready_ || owner == PeripheralPowerOwner::DeviceAwake) return false;
+    return leases_.release(owner);
 }
 
 }  // namespace deskmate::easyinput

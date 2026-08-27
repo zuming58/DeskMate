@@ -26,6 +26,13 @@ add_executable(led_feedback_tests
 target_include_directories(led_feedback_tests PRIVATE ../components/input_core/include)
 add_test(NAME led_feedback_tests COMMAND led_feedback_tests)
 
+add_executable(peripheral_power_lease_tests
+    peripheral_power_lease_tests.cpp
+    ../components/input_core/src/peripheral_power_lease.cpp
+)
+target_include_directories(peripheral_power_lease_tests PRIVATE ../components/input_core/include)
+add_test(NAME peripheral_power_lease_tests COMMAND peripheral_power_lease_tests)
+
 add_executable(firmware_source_contract_tests firmware_source_contract_tests.cpp)
 target_compile_definitions(firmware_source_contract_tests PRIVATE
     MAIN_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/main.cpp"
@@ -39,6 +46,9 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     LED_FEEDBACK_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/led_feedback.cpp"
     LED_STRIP_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/led_strip.cpp"
     POWER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/peripheral_power.cpp"
+    POWER_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/peripheral_power.h"
+    POWER_LEASE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/peripheral_power_lease.h"
+    POWER_LEASE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/peripheral_power_lease.cpp"
     MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     MANIFEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/idf_component.yml"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"

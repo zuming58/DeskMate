@@ -72,6 +72,9 @@ int main() {
     const std::string led_feedback_source = read_all(LED_FEEDBACK_SOURCE_PATH);
     const std::string led_strip_source = read_all(LED_STRIP_SOURCE_PATH);
     const std::string power_source = read_all(POWER_SOURCE_PATH);
+    const std::string power_header = read_all(POWER_HEADER_PATH);
+    const std::string power_lease_header = read_all(POWER_LEASE_HEADER_PATH);
+    const std::string power_lease_source = read_all(POWER_LEASE_SOURCE_PATH);
     const std::string module_gitignore = read_all(MODULE_GITIGNORE_PATH);
     const std::string manifest = read_all(MANIFEST_PATH);
     const std::string sdkconfig_defaults = read_all(SDKCONFIG_DEFAULTS_PATH);
@@ -209,6 +212,19 @@ int main() {
     CHECK(contains(power_source, "GPIO_PULLDOWN_DISABLE"));
     CHECK(!contains(power_source, "i2s"));
     CHECK(!contains(main_source, "i2s"));
+    CHECK(contains(power_header, "PeripheralPowerLeaseSet leases_"));
+    CHECK(contains(power_header, "acquire_consumer"));
+    CHECK(contains(power_header, "release_consumer"));
+    CHECK(contains(power_lease_header, "enum class PeripheralPowerOwner"));
+    CHECK(contains(power_lease_header, "KeyboardMic"));
+    CHECK(contains(power_lease_header, "Speaker"));
+    CHECK(contains(power_lease_header, "DeviceAwake"));
+    CHECK(contains(power_lease_source, "held_mask_"));
+    CHECK(contains(power_source,
+                   "leases_.acquire(PeripheralPowerOwner::DeviceAwake)"));
+    CHECK(contains(main_source, "PeripheralPowerController peripheral_power"));
+    CHECK(contains(main_source,
+                   "acquire_consumer(PeripheralPowerOwner::Led)"));
 
     // The five-pixel GRB RMT transfer is fixed-capacity and bounded.
     CHECK(contains(led_strip_source, "kRmtResolutionHz = 20'000'000"));

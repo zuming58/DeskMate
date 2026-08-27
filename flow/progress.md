@@ -2,10 +2,20 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-27 · T04 independently audited and prepared for the clean release gate
+
+- 做了什么：原主电脑在隔离 worktree 审查 `fbd4c20` 的完整 T04 diff、冻结合同、任务卡及固定 Maker 参考。确认 T03 语义事件先进入唯一 USB runtime，灯效随后异步消费；GPIO8 只有一个物理写入口，GPIO12 RMT、颜色/时序、fail-soft 边界和固定分区方向正确。审计补齐四 owner 的共享电源租约底座，使 `DeviceAwake`、LED 以及未来麦克风/扬声器具有同一所有权模型；本包仍未初始化音频。
+- 为什么：T04 任务明确要求为后续音频保留共享电源所有权接口。原候选只有 Awake 常开动作，若直接烧录虽然灯效可能工作，但 T08 音频接入时需要重构 GPIO8 边界。小修现在完成并用 Host test 锁定，避免再次形成第二个电源 owner。
+- 怎么理解：本轮没有改变 T03 输入/HID、灯色、动画、引脚、USB 身份或分区。文档把 RMT reset 从误写的 300 us 修正为两个 6000 tick 低半段、总低电平 600 us；发布清单同时增加当前干净 HEAD、工程路径、构建目录和 embedded app version 一致性校验，拒绝把旧构建冒充新镜像。
+- 产出路径：`firmware/easyinput-controller/components/input_core/include/peripheral_power_lease.h`、对应实现与 Host test、`main/peripheral_power.*`、`tools/write-release-manifest.ps1`、`docs/reviews/t04-input-led-feedback-independent-audit-2026-08-27.md`、更新后的 provenance、T04 任务卡和本记录。
+- 验证：精确 ESP-IDF v5.5.5 环境下 Host CTest 5/5；全新目录 `esp32s3`/Minimal build 通过且固定 16 MB 分区不变；桌面 `npm test` 68/68、`npm run build:desktop` 通过；`git diff --check`、ASCII 路径、构建产物忽略和固件局部 AGENTS/CLAUDE 一致通过。板级声明扫描 1 PASS/1 已知 constexpr 识别 WARN/0 FAIL，人工引脚复核通过。
+- 问题解决：补上共享租约和 stale-build manifest 防线；未把小问题退回另一台电脑。最终提交后必须从干净 HEAD 双构建得到逐字节一致 app，生成忽略的 release manifest，再展示 app-only 烧录卡。未扫描端口、识别设备、读取 Flash/NVS、flash、erase、monitor 或 HIL。
+- 下一步：状态为 `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / PENDING_HIL`。干净 release gate 通过后向用户展示最终 HEAD、app SHA-256、`0x010000` 起的精确 app-only 范围和恢复边界；得到新的明确授权后才识别当前 EasyInput 并烧录。真机灯效与 T03 全回归通过后才能标记 `T04_LOCKED` 并开始 T05。
+
 ## 2026-08-27 · T04 input LED feedback passes development-laptop gates
 
 - 做了什么：在 `codex/easyinput-t04-input-led-feedback` 按 `INPUT_LED_V1_FROZEN` 完成 T04。T03 已确认语义事件先进入原 USB runtime，再非阻塞发布到独立 LED 任务；新增 S1～S8 八色 140/35 ms 波纹、旋钮 160/40 ms 左右方向流、300/60 ms 按压脉冲、5 像素 GRB 序列化和最终黑帧。灯效使用最新事件优先的有界邮箱，初始化、邮箱或 RMT 失败只增加脱敏饱和计数，不改变 HID、输入 ring 或 USB 生命周期。
-- 电源与传输：建立 GPIO8 唯一物理写入口。冷启动依次预装 GPIO8 inactive latch、将 GPIO9/10/12/13/14/15 置低并让 GPIO11 禁用/浮空、配置 GPIO8 output/high、用调度器阻塞至少 50 ms，再初始化 GPIO12 RMT。Awake 期间共享域保持开启，灯灭只发黑帧；未初始化麦克风、扬声器、I2S、BLE、Wi-Fi、NVS、分区或其他外设。RMT 固定 20 MHz、5 像素/121 symbols、WS2812 `6/18` 与 `16/12` tick、300 us reset、一项 TX queue 和有界完成等待。
+- 电源与传输：建立 GPIO8 唯一物理写入口。冷启动依次预装 GPIO8 inactive latch、将 GPIO9/10/12/13/14/15 置低并让 GPIO11 禁用/浮空、配置 GPIO8 output/high、用调度器阻塞至少 50 ms，再初始化 GPIO12 RMT。Awake 期间共享域保持开启，灯灭只发黑帧；未初始化麦克风、扬声器、I2S、BLE、Wi-Fi、NVS、分区或其他外设。RMT 固定 20 MHz、5 像素/121 symbols、WS2812 `6/18` 与 `16/12` tick；reset symbol 的两个低电平半段各 6000 tick，总低电平 600 us；一项 TX queue 和有界完成等待。
 - 测试：在真实 `ESP-IDF v5.5.5` 环境的 CMake 3.30.2/MSVC 下执行规定的 configure、build、CTest，`input_core_tests`、`input_runtime_tests`、`led_feedback_tests`、`firmware_source_contract_tests` 共 4/4 通过。新增覆盖八色/时序/逐帧黄金向量、释放静默、长按、同时按键、最新事件替换、非法编码器半步、GRB、计时回绕、fail-soft 隔离，以及 GPIO8 顺序/唯一所有权、GPIO11、RMT 和固定分区源码合同。
 - 构建：每个 PowerShell 进程先加载 EIM 登记的精确 v5.5.5 并真实运行 `idf.py --version`。使用全新隔离 sdkconfig 对 `esp32s3`、Minimal build 执行 `idf.py ... build` 通过；`CONFIG_APP_REPRODUCIBLE_BUILD=y` 已真实生效。dirty-tree 候选 app 为 `0x3E440`（255,040 bytes），3 MiB factory 余量 92%，只作为构建证据，不作为烧录授权镜像；分区表 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
 - 来源与发布：逐目标文件来源、固定 Maker 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`、PolyForm Noncommercial 1.0.0、ESP-IDF Apache-2.0、采用方式和排除项记录于 `docs/provenance/t04-easyinput-input-led-feedback.md`。新增 `tools/write-release-manifest.ps1`，只允许从干净 HEAD 生成不含本机路径/设备信息的 app 大小、SHA-256、写入范围和分区哈希清单；生成清单与镜像保持 Git 忽略。

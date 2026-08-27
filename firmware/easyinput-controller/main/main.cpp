@@ -42,6 +42,7 @@ UsbDeviceConnectionGate usb_device_connection;
 std::atomic<bool> tinyusb_driver_ready{false};
 LedFeedbackMailbox led_feedback_mailbox;
 LedFeedbackDiagnostics led_feedback_diagnostics;
+PeripheralPowerController peripheral_power;
 constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -100,9 +101,10 @@ void publish_led_feedback(const InputEvent& event) {
 }
 
 void led_feedback_task(void*) {
-    PeripheralPowerController power;
     LedStrip strip;
-    if (power.begin_awake() != ESP_OK || strip.begin() != ESP_OK) {
+    if (peripheral_power.begin_awake() != ESP_OK ||
+        !peripheral_power.acquire_consumer(PeripheralPowerOwner::Led) ||
+        strip.begin() != ESP_OK) {
         led_feedback_diagnostics.record_init_failure();
         for (;;) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     }
