@@ -7,8 +7,8 @@
 - 真机结果：DeskMate 能识别当前 EasyInput，T03 按键和 T04 灯效可用，但进入按键配置页后显示“读取失败 / 键盘配置读取失败”，主进程返回 `config-read-timeout`。使用同一发布原生桥做脱敏只读复现：设备连接为 true，`0x13` 能经 `HidD_SetFeature` 被 Windows 接受，但固件没有返回能力分块；因此不是用户操作、普通断线或 renderer 展示问题，T05 配置 HIL 失败且 T06 继续阻断。
 - 根因：T05 的 `tud_hid_set_report_cb` 只接受 TinyUSB 把 Report ID 作为独立参数传入的 Feature Report。Windows 还可能以首字节携带 `0x13` Report ID 的形态交付；固定 Maker `7619bd1` 的 `usb_hid.cpp` 与 `status_hid_protocol.cpp` 明确兼容两种形态，而产品侧遗漏了这一行为。
 - 修复：在分支 `codex/easyinput-t05-config-read-fix` 增加有界 Feature Report 归一化，只接受 `0x10/0x13`、一致的独立/内嵌 Report ID、冻结长度与零填充；TinyUSB callback 仍只复制到唯一静态队列，不解析 JSON/NVS。新增 Windows 独立 ID、内嵌 ID、最大填充、冲突 ID、非零尾部及 `0x10` 回归向量。
-- 验证：固件 Host CTest `6/6` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3`、隔离 SDKCONFIG、Minimal build 和固定分区构建通过，dirty 候选 app 为 `0x4F710`。`git diff --check` 通过。未读取或写入 Flash/NVS，未烧录、擦除、monitor 或写 eFuse。
-- 状态与下一步：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED / FIX_PENDING_CLEAN_HEAD_REBUILD_AND_APP_FLASH / T06_BLOCKED`。提交文档与代码后必须从干净 HEAD 重建并记录最终 SHA-256/范围；只有取得针对该镜像的 app-only 明确授权后才可烧录并重测配置读取。
+- 验证：修复代码提交 `fac1fa821ff024265dda73202b9f2d603bd4b749` 的固件 Host CTest `6/6` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3`、隔离 SDKCONFIG、Minimal build 和固定分区构建通过。app 为 `0x4F710`（325,392 字节），SHA-256 `333C8FEA47E54D5B0A014189717B1DAEEB4E2E3A912CACFF2FFA3FFA70725874`；分区表 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。`git diff --check` 通过。未读取或写入 Flash/NVS，未烧录、擦除、monitor 或写 eFuse。
+- 状态与下一步：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED / FIX_BUILD_CONFIRMED / APP_FLASH_NOT_AUTHORIZED / T06_BLOCKED`。候选仅需 app-only 数据范围 `0x010000..0x05F70F`，写入工具最多覆盖扇区至 `0x05FFFF`；只有取得针对上述代码提交、哈希和范围的明确授权后才可烧录并重测配置读取。
 
 ## 2026-08-28 · T05 stack-fix restores keys and LED feedback
 
