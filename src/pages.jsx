@@ -579,14 +579,21 @@ export function KeymapPage({ notify }) {
   const [diagnostics, setDiagnostics] = useState([]);
   const [previewDiff, setPreviewDiff] = useState([]);
   const [syncState, setSyncState] = useState({ status: "idle", label: "本机配置 · 未同步" });
+  const dirtyKeys = useRef(new Set());
+  const dirtyEncoder = useRef(new Set());
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
   const encoder = normalizeEncoder(state.encoder);
-  const updateKey = (value) => patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) });
-  const updateEncoder = (value) => patch({ encoder: normalizeEncoder({ ...encoder, ...value }) });
+  const updateKey = (value) => { dirtyKeys.current.add(selectedInput.index); patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) }); };
+  const updateEncoder = (value) => { Object.keys(value).forEach((key) => dirtyEncoder.current.add(key)); patch({ encoder: normalizeEncoder({ ...encoder, ...value }) }); };
   const syncKeyboard = async () => {
     setSyncState({ status: "syncing", label: "正在读取…" });
     try {
-      const patch = { keymap: bindings, encoder };
+      const selectedKeys = Object.fromEntries([...dirtyKeys.current].map((index) => [`KEY${index + 1}`, bindings[index]]));
+      const selectedEncoder = Object.fromEntries([...dirtyEncoder.current].map((key) => [key, encoder[key]]));
+      const patch = {};
+      if (Object.keys(selectedKeys).length > 0) patch.keymap = selectedKeys;
+      if (Object.keys(selectedEncoder).length > 0) patch.encoder = selectedEncoder;
+      if (Object.keys(patch).length === 0) { setSyncState({ status: "idle", label: "没有待同步修改" }); return; }
       const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
       if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
       setPreviewDiff(Array.isArray(preview.diff) ? preview.diff : []);

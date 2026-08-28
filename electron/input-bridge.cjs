@@ -58,6 +58,7 @@ class InputBridgeManager extends EventEmitter {
       const matches = event.bytes === this.pendingConfig.bytes && event.crc16 === this.pendingConfig.crc16;
       if (matches) this.finishConfig(event.ok && event.saved ? { ok: true, bytes: event.bytes, crc16: event.crc16, saved: true } : { ok: false, reason: event.ok ? "config-not-saved" : "config-rejected", bytes: event.bytes, crc16: event.crc16 });
     }
+    if (result.kind === "config-progress" && this.pendingRead?.requestId === event.requestId) this.refreshReadTimeout();
     if (result.kind === "config-snapshot" && this.pendingRead?.requestId === event.requestId) {
       const snapshot = parseConfigSnapshot(event);
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
@@ -110,6 +111,13 @@ class InputBridgeManager extends EventEmitter {
     this.pendingRead = null;
     this.clearTimer(pending.timeout);
     pending.resolve(result);
+  }
+
+  refreshReadTimeout() {
+    const pending = this.pendingRead;
+    if (!pending) return;
+    this.clearTimer(pending.timeout);
+    pending.timeout = this.setTimer(() => this.finishRead({ ok: false, reason: "config-read-timeout" }), 3000);
   }
 
   handleExit(error) {

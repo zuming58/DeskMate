@@ -62,6 +62,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, bytes: bytes, crc16: crc16, sourceId: source, jsonBase64: jsonBase64));
 
+    public void ConfigProgress(string requestId, int chunk, int total) => Write(new BridgeEvent(
+        1, "config-progress", "easyinput-hid", "Config", "progress",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, chunk: chunk, total: total));
+
     private void Write(BridgeEvent value)
     {
         lock (_sync)
@@ -90,7 +95,9 @@ internal sealed record BridgeEvent(
     int? crc16 = null,
     int? phase = null,
     int? sourceId = null,
-    string? jsonBase64 = null);
+    string? jsonBase64 = null,
+    int? chunk = null,
+    int? total = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -474,6 +481,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
             if (chunk != _configNextChunk) { ResetConfigRead(); return; }
             _configChunks.Add(chunkBytes); _configLastChunk = chunkBytes;
+            _writer.ConfigProgress(PendingReadRequest, chunk, total);
             _configNextChunk++;
             if (_configNextChunk != _configTotal) return;
             var data = _configChunks.SelectMany(value => value).ToArray();

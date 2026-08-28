@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 local continuation after copied worktree
+
+- 接手：当前分支 `codex/easyinput-t05-config-nvs`，复制来的实现与远端候选逐文件一致；未合并或 rebase `main`，未开始 T06。
+- 本轮修复：UI 只提交用户实际编辑的 `KEY1`～`KEY8`/旋钮 JSON 路径；原生桥对每个已验证读取块发脱敏 `config-progress`，Electron 从最后有效进度刷新 3 秒超时；固件整数解析在乘法前拒绝溢出。
+- 验证：ESP-IDF v5.5.5 / esp32s3 激活后 Host CTest `6/6`；`npm ci --include=dev`、`npm test` `73/73`；原生桥 Release 编译 `0` 警告 / `0` 错误；`npm run build:desktop` 通过；独立绝对 SDKCONFIG、Minimal build、固定 16 MB 分区的 IDF 构建通过，app `0x4A280`（303,744 bytes）。
+- 状态：继续保持 `REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED`，等待原主电脑第三轮独立审计；未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 来源：固定 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`（PolyForm Noncommercial 1.0.0），本轮仍为产品侧清晰重实现；外部参考目录未修改、未复制、未使用 build 产物。实现细节见 `docs/provenance/t05-easyinput-config-nvs-implementation-2026-08-27.md`。
+
 ## 2026-08-27 · T05 third rework awaiting independent audit
 
 - 分支：`codex/easyinput-t05-config-nvs`，未合并或 rebase `main`；本轮继续修复第二轮审计阻断，未开始 T06。

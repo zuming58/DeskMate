@@ -21,6 +21,8 @@ void rejects_malformed_projection_without_throwing(){
   assert(!parse_config_projection(bad_escape, p));
   std::string invalid = R"JSON({"schema":"ai_keyboard.v1","profiles":[{"keys":{"KEY1":{"press":"disabled"},"KEY2":{"press":"disabled"},"KEY3":{"press":"disabled"},"KEY4":{"press":"disabled"},"KEY5":{"press":"disabled"},"KEY6":{"press":"disabled"},"KEY7":{"press":"disabled"},"KEY8":{"press":"disabled"}},"encoder":{"press":"disabled","scroll":{"mode":"scroll","speed":3}}}]}) trailing)JSON";
   assert(!parse_config_projection(invalid, p));
+  std::string overflow = R"JSON({"schema":"ai_keyboard.v1","profiles":[{"keys":{"KEY1":{"press":"disabled"},"KEY2":{"press":"disabled"},"KEY3":{"press":"disabled"},"KEY4":{"press":"disabled"},"KEY5":{"press":"disabled"},"KEY6":{"press":"disabled"},"KEY7":{"press":"disabled"},"KEY8":{"press":"disabled"}},"encoder":{"press":"disabled","scroll":{"mode":"scroll","speed":999999999999999999999999999999}}}]})JSON";
+  assert(!parse_config_projection(overflow, p));
 }
 void accepts_legal_read_flags_and_rejects_reserved(){
   std::array<uint8_t,16> request{}; request[0]='S'; request[1]='3'; request[2]='R'; request[3]=1; request[4]=7;

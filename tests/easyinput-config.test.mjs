@@ -77,6 +77,18 @@ test("configuration merge changes only approved pure-HID paths and preserves unk
   assert.throws(() => mergeKeyboardPatch(raw, { keymap: [] }), /八项/);
 });
 
+test("configuration merge accepts sparse approved key paths without rewriting untouched bindings", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.wifi = { ssid: "keep", password: "secret" };
+  const before = structuredClone(raw);
+  const merged = mergeKeyboardPatch(raw, { keymap: { KEY6: { action: "paste" } } });
+  assert.equal(merged.profiles[0].keys.KEY6.press, "paste");
+  assert.deepEqual(merged.profiles[0].keys.KEY1, before.profiles[0].keys.KEY1);
+  assert.deepEqual(merged.profiles[0].keys.KEY8, before.profiles[0].keys.KEY8);
+  assert.deepEqual(merged.wifi, before.wifi);
+  assert.throws(() => mergeKeyboardPatch(raw, { keymap: { KEY9: { action: "copy" } } }), /按键路径/);
+});
+
 test("configuration snapshot parser enforces UTF-8, source and CRC boundaries", () => {
   const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
   const base = { type: "config-snapshot", jsonBase64: data.toString("base64"), bytes: data.length, crc16: crc16Ccitt(data), sourceId: 0, requestId: "read-12345678" };

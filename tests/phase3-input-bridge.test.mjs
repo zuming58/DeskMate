@@ -45,6 +45,34 @@ test("config snapshots remain control events through the trigger filter", () => 
   assert.equal(new InputTriggerFilter().accept(parsed).kind, "config-snapshot");
 });
 
+test("config progress is validated and refreshes a matching read deadline", () => {
+  const base = { version: 1, type: "config-progress", source: "easyinput-hid", requestId: "read-12345678", chunk: 2, total: 4, time: "2026-08-21T10:00:00.000Z", sequence: 3 };
+  const parsed = parseBridgeLine(JSON.stringify(base));
+  assert.deepEqual(parsed, base);
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, chunk: 4 })), null);
+  let timerCount = 0;
+  let timeoutCallback;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (_line, callback) => callback?.() };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({
+    executable: "bridge.exe",
+    spawnImpl: () => child,
+    setTimer: (callback) => { timeoutCallback = callback; timerCount += 1; return timerCount; },
+    clearTimer: () => {},
+  });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: base.time, sequence: 1 }));
+  const read = manager.readConfig();
+  assert.equal(manager.pendingRead.requestId.startsWith("read-"), true);
+  manager.handleLine(JSON.stringify({ ...base, requestId: manager.pendingRead.requestId }));
+  assert.equal(timerCount, 2);
+  timeoutCallback();
+  return read.then((result) => { assert.deepEqual(result, { ok: false, reason: "config-read-timeout" }); manager.stop(); });
+});
+
 test("F22 triggers only on release and filters repeat, debounce, stuck release, and disconnect", () => {
   let now = 1000;
   const filter = new InputTriggerFilter({ now: () => now });

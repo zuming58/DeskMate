@@ -16,6 +16,14 @@
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
 
+## Local continuation after copied worktree
+
+- `electron/config-merge.cjs`, `src/pages.jsx`: sparse `KEY1`..`KEY8` patches are now accepted alongside the legacy full eight-item form. The renderer tracks only edited key/encoder fields and sends only those approved paths, preserving untouched bindings and all non-HID JSON.
+- `electron/input-bridge-protocol.cjs`, `electron/input-bridge.cjs`, `native/DeskMate.InputBridge/Program.cs`: added validated, redacted per-chunk `config-progress` events. Matching reads refresh the three-second deadline from the last valid chunk; invalid or stale progress is ignored.
+- `firmware/easyinput-controller/components/input_core/src/config_core.cpp`, `host_test/config_core_tests.cpp`: integer parsing now checks overflow before multiplication and rejects arbitrarily large numeric tokens without exceptions; a regression vector covers the boundary.
+
+Local continuation verification: Host CTest `6/6`; desktop `npm test` `73/73`; native bridge Release build `0` warnings / `0` errors; exact ESP-IDF `v5.5.5` / `esp32s3` build passed with app image size `0x4A280` (303,744 bytes). Hardware access remains unauthorized and unperformed.
+
 ## Third rework delta
 
 - `firmware/easyinput-controller/components/input_core/src/config_core.cpp`: replaced the compact string search and throwing integer conversion with a bounded recursive JSON parser. It rejects duplicate/nested ambiguity, malformed JSON, invalid UTF-8, invalid escape/surrogate sequences, non-integer or out-of-range speeds, trailing data, non-zero padding, and invalid request flags without exceptions; read/write assembly remains CRC- and epoch-bound.
