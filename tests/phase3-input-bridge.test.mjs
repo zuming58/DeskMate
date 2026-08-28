@@ -49,7 +49,7 @@ test("config progress is validated and refreshes a matching read deadline", () =
   const base = { version: 1, type: "config-progress", source: "easyinput-hid", requestId: "read-12345678", chunk: 2, total: 4, time: "2026-08-21T10:00:00.000Z", sequence: 3 };
   const parsed = parseBridgeLine(JSON.stringify(base));
   assert.deepEqual(parsed, base);
-  assert.equal(parseBridgeLine(JSON.stringify({ ...base, chunk: 4 })), null);
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, chunk: 0 })), null);
   let timerCount = 0;
   let timeoutCallback;
   const child = new EventEmitter();

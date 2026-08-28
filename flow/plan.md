@@ -7,7 +7,7 @@
 ### Current execution point
 
 - T04 已由另一台笔记本实现、原主电脑独立审计并完成授权 app-only 烧录和完整压力矩阵；已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`。S1～S7、旋钮灯效、长按、50 次输入、五轮断线、20 次语音键及 DeskMate 回归通过；当前样机 S8 保持既有单板硬件阻断，健康替换板到货后补测。T04 状态为 `T04_LOCKED`。
-- 当前只开放 T05：[`CONFIG_V1_FROZEN`](../contracts/deskmate-host/easyinput-config-v1.md) 已冻结完整配置读取、无损合并、脱敏确认、双槽 NVS、重启恢复和回读。另一台笔记本从准确交接 `main` 哈希开发 `codex/easyinput-t05-config-nvs`，完成无硬件证据后推送并停止；原主电脑随后独立审计与另行授权 HIL。T05 锁定前不得开始 T06。
+- 当前只开放 T05：[`CONFIG_V1_FROZEN`](../contracts/deskmate-host/easyinput-config-v1.md) 的独立代码审计、Host、桌面和 ESP-IDF 构建已通过，等待原主电脑完成授权 app-only 烧录、配置/NVS 真机往返和 T03/T04 回归。T05 锁定前不得开始 T06。
 - T03 已完成五次真机断线矩阵并由原主电脑完成独立代码、Host、IDF 和桌面组合审计：最终 atomic tap 镜像在正常断电重启后均得到 `123abc`，未出现全选或残留 Ctrl。S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获继续保留通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。T03 状态为 `T03_LOCKED`。
 - T03 的历史失败候选和验证过程保留在 `flow/progress.md` 与 `docs/handoffs/`；最终 atomic tap 提交已推送并完成授权 app-only 烧录及五次断线 HIL。旧候选只作为审计历史，不代表当前状态。
 

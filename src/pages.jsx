@@ -585,6 +585,27 @@ export function KeymapPage({ notify }) {
   const encoder = normalizeEncoder(state.encoder);
   const updateKey = (value) => { dirtyKeys.current.add(selectedInput.index); patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) }); };
   const updateEncoder = (value) => { Object.keys(value).forEach((key) => dirtyEncoder.current.add(key)); patch({ encoder: normalizeEncoder({ ...encoder, ...value }) }); };
+  useEffect(() => {
+    let active = true;
+    setSyncState({ status: "syncing", label: "正在读取键盘配置…" });
+    voiceAdapters.desktop.readKeyboardConfig().then((result) => {
+      if (!active) return;
+      if (!result?.ok || !result.config) throw new Error(result?.reason || "读取配置失败");
+      dirtyKeys.current.clear();
+      dirtyEncoder.current.clear();
+      patch({
+        keymap: Array.isArray(result.config.keymap) ? result.config.keymap.map((item) => normalizeKeyBinding(item)) : state.keymap,
+        encoder: normalizeEncoder(result.config.encoder),
+      });
+      const sourceLabel = ["DeskMate NVS", "Maker NVS", "编译默认值", "安全恢复值"][result.source] || "未知来源";
+      setSyncState({ status: "success", label: `${sourceLabel} · ${result.fingerprint || "已读取"}` });
+    }).catch((error) => {
+      if (!active) return;
+      setSyncState({ status: "error", label: "键盘配置读取失败" });
+      notify(`读取键盘配置失败：${error.message}`);
+    });
+    return () => { active = false; };
+  }, []);
   const syncKeyboard = async () => {
     setSyncState({ status: "syncing", label: "正在读取…" });
     try {
@@ -620,7 +641,7 @@ export function KeymapPage({ notify }) {
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
       <div className="keymap-grid">
         <Card className="keymap-board">
-          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>尚未读取</strong></span><span>同步结果 <strong className="success-text">UI 已就绪</strong></span></div>
+          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.status === "success" ? "已读取" : syncState.status === "syncing" ? "读取中" : "读取失败"}</strong></span><span>同步结果 <strong className="success-text">{syncState.label}</strong></span></div>
           <div className="keyboard-visual">
             <div className="key-grid">{bindings.map((binding, index) => <button key={index} className={`hardware-key ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{actionLabel(binding)}</strong></button>)}</div>
             <button className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER</small></button>

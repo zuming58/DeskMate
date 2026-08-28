@@ -24,6 +24,7 @@ recordings/
 audio-captures/
 user-data/
 diagnostics-private/
+pending-delete-*/
 firmware/**/build/
 firmware/**/sdkconfig
 firmware/**/sdkconfig.old

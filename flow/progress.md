@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 recovery work imported; local verification pending
+
+- 已从 `F:/Codex/deskmate-t05-hardware-recovery` 的提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 导入 T05 返工代码；该提交已原样备份到远端保护分支 `codex/easyinput-t05-config-nvs-hardware`，正式分支原状态保留在本地引用 `codex/easyinput-t05-before-recovery`。
+- 恢复目录的另一台电脑报告了 T05 代码门、Host、桌面和 ESP-IDF 构建证据；本机尚未独立重建，不能把该报告当作本机确认。
+- 当前状态保持 `REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_PENDING / BUILD_PENDING / HIL_NOT_AUTHORIZED / T06_BLOCKED`；未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 下一步：在正式仓库干净提交上重跑固件 Host、桌面、原生桥和 ESP-IDF v5.5.5/esp32s3 构建，核对固定分区和镜像 SHA-256；只有独立证据完成后，另行展示精确 app-only 写入范围并取得针对该镜像的明确烧录授权。
+
 ## 2026-08-28 · T05 third independent audit blocks hardware and hands off rework
 
 - 审计对象：codex/easyinput-t05-config-nvs@2c1cf8d6a9d4f3c79f0adb44bbbaad8318a02122，冻结基线 a2adc9818da07119e59a6f14d125fc23576696c9；未合并 main，未开始 T06。

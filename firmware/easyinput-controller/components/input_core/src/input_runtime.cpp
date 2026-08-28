@@ -180,6 +180,7 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
         }
         return apply_key_source(source, pressed, chord);
     } else if (event.type == InputEventType::EncoderStep) {
+        if (!encoder_enabled_) return result;
         result.wheel_changed = event.value != 0;
         if (encoder_cursor_) {
             const HidUsage usage = axis_ == ScrollAxis::Vertical
@@ -189,7 +190,7 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
             result.keyboard_changed = true;
             result.keyboard_restore_pending = true;
             result.keyboard_restore = compose();
-            compose_tap(result.keyboard_restore, {usage, 0}, result.keyboard);
+            compose_tap(result.keyboard_restore, {usage, static_cast<uint8_t>(text_caret_select_ ? 2 : 0)}, result.keyboard);
         } else {
             const int8_t amount = static_cast<int8_t>(encoder_speed_);
             if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = ((event.value > 0) ^ reverse_vertical_) ? -amount : amount;
@@ -199,7 +200,11 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
         if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
             return apply_tap_source(InputSourceId::EncoderPress, true, encoder_press_chord_);
         }
-        axis_ = axis_ == ScrollAxis::Vertical ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+        if (!configured_ || encoder_press_kind_ == ConfigActionKind::EncoderAxisToggle) {
+            axis_ = axis_ == ScrollAxis::Vertical ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+        } else if (encoder_press_kind_ == ConfigActionKind::TextCaretSelect) {
+            text_caret_select_ = !text_caret_select_;
+        }
     } else if (event.type == InputEventType::EncoderReleased) {
         if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
             return apply_tap_source(InputSourceId::EncoderPress, false, encoder_press_chord_);
@@ -215,7 +220,10 @@ void InputActionRouter::set_configuration(const ConfigProjection& projection) {
         configured_hold_[index] = projection.keys[index].kind == ConfigActionKind::VoiceInput || projection.keys[index].kind == ConfigActionKind::VoiceEdit;
     }
     encoder_press_chord_ = {static_cast<HidUsage>(projection.encoder_press.usage), projection.encoder_press.modifiers};
+    encoder_press_kind_ = projection.encoder_press.kind;
+    encoder_enabled_ = projection.encoder_enabled;
     encoder_cursor_ = projection.encoder_cursor;
+    text_caret_select_ = false;
     axis_ = projection.encoder_horizontal ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
     reverse_vertical_ = projection.reverse_vertical;
     reverse_horizontal_ = projection.reverse_horizontal;
@@ -226,7 +234,7 @@ void InputActionRouter::set_configuration(const ConfigProjection& projection) {
 void UsbInputRuntime::set_configuration(const ConfigProjection& projection) {
     // Make the replacement observable to the host before any new projection
     // can produce a report. This prevents old modifiers from surviving a save.
-    if (mounted_) enqueue_keyboard({});
+    if (mounted_) recover_release();
     router_.set_configuration(projection);
 }
 
@@ -291,6 +299,7 @@ RoutedAction InputActionRouter::apply_tap_source(InputSourceId source,
 void InputActionRouter::release_all() {
     owned_ = {};
     tap_pressed_ = {};
+    text_caret_select_ = false;
 }
 KeyboardSnapshot InputActionRouter::keyboard() const { return compose(); }
 
@@ -711,8 +720,10 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                                event.payload.begin() + event.length,
                                config_transfer->report.payload.begin())) {
                     const bool advances = config_transfer->advances_read_stream;
+                    const bool advances_status = config_transfer->advances_status_stream;
                     config_transfer->clear();
                     config_transfer->completed = advances;
+                    config_transfer->completed_status = advances_status;
                 } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
                     event.epoch == runtime.diagnostics().usb_mount_epoch &&

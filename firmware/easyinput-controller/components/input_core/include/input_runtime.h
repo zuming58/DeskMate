@@ -173,7 +173,10 @@ private:
     std::array<Chord, 8> configured_chords_{};
     std::array<bool, 8> configured_hold_{};
     Chord encoder_press_chord_{HidUsage::None, 0};
+    ConfigActionKind encoder_press_kind_{ConfigActionKind::EncoderAxisToggle};
+    bool encoder_enabled_{true};
     bool encoder_cursor_{false};
+    bool text_caret_select_{false};
     bool reverse_vertical_{false};
     bool reverse_horizontal_{false};
     uint8_t encoder_speed_{3};
@@ -216,14 +219,17 @@ struct ConfigTransferState {
     bool active{false};
     ConfigTransferReport report{};
     bool advances_read_stream{false};
+    bool advances_status_stream{false};
     bool completed{false};
+    bool completed_status{false};
     bool failed{false};
     void clear() {
         active = false;
         report = {};
         advances_read_stream = false;
+        advances_status_stream = false;
     }
-    void reset_outcome() { completed = false; failed = false; }
+    void reset_outcome() { completed = false; completed_status = false; failed = false; }
 };
 
 class UsbInputRuntime {

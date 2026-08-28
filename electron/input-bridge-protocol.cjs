@@ -26,8 +26,12 @@ function parseBridgeLine(line) {
     return Object.freeze({ version: 1, type: "config-snapshot", source: "easyinput-hid", requestId: value.requestId, bytes: value.bytes, crc16: value.crc16, sourceId: value.sourceId, jsonBase64: value.jsonBase64, time: value.time, sequence: value.sequence });
   }
   if (value.type === "config-progress") {
-    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || !Number.isInteger(value.chunk) || value.chunk < 0 || value.chunk > 41 || !Number.isInteger(value.total) || value.total < 1 || value.total > 42 || value.chunk >= value.total || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || !Number.isInteger(value.chunk) || value.chunk < 1 || !Number.isInteger(value.total) || value.total < value.chunk || value.total > 42 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     return Object.freeze({ version: 1, type: "config-progress", source: "easyinput-hid", requestId: value.requestId, chunk: value.chunk, total: value.total, time: value.time, sequence: value.sequence });
+  }
+  if (value.type === "config-capabilities") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.configReadV1 !== "boolean" || typeof value.configWriteV1 !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: value.requestId, configReadV1: value.configReadV1, configWriteV1: value.configWriteV1, time: value.time, sequence: value.sequence });
   }
   if (!["input", "status"].includes(value.type)) return null;
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;
@@ -69,7 +73,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
-    if (["host-action", "config-write", "config-ack", "config-snapshot", "config-progress"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "config-write", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) this.reset("easyinput-hid", "F22");
       return { kind: "status", event };

@@ -142,11 +142,11 @@ void configuration_replacement_releases_host_and_applies_cursor() {
     runtime.set_configuration(projection);
     QueuedHidReport report{};
     CHECK(runtime.front_report(report));
-    runtime.complete_report();
-    CHECK(runtime.front_report(report));
     CHECK(report.kind == HidReportKind::Keyboard);
     CHECK(report.payload == kZeroKeyboardPayload);
     runtime.complete_report();
+    runtime.on_input(key(0, false));
+    while (runtime.front_report(report)) runtime.complete_report();
     runtime.on_input({InputEventType::EncoderStep, 0, 1});
     CHECK(runtime.front_report(report));
     CHECK(report.kind == HidReportKind::Keyboard);
@@ -202,6 +202,35 @@ void encoder_axis_vectors() {
     CHECK(router.axis() == ScrollAxis::Horizontal);
     router.apply({InputEventType::EncoderPressed, 0, 0});
     CHECK(router.axis() == ScrollAxis::Vertical);
+}
+
+void configured_encoder_actions_follow_maker_semantics() {
+    InputActionRouter router;
+    ConfigProjection projection{};
+    projection.encoder_press.kind = ConfigActionKind::Disabled;
+    projection.encoder_enabled = false;
+    router.set_configuration(projection);
+    CHECK(!router.apply({InputEventType::EncoderStep, 0, 1}).wheel_changed);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.axis() == ScrollAxis::Vertical);
+
+    projection.encoder_enabled = true;
+    projection.encoder_press.kind = ConfigActionKind::EncoderAxisToggle;
+    router.set_configuration(projection);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.axis() == ScrollAxis::Horizontal);
+
+    projection.encoder_cursor = true;
+    projection.encoder_horizontal = true;
+    projection.encoder_press.kind = ConfigActionKind::TextCaretSelect;
+    router.set_configuration(projection);
+    auto plain = router.apply({InputEventType::EncoderStep, 0, 1});
+    CHECK(plain.keyboard_changed && plain.keyboard.modifier == 0);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    auto selected = router.apply({InputEventType::EncoderStep, 0, 1});
+    CHECK(selected.keyboard_changed && selected.keyboard.modifier == 2);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.apply({InputEventType::EncoderStep, 0, 1}).keyboard.modifier == 0);
 }
 
 void tap_actions_restore_without_waiting_for_physical_release() {
@@ -1444,6 +1473,7 @@ int main() {
     configuration_replacement_releases_host_and_applies_cursor();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
+    configured_encoder_actions_follow_maker_semantics();
     tap_actions_restore_without_waiting_for_physical_release();
     tap_actions_restore_concurrent_held_voice_snapshot();
     tap_pair_admission_and_transfer_fail_closed();

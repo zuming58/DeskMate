@@ -40,13 +40,14 @@ function encodeKeyboardConfig(value) {
   return { json, bytes: data.length, crc16, reports };
 }
 
-function encodeConfigReadRequest(requestId) {
+function encodeConfigReadRequest(requestId, flag = 0x02) {
   if (!Number.isInteger(requestId) || requestId <= 0 || requestId > 0xffffffff) throw new Error("配置读取请求 ID 无效");
+  if (![0, 1, 2].includes(flag)) throw new Error("配置读取标志无效");
   const report = Buffer.alloc(64);
   report[0] = CONFIG_READ_REPORT_ID;
   report[1] = 0x53; report[2] = 0x33; report[3] = 0x52; report[4] = 1;
   report.writeUInt32LE(requestId >>> 0, 5);
-  report[9] = 0x02;
+  report[9] = flag;
   return report;
 }
 
