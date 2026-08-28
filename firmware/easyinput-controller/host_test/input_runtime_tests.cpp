@@ -1466,6 +1466,46 @@ void event_ring_overflow_held_key_waits_for_release() {
     runtime.on_input(key(1, true));
     CHECK(runtime.queued_reports() == 1);
 }
+
+void config_status_transfer_completion_advances() {
+    UsbCallbackLifecycleState callback;
+    UsbLifecycleEventQueue events;
+    UsbInputRuntime runtime;
+    HidReportTransferState transfer;
+    ConfigTransferState config_transfer;
+
+    CHECK(events.publish(callback.on_mount()));
+    process_usb_lifecycle_events(events, runtime, transfer,
+                                 callback.snapshot(), &config_transfer);
+
+    config_transfer.active = true;
+    config_transfer.advances_status_stream = true;
+    config_transfer.report.report_id = 0x11;
+    config_transfer.report.length = 63;
+    config_transfer.report.epoch = callback.snapshot().epoch;
+    config_transfer.report.payload.fill(0);
+    config_transfer.report.payload[0] = 0x04;
+
+    std::array<uint8_t, 64> wire{};
+    wire[0] = 0x11;
+    std::copy(config_transfer.report.payload.begin(),
+              config_transfer.report.payload.end(), wire.begin() + 1);
+    const auto completion = make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, wire.data(), wire.size());
+    CHECK(completion.report_identity_valid);
+    CHECK(events.publish(completion));
+    process_usb_lifecycle_events(events, runtime, transfer,
+                                 callback.snapshot(), &config_transfer);
+    CHECK(!config_transfer.active);
+    CHECK(config_transfer.completed_status);
+
+    wire[1] = 0x05;
+    CHECK(!make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, wire.data(), wire.size())
+        .report_identity_valid);
+}
 }
 
 int main() {
@@ -1497,6 +1537,7 @@ int main() {
     input_drop_recovery_waits_for_release();
     event_ring_overflow_discards_stale_key_down();
     event_ring_overflow_held_key_waits_for_release();
+    config_status_transfer_completion_advances();
     if (failures) {
         std::cerr << "input_runtime_tests: " << failures << " failure(s)\n";
         return 1;

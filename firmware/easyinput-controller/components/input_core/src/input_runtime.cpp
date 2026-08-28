@@ -800,9 +800,12 @@ UsbLifecycleEvent make_usb_transfer_event(
     if (wire_report == nullptr || wire_length == 0) return event;
     uint16_t expected_length = usb_wire_report_length(wire_report[0]);
     // App-command configuration responses carry report ID 0x11 followed by
-    // a 63-byte payload; ordinary keyboard report 0x11 is not emitted.
+    // a 63-byte payload. T05 emits acknowledgements (0x03), capability/status
+    // chunks (0x04), and complete-configuration chunks (0x06); ordinary
+    // keyboard report 0x11 is not emitted.
     if (wire_report[0] == 0x11 && wire_length == 64 &&
-        (wire_report[1] == 0x03 || wire_report[1] == 0x06)) {
+        (wire_report[1] == 0x03 || wire_report[1] == 0x04 ||
+         wire_report[1] == 0x06)) {
         expected_length = 64;
     }
     if (expected_length == 0 || wire_length != expected_length) return event;
