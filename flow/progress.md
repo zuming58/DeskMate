@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 second config-read fix failed HIL; laptop handoff prepared
+
+- 做了什么：提交 `e10211ffedd1a27e6ec1608be9b38872a70d72ae`，补齐配置状态响应 kind `0x04` 的 TinyUSB transfer-complete 身份与 Host 回归；以 ESP-IDF v5.5.5 重建并按用户明确授权 app-only 写入当前 EasyInput。镜像 325,408 字节，SHA-256 `3074B78E6A4AD3688291E542BCA3298239BBD164427CAD925C18D9134B49D3ED`，数据范围 `0x010000..0x05F71F`，擦写扇区至 `0x05FFFF`；写入哈希和私有身份复核通过，未写 NVS/分区/eFuse，未操作小智。
+- 真机结果：用户正常关机重开后 DeskMate 仍显示 `config-read-timeout`。随后完整退出 DeskMate 与原生桥，用独立 `DeskMate.InputBridge.exe` 只读复现：`boardConnected=true`，但没有 `config-progress/config-capabilities/config-snapshot`。因此不是 renderer 缓存或软件未重启；`fac1fa8` 与 `e10211f` 两个候选均被 HIL 否决，不得再次重复烧录。
+- 怎么理解：当前证据只能把问题定位到 `0x13` Feature 请求进入固件、owner 队列、首个 `0x11` 输入报告或 Windows Raw Input 接收边界之一；既有 Host 测试制造的 64 字节 completion 形态不足以证明真实回调。下一轮必须先观测每个边界和 Maker 固定实现差异，不能提交第三个猜测性修复。
+- 产出路径：`docs/handoffs/second-computer-t05-config-read-hil-blocker-2026-08-28.md`、`flow/tasks/T05-easyinput-config-nvs.md`、`flow/lessons.md`、`docs/README.md` 及本记录。DeskMate 已在诊断结束后重新启动。
+- 当前状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED_AFTER_TWO_APP_FIXES / ROOT_CAUSE_EVIDENCE_REQUIRED / T06_BLOCKED`。
+- 下一步：另一台笔记本从 GitHub 的准确 HANDOFF HEAD 接管，按交接先取得首个丢失边界证据并修复 T05；完成只读、单字段 NVS 往返、重启回读、恢复和 T03/T04 回归后锁定 T05，再从锁定 HEAD 开始 T06 固定文字/打开应用。
+
 ## 2026-08-28 · T05 Windows configuration read timeout reproduced and fixed in code
 
 - 真机结果：DeskMate 能识别当前 EasyInput，T03 按键和 T04 灯效可用，但进入按键配置页后显示“读取失败 / 键盘配置读取失败”，主进程返回 `config-read-timeout`。使用同一发布原生桥做脱敏只读复现：设备连接为 true，`0x13` 能经 `HidD_SetFeature` 被 Windows 接受，但固件没有返回能力分块；因此不是用户操作、普通断线或 renderer 展示问题，T05 配置 HIL 失败且 T06 继续阻断。

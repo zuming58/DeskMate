@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A passing HID model test does not prove the real callback boundary
+
+- 现象：Feature Report 两种 ID 形态和 `0x04` 多分块 completion 的 Host 测试均通过，两个 app 镜像真机仍在能力读取阶段超时；独立原生桥只看到设备连接，看不到第一条进度事件。
+- 做法：把链路拆成 `HidD_SetFeature → TinyUSB set callback → owner queue → first input report → transfer callback → Windows Raw Input` 六个可观测边界，先定位第一处缺失再修改。测试必须使用真机观察到的 callback 长度和 Report ID 形态，不能由生产假设反向制造“黄金向量”。
+- 规则：同一 HIL 症状连续否决两个候选后立即停止烧录；下一候选必须带真实边界证据、固定 Maker 差异和缺失测试向量。
+
 ## TinyUSB Feature Report callbacks must normalize Windows report-ID delivery
 
 - 现象：Windows `HidD_SetFeature` 返回成功、设备枚举和普通 HID 均正常，但 `0x13` 配置读取静默超时；只测“Report ID 由 callback 参数单独给出”的 Host 向量无法复现。
