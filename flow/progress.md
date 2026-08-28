@@ -9,6 +9,14 @@
 - 当前状态保持 `REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_PENDING / BUILD_PENDING / HIL_NOT_AUTHORIZED / T06_BLOCKED`；未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
 - 下一步：在正式仓库干净提交上重跑固件 Host、桌面、原生桥和 ESP-IDF v5.5.5/esp32s3 构建，核对固定分区和镜像 SHA-256；只有独立证据完成后，另行展示精确 app-only 写入范围并取得针对该镜像的明确烧录授权。
 
+## 2026-08-28 · T05 recovery independently rebuilt on hardware computer
+
+- 角色：原主电脑/硬件电脑；分支 `codex/easyinput-t05-config-nvs`；提交 `a3f0f5fb3b4ecbb3ef859fea1b93e0561f34f22e`。恢复目录提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 已原样备份到远端保护分支 `codex/easyinput-t05-config-nvs-hardware`，并通过 cherry-pick 带入正式分支；旧正式状态保留为 `codex/easyinput-t05-before-recovery`。
+- 本机验证：固件 Host CTest `6/6`；桌面 `npm test` `73/73`；`npm run build:desktop` 通过；精确 `ESP-IDF v5.5.5`、target `esp32s3` 独立 SDKCONFIG 构建通过。应用镜像 `304848` 字节 (`0x4A6D0`)，app SHA-256 `CA889B0595B0CA40C4BD17B914C4566F918E9590D91C92DB3B483E8779AE14E4`，app-only 范围 `0x010000..0x05A6CF`；固定分区 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- 静态/范围检查：`git diff --check` 通过；根/固件 `AGENTS.md` 与 `CLAUDE.md` 一致；构建目录、`managed_components`、`sdkconfig`、镜像和发布清单均被忽略，未进入提交；外部 EasyInput/小智目录未修改、未复制、未使用其 build 产物。
+- 状态：代码门与本机测试/构建证据已完成，仍保持 `CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED`。本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 下一步：推送本分支后，若要硬件验证，必须针对上述新 HEAD、SHA-256 和范围重新确认目标 EasyInput 身份及 app-only 写入授权；之后按只读配置读取、单字段保存/重启回读和 T03/T04 快速回归执行。不得把之前旧镜像授权或另一台电脑截图作为本机证据。
+
 ## 2026-08-28 · T05 third independent audit blocks hardware and hands off rework
 
 - 审计对象：codex/easyinput-t05-config-nvs@2c1cf8d6a9d4f3c79f0adb44bbbaad8318a02122，冻结基线 a2adc9818da07119e59a6f14d125fc23576696c9；未合并 main，未开始 T06。
