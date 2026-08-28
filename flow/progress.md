@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 final code audit passed; clean image and HIL next
+
+- 做了什么：在原主电脑直接关闭另一台电脑 T05 候选的剩余阻断，不再返工。修复配置读取线程/窗口竞态、旧请求残块、能力门、同一 USB epoch 事务串行、NVS 初始化失败安全降级、Maker 兼容按键/旋钮映射、状态/完整配置分流，以及按键页进入时先读取板上脱敏配置作为编辑基线。
+- 为什么：用户要求加快进度，同时 T05 涉及持久化配置，不能把代码构建通过误当成 NVS 真机闭环。当前状态为 `AUDIT_CONFIRMED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING / T06_BLOCKED`。
+- 怎么理解：T05 只完成纯 HID 配置读取、无损修改、确认、双槽 NVS、重启恢复和回读；固定文字、打开应用及其他 Host Action 仍属于 T06。进入 T06 前只剩精确干净镜像、授权 app-only 烧录和单字段 NVS 往返验收。
+- 产出路径：`docs/reviews/t05-easyinput-config-nvs-final-audit-2026-08-28.md`、`flow/tasks/T05-easyinput-config-nvs.md`、`flow/guides/two-computer-handoff.md`，以及 `firmware/easyinput-controller/`、`native/DeskMate.InputBridge/`、`electron/`、`src/pages.jsx` 的 T05 修复。
+- 验证：固件 Host CTest 6/6；桌面 `npm test` 73/73；`npm run build:desktop` 通过；ESP-IDF v5.5.5/esp32s3 固定分区候选构建通过。板级扫描 1 PASS、1 声明形态 WARN、0 FAIL。最终 SHA 与地址必须在本次干净提交后重建取得。
+- 问题解决：把整目录复制回来的过期 build/sdkconfig 移至 Git 忽略且可恢复的 `pending-delete-2026-08-28/`，没有删除；两电脑今后只通过 GitHub 精确提交交接。
+- 下一步：提交当前审计结果，从干净 HEAD 重建 T05 app，展示 HEAD/SHA/精确 app-only 范围并取得最终确认；随后只验明并备份当前 EasyInput，写 app 区，正常关机重开并执行只读配置、S7 往返和 T03/T04 快速回归。
+
 ## 2026-08-28 · T05 local continuation after copied worktree
 
 - 接手：当前分支 `codex/easyinput-t05-config-nvs`，复制来的实现与远端候选逐文件一致；未合并或 rebase `main`，未开始 T06。

@@ -171,3 +171,7 @@
 - 决策：T05 冻结 `CONFIG_V1_FROZEN`，通过完整板载配置读取、Electron 主进程无损 read-modify-write、脱敏差异确认、DeskMate 双槽 NVS 和写后回读开放配置同步；React 不接触完整配置、网络/音频字段或设备路径。
 - 原因：Maker `ai_keyboard.v1` 是整份覆盖，`0x13` 的状态/指纹不是完整配置；局部构造 JSON 会破坏既有字段，单槽直接覆盖也无法对掉电和坏配置提供确定恢复。
 - 边界：T05 只激活纯 HID 按键与旋钮动作，继续复用 T03 held PTT/atomic tap 和 T04 灯效/GPIO8 owner。固定文字、Host Action/打开应用及其他 Windows 主机动作保留原始配置但不执行，统一留到 T06；旧 `ai_keyboard/config_v2` 只读导入，禁止自动擦除 NVS。
+# 2026-08-28 · Cross-computer exchange uses Git only
+
+- 两台电脑之间只通过 GitHub 的准确提交和短分支交换产品代码；不再整目录复制覆盖工作树。
+- 每次换电脑前必须在 `flow/progress.md` 顶部记录角色、分支、HEAD、验证、硬件操作、未决风险和下一步；详细规范见 `flow/guides/two-computer-handoff.md`。

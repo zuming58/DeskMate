@@ -19,7 +19,7 @@ class InputBridgeManager extends EventEmitter {
     this.restartTimer = null;
     this.pendingConfig = null;
     this.pendingRead = null;
-    this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "" };
+    this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
   }
 
   configure(value) { return this.filter.configure(value); }
@@ -50,7 +50,7 @@ class InputBridgeManager extends EventEmitter {
     const result = this.filter.accept(event);
     if (result.kind === "status") {
       this.restartAttempts = 0;
-      this.status = { ...this.status, boardConnected: event.boardConnected, error: "" };
+      this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null }) };
       this.emit("status", this.snapshot());
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
@@ -63,14 +63,27 @@ class InputBridgeManager extends EventEmitter {
       const snapshot = parseConfigSnapshot(event);
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
     }
+    if (result.kind === "config-capabilities" && this.pendingRead?.requestId === event.requestId) {
+      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1 };
+      this.status = { ...this.status, configCapabilities: capabilities };
+      this.finishRead({ ok: true, capabilities });
+      this.emit("status", this.snapshot());
+    }
     if (result.kind === "host-action") this.emit("host-action", event);
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
 
-  syncConfig(value) {
+  async syncConfig(value) {
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
+    if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (!this.status.configCapabilities) {
+      const checked = await this.readCapabilities();
+      if (!checked.ok) return checked;
+    }
+    if (!this.status.configCapabilities?.config_write_v1) return { ok: false, reason: "config-write-v1-unsupported" };
+    if (this.pendingConfig) return { ok: false, reason: "config-sync-in-progress" };
     let encoded;
     try { encoded = encodeKeyboardConfig(value); } catch (error) { return Promise.resolve({ ok: false, reason: error.message }); }
     const requestId = `cfg-${randomUUID()}`;
@@ -82,17 +95,31 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
-  readConfig() {
+  async readConfig() {
+    if (!this.status.configCapabilities) {
+      const checked = await this.readCapabilities();
+      if (!checked.ok) return checked;
+    }
+    if (!this.status.configCapabilities?.config_read_v1) return { ok: false, reason: "config-read-v1-unsupported" };
+    return this.requestRead(2, "config");
+  }
+
+  readCapabilities() {
+    return this.requestRead(0, "capabilities");
+  }
+
+  requestRead(flag, mode) {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
+    if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
     const requestId = `read-${randomUUID()}`;
     return new Promise((resolve) => {
-      const timeout = this.setTimer(() => this.finishRead({ ok: false, reason: "config-read-timeout" }), 3000);
-      this.pendingRead = { requestId, timeout, resolve };
+      this.pendingRead = { requestId, timeout: null, resolve, mode };
+      this.refreshReadTimeout();
       const numericId = (Date.now() >>> 0) || 1;
       this.pendingRead.numericId = numericId;
-      const report = encodeConfigReadRequest(numericId);
+      const report = encodeConfigReadRequest(numericId, flag);
       this.child.stdin.write(`${JSON.stringify({ version: 1, type: "read-config", requestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishRead({ ok: false, reason: "input-bridge-write-failed" }); });
     });
   }
@@ -126,7 +153,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishConfig({ ok: false, reason: "input-bridge-exited" });
     this.finishRead({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
-    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, error: error?.message || "" };
+    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
     if (this.stopping || this.restartTimer) return;
     const delay = Math.min(30000, 1000 * (2 ** Math.min(this.restartAttempts, 5)));
@@ -145,7 +172,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishRead({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
-    this.status = { ...this.status, process: "stopped", boardConnected: false };
+    this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };
     this.emit("status", this.snapshot());
   }
 }

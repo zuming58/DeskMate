@@ -57,5 +57,6 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     MANIFEST_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/idf_component.yml"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
     PARTITIONS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../partitions.csv"
+    CONFIG_STORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/config_store.cpp"
 )
 add_test(NAME firmware_source_contract_tests COMMAND firmware_source_contract_tests)

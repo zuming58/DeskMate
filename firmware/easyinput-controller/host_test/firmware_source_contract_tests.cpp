@@ -79,6 +79,7 @@ int main() {
     const std::string manifest = read_all(MANIFEST_PATH);
     const std::string sdkconfig_defaults = read_all(SDKCONFIG_DEFAULTS_PATH);
     const std::string partitions = read_all(PARTITIONS_PATH);
+    const std::string config_store = read_all(CONFIG_STORE_PATH);
 
     CHECK(contains(main_source, "esp_timer_get_time()"));
     CHECK(contains(main_source, "monotonic_milliseconds"));
@@ -166,6 +167,14 @@ int main() {
     CHECK(contains(main_source, "kUsbConfigurationDescriptor.data()"));
     CHECK(contains(main_source, "kUsbStringDescriptors.data()"));
     CHECK(!contains(main_source, "TUD_HID_DESCRIPTOR"));
+    CHECK(contains(main_source, "report_id == 0x10 && length == kConfigWriteFeaturePayloadBytes"));
+    CHECK(contains(main_source, "report_id == 0x13 && length >= kConfigReadRequestPayloadBytes"));
+    CHECK(contains(main_source, "config_read ? kConfigReadRequestPayloadBytes : length"));
+    CHECK(contains(main_source, "request.flag == ConfigReadFlag::CompleteConfig"));
+    CHECK(contains(main_source, "ConfigStatusStream config_status_stream"));
+    CHECK(contains(main_source, "config_save_in_flight"));
+    CHECK(!contains(config_store, "nvs_flash_erase"));
+    CHECK(contains(config_store, "storage_failed_=true"));
 
     // T04 remains a fail-soft consumer of confirmed T03 events.
     CHECK(contains(main_source,

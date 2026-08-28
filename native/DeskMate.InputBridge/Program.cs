@@ -67,6 +67,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, chunk: chunk, total: total));
 
+    public void ConfigCapabilities(string requestId, bool read, bool write) => Write(new BridgeEvent(
+        1, "config-capabilities", "easyinput-hid", "Config", "capabilities",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, configReadV1: read, configWriteV1: write));
+
     private void Write(BridgeEvent value)
     {
         lock (_sync)
@@ -97,7 +102,9 @@ internal sealed record BridgeEvent(
     int? sourceId = null,
     string? jsonBase64 = null,
     int? chunk = null,
-    int? total = null);
+    int? total = null,
+    bool? configReadV1 = null,
+    bool? configWriteV1 = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -137,12 +144,12 @@ internal sealed class ConfigCommandListener : IDisposable
             if (type.GetString() == "read-config") {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
                 var report = Convert.FromBase64String(reportValue.GetString() ?? "");
-                if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] != 2) throw new InvalidOperationException("invalid-read-report");
+                if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] > 2 || report.AsSpan(10).ContainsAnyExcept((byte)0)) throw new InvalidOperationException("invalid-read-report");
                 // Register the request before issuing the feature report. HID
                 // devices may answer synchronously on the first transfer.
-                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5));
+                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5), report[9]);
                 var readAccepted = HidFeatureDevice.RequestConfigRead(report);
-                if (!readAccepted) { _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
+                if (!readAccepted) { RawInputWindow.CancelRead(requestId); _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
                 return Task.CompletedTask;
             }
             if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
@@ -167,8 +174,12 @@ internal sealed class ConfigCommandListener : IDisposable
 
     private static bool IsRequestId(string? value) => value is { Length: >= 8 and <= 80 } && value.All(character => char.IsAsciiLetterOrDigit(character) || character == '-');
 
-    private static bool IsConfigReport(byte[] report) =>
-        report.Length == 64 && report[0] == 0x10 && report[1] == (byte)'S' && report[2] == (byte)'3' && report[3] == (byte)'C' && report[4] == 1;
+    private static bool IsConfigReport(byte[] report)
+    {
+        if (report.Length != 64 || report[0] != 0x10 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'C' || report[4] != 1) return false;
+        var chunkBytes = report[9];
+        return chunkBytes is >= 1 and <= 52 && report.AsSpan(12 + chunkBytes).ContainsAnyExcept((byte)0) == false;
+    }
 
     public void Dispose() => _cancellation.Cancel();
 }
@@ -312,9 +323,9 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
-    public static string? PendingReadRequest { get; private set; }
-    public static void BeginRead(string requestId, uint numericRequest) { PendingReadRequest = requestId; PendingReadNumericRequest = numericRequest; }
-    private static uint PendingReadNumericRequest { get; set; }
+    private static RawInputWindow? Current;
+    public static void BeginRead(string requestId, uint numericRequest, byte flag) => Current?.BeginReadInternal(requestId, numericRequest, flag);
+    public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -346,6 +357,10 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private IntPtr _keyboardHook;
     private bool _boardConnected;
     private bool _disposed;
+    private readonly object _configSync = new();
+    private string? _pendingReadRequest;
+    private uint _pendingReadNumericRequest;
+    private byte _pendingReadFlag;
     private readonly List<byte[]> _configChunks = new();
     private int _configTotal;
     private int _configLength;
@@ -358,6 +373,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     public RawInputWindow(EventWriter writer, bool diagnosticMode = false)
     {
         _writer = writer;
+        Current = this;
         _diagnosticMode = diagnosticMode;
         _keyboardProc = KeyboardHook;
         CreateHandle(new CreateParams { Caption = "DeskMate Raw Input Bridge", Parent = new IntPtr(-3) });
@@ -463,37 +479,80 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var crc16 = report[9] | (report[10] << 8);
             _writer.ConfigAck(report[6] == 1, report[11] == 1, bytes, crc16, report[5]);
         }
-        else if (kind == 0x06 && length >= 10 && PendingReadRequest is not null)
+        else if ((kind == 0x06 || kind == 0x04) && _pendingReadRequest is not null)
         {
-            var chunk = report[2];
-            var total = report[3];
-            var declared = report[9] | (report[10] << 8);
-            var crc = report[11] | (report[12] << 8);
-            var source = report[13];
-            var count = length - 10;
-            var numericRequest = BitConverter.ToUInt32(report.Slice(5, 4));
-            if (total is < 1 or > 42 || declared is < 1 or > 2048 || count > 49 || 14 + count > report.Length || source > 3 || numericRequest == 0 || numericRequest != PendingReadNumericRequest) { ResetConfigRead(); return; }
-            if (14 + count > report.Length || report.Slice(14 + count).ToArray().Any(value => value != 0)) { ResetConfigRead(); return; }
-            if (chunk == 0 && PendingReadRequest is null) { ResetConfigRead(); return; }
-            if (chunk == 0) { _configChunks.Clear(); _configTotal = total; _configLength = declared; _configCrc16 = crc; _configSource = source; _configNextChunk = 0; _configNumericRequest = numericRequest; }
-            if (total != _configTotal || declared != _configLength || crc != _configCrc16 || source != _configSource || numericRequest != _configNumericRequest) { ResetConfigRead(); return; }
-            var chunkBytes = report.Slice(14, count).ToArray();
+            ParseConfigStream(report, kind, length);
+        }
+    }
+
+    private void BeginReadInternal(string requestId, uint numericRequest, byte flag)
+    {
+        lock (_configSync)
+        {
+            ResetConfigReadLocked();
+            _pendingReadRequest = requestId;
+            _pendingReadNumericRequest = numericRequest;
+            _pendingReadFlag = flag;
+        }
+    }
+
+    private void CancelReadInternal(string requestId)
+    {
+        lock (_configSync) if (_pendingReadRequest == requestId) ResetConfigReadLocked();
+    }
+
+    private void ParseConfigStream(ReadOnlySpan<byte> report, byte kind, int length)
+    {
+        lock (_configSync)
+        {
+            if (_pendingReadRequest is null || (_pendingReadFlag == 2) != (kind == 0x06)) return;
+            var chunk = report[2]; var total = report[3];
+            var declared = report[10] | (report[11] << 8); var crc = report[12] | (report[13] << 8);
+            var source = kind == 0x06 ? report[14] : 0;
+            var headerBytes = kind == 0x06 ? 10 : 9;
+            var dataOffset = kind == 0x06 ? 15 : 14;
+            if (length < headerBytes) { ResetConfigReadLocked(); return; }
+            var count = length - headerBytes;
+            var numericRequest = BitConverter.ToUInt32(report.Slice(6, 4));
+            var maxTotal = kind == 0x06 ? 42 : 11;
+            var maxBytes = kind == 0x06 ? 2048 : 512;
+            var maxChunk = kind == 0x06 ? 49 : 50;
+            if (numericRequest == 0 || numericRequest != _pendingReadNumericRequest) return;
+            if (total is < 1 || total > maxTotal || declared is < 1 || declared > maxBytes || count > maxChunk || dataOffset + count > report.Length || (kind == 0x06 && source > 3) || report.Slice(dataOffset + count).ToArray().Any(value => value != 0)) { ResetConfigReadLocked(); return; }
+            if (chunk == 0) { _configChunks.Clear(); _configTotal=total; _configLength=declared; _configCrc16=crc; _configSource=source; _configNextChunk=0; _configNumericRequest=numericRequest; _configLastChunk=null; }
+            if (total!=_configTotal || declared!=_configLength || crc!=_configCrc16 || source!=_configSource || numericRequest!=_configNumericRequest) { ResetConfigReadLocked(); return; }
+            var chunkBytes=report.Slice(dataOffset,count).ToArray();
             if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
-            if (chunk != _configNextChunk) { ResetConfigRead(); return; }
-            _configChunks.Add(chunkBytes); _configLastChunk = chunkBytes;
-            _writer.ConfigProgress(PendingReadRequest, chunk, total);
-            _configNextChunk++;
+            if (chunk != _configNextChunk) { ResetConfigReadLocked(); return; }
+            _configChunks.Add(chunkBytes); _configLastChunk=chunkBytes; _configNextChunk++;
+            _writer.ConfigProgress(_pendingReadRequest, _configNextChunk, _configTotal);
             if (_configNextChunk != _configTotal) return;
-            var data = _configChunks.SelectMany(value => value).ToArray();
-            if (data.Length != _configLength || Crc16Ccitt(data) != _configCrc16) { ResetConfigRead(); return; }
-            _writer.ConfigSnapshot(PendingReadRequest, data.Length, _configCrc16, _configSource, Convert.ToBase64String(data));
-            ResetConfigRead();
+            var data=_configChunks.SelectMany(value=>value).ToArray();
+            if (data.Length!=_configLength || Crc16Ccitt(data)!=_configCrc16) { ResetConfigReadLocked(); return; }
+            if (kind == 0x06) _writer.ConfigSnapshot(_pendingReadRequest,data.Length,_configCrc16,_configSource,Convert.ToBase64String(data));
+            else
+            {
+                try
+                {
+                    using var json=JsonDocument.Parse(data);
+                    if (json.RootElement.GetProperty("schema").GetString() != "ai_keyboard.config_status.v1") throw new JsonException("invalid-status-schema");
+                    var capabilities=json.RootElement.GetProperty("capabilities");
+                    _writer.ConfigCapabilities(_pendingReadRequest, capabilities.TryGetProperty("config_read_v1",out var read)&&read.ValueKind==JsonValueKind.True, capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True);
+                }
+                catch (JsonException) { ResetConfigReadLocked(); return; }
+            }
+            ResetConfigReadLocked();
         }
     }
 
     private void ResetConfigRead()
     {
-        PendingReadRequest = null; PendingReadNumericRequest = 0;
+        lock (_configSync) ResetConfigReadLocked();
+    }
+
+    private void ResetConfigReadLocked()
+    {
+        _pendingReadRequest = null; _pendingReadNumericRequest = 0; _pendingReadFlag = 0;
         _configChunks.Clear(); _configLastChunk = null; _configTotal = _configLength = _configCrc16 = _configSource = _configNextChunk = 0; _configNumericRequest = 0;
     }
 
@@ -573,6 +632,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (ReferenceEquals(Current, this)) Current = null;
         if (_keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(_keyboardHook);
         DestroyHandle();
     }

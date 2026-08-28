@@ -21,6 +21,8 @@
 - `flow/tasks/`：大任务说明书；结果写入 `flow/progress.md`，不要堆回任务卡。
 - `flow/guides/`：Project Flow 方法规范的本地副本。
 
+两台电脑交替工作时必须执行 `flow/guides/two-computer-handoff.md`：GitHub 是唯一代码交换通道；每次换电脑都要提交、推送并在 `flow/progress.md` 顶部记录准确分支、HEAD、验证、硬件操作和下一步。不得再用整目录覆盖另一台电脑的工作树。
+
 用户要求所有目录使用英文 ASCII 名称。文件名也优先使用英文 kebab-case；正文可以使用中文。
 
 ## Product constraints

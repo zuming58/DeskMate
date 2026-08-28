@@ -15,5 +15,6 @@ class ConfigNvsStore final : public ConfigStorageBackend {
   void* handle_{nullptr};
   ConfigSlot marker_{ConfigSlot::Invalid};
   bool writable_{false};
+  bool storage_failed_{false};
 };
 }
