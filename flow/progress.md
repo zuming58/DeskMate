@@ -2,6 +2,12 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 stack-fix restores keys and LED feedback
+
+- 用户在 app-only 烧录并正常启动后确认：实体按键功能已经恢复，T04 输入灯效也已经恢复。这证明此前首次 NVS 加载期间的启动栈溢出已不再阻止基础输入与灯效运行。
+- 本次只记录用户可观察的真机事实；旋钮行为、完整配置读取、单字段保存、重启回读、掉电恢复和 T03 断线回归尚未完成，因此不得将 T05 标记为完整 HIL 通过。
+- 当前交接状态：`REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / PARTIAL_HIL_CONFIRMED / T06_BLOCKED`。继续工作时以 GitHub 分支 `codex/easyinput-t05-config-nvs` 为唯一交换通道，不使用整目录覆盖；先完成剩余 T05 HIL，再决定是否关闭 T05。
+
 ## 2026-08-28 · T05 stack-fix app flashed; functional HIL pending
 
 - 烧录源码提交：`b67371fe91847c9be3b0f6f1e3e29eb6657a5bc5`；精确 `ESP-IDF v5.5.5` / `esp32s3` 发布镜像为 325296 字节（`0x4F6B0`），SHA-256 `D7AE882F417777533CF3994E916B1F7A3B96E1DE0A80EEFBAA3E30505E091E37`。用户针对该 HEAD、哈希及 `0x010000..0x05F6AF` app-only 范围明确授权后执行。
