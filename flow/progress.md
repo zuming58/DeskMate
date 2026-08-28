@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 app flashed and core configuration/voice HIL accepted
+
+- 分支与代码：`codex/easyinput-t05-config-read-fix`，源码 HEAD `14e46f8233ca49fa11d2d63922d5094797e114a5`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 325,760 字节（`0x4F880`），SHA-256 `66DBA78C025E53EFCEA35031FF2D436A85DA2EE98A49FA7CC11E276324CF0905`。
+- 硬件操作：用户按精确 HEAD、哈希和 `0x010000..0x05F87F` 授权后，仅 app-only 写入 factory app；esptool 报告写入数据哈希验证通过并 hard reset。未写 bootloader、分区表、NVS 原始区域、PHY、声音区或 eFuse，未整片擦除，未操作小智。端口和设备标识不进入 Git。
+- 真机结果：配置页已能读取板上配置；K2/K4 继续作为 Maker 兼容快捷键且允许录入单键，界面将 Return/Backspace/Space 显示为“回车/退格/空格”；用户确认配置可以修改并进入脱敏预览/确认/提交链路。K1 已恢复并能正常触发 DeskMate 语音输入流程；当前语音识别服务因本机未重新配置 API 而返回“尚未配置”，这不是实体键或固件回归。
+- 桌面版本：烧录后最初仍运行旧的 `release/config-read-fix` 包，导致界面继续显示英文；已关闭旧进程并启动当前 HEAD 的 `release/win-unpacked`，并直接核对 app.asar 包含中文显示和“单键或组合键”录入逻辑。
+- 验证继承：该 HEAD 的固件 Host CTest `6/6`、桌面 `npm test` `78/78`、`npm run build:desktop`、ESP-IDF v5.5.5 固定 16 MB 分区构建及静态检查均通过。用户将当前核心功能判定为“基本合格”，明确要求更新仓库后进入下一阶段。
+- 保留边界：系统 `window.confirm` 与 DeskMate 视觉不一致，作为下一阶段开始前的桌面界面债务记录；尚未取得 API 配置后的完整 STT 证据，也未把重启回读、损坏恢复或完整 T03/T04 压力矩阵写成通过。后续改动必须保持配置读取、K1/K3 held 生命周期、K2/K4 单键、八键、旋钮、灯效和 T03 断线释放回归。
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / CORE_CONFIG_EDIT_HIL_CONFIRMED / VOICE_TRIGGER_HIL_CONFIRMED / USER_ACCEPTED_FOR_NEXT_STAGE`。下一步从本记录提交创建 `codex/easyinput-t06-host-actions`，先完整阅读 T06 任务卡并冻结/核对 HOST_ACTION 合同；不得提前开发 BLE、音频、DeskMate Link 或小智。
+
 ## 2026-08-28 · T05 configuration read fixed; voice and single-key regression candidate ready for clean image
 
 - 结果：用户真机已确认配置页显示“键盘系统 已读取”，证明配置读取阻断已关闭。随后定位到三个 T05 回归：加载配置时 K1/K3 的 `voice_ptt_hold` / `edit_ptt_hold` 只保留动作类型却丢失 HID chord；K2/K4 的 Maker 单键快捷键被 renderer 的“必须有修饰键”规则拒绝；“保存当前按键”只提示本机保存而没有进入板端事务同步。
