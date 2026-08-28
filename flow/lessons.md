@@ -1,5 +1,11 @@
 # Lessons learned
 
+## ESP-IDF fixed task stacks cannot carry configuration aggregates
+
+- 现象：T05 旧镜像在 app_main 首次 NVS 加载时重启；大容量 ConfigLoadResult、ConfigSlotRecord、legacy JSON 和保存结果沿调用链落入主任务或 4 KiB owner task 栈。即使局部声明很短，aggregate = {} 也可能生成同尺寸隐式临时对象。
+- 做法：把有界配置工作区放入唯一 owner 的静态成员或静态缓冲，函数通过调用方提供的结果/工作区写入；用 Host source-contract 禁止大对象回到 app_main、配置 owner 或输入 owner 栈，并从最终 ELF 读取真实栈帧。
+- 规则：ESP-IDF 栈预算必须按编译后的栈帧和隐式临时对象验证，不能只看源码或盲目增大任务栈；配置/NVS 失败仍须 fail-soft，不得以启动崩溃换取恢复。
+
 ## Maker reference logic must be consulted before inventing a replacement
 
 - 现象：T03 早期多轮修复围绕新 HID lifetime 的全零报告、mount 顺序、transfer-complete、GPIO40 DCD 重连和重复释放反复试验，Host 测试可通过但真机仍在第二次或后续断线留下 Ctrl。

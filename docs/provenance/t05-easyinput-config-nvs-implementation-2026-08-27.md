@@ -16,6 +16,13 @@
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
 
+## 2026-08-28 startup-stack rework
+
+- Failure evidence: image 1cf3a4e rebooted during first NVS load. The backtrace path was nvs_get_u8 -> ConfigNvsStore::load() -> app_main(). Measured old stack frames were approximately 10.4 KiB for load, 4.2 KiB for save_config_transaction, 6.3 KiB for config_owner_task, and 6.7 KiB for input_owner_task.
+- Product-side correction: bounded A/B records, load result, legacy buffer and transaction workspace are static members of the sole ConfigNvsStore; load returns a const reference; transaction and slot selection write through caller-provided storage; configuration/input owner command and result buffers are static owner storage; implicit large aggregate temporaries were removed. T03/T04 ownership remains unchanged.
+- Regression evidence: Host CTest 6/6, desktop npm test 73/73, and npm run build:desktop pass. The pre-commit ESP-IDF v5.5.5/esp32s3 candidate uses MINIMAL_BUILD and the preserved 16 MB partition table; ELF frames are app_main 224, ConfigNvsStore::load 112, save_config_transaction 96, config_owner_task 96, and input_owner_task 432 bytes. A clean-HEAD rebuild and new image hash are required before burning.
+- Safety: the old image/hash and earlier burn authorization are invalid. No reference tree was modified or built; no port scan, device identification, Flash/NVS access, erase, flash, monitor or HIL was performed.
+
 ## Local continuation after copied worktree
 
 - `electron/config-merge.cjs`, `src/pages.jsx`: sparse `KEY1`..`KEY8` patches are now accepted alongside the legacy full eight-item form. The renderer tracks only edited key/encoder fields and sends only those approved paths, preserving untouched bindings and all non-HID JSON.

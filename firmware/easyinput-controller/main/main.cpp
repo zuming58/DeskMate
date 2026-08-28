@@ -68,6 +68,11 @@ ConfigNvsStore config_store;
 ConfigDocument active_config{};
 ConfigSlot active_config_slot{ConfigSlot::Invalid};
 uint32_t active_config_generation{0};
+ConfigSaveCommand config_owner_command{};
+ConfigSaveResult config_owner_result{};
+ConfigSaveResult input_owner_save_result{};
+ConfigFeatureCommand input_owner_config_command{};
+ConfigSaveCommand input_owner_save_command{};
 ConfigWriteAssembler config_write_assembler;
 ConfigReadStream config_read_stream;
 ConfigStatusStream config_status_stream;
@@ -76,6 +81,16 @@ std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
 bool config_ack_pending = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_ack_payload{};
+void reset_config_save_result(ConfigSaveResult& result) {
+    result.status = ConfigSaveStatus::WriteFailed;
+    result.document.bytes.fill(0);
+    result.document.length = 0;
+    result.document.crc16 = 0;
+    result.document.source = ConfigSource::Default;
+    result.slot = ConfigSlot::Invalid;
+    result.generation = 0;
+    result.epoch = 0;
+}
 void queue_config_ack(uint8_t phase, bool ok, bool saved, uint16_t bytes,
                       uint16_t crc16) {
     config_ack_payload.fill(0);
@@ -189,25 +204,24 @@ void led_feedback_task(void*) {
 }
 
 void config_owner_task(void*) {
-    ConfigSaveCommand command{};
     for (;;) {
-        if (xQueueReceive(config_save_queue, &command, portMAX_DELAY) != pdTRUE) continue;
-        ConfigSaveResult result{};
-        result.document = command.document;
-        result.epoch = command.epoch;
-        result.status = config_store.save(command.document, command.active, command.generation);
-        if (result.status == ConfigSaveStatus::Saved) {
-            const auto loaded = config_store.load();
+        if (xQueueReceive(config_save_queue, &config_owner_command, portMAX_DELAY) != pdTRUE) continue;
+        reset_config_save_result(config_owner_result);
+        config_owner_result.document = config_owner_command.document;
+        config_owner_result.epoch = config_owner_command.epoch;
+        config_owner_result.status = config_store.save(config_owner_command.document, config_owner_command.active, config_owner_command.generation);
+        if (config_owner_result.status == ConfigSaveStatus::Saved) {
+            const ConfigLoadResult& loaded = config_store.load();
             ConfigProjection projection{};
             if (loaded.slot == ConfigSlot::Invalid || !parse_config_projection(loaded.document.view(), projection)) {
-                result.status = ConfigSaveStatus::ReadbackFailed;
+                config_owner_result.status = ConfigSaveStatus::ReadbackFailed;
             } else {
-                result.document = loaded.document;
-                result.slot = loaded.slot;
-                result.generation = loaded.generation;
+                config_owner_result.document = loaded.document;
+                config_owner_result.slot = loaded.slot;
+                config_owner_result.generation = loaded.generation;
             }
         }
-        (void)xQueueSend(config_result_queue, &result, portMAX_DELAY);
+        (void)xQueueSend(config_result_queue, &config_owner_result, portMAX_DELAY);
     }
 }
 
@@ -304,49 +318,49 @@ void input_owner_task(void*) {
             }
         }
 
-        ConfigSaveResult save_result{};
-        while (xQueueReceive(config_result_queue, &save_result, 0) == pdTRUE) {
+        while (xQueueReceive(config_result_queue, &input_owner_save_result, 0) == pdTRUE) {
             config_save_in_flight = false;
-            if (save_result.epoch != runtime.diagnostics().usb_mount_epoch || !runtime.mounted()) {
+            if (input_owner_save_result.epoch != runtime.diagnostics().usb_mount_epoch || !runtime.mounted()) {
                 continue;
             }
-            if (save_result.status == ConfigSaveStatus::Saved) {
+            if (input_owner_save_result.status == ConfigSaveStatus::Saved) {
                 ConfigProjection projection{};
-                if (parse_config_projection(save_result.document.view(), projection)) {
-                    active_config = save_result.document;
-                    active_config_slot = save_result.slot;
-                    active_config_generation = save_result.generation;
+                if (parse_config_projection(input_owner_save_result.document.view(), projection)) {
+                    active_config = input_owner_save_result.document;
+                    active_config_slot = input_owner_save_result.slot;
+                    active_config_generation = input_owner_save_result.generation;
                     runtime.set_configuration(projection);
-                    queue_config_ack(2, true, true, save_result.document.length, save_result.document.crc16);
+                    queue_config_ack(2, true, true, input_owner_save_result.document.length, input_owner_save_result.document.crc16);
                 } else {
-                    queue_config_ack(3, false, false, save_result.document.length, save_result.document.crc16);
+                    queue_config_ack(3, false, false, input_owner_save_result.document.length, input_owner_save_result.document.crc16);
                 }
             } else {
-                queue_config_ack(static_cast<uint8_t>(save_result.status), false, false,
-                                 save_result.document.length, save_result.document.crc16);
+                queue_config_ack(static_cast<uint8_t>(input_owner_save_result.status), false, false,
+                                 input_owner_save_result.document.length, input_owner_save_result.document.crc16);
             }
         }
-        ConfigFeatureCommand config_command{};
-        while (xQueueReceive(config_command_queue, &config_command, 0) == pdTRUE) {
-            if (config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
+        while (xQueueReceive(config_command_queue, &input_owner_config_command, 0) == pdTRUE) {
+            if (input_owner_config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
                 config_write_assembler.abort();
                 config_read_stream.abort();
                 config_status_stream.abort();
                 continue;
             }
-            if (config_command.report_id == 0x10) {
+            if (input_owner_config_command.report_id == 0x10) {
                 if (config_save_in_flight || config_read_stream.pending() || config_status_stream.pending()) {
                     queue_config_ack(1, false, false, 0, 0);
                     continue;
                 }
                 const auto result = config_write_assembler.accept(
-                    config_command.payload.data(), config_command.length,
-                    config_command.epoch);
+                    input_owner_config_command.payload.data(), input_owner_config_command.length,
+                    input_owner_config_command.epoch);
                 if (result == ConfigReceiveStatus::Complete) {
-                    const ConfigDocument candidate = config_write_assembler.document();
-                    ConfigSaveCommand save{candidate, active_config_slot, active_config_generation,
-                                           config_command.epoch};
-                    if (xQueueSend(config_save_queue, &save, 0) == pdTRUE) {
+                    const ConfigDocument& candidate = config_write_assembler.document();
+                    input_owner_save_command.document = candidate;
+                    input_owner_save_command.active = active_config_slot;
+                    input_owner_save_command.generation = active_config_generation;
+                    input_owner_save_command.epoch = input_owner_config_command.epoch;
+                    if (xQueueSend(config_save_queue, &input_owner_save_command, 0) == pdTRUE) {
                         config_save_in_flight = true;
                     } else {
                         queue_config_ack(4, false, false, candidate.length, candidate.crc16);
@@ -356,17 +370,17 @@ void input_owner_task(void*) {
                 }
             } else {
                 ConfigReadRequest request{};
-                if (decode_config_read_request(config_command.payload.data(),
-                                               config_command.length, request)) {
+                if (decode_config_read_request(input_owner_config_command.payload.data(),
+                                               input_owner_config_command.length, request)) {
                     if (config_save_in_flight || config_write_assembler.active()) continue;
                     config_read_stream.abort();
                     config_status_stream.abort();
                     if (request.flag == ConfigReadFlag::CompleteConfig) {
                         (void)config_read_stream.replace(
-                            request.request_id, active_config, config_command.epoch);
+                            request.request_id, active_config, input_owner_config_command.epoch);
                     } else {
                         (void)config_status_stream.replace(
-                            request.request_id, config_command.epoch);
+                            request.request_id, input_owner_config_command.epoch);
                     }
                 }
             }
@@ -448,7 +462,7 @@ void publish_transfer_event(UsbLifecycleEventKind kind,
 
 extern "C" void app_main(void) {
     ESP_ERROR_CHECK(config_store.begin());
-    const auto loaded_config = config_store.load();
+    const ConfigLoadResult& loaded_config = config_store.load();
     active_config = loaded_config.document;
     active_config_slot = loaded_config.slot;
     active_config_generation = loaded_config.generation;

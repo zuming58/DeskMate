@@ -58,5 +58,8 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
     PARTITIONS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../partitions.csv"
     CONFIG_STORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/config_store.cpp"
+    CONFIG_STORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/config_store.h"
+    CONFIG_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/config_core.h"
+    CONFIG_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/config_core.cpp"
 )
 add_test(NAME firmware_source_contract_tests COMMAND firmware_source_contract_tests)

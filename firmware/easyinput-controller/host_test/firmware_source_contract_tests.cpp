@@ -80,6 +80,9 @@ int main() {
     const std::string sdkconfig_defaults = read_all(SDKCONFIG_DEFAULTS_PATH);
     const std::string partitions = read_all(PARTITIONS_PATH);
     const std::string config_store = read_all(CONFIG_STORE_PATH);
+    const std::string config_store_header = read_all(CONFIG_STORE_HEADER_PATH);
+    const std::string config_core_header = read_all(CONFIG_CORE_HEADER_PATH);
+    const std::string config_core_source = read_all(CONFIG_CORE_SOURCE_PATH);
 
     CHECK(contains(main_source, "esp_timer_get_time()"));
     CHECK(contains(main_source, "monotonic_milliseconds"));
@@ -175,6 +178,37 @@ int main() {
     CHECK(contains(main_source, "config_save_in_flight"));
     CHECK(!contains(config_store, "nvs_flash_erase"));
     CHECK(contains(config_store, "storage_failed_=true"));
+
+    // T05 bounded configuration documents belong to the single static owners,
+    // never the 3.5/4 KiB ESP-IDF task stacks.
+    CHECK(contains(config_store_header, "const ConfigLoadResult& load()"));
+    CHECK(contains(config_store_header, "ConfigSlotRecord slot_a_{}"));
+    CHECK(contains(config_store_header, "ConfigSlotRecord slot_b_{}"));
+    CHECK(contains(config_store_header, "ConfigLoadResult loaded_{}"));
+    CHECK(contains(config_store_header,
+                   "ConfigTransactionWorkspace transaction_workspace_{}"));
+    CHECK(contains(config_store_header,
+                   "std::array<char, kConfigMaxJsonBytes + 1> legacy_buffer_{}"));
+    CHECK(contains(config_core_header,
+                   "ConfigTransactionWorkspace&"));
+    CHECK(contains(main_source,
+                   "const ConfigLoadResult& loaded_config = config_store.load()"));
+    CHECK(contains(main_source, "ConfigSaveCommand config_owner_command{}"));
+    CHECK(contains(main_source, "ConfigSaveResult config_owner_result{}"));
+    CHECK(contains(main_source, "ConfigSaveResult input_owner_save_result{}"));
+    CHECK(contains(main_source, "ConfigSaveCommand input_owner_save_command{}"));
+    CHECK(contains(main_source, "reset_config_save_result(config_owner_result)"));
+    CHECK(!contains(main_source, "config_owner_result = {}"));
+    CHECK(!contains(main_source, "const auto loaded_config = config_store.load()"));
+    CHECK(!contains(main_source, "const ConfigDocument candidate ="));
+    CHECK(!contains(main_source, "ConfigSaveResult save_result{}"));
+    CHECK(!contains(main_source, "ConfigSaveCommand command{}"));
+    CHECK(!contains(config_store, "loaded_ = {}"));
+    CHECK(!contains(config_store, "slot_a_ = {}"));
+    CHECK(!contains(config_store, "slot_b_ = {}"));
+    CHECK(!contains(config_core_source, "result = {}; const bool va"));
+    CHECK(!contains(config_core_source, "workspace.record = {}"));
+    CHECK(!contains(config_core_source, "workspace.readback = {}"));
 
     // T04 remains a fail-soft consumer of confirmed T03 events.
     CHECK(contains(main_source,

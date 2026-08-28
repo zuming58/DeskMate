@@ -38,8 +38,9 @@ struct ConfigSlotRecord { uint32_t magic{kConfigRecordMagic}; uint16_t version{k
 bool validate_config_record(const ConfigSlotRecord&);
 enum class ConfigSlot:uint8_t { A=0,B=1,Invalid=0xff };
 struct ConfigLoadResult { ConfigDocument document{}; ConfigSlot slot{ConfigSlot::Invalid}; uint32_t generation{}; bool recovered_marker{}; };
-ConfigLoadResult select_config_record(const ConfigSlotRecord*,const ConfigSlotRecord*,ConfigSlot);
+void select_config_record(const ConfigSlotRecord*,const ConfigSlotRecord*,ConfigSlot,ConfigLoadResult&);
 class ConfigStorageBackend { public: virtual ~ConfigStorageBackend()=default; virtual bool write_slot(ConfigSlot,const ConfigSlotRecord&)=0; virtual bool commit()=0; virtual bool read_slot(ConfigSlot,ConfigSlotRecord&)=0; virtual bool write_marker(ConfigSlot)=0; };
 enum class ConfigSaveStatus:uint8_t { Saved,WriteFailed,CommitFailed,ReadbackFailed,MarkerFailed };
-ConfigSaveStatus save_config_transaction(ConfigStorageBackend&,const ConfigDocument&,ConfigSlot,uint32_t);
+struct ConfigTransactionWorkspace { ConfigSlotRecord record{}; ConfigSlotRecord readback{}; };
+ConfigSaveStatus save_config_transaction(ConfigStorageBackend&,const ConfigDocument&,ConfigSlot,uint32_t,ConfigTransactionWorkspace&);
 }

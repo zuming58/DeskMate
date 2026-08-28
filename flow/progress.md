@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 startup stack overflow fixed; clean-HEAD image pending
+
+- 旧 T05 镜像 1cf3a4e 在首次加载 NVS 配置时循环重启。串口回溯落在 nvs_get_u8 -> ConfigNvsStore::load() -> app_main()；旧 load 栈帧约 10.4 KiB，save_config_transaction 约 4.2 KiB，config_owner_task 约 6.3 KiB，input_owner_task 约 6.7 KiB，超过约 3.5 KiB 主任务栈和 4 KiB owner task 栈。该镜像及其旧烧录授权已作废。
+- 修复把 NVS A/B 槽、加载结果、legacy JSON 和事务工作区放入唯一 ConfigNvsStore 的静态有界成员；加载、槽选择和保存改为通过稳定引用/调用方工作区写入；配置与输入 owner 的大 command/result/document 改为唯一静态缓冲；消除大聚合临时重置。没有单纯增大任务栈，也没有建立第二套输入或配置状态机。
+- 回归门禁：Visual Studio 2022/MSVC 19.44 Host CTest 6/6；桌面 npm test 73/73；npm run build:desktop 通过。候选 ESP-IDF v5.5.5/esp32s3/MINIMAL_BUILD/固定分区构建通过，app 为 325264 字节；候选 ELF 实测 app_main 224 字节、ConfigNvsStore::load 112、save_config_transaction 96、config_owner_task 96、input_owner_task 432 字节。
+- 当前状态：REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_PENDING / HIL_NOT_AUTHORIZED / T06_BLOCKED。候选构建来自提交前工作区，不得烧录。下一步提交推送后从最终干净 HEAD 和绝对隔离 SDKCONFIG 重建，计算新的 SHA-256 与 app-only 范围，再取得新授权。未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+
 ## 2026-08-28 · T05 recovery work imported; local verification pending
 
 - 已从 `F:/Codex/deskmate-t05-hardware-recovery` 的提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 导入 T05 返工代码；该提交已原样备份到远端保护分支 `codex/easyinput-t05-config-nvs-hardware`，正式分支原状态保留在本地引用 `codex/easyinput-t05-before-recovery`。
