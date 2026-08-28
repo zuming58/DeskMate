@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 stack-fix app flashed; functional HIL pending
+
+- 烧录源码提交：`b67371fe91847c9be3b0f6f1e3e29eb6657a5bc5`；精确 `ESP-IDF v5.5.5` / `esp32s3` 发布镜像为 325296 字节（`0x4F6B0`），SHA-256 `D7AE882F417777533CF3994E916B1F7A3B96E1DE0A80EEFBAA3E30505E091E37`。用户针对该 HEAD、哈希及 `0x010000..0x05F6AF` app-only 范围明确授权后执行。
+- 写入结果：只从 `0x010000` 写入 app；esptool 按 4 KiB 扇区实际擦除 `0x010000..0x05FFFF`，仍完全位于固定 3 MiB factory app 分区内；写入 325296 字节并完成数据哈希校验，随后自动 hard reset。未写 bootloader、分区表、NVS、PHY、声音区或 eFuse，未整片擦除。
+- 烧录前只读验明目标为 ESP32-S3，具体端口和设备标识不进入 Git。烧录后验证 helper 因本机 PowerShell Security 模块无法加载而未建立验证 session；后续有界只读日志采集也未取得应用健康标志，因此不能把烧录退出 0 冒充功能 HIL。
+- 当前状态：`REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PENDING / T06_BLOCKED`。下一步由用户观察正常启动，再测试八键、灯效、旋钮以及配置读取/保存/重启回读；通过前不开始 T06。
+
 ## 2026-08-28 · T05 startup stack overflow fixed; final release image pending
 
 - 旧 T05 镜像 1cf3a4e 在首次加载 NVS 配置时循环重启。串口回溯落在 nvs_get_u8 -> ConfigNvsStore::load() -> app_main()；旧 load 栈帧约 10.4 KiB，save_config_transaction 约 4.2 KiB，config_owner_task 约 6.3 KiB，input_owner_task 约 6.7 KiB，超过约 3.5 KiB 主任务栈和 4 KiB owner task 栈。该镜像及其旧烧录授权已作废。
