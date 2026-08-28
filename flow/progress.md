@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 configuration read fixed; voice and single-key regression candidate ready for clean image
+
+- 结果：用户真机已确认配置页显示“键盘系统 已读取”，证明配置读取阻断已关闭。随后定位到三个 T05 回归：加载配置时 K1/K3 的 `voice_ptt_hold` / `edit_ptt_hold` 只保留动作类型却丢失 HID chord；K2/K4 的 Maker 单键快捷键被 renderer 的“必须有修饰键”规则拒绝；“保存当前按键”只提示本机保存而没有进入板端事务同步。
+- 修复：K1 恢复 `Ctrl+Shift+Space`、K3 恢复 `Ctrl+Shift+E`，继续使用 T03 held-source 生命周期；KEY2/KEY4 继续保持 Maker 的快捷键合同，允许回车、退格、空格、Tab、Esc、方向键、数字、字母、F1～F24 及合法组合键。界面将 Return/Backspace/Space 显示为“回车/退格/空格”，全局语音快捷键仍要求修饰键。每键保存现在走重新读取、脱敏 preview、用户确认、单次 token commit 和回读流程。
+- 参考：固定只读核对 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `keymap.cpp`、`hid_keycode.cpp` 及对应 Host tests；只采用行为证据并在 DeskMate 内清晰重实现，未读取脏工作树或使用参考 build 产物。
+- 验证：Visual Studio 2022 x64 Host CTest `6/6`；桌面 `npm test` `78/78`；`npm run build:desktop` 通过；精确 `ESP-IDF v5.5.5`、target `esp32s3`、Minimal build、固定 16 MB 分区构建通过，dirty app 为 `0x4F880`（325,760 字节），factory 余量 90%；`git diff --check`、AGENTS/CLAUDE、来源、密钥/隐私和构建产物忽略检查通过。
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / VOICE_AND_SINGLE_KEY_FIX_PENDING_APP_FLASH / T06_BLOCKED`。本轮尚未扫描端口、识别设备、读取 Flash/NVS、烧录、erase、monitor 或执行新镜像 HIL。提交推送后必须从最终干净 HEAD 重建，展示 HEAD、app SHA-256 与 app-only 精确范围，并取得针对该镜像的新确认后才可烧录。
+
 ## 2026-08-28 · T05 second config-read fix failed HIL; laptop handoff prepared
 
 - 做了什么：提交 `e10211ffedd1a27e6ec1608be9b38872a70d72ae`，补齐配置状态响应 kind `0x04` 的 TinyUSB transfer-complete 身份与 Host 回归；以 ESP-IDF v5.5.5 重建并按用户明确授权 app-only 写入当前 EasyInput。镜像 325,408 字节，SHA-256 `3074B78E6A4AD3688291E542BCA3298239BBD164427CAD925C18D9134B49D3ED`，数据范围 `0x010000..0x05F71F`，擦写扇区至 `0x05FFFF`；写入哈希和私有身份复核通过，未写 NVS/分区/eFuse，未操作小智。

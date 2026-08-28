@@ -12,6 +12,11 @@ internal static class Program
     private static void Main(string[] args)
     {
         Console.OutputEncoding = new UTF8Encoding(false);
+        if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
+        {
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() ? 0 : 1;
+            return;
+        }
         var writer = new EventWriter();
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
@@ -463,11 +468,9 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
-        if (report.Length != 64 || report[0] != 0x11) return;
+        if (!VendorReportProtocol.HasValidEnvelope(report)) return;
         var kind = report[1];
         var length = report[4];
-        if (5 + length > report.Length) return;
-        if (kind != 0x06 && (report[2] != 0 || report[3] != 1)) return;
         if (kind == 0x05 && length == 36)
         {
             var id = Encoding.ASCII.GetString(report.Slice(5, 36));

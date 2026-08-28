@@ -1,6 +1,6 @@
 # T05 · EasyInput configuration and NVS
 
-- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED_AFTER_TWO_APP_FIXES / ROOT_CAUSE_EVIDENCE_REQUIRED / T06_BLOCKED`
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / VOICE_AND_SINGLE_KEY_FIX_PENDING_APP_FLASH / T06_BLOCKED`
 - 恢复提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 在另一台电脑有代码审计与构建报告；当前电脑必须独立重跑验证后，才能更新为 `AUDIT_CONFIRMED`。
 - 前置：T04 已在原主电脑完成独立审计、构建、烧录、完整真机矩阵并锁定；当前样机 S8 为既有单板硬件阻断，八键/GPIO48 产品合同不变。
 - 计划分支：`codex/easyinput-t05-config-nvs`，从本任务交接时用户收到的准确 `origin/main` 哈希创建。

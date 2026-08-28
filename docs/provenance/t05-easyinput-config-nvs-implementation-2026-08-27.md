@@ -16,6 +16,15 @@
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
 
+## 2026-08-28 voice and single-key regression correction
+
+- Fixed Maker evidence: commit `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`, `components/keyboard/src/keymap.cpp`, `components/keyboard/src/hid_keycode.cpp`, `host_test/hid_keycode_tests.cpp`, `host_test/config_payload_tests.cpp`, and `host_test/config_state_tests.cpp`. Maker keeps KEY2 as `Return`, KEY4 as `Backspace`, accepts unmodified single HID keys, and keeps the public voice shortcuts `Ctrl+Shift+Space` and `Ctrl+Shift+E`.
+- Product-side root cause: the T05 projection recognized `voice_ptt_hold` and `edit_ptt_hold` as held actions but discarded their modifier/usage bytes. Loading configuration therefore replaced the locked T03 K1/K3 chords with empty reports. The renderer also treated KEY2/KEY4 as shortcuts while its recorder rejected every unmodified key, and the per-key save button did not enter the guarded preview/commit flow.
+- Product-side correction: `config_core.cpp` restores the two held voice chords and accepts the fixed Maker single-key vocabulary; `shortcutCapture.js`, `keymap.js`, and `pages.jsx` allow single keys only in key mapping, display Return/Backspace/Space as 回车/退格/空格, and route the per-key save button through read/preview/confirm/commit. The global voice-shortcut recorder still requires a modifier.
+- Windows read correction: `VendorReportProtocol.cs` makes Maker-compatible multi-chunk kind `0x04` and DeskMate kind `0x06` envelopes share one validated Raw Input boundary. The production parser and a native self-test use the same validator.
+- Regression evidence: firmware Host CTest `6/6`, desktop `npm test` `78/78`, `npm run build:desktop`, and exact ESP-IDF `v5.5.5` / `esp32s3` build pass. The dirty verification app is `0x4F880` bytes; only the clean final HEAD image may be authorized for flashing.
+- Safety: no external reference file or build output was modified or used. No port scan, device identification, Flash/NVS access, flash, erase, monitor, eFuse, partition, PHY, sound-bank, Xiaozhi, or T06 operation was performed.
+
 ## 2026-08-28 Windows Feature Report callback compatibility
 
 - Failure evidence: on Windows, DeskMate reported the board connected but both capability and full-config reads timed out. A redacted direct bridge reproduction confirmed that `HidD_SetFeature` accepted `0x13`, while no response stream reached the host.

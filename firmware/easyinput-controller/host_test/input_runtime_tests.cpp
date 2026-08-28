@@ -153,6 +153,27 @@ void configuration_replacement_releases_host_and_applies_cursor() {
     CHECK(report.payload[2] == 0x51 || report.payload[2] == 0x52);
 }
 
+void loaded_safe_configuration_preserves_voice_shortcuts() {
+    ConfigProjection projection{};
+    CHECK(parse_config_projection(compiled_safe_config_json(), projection));
+    InputActionRouter router;
+    router.set_configuration(projection);
+
+    const auto voice = router.apply(key(0, true));
+    CHECK(voice.keyboard_changed);
+    CHECK(voice.keyboard.modifier == 0x03);
+    CHECK(voice.keyboard.usages[0] == 0x2c);
+    CHECK(!voice.keyboard_restore_pending);
+    CHECK(router.apply(key(0, false)).keyboard_changed);
+
+    const auto edit = router.apply(key(2, true));
+    CHECK(edit.keyboard_changed);
+    CHECK(edit.keyboard.modifier == 0x03);
+    CHECK(edit.keyboard.usages[0] == 0x08);
+    CHECK(!edit.keyboard_restore_pending);
+    CHECK(router.apply(key(2, false)).keyboard_changed);
+}
+
 void physical_source_ownership_and_overflow() {
     InputActionRouter router;
     const InputActionRouter::Chord same{HidUsage::A, 1};
@@ -1511,6 +1532,7 @@ void config_status_transfer_completion_advances() {
 int main() {
     default_action_vectors();
     configuration_replacement_releases_host_and_applies_cursor();
+    loaded_safe_configuration_preserves_voice_shortcuts();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
     configured_encoder_actions_follow_maker_semantics();

@@ -54,7 +54,7 @@ import { BailianSttAdapter, BailianTextOrganizer, ConfigurableTextOrganizer, Htt
 import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
 import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
-import { shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
+import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
 import { processVoiceRecording } from "./services/voicePipeline.js";
@@ -87,7 +87,7 @@ const moodIcons = {
   alert: AlertCircle,
 };
 
-function ShortcutRecorder({ value, onConfirm, global = false }) {
+function ShortcutRecorder({ value, onConfirm, global = false, allowSingle = false }) {
   const [capturing, setCapturing] = useState(false);
   const [candidate, setCandidate] = useState("");
   const [message, setMessage] = useState("");
@@ -108,15 +108,15 @@ function ShortcutRecorder({ value, onConfirm, global = false }) {
     const capture = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (event.key === "Escape" && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) { stopCapture(); return; }
-      const result = shortcutFromKeyboardEvent(event);
+      if (!allowSingle && event.key === "Escape" && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) { stopCapture(); return; }
+      const result = shortcutFromKeyboardEvent(event, { allowSingle });
       if (result.error) { setCandidate(""); setMessage(result.error); }
       else if (result.shortcut) { setCandidate(result.shortcut); setMessage("请确认是否使用这个快捷键"); }
       else { setCandidate(""); setMessage(result.display ? `已按下 ${result.display}，请继续按一个字母、数字或功能键` : "请按下组合键"); }
     };
     window.addEventListener("keydown", capture, true);
     return () => window.removeEventListener("keydown", capture, true);
-  }, [capturing, stopCapture]);
+  }, [allowSingle, capturing, stopCapture]);
   useEffect(() => () => { if (global) voiceAdapters.desktop.setShortcutCapture(false).catch(() => {}); }, [global]);
   const confirm = async () => {
     if (!candidate) return;
@@ -129,8 +129,8 @@ function ShortcutRecorder({ value, onConfirm, global = false }) {
   };
   return (
     <div className="shortcut-recorder">
-      <button type="button" className={`shortcut-recorder__field ${capturing ? "is-capturing" : ""}`} onClick={startCapture}>{capturing ? candidate || "请按下新的组合键…" : value || "点击录制快捷键"}</button>
-      {capturing && <div className="shortcut-recorder__confirm"><small>{message || "请同时按下修饰键和一个按键；Esc 取消"}</small><div><Button variant="ghost" onClick={stopCapture}>取消</Button><Button variant="primary" disabled={!candidate} onClick={confirm}>确认</Button></div></div>}
+      <button type="button" className={`shortcut-recorder__field ${capturing ? "is-capturing" : ""}`} onClick={startCapture}>{capturing ? shortcutDisplay(candidate) || (allowSingle ? "请按下单键或组合键…" : "请按下新的组合键…") : shortcutDisplay(value) || "点击录制快捷键"}</button>
+      {capturing && <div className="shortcut-recorder__confirm"><small>{message || (allowSingle ? "请按下单键或组合键；使用取消按钮退出" : "请同时按下修饰键和一个按键；Esc 取消")}</small><div><Button variant="ghost" onClick={stopCapture}>取消</Button><Button variant="primary" disabled={!candidate} onClick={confirm}>确认</Button></div></div>}
     </div>
   );
 }
@@ -181,7 +181,7 @@ function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
   const changeAction = (action) => onChange({ action });
   return <>
     <label>按下动作<Select value={current.action} onChange={changeAction} ariaLabel="按键动作">{options.map((action) => <option value={action.id} key={action.id}>{action.label}</option>)}</Select></label>
-    {current.action === "hotkey" && <label>快捷键<ShortcutRecorder value={current.shortcut || "点击录制快捷键"} onConfirm={async (shortcut) => onChange({ ...current, shortcut })} /></label>}
+    {current.action === "hotkey" && <label>快捷键<ShortcutRecorder allowSingle value={current.shortcut || "点击录制快捷键"} onConfirm={async (shortcut) => onChange({ ...current, shortcut })} /></label>}
     {current.action === "fixed-text" && <label>固定文字<textarea maxLength={512} value={current.text || ""} onChange={(event) => onChange({ ...current, text: event.target.value })} placeholder="输入按键要写出的文字" /></label>}
     {current.action === "open-app" && <ApplicationPicker binding={current} onChange={onChange} notify={notify} />}
   </>;
@@ -623,6 +623,8 @@ export function KeymapPage({ notify }) {
       if (!approved) { setSyncState({ status: "idle", label: "等待确认" }); return; }
       const result = await voiceAdapters.desktop.commitKeyboardConfig(preview.token);
       if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
+      dirtyKeys.current.clear();
+      dirtyEncoder.current.clear();
       setSyncState({ status: "success", label: "键盘已确认" }); notify("按键与旋钮配置已同步到键盘并保存");
     } catch (error) { setSyncState({ status: "error", label: "同步失败" }); notify(`同步失败：${error.message}`); }
   };
@@ -652,7 +654,7 @@ export function KeymapPage({ notify }) {
             <div className="key-editor__title"><span>KEY {selectedInput.index + 1}</span><strong>按键设置</strong></div>
             <BindingEditor binding={bindings[selectedInput.index]} onChange={updateKey} notify={notify} />
             <div className="mapping-preview"><span>当前映射</span><strong>{actionLabel(bindings[selectedInput.index])}</strong><small>修改后自动保存到本机</small></div>
-            <Button variant="primary" className="button--wide" onClick={() => notify(`KEY ${selectedInput.index + 1} 的本机配置已保存`)}>保存当前按键</Button>
+            <Button variant="primary" className="button--wide" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>保存当前按键</Button>
           </> : <>
             <div className="key-editor__title"><span>ENCODER</span><strong>旋钮设置</strong></div>
             <label>旋转模式<Segmented compact value={encoder.mode} onChange={(mode) => updateEncoder({ mode })} options={[{ value: "scroll", label: "滚动页面" }, { value: "cursor", label: "移动光标" }]} /></label>

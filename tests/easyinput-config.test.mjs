@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction, normalizeEncoder } from "../src/domain/keymap.js";
+import { actionLabel, createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction, normalizeEncoder } from "../src/domain/keymap.js";
 
 const require = createRequire(import.meta.url);
 const { crc16Ccitt, encodeKeyboardConfig, parseAppCommandReport, parseConfigSnapshot } = require("../electron/easyinput-config.cjs");
@@ -87,6 +87,25 @@ test("configuration merge accepts sparse approved key paths without rewriting un
   assert.deepEqual(merged.profiles[0].keys.KEY8, before.profiles[0].keys.KEY8);
   assert.deepEqual(merged.wifi, before.wifi);
   assert.throws(() => mergeKeyboardPatch(raw, { keymap: { KEY9: { action: "copy" } } }), /按键路径/);
+});
+
+test("Maker Return and Backspace bindings remain editable single-key shortcuts", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  const sanitized = sanitizeKeyboardConfig(raw);
+  assert.deepEqual(sanitized.keymap[1], { action: "hotkey", shortcut: "Return" });
+  assert.deepEqual(sanitized.keymap[3], { action: "hotkey", shortcut: "Backspace" });
+  assert.equal(actionLabel(sanitized.keymap[1]), "回车");
+  assert.equal(actionLabel(sanitized.keymap[3]), "退格");
+  const merged = mergeKeyboardPatch(raw, { keymap: { KEY2: { action: "hotkey", shortcut: "Space" } } });
+  assert.deepEqual(merged.profiles[0].keys.KEY2.press, { hotkey: "Space" });
+});
+
+test("the current-key save button uses the guarded preview and commit flow", async () => {
+  const source = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(source, /onClick=\{syncKeyboard\}>保存当前按键/);
+  assert.match(source, /previewKeyboardConfigPatch\(patch\)/);
+  assert.match(source, /commitKeyboardConfig\(preview\.token\)/);
+  assert.doesNotMatch(source, /syncKeyboardConfig\(/);
 });
 
 test("configuration snapshot parser enforces UTF-8, source and CRC boundaries", () => {

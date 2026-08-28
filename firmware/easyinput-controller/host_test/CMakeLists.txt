@@ -12,6 +12,7 @@ add_executable(input_runtime_tests
     ../components/input_core/src/input_runtime.cpp
     ../components/input_core/src/input_core.cpp
     ../components/input_core/src/hid_report.cpp
+    ../components/input_core/src/config_core.cpp
 )
 target_include_directories(input_runtime_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_runtime_tests COMMAND input_runtime_tests)

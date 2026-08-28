@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { downsampleToPcm16, shouldIgnoreToggle } from "../src/hooks/useRecorder.js";
 import { DesktopBridgeAdapter, EasyInputLanAudioAdapter, TextOutputAdapter } from "../src/adapters/voiceAdapters.js";
-import { shortcutFromKeyboardEvent } from "../src/domain/shortcutCapture.js";
+import { shortcutDisplay, shortcutFromKeyboardEvent } from "../src/domain/shortcutCapture.js";
 
 const require = createRequire(import.meta.url);
 const { normalizeShortcut } = require("../electron/shortcut.cjs");
@@ -33,6 +33,19 @@ test("shortcut capture derives an accelerator from physical key presses", () => 
   assert.deepEqual(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), { shortcut: "Ctrl+Alt+K" });
   assert.equal(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }).error.includes("修饰键"), true);
   assert.deepEqual(shortcutFromKeyboardEvent({ code: "ControlLeft", key: "Control", ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }), { pending: true, display: "Ctrl" });
+});
+
+test("key mapping shortcut capture accepts single keys and localizes common labels", () => {
+  const base = { ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Enter", key: "Enter" }, { allowSingle: true }), { shortcut: "Enter" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Backspace", key: "Backspace" }, { allowSingle: true }), { shortcut: "Backspace" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Space", key: " " }, { allowSingle: true }), { shortcut: "Space" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Escape", key: "Escape" }, { allowSingle: true }), { shortcut: "Esc" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Digit7", key: "7" }, { allowSingle: true }), { shortcut: "7" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "ArrowLeft", key: "ArrowLeft" }, { allowSingle: true }), { shortcut: "ArrowLeft" });
+  assert.equal(shortcutDisplay("Return"), "回车");
+  assert.equal(shortcutDisplay("Backspace"), "退格");
+  assert.equal(shortcutDisplay("Ctrl+Space"), "Ctrl+空格");
 });
 
 test("web desktop bridge safely degrades and LAN audio stays unavailable", async () => {
