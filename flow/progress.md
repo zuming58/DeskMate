@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 third independent audit blocks hardware and hands off rework
+
+- 审计对象：codex/easyinput-t05-config-nvs@2c1cf8d6a9d4f3c79f0adb44bbbaad8318a02122，冻结基线 a2adc9818da07119e59a6f14d125fc23576696c9；未合并 main，未开始 T06。
+- 已确认：Feature Report 精确长度、严格 JSON/UTF-8、cursor 投影、配置切换全释放、save epoch、稀疏 patch、脱敏差异和读取进度刷新已进入候选。
+- 阻断：原生读取仍有跨线程/旧分块竞态；0x13 flag 未分流且能力被桌面硬编码；NVS init 失败会中止应用；同 epoch 保存未串行；NVS 故障矩阵与 board-first UI 不完整。
+- 复验：固件 Host 6/6、桌面 73/73、原生桥 Release 0 warning/0 error、桌面构建通过；精确环境 ESP-IDF v5.5.5 / esp32s3。既有 app 303744 bytes、SHA-256 F7CCF2F44A67034AC0081B5823A7FCBEFB47AFFC7AC93FCC53FCCDCD468FB737 仅为审计证据，不得烧录。
+- 交付：第三轮审计和另一台电脑返工交接已写入 docs/reviews 与 docs/handoffs。状态保持 REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED。未访问硬件。
+
 ## 2026-08-28 · T05 local continuation after copied worktree
 
 - 接手：当前分支 `codex/easyinput-t05-config-nvs`，复制来的实现与远端候选逐文件一致；未合并或 rebase `main`，未开始 T06。

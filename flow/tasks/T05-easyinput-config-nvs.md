@@ -1,6 +1,7 @@
 # T05 · EasyInput configuration and NVS
 
 - 状态：`REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`
+- 第三轮独立审计：候选 2c1cf8d6 仍有原生读取竞态、状态 flag/能力门、NVS 降级与事务串行化、恢复矩阵和 board-first UI 阻断。当前镜像不得烧录，T06 继续阻断。详见 docs/reviews/t05-easyinput-config-nvs-third-audit-2026-08-28.md。
 - 前置：T04 已在原主电脑完成独立审计、构建、烧录、完整真机矩阵并锁定；当前样机 S8 为既有单板硬件阻断，八键/GPIO48 产品合同不变。
 - 计划分支：`codex/easyinput-t05-config-nvs`，从本任务交接时用户收到的准确 `origin/main` 哈希创建。
 - 目标：建立“读取板上完整配置 → 校验 → 无损合并用户改动 → 明示差异 → 事务保存 → 重启恢复 → 回读确认”的 Windows↔EasyInput 闭环。
