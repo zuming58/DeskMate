@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-28 · T05 Windows configuration read timeout reproduced and fixed in code
+
+- 真机结果：DeskMate 能识别当前 EasyInput，T03 按键和 T04 灯效可用，但进入按键配置页后显示“读取失败 / 键盘配置读取失败”，主进程返回 `config-read-timeout`。使用同一发布原生桥做脱敏只读复现：设备连接为 true，`0x13` 能经 `HidD_SetFeature` 被 Windows 接受，但固件没有返回能力分块；因此不是用户操作、普通断线或 renderer 展示问题，T05 配置 HIL 失败且 T06 继续阻断。
+- 根因：T05 的 `tud_hid_set_report_cb` 只接受 TinyUSB 把 Report ID 作为独立参数传入的 Feature Report。Windows 还可能以首字节携带 `0x13` Report ID 的形态交付；固定 Maker `7619bd1` 的 `usb_hid.cpp` 与 `status_hid_protocol.cpp` 明确兼容两种形态，而产品侧遗漏了这一行为。
+- 修复：在分支 `codex/easyinput-t05-config-read-fix` 增加有界 Feature Report 归一化，只接受 `0x10/0x13`、一致的独立/内嵌 Report ID、冻结长度与零填充；TinyUSB callback 仍只复制到唯一静态队列，不解析 JSON/NVS。新增 Windows 独立 ID、内嵌 ID、最大填充、冲突 ID、非零尾部及 `0x10` 回归向量。
+- 验证：固件 Host CTest `6/6` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3`、隔离 SDKCONFIG、Minimal build 和固定分区构建通过，dirty 候选 app 为 `0x4F710`。`git diff --check` 通过。未读取或写入 Flash/NVS，未烧录、擦除、monitor 或写 eFuse。
+- 状态与下一步：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED / FIX_PENDING_CLEAN_HEAD_REBUILD_AND_APP_FLASH / T06_BLOCKED`。提交文档与代码后必须从干净 HEAD 重建并记录最终 SHA-256/范围；只有取得针对该镜像的 app-only 明确授权后才可烧录并重测配置读取。
+
 ## 2026-08-28 · T05 stack-fix restores keys and LED feedback
 
 - 用户在 app-only 烧录并正常启动后确认：实体按键功能已经恢复，T04 输入灯效也已经恢复。这证明此前首次 NVS 加载期间的启动栈溢出已不再阻止基础输入与灯效运行。

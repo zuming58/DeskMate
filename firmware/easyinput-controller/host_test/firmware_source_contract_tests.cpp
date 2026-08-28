@@ -170,9 +170,8 @@ int main() {
     CHECK(contains(main_source, "kUsbConfigurationDescriptor.data()"));
     CHECK(contains(main_source, "kUsbStringDescriptors.data()"));
     CHECK(!contains(main_source, "TUD_HID_DESCRIPTOR"));
-    CHECK(contains(main_source, "report_id == 0x10 && length == kConfigWriteFeaturePayloadBytes"));
-    CHECK(contains(main_source, "report_id == 0x13 && length >= kConfigReadRequestPayloadBytes"));
-    CHECK(contains(main_source, "config_read ? kConfigReadRequestPayloadBytes : length"));
+    CHECK(contains(main_source, "normalize_config_feature_report(report_id, buffer, length, feature)"));
+    CHECK(contains(main_source, "config_read ? kConfigReadRequestPayloadBytes : feature.length"));
     CHECK(contains(main_source, "request.flag == ConfigReadFlag::CompleteConfig"));
     CHECK(contains(main_source, "ConfigStatusStream config_status_stream"));
     CHECK(contains(main_source, "config_save_in_flight"));

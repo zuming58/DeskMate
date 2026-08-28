@@ -74,4 +74,20 @@ void accepts_legal_read_flags_and_rejects_reserved(){
   request[8]=3;CHECK(!decode_config_read_request(request.data(),request.size(),decoded));request[8]=2;request[15]=1;CHECK(!decode_config_read_request(request.data(),request.size(),decoded));CHECK(!decode_config_read_request(request.data(),63,decoded));
 }
 
-int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();storage();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();return 0;}
+void normalizes_windows_feature_report_shapes(){
+  std::array<uint8_t,kConfigFeaturePayloadBytes+1> wire{};
+  wire[0]=0x13;wire[1]='S';wire[2]='3';wire[3]='R';wire[4]=1;wire[5]=7;
+  ConfigFeatureReportView view{};
+  CHECK(normalize_config_feature_report(0,wire.data(),17,view));
+  CHECK(view.report_id==0x13&&view.payload==wire.data()+1&&view.length==16);
+  CHECK(normalize_config_feature_report(0x13,wire.data(),wire.size(),view));
+  CHECK(view.report_id==0x13&&view.length==kConfigFeaturePayloadBytes);
+  CHECK(!normalize_config_feature_report(0x10,wire.data(),17,view));
+  wire[17]=1;CHECK(!normalize_config_feature_report(0,wire.data(),wire.size(),view));wire[17]=0;
+  wire.fill(0);wire[0]=0x10;wire[1]='S';
+  CHECK(normalize_config_feature_report(0,wire.data(),wire.size(),view));
+  CHECK(view.report_id==0x10&&view.payload==wire.data()+1&&view.length==kConfigWriteFeaturePayloadBytes);
+  CHECK(!normalize_config_feature_report(0x12,wire.data()+1,kConfigWriteFeaturePayloadBytes,view));
+}
+
+int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();storage();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();normalizes_windows_feature_report_shapes();return 0;}

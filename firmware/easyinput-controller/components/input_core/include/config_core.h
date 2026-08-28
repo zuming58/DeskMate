@@ -21,6 +21,8 @@ class ConfigWriteAssembler {
 enum class ConfigReadFlag : uint8_t { CachedStatus=0, FreshStatus=1, CompleteConfig=2 };
 struct ConfigReadRequest { uint32_t request_id{}; ConfigReadFlag flag{ConfigReadFlag::CachedStatus}; };
 bool decode_config_read_request(const uint8_t*,size_t,ConfigReadRequest&);
+struct ConfigFeatureReportView { uint8_t report_id{}; const uint8_t* payload{}; size_t length{}; };
+bool normalize_config_feature_report(uint8_t,const uint8_t*,size_t,ConfigFeatureReportView&);
 class ConfigReadStream {
  public: bool replace(uint32_t,const ConfigDocument&,uint32_t); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
  private: ConfigDocument document_{}; uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; bool pending_{};

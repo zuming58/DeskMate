@@ -589,18 +589,15 @@ extern "C" uint16_t tud_hid_get_report_cb(
 extern "C" void tud_hid_set_report_cb(
     uint8_t, uint8_t report_id, hid_report_type_t report_type,
     uint8_t const* buffer, uint16_t length) {
-    if (report_type != HID_REPORT_TYPE_FEATURE || buffer == nullptr) return;
-    const bool config_write = report_id == 0x10 && length == kConfigWriteFeaturePayloadBytes;
-    const bool config_read = report_id == 0x13 && length >= kConfigReadRequestPayloadBytes &&
-        length <= kConfigFeaturePayloadBytes &&
-        std::all_of(buffer + kConfigReadRequestPayloadBytes, buffer + length,
-                    [](uint8_t value) { return value == 0; });
-    if (!config_write && !config_read) return;
+    ConfigFeatureReportView feature{};
+    if (report_type != HID_REPORT_TYPE_FEATURE ||
+        !normalize_config_feature_report(report_id, buffer, length, feature)) return;
+    const bool config_read = feature.report_id == 0x13;
     ConfigFeatureCommand command{};
-    command.report_id = report_id;
-    command.length = static_cast<uint8_t>(config_read ? kConfigReadRequestPayloadBytes : length);
+    command.report_id = feature.report_id;
+    command.length = static_cast<uint8_t>(config_read ? kConfigReadRequestPayloadBytes : feature.length);
     command.epoch = callback_lifecycle.snapshot().epoch;
-    std::copy_n(buffer, command.length, command.payload.begin());
+    std::copy_n(feature.payload, command.length, command.payload.begin());
     if (config_command_queue != nullptr &&
         xQueueSend(config_command_queue, &command, 0) == pdTRUE) {
         notify_owner_from_callback();

@@ -69,6 +69,27 @@ uint16_t config_crc16_ccitt(const uint8_t* data, size_t length) { uint16_t crc =
 ConfigReceiveStatus ConfigWriteAssembler::accept(const uint8_t* p, size_t n, uint32_t epoch) { if (!p || !epoch || n < 11 || n > kConfigWriteFeaturePayloadBytes || p[0] != 'S' || p[1] != '3' || p[2] != 'C' || p[3] != 1) return ConfigReceiveStatus::Rejected; const uint8_t index = p[4], total = p[5], chunk = p[8]; const uint16_t length = u16(p + 6), crc = u16(p + 9); if (!total || total > 40 || !length || length > kConfigMaxJsonBytes || !chunk || chunk > kConfigWriteChunkBytes || index >= total || 11u + chunk > n || (n > 11u + chunk && std::any_of(p + 11 + chunk, p + n, [](uint8_t v) { return v != 0; }))) { abort(); return ConfigReceiveStatus::Rejected; } if (index == 0) { abort(); active_ = true; epoch_ = epoch; total_chunks_ = total; declared_length_ = length; declared_crc_ = crc; } if (!active_ || epoch != epoch_ || index != expected_chunk_ || total != total_chunks_ || length != declared_length_ || crc != declared_crc_ || static_cast<size_t>(index) * kConfigWriteChunkBytes + chunk > length) { abort(); return ConfigReceiveStatus::Rejected; } std::copy_n(p + 11, chunk, document_.bytes.begin() + index * kConfigWriteChunkBytes); ++expected_chunk_; if (expected_chunk_ != total_chunks_) return ConfigReceiveStatus::Accepted; document_.length = length; document_.crc16 = crc; const bool good = static_cast<size_t>(total - 1) * kConfigWriteChunkBytes + chunk == length && config_crc16_ccitt(document_.bytes.data(), length) == crc; active_ = false; return good ? ConfigReceiveStatus::Complete : ConfigReceiveStatus::Rejected; }
 void ConfigWriteAssembler::abort() { document_ = {}; epoch_ = 0; expected_chunk_ = total_chunks_ = 0; declared_length_ = declared_crc_ = 0; active_ = false; }
 bool decode_config_read_request(const uint8_t* p, size_t n, ConfigReadRequest& out) { if (!p || n != kConfigReadRequestPayloadBytes || p[0] != 'S' || p[1] != '3' || p[2] != 'R' || p[3] != 1 || p[8] > 2) return false; const auto id = u32(p + 4); if (!id || std::any_of(p + 9, p + n, [](uint8_t v) { return v != 0; })) return false; out.request_id = id; out.flag = static_cast<ConfigReadFlag>(p[8]); return true; }
+bool normalize_config_feature_report(uint8_t report_id, const uint8_t* buffer, size_t length, ConfigFeatureReportView& out) {
+  out = {};
+  if (!buffer) return false;
+  const uint8_t* payload = buffer;
+  size_t payload_length = length;
+  if (payload_length != 0 && (payload[0] == 0x10 || payload[0] == 0x13)) {
+    if (report_id != 0 && report_id != payload[0]) return false;
+    report_id = payload[0];
+    ++payload;
+    --payload_length;
+  }
+  if (report_id == 0x10) {
+    if (payload_length != kConfigWriteFeaturePayloadBytes) return false;
+  } else if (report_id == 0x13) {
+    if (payload_length < kConfigReadRequestPayloadBytes || payload_length > kConfigFeaturePayloadBytes ||
+        std::any_of(payload + kConfigReadRequestPayloadBytes, payload + payload_length,
+                    [](uint8_t value) { return value != 0; })) return false;
+  } else return false;
+  out = {report_id, payload, payload_length};
+  return true;
+}
 bool ConfigReadStream::replace(uint32_t id, const ConfigDocument& d, uint32_t epoch) { abort(); if (!id || !epoch || !d.length || d.length > kConfigMaxJsonBytes || config_crc16_ccitt(d.bytes.data(), d.length) != d.crc16) return false; document_ = d; request_id_ = id; epoch_ = epoch; total_chunks_ = static_cast<uint8_t>((d.length + kConfigReadChunkBytes - 1) / kConfigReadChunkBytes); pending_ = true; return true; }
 bool ConfigReadStream::encode_next(std::array<uint8_t, kConfigFeaturePayloadBytes>& out) const { if (!pending_ || next_chunk_ >= total_chunks_) return false; out.fill(0); const auto offset = static_cast<size_t>(next_chunk_) * kConfigReadChunkBytes; const auto count = std::min(kConfigReadChunkBytes, static_cast<size_t>(document_.length) - offset); out[0] = 6; out[1] = next_chunk_; out[2] = total_chunks_; out[3] = static_cast<uint8_t>(10 + count); out[4] = 1; w32(out.data() + 5, request_id_); w16(out.data() + 9, document_.length); w16(out.data() + 11, document_.crc16); out[13] = static_cast<uint8_t>(document_.source); std::copy_n(document_.bytes.data() + offset, count, out.begin() + 14); return true; }
 bool ConfigReadStream::mark_sent() { if (!pending_) return false; if (++next_chunk_ >= total_chunks_) pending_ = false; return !pending_; }

@@ -16,6 +16,13 @@
 
 No files were modified, copied from, or built in either external reference directory. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor or HIL was performed.
 
+## 2026-08-28 Windows Feature Report callback compatibility
+
+- Failure evidence: on Windows, DeskMate reported the board connected but both capability and full-config reads timed out. A redacted direct bridge reproduction confirmed that `HidD_SetFeature` accepted `0x13`, while no response stream reached the host.
+- Fixed reference evidence: Maker commit `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`, `main/platform/usb_hid.cpp` and `components/keyboard/src/status_hid_protocol.cpp`, accepts both a callback-supplied Report ID and a leading Report ID byte before decoding the 16-byte status request.
+- Product-side correction: `config_core.*` now normalizes the two Windows/TinyUSB callback shapes into a bounded view for `0x10/0x13`, rejecting conflicting/unknown IDs, invalid lengths and non-zero read padding. `main.cpp` copies only the normalized payload into the existing static owner queue; it does not copy Maker runtime code or move parsing/NVS work into the callback.
+- Regression evidence: Host CTest `6/6` and exact ESP-IDF `v5.5.5`/`esp32s3` isolated build pass. The final clean-HEAD image identity is recorded separately before any new flash authorization. The external reference tree was read-only and no hardware write was performed.
+
 ## 2026-08-28 startup-stack rework
 
 - Failure evidence: image 1cf3a4e rebooted during first NVS load. The backtrace path was nvs_get_u8 -> ConfigNvsStore::load() -> app_main(). Measured old stack frames were approximately 10.4 KiB for load, 4.2 KiB for save_config_transaction, 6.3 KiB for config_owner_task, and 6.7 KiB for input_owner_task.

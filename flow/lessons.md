@@ -1,5 +1,11 @@
 # Lessons learned
 
+## TinyUSB Feature Report callbacks must normalize Windows report-ID delivery
+
+- 现象：Windows `HidD_SetFeature` 返回成功、设备枚举和普通 HID 均正常，但 `0x13` 配置读取静默超时；只测“Report ID 由 callback 参数单独给出”的 Host 向量无法复现。
+- 根因：同一 Feature Report 可能以两种 TinyUSB callback 形态出现：Report ID 单独传入，或 Report ID 位于 `buffer[0]`。固定 Maker 的状态请求解码器明确兼容两者，DeskMate 第一版 T05 漏掉了内嵌形态。
+- 做法：在 callback 边界先归一化 Report ID/载荷，拒绝冲突 ID、未知 ID、越界长度和非零填充，再把固定长度载荷复制给唯一 owner；Host 测试必须同时覆盖独立 ID、内嵌 ID、填充上限和冲突输入。涉及 Windows HID 行为时，参考审计不能只看协议字段，还要核对平台适配器的输入形态兼容。
+
 ## ESP-IDF fixed task stacks cannot carry configuration aggregates
 
 - 现象：T05 旧镜像在 app_main 首次 NVS 加载时重启；大容量 ConfigLoadResult、ConfigSlotRecord、legacy JSON 和保存结果沿调用链落入主任务或 4 KiB owner task 栈。即使局部声明很短，aggregate = {} 也可能生成同尺寸隐式临时对象。
