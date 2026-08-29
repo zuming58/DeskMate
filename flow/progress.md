@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 configuration-save recovery app flashed; HIL pending
+
+- 烧录身份：源码 HEAD `7907d6f8412e549fc312eed23deeb31ba5dcda53`；ESP-IDF `v5.5.5` / `esp32s3` app 为 327,952 字节（`0x50110`），SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`。
+- 授权与目标：用户先按精确 HEAD、SHA-256 和 `0x010000..0x06010F` 授权 app-only 写入，再确认本轮只读识别得到的 `COM6` ESP32-S3 目标身份；私有设备身份不写入仓库。
+- 写入结果：仅从 `0x010000` 写入上述 app，327,952 字节完成且 esptool 报告 `Hash of data verified`，随后 hard reset。Flash 扇区实际擦除范围为 `0x010000..0x060FFF`，仍完全位于固定 3 MiB factory app 分区；未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse。
+- 当前门禁：`TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PENDING`。烧录成功不等于故障已经真机关闭；尚未验证旧 NVS 配置启动恢复、KEY8 Host Action 保存、重启回读、按键/灯效持续工作或 T03/T04 回归，也未运行 monitor 或读取 Flash/NVS。
+- 下一步：用户先确认正常启动及八键/灯效；DeskMate 读取配置成功后，将 KEY8 选择为 Chrome 并保存，确认保存后按键与灯效不中断且配置仍可读；再完整关机重启，验证配置回读和 Host Action，最后回归语音、旋钮与断线安全。失败时停止重复写入，取得脱敏边界证据后再改代码；T06 HIL 关闭前不开始 T07。
+
 ## 2026-08-29 · T06 configuration-save board failure fixed in code
 
 - 做了什么：针对用户真机将 KEY8 配置为 Host Action 并保存后，按键与灯效全部停止且完整重启仍不能恢复的问题，替换 `config_core.cpp` 的完整递归动态 JSON DOM；新实现先严格验证最多 2048 字节的 UTF-8/JSON，再仅按冻结配置路径流式提取运行时投影，继续原字节保存完整 JSON。新增接近上限的 Host Action 配置回归，覆盖 `0x10` 分块组装、双槽 NVS 保存/回读、运行时投影、`0x11` 完整读取和模拟重启恢复。
