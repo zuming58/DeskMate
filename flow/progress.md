@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-29 · T08 Xiaozhi Link endpoint Phase A completed and stopped at contract gate
+
+- role/branch/base：本窗口只负责小智固件，在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 工作；起点为 T08 交接 HEAD `93a5f9c6f72c9eb5a02917d062bfff38da0c4258`，正式主基线已核对为 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`，Phase A 实现提交为 `bfa1f46554a97636241d3a5f15c4d23e9391e05f`。原 `F:\Codex\deskmate` 工作树未切换、未覆盖；EasyInput 固件、桌面软件和 `contracts/deskmate-link/` 均未修改。
+- reference/UART：只读参考 `F:\Codex\xiaozhi-yuntai` 没有 `.git`，因此准确参考提交保持 `UNKNOWN`；根许可证为 MIT，项目版本 `1.9.0`。参考当前 UART0 是 115200 主控制台，USB Serial/JTAG 是次控制台；ESP-IDF v5.5.3 的 ESP32-S3 默认 UART0 IOMUX 为 TX GPIO43/RX GPIO44，当前板源未占用这两个 GPIO，但缺少原理图或连续性测量，不能证明物理排针连接。Phase A 只把应用日志迁到 USB Serial/JTAG，ROM 启动字节、USB 物理路由和恢复行为仍未验证。
+- outputs/safety：建立 ESP-IDF v5.5.3/esp32s3 正式模块、纯 C++ transport abstraction、Host-only fake UART、只读 capability/status 模型和 fail-closed 源码合同测试。Link/motion 为 `locked`，display 为 `pending_validation`，本板麦克风/功放/扬声器为 `disabled_by_product`；没有真实 UART 控制器/引脚/速率或 framing、magic、版本、消息 ID、CRC、超时、重试、错误语义，也没有初始化 OLED、I2S、音频、LEDC、PWM 或舵机。完整证据见 `docs/provenance/t08-xiaozhi-link-endpoint-reference-audit.md`，交接见 `docs/handoffs/t08-xiaozhi-link-endpoint-phase-a-2026-08-29.md`。
+- verification：Host CTest `3/3`；精确 `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`、target `esp32s3` 构建 `530/530`。app 为 160,768 字节（`0x27400`），SHA-256 `E553C1B18D37320B3B5606F3552B1637835F46B39D598EA0D686DA4A5187EAE1`；默认 1 MiB factory 分区约 85% 空闲，但它只是编译脚手架，不是获准烧录的最终布局。`git diff --check`、所有权、ASCII 路径、AGENTS/CLAUDE 镜像、来源/许可证、密钥/隐私、构建产物忽略检查均通过。
+- hardware/UNKNOWN/next：本轮未扫描端口、未识别设备、未接线、未读写或擦除 Flash、未烧录、未 monitor、未初始化任何外设。仍为 `UNKNOWN`：参考 Git 提交、PCB 版本/原理图、排针到 GPIO43/44 连续性、USB 路由与恢复、电平/共地、Link UART 外设和引脚、物理排针启动字节、Flash/PSRAM 实器件与最终 Flash/OTA/恢复布局、舵机供电/峰值电流/中心/方向/机械限位。现在停止；只有 EasyInput 窗口提供准确且显式标记 `DESKMATE_LINK_V1_FROZEN` 的提交后，才可进入 Phase B，并且小智窗口只消费合同、不修改合同。
+
 ## 2026-08-29 · T08 parallel firmware ownership opened from frozen T07 main
 
 - role/branch/base：本窗口在隔离工作树 `F:\Codex\deskmate-t08-easyinput` 创建 `codex/easyinput-t08-link-controller`，精确基线为 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`；原 `F:\Codex\deskmate` 的用户界面脏工作树完全未改动。另一窗口将从同一基线创建 `codex/xiaozhi-t08-link-endpoint`。

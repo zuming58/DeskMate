@@ -7,6 +7,7 @@ Status: `PHASE_A_COMPLETE / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_NOT_AUTHORIZE
 - Worktree: `F:\Codex\deskmate-t08-xiaozhi`.
 - Branch: `codex/xiaozhi-t08-link-endpoint`.
 - Starting HEAD: `93a5f9c6f72c9eb5a02917d062bfff38da0c4258`.
+- Phase A implementation commit: `bfa1f46554a97636241d3a5f15c4d23e9391e05f`.
 - Formal main baseline observed before work: `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`.
 - Changes are limited to `firmware/xiaozhi-yuntai/`, this task's provenance/handoff documents and the root progress pointer. EasyInput firmware, desktop software and Link contracts were not modified.
 
