@@ -2,6 +2,7 @@ node_modules/
 dist/
 build-*/
 release/
+release-*/
 release-phase3b/
 release-phase3b-verify/
 native/**/bin/
@@ -24,6 +25,7 @@ recordings/
 audio-captures/
 user-data/
 diagnostics-private/
+pending-delete-*/
 firmware/**/build/
 firmware/**/sdkconfig
 firmware/**/sdkconfig.old

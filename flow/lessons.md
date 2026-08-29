@@ -1,5 +1,42 @@
 # Lessons learned
 
+## A configuration save acknowledgement is not a read-status failure
+
+- 现象：固件已经返回保存 ACK，实体功能和重新进入页面后的读取都正常，但保存页因为紧接着的第一次回读超时，把“键盘系统”和“同步结果”一起显示成失败。
+- 做法：主进程在保存 ACK 后执行有界回读重试，指纹不一致仍立即失败关闭；renderer 分开维护板上配置读取状态与本次同步状态。ACK 后若重试仍不可读，只显示“已保存，回读待确认”，不得冒充完整验证成功，也不得把既有读取状态改写成读取失败。若 ACK 本身超时，只有随后完整回读与写入前已确认不同的预期指纹精确一致时才转为成功，否则继续报告失败。
+- 规则：涉及持久化的 UI 必须区分“写入未发生”“写入已确认但回读未完成”“写入并回读一致”三种状态；不能用一个布尔值同时表示传输、持久化和读取健康。
+
+## Repeated process startup must stay out of the voice output critical path
+
+- 现象：转写完成后长时间停留在“正在写入目标窗口”，实际输出阶段先启动一次 PowerShell 查询前台窗口，再启动一次 PowerShell 发送粘贴键。
+- 做法：本机实测空 PowerShell 冷启动平均约 1.35 秒，因此仅从两次减到一次仍不足。录音触发时和输出阶段都改用同一个常驻原生输入桥：即时捕获临时窗口句柄，输出时核对该精确句柄并用 `SendInput` 发送 Ctrl+V；命令不携带剪贴板文字、窗口标题或进程路径。目标变化、超时、部分发送或 helper 失败继续 fail closed，显式释放 modifier 并回退剪贴板。
+- 规则：用户可感知的语音输出关键路径应把外部进程启动次数当作明确性能预算；合并调用时不得删除原有目标身份核对或失败回退。
+
+## Bounded firmware configuration parsing must avoid a whole-document dynamic DOM
+
+- 现象：普通按键配置可运行，但加入 Host Action 后保存会让按键和灯效停止；配置已经写入 NVS，完整重启又会在启动加载时重复触发。
+- 根因：最多 2048 字节的配置在 ESP-IDF `-fno-exceptions` 环境中被递归解析成含 `std::string`、`std::vector` 的完整动态对象树，并在保存、回读、应用和启动恢复阶段连续重建。Host 上通过的小配置无法覆盖目标机的递归栈和动态分配压力。
+- 做法：保留完整原始 JSON 作为无损存储真相，先做严格 UTF-8/JSON/深度验证，再以有界扫描器只提取冻结路径的运行时投影；未知字段、多 Profile、网络和音频字段继续原字节保存。Host 回归必须使用接近 2048 字节的真实配置，贯穿分块写入、双槽保存、回读、完整读取和模拟重启，并从 ESP32 ELF核对关键解析函数栈帧。
+- 规则：固件中的有界输入不等于可以安全构造完整动态 DOM；涉及保存后重启恢复的配置功能，测试数据必须接近协议上限并覆盖完整生命周期，不能只测短样例的单次解析。
+
+## A passing HID model test does not prove the real callback boundary
+
+- 现象：Feature Report 两种 ID 形态和 `0x04` 多分块 completion 的 Host 测试均通过，两个 app 镜像真机仍在能力读取阶段超时；独立原生桥只看到设备连接，看不到第一条进度事件。
+- 做法：把链路拆成 `HidD_SetFeature → TinyUSB set callback → owner queue → first input report → transfer callback → Windows Raw Input` 六个可观测边界，先定位第一处缺失再修改。测试必须使用真机观察到的 callback 长度和 Report ID 形态，不能由生产假设反向制造“黄金向量”。
+- 规则：同一 HIL 症状连续否决两个候选后立即停止烧录；下一候选必须带真实边界证据、固定 Maker 差异和缺失测试向量。
+
+## TinyUSB Feature Report callbacks must normalize Windows report-ID delivery
+
+- 现象：Windows `HidD_SetFeature` 返回成功、设备枚举和普通 HID 均正常，但 `0x13` 配置读取静默超时；只测“Report ID 由 callback 参数单独给出”的 Host 向量无法复现。
+- 根因：同一 Feature Report 可能以两种 TinyUSB callback 形态出现：Report ID 单独传入，或 Report ID 位于 `buffer[0]`。固定 Maker 的状态请求解码器明确兼容两者，DeskMate 第一版 T05 漏掉了内嵌形态。
+- 做法：在 callback 边界先归一化 Report ID/载荷，拒绝冲突 ID、未知 ID、越界长度和非零填充，再把固定长度载荷复制给唯一 owner；Host 测试必须同时覆盖独立 ID、内嵌 ID、填充上限和冲突输入。涉及 Windows HID 行为时，参考审计不能只看协议字段，还要核对平台适配器的输入形态兼容。
+
+## ESP-IDF fixed task stacks cannot carry configuration aggregates
+
+- 现象：T05 旧镜像在 app_main 首次 NVS 加载时重启；大容量 ConfigLoadResult、ConfigSlotRecord、legacy JSON 和保存结果沿调用链落入主任务或 4 KiB owner task 栈。即使局部声明很短，aggregate = {} 也可能生成同尺寸隐式临时对象。
+- 做法：把有界配置工作区放入唯一 owner 的静态成员或静态缓冲，函数通过调用方提供的结果/工作区写入；用 Host source-contract 禁止大对象回到 app_main、配置 owner 或输入 owner 栈，并从最终 ELF 读取真实栈帧。
+- 规则：ESP-IDF 栈预算必须按编译后的栈帧和隐式临时对象验证，不能只看源码或盲目增大任务栈；配置/NVS 失败仍须 fail-soft，不得以启动崩溃换取恢复。
+
 ## Maker reference logic must be consulted before inventing a replacement
 
 - 现象：T03 早期多轮修复围绕新 HID lifetime 的全零报告、mount 顺序、transfer-complete、GPIO40 DCD 重连和重复释放反复试验，Host 测试可通过但真机仍在第二次或后续断线留下 Ctrl。
@@ -112,3 +149,12 @@
 
 - 现象：使用“空槽区分空/满”的环形队列时，存储长度 16 实际只有 15 个可用槽；如果 callback 忽略 publish 失败，关键生命周期事件会静默消失。另行复制一套测试处理器或由 callback 与 owner 分别推进 epoch，也会让测试通过但生产状态分叉。
 - 做法：声明容量 N 时为 sentinel 另加一个存储槽，并对满队列做饱和计数与 fail-safe 状态重建；callback 状态生成和 owner 消费逻辑必须是 Host 测试直接调用的生产实现。重复事件、真实 remount、第 N 条、第 N+1 条和溢出恢复都要作为边界向量锁定。
+# 2026-08-28 · Whole-worktree copying destroys provenance
+
+- 直接把一台电脑的整个项目目录覆盖到另一台，会把过期 build、sdkconfig、未跟踪审计文档和远端状态混在一起，既拖慢审计，也无法证明哪个提交生成了镜像。
+- 处理方式是把生成物移入 Git 忽略的待删除目录，仅保留可追溯源码/文档；此后只用 Git 提交交换，并在干净 HEAD 后重新构建烧录镜像。
+
+## Performance changes must preserve a HIL-proven Windows focus boundary
+
+- 现象：语音输出的 PowerShell 路径已经在真机上成功写回目标窗口；为减少约 1.35 秒进程启动耗时，将目标捕获和粘贴迁移到常驻原生桥后，连续候选均出现“目标窗口已变化”并回退剪贴板。250 ms 稳定采样虽通过自动化，也没有修复用户现场失败。
+- 做法：性能优化不能在缺少等价 HIL 的情况下替换已通过的跨进程焦点边界。候选被真机否决后，应恢复最后已知稳定实现，再单独设计可观测、可回滚的性能改进；自动化只证明失败关闭和调用形态，不能代替真实 Windows 焦点/输入注入验收。

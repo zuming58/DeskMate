@@ -1,14 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction, normalizeEncoder } from "../src/domain/keymap.js";
+import { actionLabel, createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction, limitUtf8Bytes, normalizeEncoder, normalizeKeyBinding } from "../src/domain/keymap.js";
 
 const require = createRequire(import.meta.url);
-const { crc16Ccitt, encodeKeyboardConfig, parseAppCommandReport } = require("../electron/easyinput-config.cjs");
-const { AppActionStore } = require("../electron/app-actions.cjs");
+const { crc16Ccitt, encodeKeyboardConfig, parseAppCommandReport, parseConfigSnapshot } = require("../electron/easyinput-config.cjs");
+const { configFingerprint, mergeKeyboardPatch, sanitizeKeyboardConfig, checkHostCapabilities, requiredHostCapabilities } = require("../electron/config-merge.cjs");
+const { AppActionStore, HostActionExecutor } = require("../electron/app-actions.cjs");
 
 test("DeskMate key bindings produce the frozen Maker ai_keyboard.v1 payload", () => {
   const hostActionId = "01234567-89ab-cdef-0123-456789abcdef";
@@ -55,8 +56,134 @@ test("application actions persist only in the Electron-side registry and open by
   const store = new AppActionStore({ userDataPath: root, dialog: {}, shell: { openPath: async (value) => { opened.push(value); return ""; } } });
   const action = store.registerTarget(target, "Demo");
   assert.match(action.id, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(store.describe(action.id), { id: action.id, label: "Demo" });
+  assert.equal(JSON.stringify(store.describe(action.id)).includes(target), false);
   assert.deepEqual(await store.execute(action.id), { ok: true, label: "Demo" });
   assert.deepEqual(opened, [target]);
   const reloaded = new AppActionStore({ userDataPath: root, dialog: {}, shell: { openPath: async () => "" } });
   assert.deepEqual(await reloaded.execute(action.id), { ok: true, label: "Demo" });
+});
+
+test("application actions reject relative, network, device, URL, argument shortcuts, and missing targets", async (context) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "deskmate-app-action-safety-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const exe = path.join(root, "Demo.exe");
+  const shortcut = path.join(root, "Demo.lnk");
+  await writeFile(exe, ""); await writeFile(shortcut, "");
+  const shell = { openPath: async () => "", readShortcutLink: () => ({ target: exe, args: "--unsafe" }) };
+  const store = new AppActionStore({ userDataPath: root, dialog: {}, shell });
+  for (const target of ["relative.exe", "\\\\server\share\app.exe", "\\\\?\C:\\app.exe", "https://example.com/app.exe"]) assert.equal(store.isAllowedTarget(target), false);
+  const action = store.registerTarget(shortcut, "Demo");
+  assert.deepEqual(await store.execute(action.id), { ok: false, reason: "shortcut-target-unverified", label: "Demo" });
+  await rm(shortcut);
+  assert.deepEqual(await store.execute(action.id), { ok: false, reason: "application-missing", label: "Demo" });
+});
+
+test("Host Action execution is serialized and suppresses the same UUID for 250 ms", async () => {
+  let now = 1000; const order = []; let release;
+  const store = { execute: async (id) => { order.push(`start:${id}`); if (!release) await new Promise((resolve) => { release = resolve; }); order.push(`end:${id}`); return { ok: true, label: id }; } };
+  const executor = new HostActionExecutor({ store, now: () => now });
+  const firstId = "01234567-89ab-cdef-0123-456789abcdef"; const secondId = "11111111-2222-3333-4444-555555555555";
+  const first = executor.execute(firstId); const duplicate = await executor.execute(firstId); const second = executor.execute(secondId);
+  assert.equal(duplicate.reason, "host-action-duplicate"); assert.deepEqual(order, [`start:${firstId}`]);
+  release(); await first; await second;
+  assert.deepEqual(order, [`start:${firstId}`, `end:${firstId}`, `start:${secondId}`, `end:${secondId}`]);
+  now += 251; assert.equal((await executor.execute(firstId)).ok, true);
+});
+
+test("T06 configuration actions require explicit board capabilities", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.profiles[0].keys.KEY1.press = { text: "hello" };
+  raw.profiles[0].keys.KEY2.press = "host_action:01234567-89ab-cdef-0123-456789abcdef";
+  assert.deepEqual(requiredHostCapabilities(raw), ["fixed_text_v1", "host_action_v1"]);
+  assert.equal(checkHostCapabilities(raw, { fixed_text_v1: true, host_action_v1: false }).reason, "host_action_v1-unsupported");
+  assert.deepEqual(checkHostCapabilities(raw, { fixed_text_v1: true, host_action_v1: true }), { ok: true });
+  assert.equal(mergeKeyboardPatch(raw, { keymap: { KEY1: { action: "fixed-text", text: "你好" }, KEY2: { action: "open-app", appActionId: "01234567-89ab-cdef-0123-456789abcdef" } } }).profiles[0].keys.KEY1.press.text, "你好");
+});
+
+test("fixed text editing preserves complete UTF-8 characters within the 960-byte contract", () => {
+  assert.equal(limitUtf8Bytes("x".repeat(961)).length, 960);
+  const chinese = limitUtf8Bytes("中".repeat(321));
+  assert.equal(Buffer.byteLength(chinese, "utf8"), 960);
+  assert.equal(chinese, "中".repeat(320));
+  const emoji = limitUtf8Bytes("x".repeat(958) + "😀");
+  assert.equal(Buffer.byteLength(emoji, "utf8"), 958);
+  assert.equal(emoji.endsWith("\ud83d"), false);
+  const normalized = normalizeKeyBinding({ action: "fixed-text", text: "好".repeat(400) });
+  assert.equal(Buffer.byteLength(normalized.text, "utf8"), 960);
+});
+
+test("host action configuration readback exposes only a mapped UUID and label", () => {
+  const mappedId = "01234567-89ab-cdef-0123-456789abcdef";
+  const unknownId = "11111111-2222-3333-4444-555555555555";
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.profiles[0].keys.KEY1.press = `host_action:${mappedId}`;
+  raw.profiles[0].keys.KEY2.press = `host_action:${unknownId}`;
+  raw.profiles[0].keys.KEY3.press = { text: "renderer must not receive this" };
+  const sanitized = sanitizeKeyboardConfig(raw, (id) => id === mappedId ? { id, label: "Codex", target: "C:\\private\\Codex.exe" } : null);
+  assert.deepEqual(sanitized.keymap[0], { action: "open-app", appActionId: mappedId, appName: "Codex" });
+  assert.deepEqual(sanitized.keymap[1], { action: "open-app" });
+  assert.deepEqual(sanitized.keymap[2], { action: "fixed-text" });
+  assert.equal(JSON.stringify(sanitized).includes("private"), false);
+  assert.equal(JSON.stringify(sanitized).includes("renderer must not receive this"), false);
+  assert.throws(() => mergeKeyboardPatch(raw, { keymap: { KEY2: sanitized.keymap[1] } }), /应用映射无效/);
+});
+
+test("configuration merge changes only approved pure-HID paths and preserves unknown data", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.wifi = { ssid: "preserve", password: "secret" };
+  raw.profiles.push({ id: "secondary", keys: { KEY1: { press: "fixed-text" } } });
+  const before = structuredClone(raw);
+  const merged = mergeKeyboardPatch(raw, { keymap: Array(8).fill(null).map(() => ({ action: "copy" })), encoder: { speed: 5 } });
+  assert.equal(merged.wifi.password, before.wifi.password);
+  assert.deepEqual(merged.profiles.slice(1), before.profiles.slice(1));
+  assert.equal(merged.profiles[0].encoder.scroll.speed, 5);
+  assert.notEqual(configFingerprint(merged), configFingerprint(raw));
+  assert.deepEqual(sanitizeKeyboardConfig(merged).keymap[0], { action: "copy" });
+  assert.throws(() => mergeKeyboardPatch(raw, { wifi: { ssid: "no" } }), /未批准/);
+  assert.throws(() => mergeKeyboardPatch(raw, { keymap: [] }), /八项/);
+});
+
+test("configuration merge accepts sparse approved key paths without rewriting untouched bindings", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  raw.wifi = { ssid: "keep", password: "secret" };
+  const before = structuredClone(raw);
+  const merged = mergeKeyboardPatch(raw, { keymap: { KEY6: { action: "paste" } } });
+  assert.equal(merged.profiles[0].keys.KEY6.press, "paste");
+  assert.deepEqual(merged.profiles[0].keys.KEY1, before.profiles[0].keys.KEY1);
+  assert.deepEqual(merged.profiles[0].keys.KEY8, before.profiles[0].keys.KEY8);
+  assert.deepEqual(merged.wifi, before.wifi);
+  assert.throws(() => mergeKeyboardPatch(raw, { keymap: { KEY9: { action: "copy" } } }), /按键路径/);
+});
+
+test("Maker Return and Backspace bindings remain editable single-key shortcuts", () => {
+  const raw = createKeyboardConfig({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER });
+  const sanitized = sanitizeKeyboardConfig(raw);
+  assert.deepEqual(sanitized.keymap[1], { action: "hotkey", shortcut: "Return" });
+  assert.deepEqual(sanitized.keymap[3], { action: "hotkey", shortcut: "Backspace" });
+  assert.equal(actionLabel(sanitized.keymap[1]), "回车");
+  assert.equal(actionLabel(sanitized.keymap[3]), "退格");
+  const merged = mergeKeyboardPatch(raw, { keymap: { KEY2: { action: "hotkey", shortcut: "Space" } } });
+  assert.deepEqual(merged.profiles[0].keys.KEY2.press, { hotkey: "Space" });
+});
+
+test("the current-key save button uses the guarded preview and commit flow", async () => {
+  const source = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(source, /onClick=\{syncKeyboard\}>保存当前按键/);
+  assert.match(source, /previewKeyboardConfigPatch\(patch\)/);
+  assert.match(source, /setConfigConfirmation\(\{ token: preview\.token/);
+  assert.match(source, /commitKeyboardConfig\(pending\.token\)/);
+  assert.match(source, /<ConfirmationDialog/);
+  assert.doesNotMatch(source, /window\.confirm/);
+  assert.doesNotMatch(source, /syncKeyboardConfig\(/);
+});
+
+test("configuration snapshot parser enforces UTF-8, source and CRC boundaries", () => {
+  const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
+  const base = { type: "config-snapshot", jsonBase64: data.toString("base64"), bytes: data.length, crc16: crc16Ccitt(data), sourceId: 0, requestId: "read-12345678" };
+  assert.equal(parseConfigSnapshot(base).json, data.toString("utf8"));
+  assert.equal(parseConfigSnapshot({ ...base, sourceId: 4 }), null);
+  assert.equal(parseConfigSnapshot({ ...base, jsonBase64: "!!!" }), null);
+  const invalid = Buffer.from([0xc3, 0x28]);
+  assert.equal(parseConfigSnapshot({ ...base, jsonBase64: invalid.toString("base64"), bytes: invalid.length, crc16: crc16Ccitt(invalid) }), null);
 });

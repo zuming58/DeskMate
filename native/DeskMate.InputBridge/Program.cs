@@ -12,12 +12,18 @@ internal static class Program
     private static void Main(string[] args)
     {
         Console.OutputEncoding = new UTF8Encoding(false);
+        if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
+        {
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() ? 0 : 1;
+            return;
+        }
         var writer = new EventWriter();
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
             writer.Input("easyinput-hid", "F22", "down");
             writer.Input("easyinput-hid", "F22", "up");
             writer.HostAction("00000000-0000-0000-0000-000000000001");
+            writer.FixedTextReady("fixed-00000000000000000000000000000000", 12);
             writer.ConfigAck(true, true, 120, 0x1234, 2);
             writer.Status(false);
             return;
@@ -47,6 +53,25 @@ internal sealed class EventWriter
         1, "host-action", "easyinput-hid", "HostAction", "invoke",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, hostActionId: id));
 
+    public void FixedTextReady(string requestId, int bytes) => Write(new BridgeEvent(
+        1, "fixed-text", "easyinput-hid", "FixedText", "ready",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId, bytes: bytes));
+
+    public void FixedTextResult(string requestId, bool ok, string reason, int bytes) => Write(new BridgeEvent(
+        1, "fixed-text-result", "easyinput-hid", "FixedText", ok ? "injected" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason, bytes: bytes));
+
+    public void DesktopOutputResult(string requestId, bool ok, string reason) => Write(new BridgeEvent(
+        1, "desktop-output-result", "desktop-output", "ActiveWindow", ok ? "pasted" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason));
+
+    public void DesktopWindowResult(string requestId, bool ok, string reason, string targetWindow) => Write(new BridgeEvent(
+        1, "desktop-window-result", "desktop-output", "ActiveWindow", ok ? "captured" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason, targetWindow: targetWindow));
+
     public void ConfigWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
         1, "config-write", "easyinput-hid", "Config", ok ? "written" : "failed",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -56,6 +81,21 @@ internal sealed class EventWriter
         1, "config-ack", "easyinput-hid", "Config", ok ? "accepted" : "rejected",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         ok: ok, saved: saved, bytes: bytes, crc16: crc16, phase: phase));
+
+    public void ConfigSnapshot(string requestId, int bytes, int crc16, int source, string jsonBase64) => Write(new BridgeEvent(
+        1, "config-snapshot", "easyinput-hid", "Config", "snapshot",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, bytes: bytes, crc16: crc16, sourceId: source, jsonBase64: jsonBase64));
+
+    public void ConfigProgress(string requestId, int chunk, int total) => Write(new BridgeEvent(
+        1, "config-progress", "easyinput-hid", "Config", "progress",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, chunk: chunk, total: total));
+
+    public void ConfigCapabilities(string requestId, bool read, bool write, bool hostAction, bool fixedText) => Write(new BridgeEvent(
+        1, "config-capabilities", "easyinput-hid", "Config", "capabilities",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, configReadV1: read, configWriteV1: write, hostActionV1: hostAction, fixedTextV1: fixedText));
 
     private void Write(BridgeEvent value)
     {
@@ -83,7 +123,16 @@ internal sealed record BridgeEvent(
     bool? saved = null,
     int? bytes = null,
     int? crc16 = null,
-    int? phase = null);
+    int? phase = null,
+    int? sourceId = null,
+    string? jsonBase64 = null,
+    int? chunk = null,
+    int? total = null,
+    bool? configReadV1 = null,
+    bool? configWriteV1 = null,
+    bool? hostActionV1 = null,
+    bool? fixedTextV1 = null,
+    string? targetWindow = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -115,10 +164,53 @@ internal sealed class ConfigCommandListener : IDisposable
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
-                !root.TryGetProperty("type", out var type) || type.GetString() != "sync-config" ||
+                !root.TryGetProperty("type", out var type) ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
+            if (type.GetString() == "capture-active-window")
+            {
+                var capture = RawInputWindow.CaptureActiveWindow();
+                _writer.DesktopWindowResult(requestId, capture.ok, capture.reason, capture.targetWindow);
+                return Task.CompletedTask;
+            }
+            if (type.GetString() == "paste-active-window")
+            {
+                if (!root.TryGetProperty("targetWindow", out var targetValue) || !ulong.TryParse(targetValue.GetString(), out var target) || target == 0)
+                    throw new InvalidOperationException("invalid-active-window-command");
+                var output = RawInputWindow.PasteActiveWindow(new IntPtr(unchecked((long)target)));
+                _writer.DesktopOutputResult(requestId, output.ok, output.reason);
+                return Task.CompletedTask;
+            }
+            if (type.GetString() == "inject-fixed-text")
+            {
+                if (!root.TryGetProperty("expiresUnixMs", out var expiryValue) || !expiryValue.TryGetInt64(out var expiry) ||
+                    !root.TryGetProperty("blockedProcessId", out var processValue) || !processValue.TryGetUInt32(out var blockedProcessId) ||
+                    !root.TryGetProperty("blockedWindowHandles", out var windowsValue) || windowsValue.ValueKind != JsonValueKind.Array || windowsValue.GetArrayLength() > 4)
+                    throw new InvalidOperationException("invalid-fixed-text-command");
+                var blockedWindows = new HashSet<IntPtr>();
+                foreach (var item in windowsValue.EnumerateArray())
+                {
+                    if (!ulong.TryParse(item.GetString(), out var handle)) throw new InvalidOperationException("invalid-fixed-text-command");
+                    blockedWindows.Add(new IntPtr(unchecked((long)handle)));
+                }
+                var injection = RawInputWindow.InjectFixedText(requestId, expiry, blockedProcessId, blockedWindows);
+                _writer.FixedTextResult(requestId, injection.ok, injection.reason, injection.bytes);
+                return Task.CompletedTask;
+            }
+            if (type.GetString() == "read-config") {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] > 2 || report.AsSpan(10).ContainsAnyExcept((byte)0)) throw new InvalidOperationException("invalid-read-report");
+                // Register the request before issuing the feature report. HID
+                // devices may answer synchronously on the first transfer.
+                RawInputWindow.BeginRead(requestId, BitConverter.ToUInt32(report, 5), report[9]);
+                var readAccepted = HidFeatureDevice.RequestConfigRead(report);
+                if (!readAccepted) { RawInputWindow.CancelRead(requestId); _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
+                return Task.CompletedTask;
+            }
+            if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
             if (!root.TryGetProperty("reports", out var reportsValue) || reportsValue.ValueKind != JsonValueKind.Array || reportsValue.GetArrayLength() is < 1 or > 40)
                 throw new InvalidOperationException("invalid-reports");
             var reports = new List<byte[]>();
@@ -140,8 +232,12 @@ internal sealed class ConfigCommandListener : IDisposable
 
     private static bool IsRequestId(string? value) => value is { Length: >= 8 and <= 80 } && value.All(character => char.IsAsciiLetterOrDigit(character) || character == '-');
 
-    private static bool IsConfigReport(byte[] report) =>
-        report.Length == 64 && report[0] == 0x10 && report[1] == (byte)'S' && report[2] == (byte)'3' && report[3] == (byte)'C' && report[4] == 1;
+    private static bool IsConfigReport(byte[] report)
+    {
+        if (report.Length != 64 || report[0] != 0x10 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'C' || report[4] != 1) return false;
+        var chunkBytes = report[9];
+        return chunkBytes is >= 1 and <= 52 && report.AsSpan(12 + chunkBytes).ContainsAnyExcept((byte)0) == false;
+    }
 
     public void Dispose() => _cancellation.Cancel();
 }
@@ -170,6 +266,12 @@ internal static class HidFeatureDevice
             Thread.Sleep(12);
         }
         return (true, "");
+    }
+
+    public static bool RequestConfigRead(byte[] report)
+    {
+        using var handle = OpenConfigInterface();
+        return handle is not null && !handle.IsInvalid && HidD_SetFeature(handle, report, report.Length);
     }
 
     private static SafeFileHandle? OpenConfigInterface()
@@ -279,6 +381,15 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
+    private static RawInputWindow? Current;
+    public static void BeginRead(string requestId, uint numericRequest, byte flag) => Current?.BeginReadInternal(requestId, numericRequest, flag);
+    public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
+    public static (bool ok, string reason, int bytes) InjectFixedText(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows) =>
+        Current?.InjectFixedTextInternal(requestId, expiresUnixMs, blockedProcessId, blockedWindows) ?? (false, "input-window-unavailable", 0);
+    public static (bool ok, string reason) PasteActiveWindow(IntPtr expectedWindow) =>
+        Current?.PasteActiveWindowInternal(expectedWindow) ?? (false, "input-window-unavailable");
+    public static (bool ok, string reason, string targetWindow) CaptureActiveWindow() =>
+        Current?.CaptureActiveWindowInternal() ?? (false, "input-window-unavailable", string.Empty);
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -296,6 +407,14 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort VkMenu = 0x12;
     private const ushort VkEscape = 0x1B;
     private const ushort VkRMenu = 0xA5;
+    private const ushort VkControl = 0x11;
+    private const ushort VkLControl = 0xA2;
+    private const ushort VkRControl = 0xA3;
+    private const ushort VkShift = 0x10;
+    private const ushort VkLShift = 0xA0;
+    private const ushort VkRShift = 0xA1;
+    private const ushort VkE = 0x45;
+    private const ushort VkV = 0x56;
     private const ushort VkF22 = 0x85;
     private const int WhKeyboardLl = 13;
     private const int WmKeyDown = 0x0100;
@@ -309,11 +428,30 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private readonly LowLevelKeyboardProc _keyboardProc;
     private IntPtr _keyboardHook;
     private bool _boardConnected;
+    private bool _hookControlDown;
+    private bool _hookShiftDown;
+    private bool _hookVoiceEditDown;
     private bool _disposed;
+    private readonly object _configSync = new();
+    private readonly object _fixedTextSync = new();
+    private readonly FixedTextAssembler _fixedTextAssembler = new();
+    private PendingFixedText? _pendingFixedText;
+    private string? _pendingReadRequest;
+    private uint _pendingReadNumericRequest;
+    private byte _pendingReadFlag;
+    private readonly List<byte[]> _configChunks = new();
+    private int _configTotal;
+    private int _configLength;
+    private int _configCrc16;
+    private int _configSource;
+    private int _configNextChunk;
+    private uint _configNumericRequest;
+    private byte[]? _configLastChunk;
 
     public RawInputWindow(EventWriter writer, bool diagnosticMode = false)
     {
         _writer = writer;
+        Current = this;
         _diagnosticMode = diagnosticMode;
         _keyboardProc = KeyboardHook;
         CreateHandle(new CreateParams { Caption = "DeskMate Raw Input Bridge", Parent = new IntPtr(-3) });
@@ -403,14 +541,24 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
-        if (report.Length < 5 || report[0] != 0x11 || report[2] != 0 || report[3] != 1) return;
+        if (!VendorReportProtocol.HasValidEnvelope(report)) return;
         var kind = report[1];
         var length = report[4];
-        if (5 + length > report.Length) return;
         if (kind == 0x05 && length == 36)
         {
             var id = Encoding.ASCII.GetString(report.Slice(5, 36));
             if (IsCanonicalUuid(id)) _writer.HostAction(id);
+        }
+        else if (kind == 0x01)
+        {
+            lock (_fixedTextSync)
+            {
+                if (_pendingFixedText is not null && DateTimeOffset.UtcNow > _pendingFixedText.Expires) _pendingFixedText = null;
+                if (!_fixedTextAssembler.Accept(report, out var payload) || payload.Bytes == 0 || _pendingFixedText is not null) return;
+                var requestId = $"fixed-{Guid.NewGuid():N}";
+                _pendingFixedText = new PendingFixedText(requestId, payload.Text, payload.Bytes, DateTimeOffset.UtcNow.AddSeconds(3));
+                _writer.FixedTextReady(requestId, payload.Bytes);
+            }
         }
         else if (kind == 0x03 && length == 7)
         {
@@ -418,6 +566,92 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var crc16 = report[9] | (report[10] << 8);
             _writer.ConfigAck(report[6] == 1, report[11] == 1, bytes, crc16, report[5]);
         }
+        else if ((kind == 0x06 || kind == 0x04) && _pendingReadRequest is not null)
+        {
+            ParseConfigStream(report, kind, length);
+        }
+    }
+
+    private void BeginReadInternal(string requestId, uint numericRequest, byte flag)
+    {
+        lock (_configSync)
+        {
+            ResetConfigReadLocked();
+            _pendingReadRequest = requestId;
+            _pendingReadNumericRequest = numericRequest;
+            _pendingReadFlag = flag;
+        }
+    }
+
+    private void CancelReadInternal(string requestId)
+    {
+        lock (_configSync) if (_pendingReadRequest == requestId) ResetConfigReadLocked();
+    }
+
+    private void ParseConfigStream(ReadOnlySpan<byte> report, byte kind, int length)
+    {
+        lock (_configSync)
+        {
+            if (_pendingReadRequest is null || (_pendingReadFlag == 2) != (kind == 0x06)) return;
+            var chunk = report[2]; var total = report[3];
+            var declared = report[10] | (report[11] << 8); var crc = report[12] | (report[13] << 8);
+            var source = kind == 0x06 ? report[14] : 0;
+            var headerBytes = kind == 0x06 ? 10 : 9;
+            var dataOffset = kind == 0x06 ? 15 : 14;
+            if (length < headerBytes) { ResetConfigReadLocked(); return; }
+            var count = length - headerBytes;
+            var numericRequest = BitConverter.ToUInt32(report.Slice(6, 4));
+            var maxTotal = kind == 0x06 ? 42 : 11;
+            var maxBytes = kind == 0x06 ? 2048 : 512;
+            var maxChunk = kind == 0x06 ? 49 : 50;
+            if (numericRequest == 0 || numericRequest != _pendingReadNumericRequest) return;
+            if (total is < 1 || total > maxTotal || declared is < 1 || declared > maxBytes || count > maxChunk || dataOffset + count > report.Length || (kind == 0x06 && source > 3) || report.Slice(dataOffset + count).ToArray().Any(value => value != 0)) { ResetConfigReadLocked(); return; }
+            if (chunk == 0) { _configChunks.Clear(); _configTotal=total; _configLength=declared; _configCrc16=crc; _configSource=source; _configNextChunk=0; _configNumericRequest=numericRequest; _configLastChunk=null; }
+            if (total!=_configTotal || declared!=_configLength || crc!=_configCrc16 || source!=_configSource || numericRequest!=_configNumericRequest) { ResetConfigReadLocked(); return; }
+            var chunkBytes=report.Slice(dataOffset,count).ToArray();
+            if (chunk == _configNextChunk - 1 && _configLastChunk is not null && _configLastChunk.AsSpan().SequenceEqual(chunkBytes)) return;
+            if (chunk != _configNextChunk) { ResetConfigReadLocked(); return; }
+            _configChunks.Add(chunkBytes); _configLastChunk=chunkBytes; _configNextChunk++;
+            _writer.ConfigProgress(_pendingReadRequest, _configNextChunk, _configTotal);
+            if (_configNextChunk != _configTotal) return;
+            var data=_configChunks.SelectMany(value=>value).ToArray();
+            if (data.Length!=_configLength || Crc16Ccitt(data)!=_configCrc16) { ResetConfigReadLocked(); return; }
+            if (kind == 0x06) _writer.ConfigSnapshot(_pendingReadRequest,data.Length,_configCrc16,_configSource,Convert.ToBase64String(data));
+            else
+            {
+                try
+                {
+                    using var json=JsonDocument.Parse(data);
+                    if (json.RootElement.GetProperty("schema").GetString() != "ai_keyboard.config_status.v1") throw new JsonException("invalid-status-schema");
+                    var capabilities=json.RootElement.GetProperty("capabilities");
+                    _writer.ConfigCapabilities(_pendingReadRequest,
+                        capabilities.TryGetProperty("config_read_v1",out var read)&&read.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("host_action_v1",out var hostAction)&&hostAction.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True);
+                }
+                catch (JsonException) { ResetConfigReadLocked(); return; }
+            }
+            ResetConfigReadLocked();
+        }
+    }
+
+    private void ResetConfigRead()
+    {
+        lock (_configSync) ResetConfigReadLocked();
+    }
+
+    private void ResetConfigReadLocked()
+    {
+        _pendingReadRequest = null; _pendingReadNumericRequest = 0; _pendingReadFlag = 0;
+        _configChunks.Clear(); _configLastChunk = null; _configTotal = _configLength = _configCrc16 = _configSource = _configNextChunk = 0; _configNumericRequest = 0;
+    }
+
+    private static int Crc16Ccitt(byte[] data)
+    {
+        var crc = 0xffff;
+        foreach (var value in data) { crc ^= value << 8; for (var bit = 0; bit < 8; bit++) crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff; }
+        return crc;
     }
 
     private static bool IsCanonicalUuid(string value)
@@ -431,11 +665,74 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return true;
     }
 
+    private (bool ok, string reason, int bytes) InjectFixedTextInternal(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows)
+    {
+        PendingFixedText pending;
+        lock (_fixedTextSync)
+        {
+            if (_pendingFixedText is null || _pendingFixedText.RequestId != requestId)
+                return (false, "fixed-text-not-pending", 0);
+            pending = _pendingFixedText;
+            _pendingFixedText = null;
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (now > pending.Expires || now.ToUnixTimeMilliseconds() > expiresUnixMs)
+            return (false, "fixed-text-command-expired", 0);
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || !IsWindowVisible(foreground))
+            return (false, "fixed-text-no-visible-target", 0);
+        GetWindowThreadProcessId(foreground, out var foregroundProcessId);
+        if (foregroundProcessId == 0 || foregroundProcessId == Environment.ProcessId || foregroundProcessId == blockedProcessId || blockedWindows.Contains(foreground))
+            return (false, "fixed-text-target-rejected", 0);
+        var inputs = new List<NativeInput>(pending.Text.Length * 2);
+        foreach (var character in pending.Text)
+        {
+            inputs.Add(NativeInput.Unicode(character, false));
+            inputs.Add(NativeInput.Unicode(character, true));
+        }
+        var sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<NativeInput>());
+        return sent == inputs.Count ? (true, "", pending.Bytes) : (false, "fixed-text-send-input-incomplete", 0);
+    }
+
+    private (bool ok, string reason) PasteActiveWindowInternal(IntPtr expectedWindow)
+    {
+        var foreground = GetForegroundWindow();
+        if (expectedWindow == IntPtr.Zero || foreground != expectedWindow || !IsWindowVisible(foreground))
+            return (false, "target-window-changed");
+        var inputs = new[]
+        {
+            NativeInput.Key(VkControl, false), NativeInput.Key(VkV, false),
+            NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true),
+        };
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>());
+        if (sent == inputs.Length) return (true, "");
+        var releases = new[] { NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true) };
+        SendInput((uint)releases.Length, releases, Marshal.SizeOf<NativeInput>());
+        return (false, "desktop-output-send-input-incomplete");
+    }
+
+    private (bool ok, string reason, string targetWindow) CaptureActiveWindowInternal()
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || !IsWindowVisible(foreground))
+            return (false, "foreground-window-unavailable", string.Empty);
+        return (true, "", unchecked((ulong)foreground.ToInt64()).ToString());
+    }
+
     private void RefreshBoardStatus(bool force)
     {
         var connected = EnumerateDeviceNames().Any(name => name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase));
         if (!force && connected == _boardConnected) return;
         _boardConnected = connected;
+        if (!connected)
+        {
+            ResetConfigRead();
+            lock (_fixedTextSync)
+            {
+                _fixedTextAssembler.Reset();
+                _pendingFixedText = null;
+            }
+        }
         _writer.Status(connected);
     }
 
@@ -444,9 +741,28 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         if (code >= 0)
         {
             var value = Marshal.PtrToStructure<LowLevelKeyboardInput>(data);
+            var messageId = message.ToInt32();
+            var isDown = messageId is WmKeyDown or WmSysKeyDown;
+            var isUp = messageId is WmKeyUp or WmSysKeyUp;
+            if (value.VirtualKey is VkControl or VkLControl or VkRControl)
+                _hookControlDown = isDown || (!isUp && _hookControlDown);
+            else if (value.VirtualKey is VkShift or VkLShift or VkRShift)
+                _hookShiftDown = isDown || (!isUp && _hookShiftDown);
+            else if (value.VirtualKey == VkE)
+            {
+                if (isDown && _hookControlDown && _hookShiftDown && !_hookVoiceEditDown)
+                {
+                    _hookVoiceEditDown = true;
+                    _writer.Input("keyboard", "VoiceEdit", "down");
+                }
+                else if (isUp && _hookVoiceEditDown)
+                {
+                    _hookVoiceEditDown = false;
+                    _writer.Input("keyboard", "VoiceEdit", "up");
+                }
+            }
             if (value.VirtualKey == VkF22)
             {
-                var messageId = message.ToInt32();
                 if (messageId is WmKeyDown or WmSysKeyDown) _writer.Input("f22-fallback", "F22", "down");
                 else if (messageId is WmKeyUp or WmSysKeyUp) _writer.Input("f22-fallback", "F22", "up");
             }
@@ -488,6 +804,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (ReferenceEquals(Current, this)) Current = null;
         if (_keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(_keyboardHook);
         DestroyHandle();
     }
@@ -525,6 +842,49 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         public UIntPtr ExtraInfo;
     }
 
+    private sealed record PendingFixedText(string RequestId, string Text, int Bytes, DateTimeOffset Expires);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public uint Type;
+        public NativeInputUnion Value;
+
+        public static NativeInput Unicode(char character, bool keyUp) => new()
+        {
+            Type = 1,
+            Value = new NativeInputUnion
+            {
+                Keyboard = new NativeKeyboardInput { ScanCode = character, Flags = keyUp ? 0x0006u : 0x0004u }
+            }
+        };
+
+        public static NativeInput Key(ushort virtualKey, bool keyUp) => new()
+        {
+            Type = 1,
+            Value = new NativeInputUnion
+            {
+                Keyboard = new NativeKeyboardInput { VirtualKey = virtualKey, Flags = keyUp ? 0x0002u : 0u }
+            }
+        };
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct NativeInputUnion
+    {
+        [FieldOffset(0)] public NativeKeyboardInput Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeKeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr message, IntPtr data);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -550,4 +910,16 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint inputCount, [In] NativeInput[] inputs, int inputSize);
 }

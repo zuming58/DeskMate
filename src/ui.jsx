@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from "react";
 import {
   IconAlertTriangle as AlertTriangle,
   IconCheck as Check,
@@ -5,6 +6,7 @@ import {
   IconHelpCircle as CircleHelp,
   IconInfoCircle as Info,
   IconSearch as Search,
+  IconShieldCheck as ShieldCheck,
   IconSparkles as Sparkles,
   IconX as X,
 } from "@tabler/icons-react";
@@ -53,6 +55,59 @@ export function Button({ children, icon: Icon, variant = "secondary", className 
       {Icon && <Icon size={18} stroke={1.8} />}
       <span>{children}</span>
     </button>
+  );
+}
+
+export function ConfirmationDialog({ open, title, description, paths = [], busy = false, onCancel, onConfirm }) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const cancelButtonRef = useRef(null);
+  const restoreFocusRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    restoreFocusRef.current = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.requestAnimationFrame(() => cancelButtonRef.current?.focus());
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape" || busy) return;
+      event.preventDefault();
+      onCancel?.();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      restoreFocusRef.current?.focus?.();
+    };
+  }, [busy, onCancel, open]);
+
+  if (!open) return null;
+  return (
+    <div className="confirmation-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel?.(); }}>
+      <section className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+        <div className="confirmation-dialog__header">
+          <span className="confirmation-dialog__icon"><ShieldCheck size={24} stroke={1.75} /></span>
+          <div>
+            <span className="confirmation-dialog__eyebrow">CONFIGURATION REVIEW</span>
+            <h2 id={titleId}>{title}</h2>
+            <p id={descriptionId}>{description}</p>
+          </div>
+        </div>
+        <div className="confirmation-dialog__body">
+          <div className="confirmation-dialog__summary">
+            <div><strong>本次修改路径</strong><span>{paths.length} 项</span></div>
+            <ul>{paths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
+          </div>
+          <div className="confirmation-dialog__notice"><ShieldCheck size={18} stroke={1.8} /><p>只修改上面列出的已脱敏路径；网络、音频和未知字段保持原值。取消不会改变板上配置。</p></div>
+        </div>
+        <div className="confirmation-dialog__footer">
+          <button ref={cancelButtonRef} className="button button--ghost" disabled={busy} onClick={onCancel}><span>取消</span></button>
+          <Button variant="primary" disabled={busy} onClick={onConfirm}>{busy ? "正在保存并核对…" : "确认并同步"}</Button>
+        </div>
+      </section>
+    </div>
   );
 }
 

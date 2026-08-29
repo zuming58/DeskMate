@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T07D companion UI integration after T06](design/companion-ui-integration-after-t06.md)
+- [T07D companion UI visual QA](../design/qa/design-qa.md)
+- [Voice edit, memory and AI service boundaries](architecture/voice-edit-memory-ai-services.md)
+- [T07 Desktop UI V1 freeze](contracts/t07-desktop-ui-v1.md)
 - [Latest three-end development guide](guides/deskmate-three-end-development-guide-2026-08-24.md)
 - [DeskMate V1 hardware baseline](architecture/deskmate-v1-hardware-baseline.md)
 - [Integrated software and hardware project start](handoffs/integrated-project-start-2026-08-23.md)
@@ -38,6 +42,9 @@
 - [T05 first independent audit and rework gate](reviews/t05-easyinput-config-nvs-first-audit-2026-08-27.md)
 - [T05 second independent audit and rework gate](reviews/t05-easyinput-config-nvs-second-audit-2026-08-27.md)
 - [T05 second-computer second rework handoff](handoffs/second-computer-t05-config-nvs-second-rework-2026-08-27.md)
+- [T05 third independent audit](reviews/t05-easyinput-config-nvs-third-audit-2026-08-28.md)
+- [T05 third-rework handoff](handoffs/second-computer-t05-config-nvs-third-rework-2026-08-28.md)
+- [T05 configuration-read HIL blocker handoff](handoffs/second-computer-t05-config-read-hil-blocker-2026-08-28.md)
 - [T06 EasyInput Host Action task](../flow/tasks/T06-easyinput-host-actions.md)
 
 ## Product

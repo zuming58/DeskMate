@@ -1,6 +1,258 @@
 # Progress log
 
+## 2026-08-29 · T07 desktop baseline integrated and verified for mainline
+
+- role/base/source：在隔离工作树 `F:\Codex\deskmate-t07-main-merge` 中，以 `origin/main@069c2a90da4f3ad436074c0cd35a566a2268f91e` 为第一父提交，合并已冻结的 T07 分支 `codex/companion-t07d-t06-integration@a0ade9c6fc1b25d8786471b2f53babe3219fb5f3`。原工作树 `F:\Codex\deskmate` 的用户未提交修改保持原样，没有使用整目录覆盖。
+- merge resolution：仅 `docs/README.md`、`flow/progress.md`、`flow/tasks/T05-easyinput-config-nvs.md` 发生文本冲突；产品源码均自动合并。冲突按当前已验收 T05/T06/T07 状态为准，同时保留旧 `main` 的两条 T05 审计历史；桌面界面合同继续标记为 `T07_DESKTOP_UI_V1_FROZEN`。
+- verification：`npm ci --include=dev` 成功；`npm test` 115/115；`npm run build:desktop` 完整通过；EasyInput 固件 Host CTest 7/7。合并候选 `release/win-unpacked/resources/app.asar` SHA-256 为 `273942ADFF301D2AA36096DB9FE2C90F2578C17108CF8A86DC6D1C755AEC354E`，并通过 `git diff --check`。
+- hardware/safety：本次仅做 Git、文档、桌面构建与 Host 测试；没有扫描端口、识别设备、读取或写入 Flash/NVS、烧录、擦除、monitor、写 eFuse，也没有驱动小智 OLED 或舵机。
+- next action：推送合并后的远端 `main`，EasyInput 与小智后续任务都必须先 `git fetch origin`，再从该准确远端基线创建各自短分支；继续禁止跨电脑整目录覆盖。实时陪伴、自动记忆摘要与检索、DeskMate Link、小智 OLED/舵机仍是待冻结或待实现切片，不能标作已接入。
+
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
+
+## 2026-08-29 · T07 Desktop UI V1 frozen for mainline integration
+
+- role/branch/base：当前硬件验收电脑在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 完成桌面冻结；本轮进入时 HEAD `860e726ed5519a3afa8195e59c15994ad2717eb8`，冻结提交 `e3b2e605166a90d32c73d72d39e4f2e0f016a738`，共同历史基于已锁定 T06 `619d85347499545e9af11488bb5d141296ae1dd3`。
+- scope/changed paths：用户确认 KEY3 语音编辑已完成，且此前真实文字模型的智能整理测试通过。新增 `docs/contracts/t07-desktop-ui-v1.md` 并标记 `T07_DESKTOP_UI_V1_FROZEN`；D030 固定七个主导航入口、内部页面归属、共享七表情脸、单一 VoiceWorkflow 和完整 T06 能力基线；同步 `docs/README.md`、`flow/decisions.md`、`flow/plan.md`。
+- verification/hardware：冻结前最终候选已完成 `npm test` 115/115 和 `npm run build:desktop`，用户完成 KEY3 功能确认；智能整理与 KEY3 属用户可见 HIL，实时陪伴、自动记忆、DeskMate Link、小智 OLED/舵机仍未完成。本轮冻结记录没有扫描端口、读写 Flash/NVS、烧录或改变任一固件/硬件配置。
+- open risks/next action：`origin/main` 当前仍是较早的 `069c2a90da4f3ad436074c0cd35a566a2268f91e`，而冻结分支包含后续 T05/T06/T07；原 `F:\Codex\deskmate` 工作树仍在 `codex/companion-t07c-ui-shell@9e5e442` 且有用户未提交改动，必须保持原样。下一步在新隔离工作树从准确 `origin/main` 合并冻结分支，重新执行依赖安装、115 项全量测试和桌面打包，通过后推送远端 `main`，供 EasyInput 与小智后续短分支共同取基线。
+
+## 2026-08-29 · T07D idle Escape and physical KEY3 voice-edit regression fixed
+
+- 用户证据：用户用已配置的真实文字模型确认“智能整理”可用，能够去除重复和口头语；同时复现两个桌面回归：没有语音会话时按 Escape 仍显示“已取消当前语音输入”，实体 KEY3/语音编辑没有可见响应。
+- 根因与修复：实现提交 `0f59ff598d46046ea1f55e9badb50d1a05a3dfbd`。Escape 原先从只读输入桥无条件进入取消事件；现在只有共享语音状态处于 recording/transcribing/organizing/outputting 时才允许取消，idle/completed/error 均忽略。KEY3 的 `Ctrl+Shift+E` 原先在全局快捷键 key-down 时立即复制选区，可能与仍按住的 Ctrl/Shift/E 冲突；常驻原生桥现在只在完整组合键释放后发出脱敏 `VoiceEdit` 语义事件，主进程取消延迟后备触发、再读取选区并显示明确进度/错误。输入钩子继续只读，不吞键，不输出选区、窗口标题或设备路径。
+- 验证与候选：定向 native/protocol/voice 回归 38/38；全量 `npm test` 115/115；`npm run build:desktop` 完整通过。最终候选为 `F:\Codex\deskmate-t07-integration\release\win-unpacked\DeskMate.exe`，`app.asar` SHA-256 `273942ADFF301D2AA36096DB9FE2C90F2578C17108CF8A86DC6D1C755AEC354E`，旧 D 盘候选已关闭，新候选已启动。详细矩阵见 `docs/testing/t07d-voice-edit-escape-regression-2026-08-29.md`。
+- 边界与下一步：本轮没有改 EasyInput 固件或配置，没有扫描端口、读取/写入 Flash/NVS、烧录或操作小智。用户需在新候选中确认空闲 Escape 无提示、KEY3 第一次释放开始编辑录音、第二次释放结束并替换所选文字，以及活动会话内 Escape 仍能取消；完成前 KEY3 保持 `HIL_PENDING`。
+
+## 2026-08-29 · T07D voice edit, AI services and local memory foundation ready for manual regression
+
+- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上继续工作；本轮起点 HEAD 为 `82d582c91007ffc27549397d71d8cdc658e38178`，功能实现提交为 `78a95726db4ac7e5f33c11fd400eab064c38f4ac`。主工作树 `F:\Codex\deskmate` 未修改。
+- 做了什么：用 DeskMate 自定义确认框替换按键保存时的原生 Windows `confirm`；把“设备连接”从主导航迁入“设备与诊断”内页；新增独立 `Ctrl+Shift+E` / KEY3 语音编辑链路，先精确捕获前台窗口选区，再录制编辑指令、调用文字大模型，且仅在目标窗口和原选区仍一致时替换；原样输出仍走本地确定性规则，智能整理和自定义整理改为真实文字模型调用，并与 KEY3、后续 Bridge/记忆摘要共用一套版本化文字模型配置。
+- AI 服务与安全：设置页新增“AI 服务”，分别配置百炼 ASR、OpenAI-compatible 文字模型，以及豆包/自定义 WSS 实时语音；API Key、App ID、Access Key、App Key 通过 Electron `safeStorage` 加密，React 不读取密钥、Node API 或设备路径。实时语音配置目前只保存并显示待接入，尚未启用第二套语音状态机或陪伴 Bridge；未伪装成已经联通。
+- 记忆基础：新增 `%APPDATA%\deskmate\companion-memory.sqlite3`，使用内置 `node:sqlite`、WAL 和 FULL synchronous，落地对话轮次、每日摘要、记忆候选、审核状态和 embedding 表；AI 陪伴的“记忆管理”已显示真实数据库状态、候选列表与审核入口。数据库和管理面是真实实现，但陪伴对话写入、自动小时/每日摘要、向量生成与检索仍待后续切片，当前空库会如实显示。
+- 来源与边界：对照 Maker 固定参考确认 KEY3/`Ctrl+Shift+E` 只负责热键和音频生命周期，Windows 选区捕获、模型处理与安全替换应由 Host 实现；只参考 `F:\Codex\suligent` 的“实时语音 WebSocket + 独立 OpenAI-compatible 意图/状态模型 + 输入打断播放”架构，没有复制人物、凭据或代码。本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未驱动小智 OLED/舵机。
+- 验证：`npm ci --include=dev` 成功；`npm test` 112/112 通过。最终源码与原生桥构建通过；仓库内 `npm run build:desktop` 在 electron-builder 重命名 `release\win-unpacked.tmp` 时受 Windows 文件锁 `EPERM` 阻断，但对同一最终源码执行等价打包到隔离输出目录成功，成品为 `D:\CodexData\home\visualizations\2026\08\29\01a04af3-3b1b-7843-9dcd-d8d26ef52e4c\deskmate-package\win-unpacked\DeskMate.exe`，`app.asar` SHA-256 为 `4E4157950939B8BACC4A27A08F10827BCFFD29155CF0671FB0E984ED1F737BE4`，应用已启动且创建本地记忆库。Edge 自动视觉采集因无法可靠确认浏览器当前 URL 而安全停止，未把未完成的自动截图冒充 QA。
+- 下一步：用户在已启动的最终包中人工回归原 T06 按键保存/回读与新确认框、KEY1 原样/智能整理、KEY3 选中文本语音编辑、AI 服务保存状态和记忆空库状态；新 KEY3 尚未取得本轮真机验收，不标记为 HIL 通过。实时陪伴语音、Bridge、自动记忆摘要和 embedding 检索另开冻结切片后实现。
+
+## 2026-08-29 · T07D companion UI integrated on the locked T06 baseline
+
+- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上工作；精确基线为已锁定 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3`，已验证实现提交为 `ac5bf6d86661fc1260bb8a3301e684778c829a9b`。原 `F:\Codex\deskmate` 的 T07C dirty 工作树保持原样，没有整目录覆盖或回写。
+- 做了什么：主导航收敛为工作台、语音输入、AI 陪伴、历史记录、词库、按键配置、设备连接、设备与诊断；AI 联动、表情库和动作编排嵌入 AI 陪伴，表情编辑和环境感知不再作为主入口。新增共享 `CompanionFace`，把默认、眨眼、开心、难过、生气、思考、聆听七张真实图片用于品牌、侧栏设备脸、工作台、陪伴页、表情库和动作预览；自然眨眼为 4.2～7.8 秒间隔、150 ms 持续并尊重 reduced-motion。
+- 功能边界：T06 的 VoiceWorkflow、活动窗口写回、固定文字、UUID 打开应用、配置 ACK/回读、按键映射、连接和诊断实现未被替换。陪伴对话、记忆、提醒、图片导入持久化、小智屏幕和舵机均明确标为软件预览、待开发或待接入；“开始陪伴对话”不打开麦克风，动作按钮不发送硬件命令。
+- 产出：实现见 `src/CompanionFace.jsx`、`src/App.jsx`、`src/pages.jsx`、`src/appData.js`、`src/styles.css` 和 `public/assets/expressions/`；设计说明见 `docs/design/companion-ui-integration-after-t06.md`，视觉 QA 见 `design/qa/design-qa.md`，选定表情系统见 `design/concepts/companion-expression-elastic-language.png`。
+- 验证：精确 T06 基线在改动前 101/101；集成后 `npm test` 105/105，`npm run build:desktop` 通过。所选 Edge 中八个主入口逐页打开，陪伴预览、七表情、表情搜索、动作软件预览和 AI 联动均完成交互检查；小窗口无横向文档溢出。自动验证只证明软件候选，不替代用户对原有功能的人工回归。
+- 硬件与下一步：本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未接线、未操作小智 OLED/舵机。下一步由用户运行 `release/win-unpacked/DeskMate.exe`，优先人工回归 T06 固定文字、打开应用、配置回读、语音写回和八键/旋钮，再检查 AI 陪伴七表情与内部分页；任何原功能回归立即停在本候选修复，不开始小智通信或固件实现。
+
+## 2026-08-29 · T06 manual matrix passed, locked and ready for Git handoff
+
+- 做了什么：启动当前 `release/win-unpacked` DeskMate 供用户人工验收；用户按清单完成同一窗口语音写回、主动切窗剪贴板安全回退、固定文字、UUID 打开应用、DeskMate 重启后的配置读取，以及八键、旋钮旋转/按压、灯效和语音键回归，并明确报告“测试全部通过”。T06 状态更新为 `HIL_CONFIRMED / USER_ACCEPTED / T06_LOCKED`。
+- 证据归属：接受的桌面源码为本条文档提交前的 `1fb0dab99697209f70927442aa3aaf78fd45ecbc`；板上固件源码仍为已授权烧录的 `7907d6f8412e549fc312eed23deeb31ba5dcda53`，app 327,952 字节（`0x50110`），烧录 SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`。`7907d6f..1fb0dab` 的固件目录 diff 为空，因此本次桌面修复没有造成板端代码漂移；不能把后来未烧录的干净构建哈希冒充板上镜像。
+- 自动化与产出：继承桌面 101/101、固件 Host 7/7、`npm run build:desktop`、精确 ESP-IDF v5.5.5/esp32s3/固定 16 MB 分区构建和组合代码审计通过。正式验收记录为 `docs/testing/t06-host-actions-acceptance-2026-08-29.md`，跨电脑交接同步到 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`。
+- 上传边界：GitHub 只交换源码、合同、测试、审计和交接；`release/`、`build/`、`managed_components/`、SDKCONFIG、bin/elf/map 不提交。另一台电脑 fetch 最终分支后本地重建，不再用整目录覆盖。
+- 硬件与下一步：记录验收和推送期间未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未修改小智或外部参考。提交并推送当前分支后停止；另一台电脑先核对远端 HEAD 和本记录。T07、新固件写入或其他硬件操作必须另行开包和授权。
+
+## 2026-08-29 · T02-T06 combined self-audit and stable voice-path restoration ready for handoff
+
+- 做了什么：完成 T02～T06 组合代码审计，并撤销被连续真机证据否决的常驻原生桥语音目标候选；恢复 `9e214d1` 已知成功的 PowerShell 边界，即录音开始捕获前台 HWND，输出时在同一 PowerShell 调用内精确核对 HWND 后发送 Ctrl+V。保留配置保存/回读修复、T06 固定文字与打开应用、固件、中文单键和 320 px 悬浮条。同步修正 T05 任务卡的旧 `T06_BLOCKED` 状态。
+- 为什么与怎么理解：`c6ead2a` 和 `8462e59` 虽通过自动化，用户现场仍持续出现目标变化回退；该证据已经否决候选，不能继续用采样参数猜测修复。审计确认性能优化替换了曾通过 HIL 的 Windows 焦点/粘贴边界，因此先恢复最后已知稳定实现，再把性能优化留给独立、可观测的新任务。
+- 产出路径：`electron/active-window-output.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、相关测试；组合审计 `docs/reviews/t06-host-actions-combined-self-audit-2026-08-29.md`；交接 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`；经验写入 `flow/lessons.md`。
+- 验证：桌面 `npm test` 101/101；`npm run build:desktop` 通过；MSVC 19.44 固件 Host CTest 7/7；精确 ESP-IDF v5.5.5、Python 3.11.15、`esp32s3`、Minimal Build、绝对隔离 SDKCONFIG 和固定 16 MB 分区构建通过。dirty 审计 app 为 327,952 字节（`0x50110`），SHA-256 `8C2259C809046B4D9688A62B882173FAA2E576EDF28F2A6C07F16B27911C0D4A`；最终干净 HEAD 镜像在提交后重建并随交付报告。`git diff --check`、AGENTS/CLAUDE 逐字一致、来源/许可证、隐私/密钥、ASCII 路径和构建产物检查通过。
+- 审计结论：T02 输入基础、T03 atomic tap/held PTT/断线释放、T04 LED/GPIO8 单一所有权、T05 配置读改写/NVS/脱敏边界及 T06 Host Action/固定文字均未发现新的自动化阻断。语音恢复路径和 T06 实体动作仍需用户在场的人工 HIL，不能声明 T06 锁定。
+- 硬件操作与下一步：本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未修改小智或外部参考。状态为 `SELF_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`。提交并推送当前分支后停止；接手方先核对远端 HEAD 并独立重建，再由用户在场验证同窗语音写回、主动切窗回退、固定文字、UUID 打开应用、配置重启回读和 T03/T04 组合矩阵，不开始 T07。
+
+## 2026-08-29 · T06 active-window capture stabilized after monitored Windows focus gap
+
+- 做了什么：针对用户在未主动切窗时仍收到“目标窗口已变化”的回归，连续执行两轮脱敏前台监控，只记录相对时间、HWND 和 PID。两轮都观察到从 Codex 切入记事本时先出现 `GetForegroundWindow() == 0`，空窗分别约 92 ms 和 61 ms；进入记事本后 HWND 在整个语音操作期间保持不变。原生桥现在对录音开始目标执行最多 250 ms、每 10 ms 一次的有界采样，并要求同一可见窗口连续出现两次才接受；输出时仍要求当前前台 HWND 与该捕获值完全一致，没有放宽为任意当前窗口。界面同时区分“目标后来变化”和“未能稳定捕获输入目标”，不再把所有安全回退误报为用户切窗。
+- 为什么与怎么理解：旧实现只调用一次 `GetForegroundWindow()`；当用户刚切到目标编辑器就按语音键时，Windows 焦点交接会短暂返回零，DeskMate 因此没有保存本轮目标。转写完成后的剪贴板回退是 fail-closed 的正确后果，但旧提示错误地称为“目标窗口已变化”。监控还证明悬浮条没有抢焦点，记事本内部也没有 HWND 抖动。
+- 产出路径：`native/DeskMate.InputBridge/Program.cs`、`src/pages.jsx`、`tests/native-input-bridge-protocol.test.mjs`、`tests/desktop-reliability.test.mjs`；可复用结论同步到 `flow/lessons.md`。
+- 验证：定向桌面/原生回归 `46/46`；全量 `npm test` `101/101`；`npm run build:desktop` 通过（首次因旧 DeskMate 占用发布文件而失败，关闭旧进程后重跑通过）；`git diff --check` 通过。已关闭旧包并启动 `release/win-unpacked/DeskMate.exe`。未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：用户在新包中先切到记事本、等待焦点稳定后完成一次语音输入，确认文字直接写回；再主动切窗一次确认仍安全回退剪贴板。当前保持 `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`，T06 组合 HIL 完成前不开始 T07。
+
+## 2026-08-29 · T06 voice target capture race removed and overlay compacted
+
+- 做了什么：修复用户在没有主动切换窗口时仍收到“目标窗口已变化”的新回归。录音开始时的目标捕获从约 1.35 秒冷启动的 PowerShell 改为常驻 `DeskMate.InputBridge` 即时命令；捕获与输出核对现在由同一个原生桥、同一种窗口句柄语义完成。桥事件只返回临时句柄，不含窗口标题、进程路径或转写正文。语音悬浮条按用户要求从 520px 缩为 320px，波形、间距、字号和状态区同步收紧，转写继续单行显示最新尾部。
+- 为什么与怎么理解：上一候选已经把输出核对改为即时原生桥，但捕获仍延迟启动 PowerShell；两个时点和执行路径不一致，延迟期间即使用户未主动切换，也可能捕获到不同前台窗口。统一到常驻桥既消除竞态，也移除录音开始阶段的 PowerShell 固定开销。
+- 产出路径：`electron/input-bridge-protocol.cjs`、`electron/input-bridge.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、`tests/desktop-reliability.test.mjs`、`tests/phase3-input-bridge.test.mjs`、`tests/native-input-bridge-protocol.test.mjs`。
+- 验证：定向回归 30/30；全量 `npm test` 101/101；`npm run build:desktop` 通过。新增覆盖常驻桥捕获命令、仅句柄结果、主进程无 PowerShell、320px 稳定宽度，以及既有目标变化/SendInput modifier 释放。未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：启动新打包 DeskMate，用户在同一目标窗口完成一次语音输入，确认直接写回且悬浮条尺寸合适；再主动切换窗口一次，确认仍安全回退剪贴板。T06 组合 HIL 完成前不开始 T07。
+
+## 2026-08-29 · T06 ACK-timeout reconciliation and resident voice paste ready for HIL
+
+- 做了什么：根据新版真机截图确认配置完整读取正常，但保存结果因 `config-ack-timeout` 被判失败；现在写入 ACK 超时后会启动有界完整回读，只有板上指纹精确等于预期配置才判定保存成功，不一致或不可读仍失败关闭。移除保存页长期驻留的“待确认的脱敏路径”卡片，脱敏路径继续只出现在用户确认对话中。语音活动窗口输出不再启动 PowerShell，而是向常驻 `DeskMate.InputBridge` 发送仅含 request ID 和目标窗口句柄的粘贴命令；桥核对前台窗口后用 `SendInput` 发送 Ctrl+V，失败时补发 V/Ctrl release。
+- 为什么与怎么理解：用户切页后能读到已修改值，证明本次真实边界是固件保存成功但 ACK 未被 Windows 链路消费；精确回读能够确认最终状态，不能仅凭超时或体感伪装成功。语音慢的本机测量显示空 PowerShell 冷启动五次平均约 1.35 秒，说明上一轮“两个进程减为一个”仍保留明显固定延迟，改用既有常驻桥才能移除该成本。
+- 产出路径：`electron/config-readback.cjs`、`electron/input-bridge-protocol.cjs`、`electron/input-bridge.cjs`、`electron/active-window-output.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、`src/pages.jsx`，以及 `tests/desktop-reliability.test.mjs`、`tests/phase3-input-bridge.test.mjs`、`tests/native-input-bridge-protocol.test.mjs`。
+- 验证：定向回归 27/27；全量 `npm test` 98/98；`npm run build:desktop` 通过。新增覆盖 ACK timeout + exact readback、mismatch fail-closed、常驻桥单飞/脱敏命令、精确目标校验和 SendInput modifier 释放。本轮未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：启动新打包 DeskMate，真机验证 KEY6 单字段保存后当前页面直接显示“已保存并回读确认”，并验证一次语音输出耗时和目标变化剪贴板回退；T06 组合 HIL 完成前不开始 T07。
+
+## 2026-08-29 · T06 desktop config status and voice output latency fixed
+
+- 做了什么：修复两个用户真机联调后确认的桌面问题。配置提交在固件保存 ACK 后增加三次有界回读验证，第一次瞬时失败可恢复；板上读取状态与同步状态拆开，成功后清除旧脱敏差异，保存已确认但回读仍失败时显示“已保存，回读待确认”，真实指纹不一致继续立即失败关闭。语音活动窗口输出把“核对当前前台窗口 + Ctrl+V”合并为一次 PowerShell 调用，保留录音触发时捕获的目标窗口、目标变化拒绝和剪贴板回退。
+- 为什么与怎么理解：截图和真机结果证明配置实际已保存、离开页面再进入即可读取，因此旧“读取失败/同步失败”是保存后瞬时回读与 UI 状态混用，不是 NVS 保存失败。语音慢点位于转写完成后的输出阶段，旧路径连续启动两个 PowerShell 进程；本轮没有改 STT、整理模型或固件。
+- 产出路径：`electron/config-readback.cjs`、`electron/active-window-output.cjs`、`electron/main.cjs`、`src/pages.jsx`、`src/styles.css`、`tests/desktop-reliability.test.mjs`；可复用边界补入 `flow/lessons.md`。
+- 验证：新增 7 个桌面可靠性回归；全量 `npm test` 94/94、`npm run build:desktop` 和 `git diff --check` 通过。没有修改 EasyInput 固件、冻结合同、外部参考、小智、BLE/Wi-Fi、音频或 DeskMate Link；没有扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。构建输出保持忽略且不提交。
+- 下一步：使用本次新打包的 DeskMate 验证一次按键保存和一次语音活动窗口输出；桌面修复不需要重新烧录当前 `7907d6f` 固件。T06 组合 HIL 关闭前不开始 T07。
+
+## 2026-08-29 · Espressif MCP support and manual T06 pressure-test guide added
+
+- 做了什么：按用户提供的乐鑫官方入口，在项目级 `.codex/config.toml` 注册 `espressif-documentation`、`esp-component-registry` 和 `espressif-engineering` 三个可选远程 MCP；文档/组件查询只在写操作时提示，工程排障每次调用均提示确认且所有服务 `required = false`，服务不可用不会阻断 DeskMate 开发。OpenAI Docs 确认受信任项目可使用 `.codex/config.toml` 配置 Streamable HTTP MCP。
+- 为什么与怎么理解：MCP 适合查询精确 ESP-IDF API、组件兼容性和形成排障路径，但不能把第三方回答当成代码、合同或 HIL 证据。新增 `flow/guides/espressif-mcp-troubleshooting.md` 固定问题路由、脱敏清单、建议复核门和 T06 保存/重启五轮手动压力矩阵；用户明确选择自己操作配置界面，本轮 Agent 不代写 NVS。
+- 产出路径：`.codex/config.toml`、`flow/guides/espressif-mcp-troubleshooting.md`、根 `AGENTS.md`。本机仅追加 DeskMate 项目信任记录后，`codex-cli 0.147.0` 的 `codex mcp list/get` 已识别三个服务为 enabled；该结果证明配置被加载，不证明远端认证或实际查询已成功。新 MCP 需新 Codex 任务或客户端刷新后进入工具清单，当前已运行任务不能据配置变化声称服务可调用。
+- 当前硬件事实：新 app 启动后用户确认按键和灯效恢复，DeskMate 配置页显示已读取；这关闭了旧 NVS 配置导致的启动阻断，但 KEY8 保存、Host Action、完整重启回读和五轮压力测试仍为 `HIL_PENDING`。
+- 下一步：用户按指南手动执行 KEY8 保存、Host Action、完整重启和 T03/T04 回归；如失败立即停止重复保存/烧录，保留脱敏的首个失败边界，再由新任务调用对应乐鑫 MCP辅助形成问题清单并补失败测试。T06 HIL 关闭前不开始 T07。
+
+## 2026-08-29 · T06 configuration-save recovery app flashed; HIL pending
+
+- 烧录身份：源码 HEAD `7907d6f8412e549fc312eed23deeb31ba5dcda53`；ESP-IDF `v5.5.5` / `esp32s3` app 为 327,952 字节（`0x50110`），SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`。
+- 授权与目标：用户先按精确 HEAD、SHA-256 和 `0x010000..0x06010F` 授权 app-only 写入，再确认本轮只读识别得到的 `COM6` ESP32-S3 目标身份；私有设备身份不写入仓库。
+- 写入结果：仅从 `0x010000` 写入上述 app，327,952 字节完成且 esptool 报告 `Hash of data verified`，随后 hard reset。Flash 扇区实际擦除范围为 `0x010000..0x060FFF`，仍完全位于固定 3 MiB factory app 分区；未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse。
+- 当前门禁：`TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PENDING`。烧录成功不等于故障已经真机关闭；尚未验证旧 NVS 配置启动恢复、KEY8 Host Action 保存、重启回读、按键/灯效持续工作或 T03/T04 回归，也未运行 monitor 或读取 Flash/NVS。
+- 下一步：用户先确认正常启动及八键/灯效；DeskMate 读取配置成功后，将 KEY8 选择为 Chrome 并保存，确认保存后按键与灯效不中断且配置仍可读；再完整关机重启，验证配置回读和 Host Action，最后回归语音、旋钮与断线安全。失败时停止重复写入，取得脱敏边界证据后再改代码；T06 HIL 关闭前不开始 T07。
+
+## 2026-08-29 · T06 configuration-save board failure fixed in code
+
+- 做了什么：针对用户真机将 KEY8 配置为 Host Action 并保存后，按键与灯效全部停止且完整重启仍不能恢复的问题，替换 `config_core.cpp` 的完整递归动态 JSON DOM；新实现先严格验证最多 2048 字节的 UTF-8/JSON，再仅按冻结配置路径流式提取运行时投影，继续原字节保存完整 JSON。新增接近上限的 Host Action 配置回归，覆盖 `0x10` 分块组装、双槽 NVS 保存/回读、运行时投影、`0x11` 完整读取和模拟重启恢复。
+- 为什么与怎么理解：旧实现会为整份配置递归构造含 `std::string`/`std::vector` 的对象树，并在保存、回读、应用和启动加载阶段重复解析；ESP-IDF 又以 `-fno-exceptions` 构建。普通配置未必触发故障，但加入 Host Action 后配置增大，动态分配与递归栈风险足以解释“保存即失效、重启仍失效”。固定 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的同类路径保留原 JSON并按路径解析，本轮按此行为清晰重实现，没有复制 Maker runtime 或使用其 build 产物。该根因是代码和目标 ELF支持的高可信结论，仍须新镜像真机复测后才能标为 HIL 确认。
+- 产出路径：`firmware/easyinput-controller/components/input_core/src/config_core.cpp`、`firmware/easyinput-controller/host_test/config_core_tests.cpp`、`firmware/easyinput-controller/host_test/firmware_source_contract_tests.cpp`；来源补充见 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`，可复用经验见 `flow/lessons.md`。
+- 验证：Visual Studio Build Tools 2022 / MSVC 19.44 Host CTest `7/7`；桌面 `npm test` `87/87`、`npm run build:desktop`；精确 ESP-IDF `v5.5.5` / `esp32s3` / Minimal build / 固定 16 MB 分区的 dirty 候选构建均通过。`git diff --check`、AGENTS/CLAUDE 一致性和密钥初筛通过。最终提交后的干净镜像仍须重建并在交付回复中报告 HEAD、大小、SHA-256 与 app-only 范围。
+- 硬件边界：本轮没有扫描端口、识别设备、读取 Flash/NVS、烧录、erase、monitor 或执行 HIL；旧 `af2263f` 镜像不得重复烧录。新候选必须先提交推送并从干净 HEAD 重建，再取得针对精确 HEAD、SHA-256 和 app-only 范围的新授权。
+- 下一步：授权后只 app-only 写入新候选并验证启动、配置读取、KEY8 选择 Chrome 后保存、按键/灯效继续工作、重启后配置仍可读且 Host Action 生效，再回归 T03/T04。语音“正在写入目标窗口”延迟作为独立桌面问题记录，不把它与本次板端保存失效混为同一根因；T06 HIL 关闭前不开始 T07。
+
+## 2026-08-29 · T06 closure check completed and branch handed off
+
+- 做了什么：完成 T06 收工自检，复核根级 `AGENTS.md`、Project Flow、双电脑交接规范、分支状态和既有验证证据；T06 固定文字与安全打开应用实现、合同、来源记录、Host/桌面/ESP-IDF 验证及旧板 app-only 烧录事实均已提交。收工前远端分支为 `codex/easyinput-t06-host-actions`，HEAD `4d6fd81b8e8e3f03effe5727aba1dcf5e25fc57b`；本条为纯交接文档更新，最终推送 HEAD 在交付回复中报告。
+- 为什么与怎么理解：T06 代码和构建已经结束，但用户准备更换实体板，固定文字、UUID 打开应用及 T03-T05 组合真机矩阵尚未执行，因此当前只能保持 `TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PAUSED_FOR_BOARD_REPLACEMENT`，不能把写入哈希通过等同于 T06 真机验收通过。
+- 产出路径：冻结合同 `contracts/deskmate-host/easyinput-host-action-v1.md`；实现来源与许可证 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`；跨电脑交接 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`；详细硬件边界与镜像证据见紧随其后的 T06 记录。
+- 问题解决：最终镜像、源码 HEAD、大小、SHA-256、app-only 数据范围和实际擦写扇区均已如实记录；构建产物未进入 Git，端口和私有设备身份未进入仓库。用户发出暂停后没有继续识别、读取、写入或 monitor。
+- 文档判断：本轮未改变仓库结构、架构、产品方向或视觉设计，无需更新 `AGENTS.md` / `DESIGN.md`；没有新增稳定决策或独立可复用故障模型，无需追加 `flow/decisions.md` / `flow/lessons.md`。
+- 下一步：等待用户换好新板。接手时先 fetch 并核对本分支最终远端 HEAD，独立审计和重建；如需写入新板，必须重新识别目标，并展示届时的精确 HEAD、app SHA-256 和 app-only 范围，取得新的明确授权后才烧录和执行 T06 HIL。T06 HIL 关闭前不开始 T07。
+
+## 2026-08-29 · T06 final app flashed; HIL paused for board replacement
+
+- 分支与镜像：`codex/easyinput-t06-host-actions`，烧录源码 HEAD `b99f012c9faa5bdc65531df9237727b78a794a9b`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 329,552 字节（`0x50750`），SHA-256 `C20B37E056A1DF8D677C6EA48D88A1F3EE99991AC3B920AA15F9930F9159B0BA`。
+- 硬件操作：用户明确确认后，先只读核对目标为 ESP32-S3，再仅将上述 app 写入 `0x010000..0x06074F`；esptool 报告 329,552 字节写入完成并通过 `Hash of data verified`。实际擦写扇区边界为 `0x010000..0x060FFF`。未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse；设备端口和私有身份不进入 Git。
+- 当前门禁：用户随后说明准备更换一块板，要求暂停烧录。收到该消息后未再识别、读取、烧录或 monitor；本次尚未执行固定文字、UUID 打开应用或 T03-T05 组合真机回归，不能声明 T06 HIL 通过。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / APP_FLASH_CONFIRMED / HIL_PAUSED_FOR_BOARD_REPLACEMENT`。后续新板必须重新核对目标身份，并针对届时的精确 HEAD、app SHA-256 和 app-only 范围取得新的明确授权；不得沿用本次旧板授权，不开始 T07。
+
+## 2026-08-29 · T06 host actions implementation handed off for independent audit
+
+- 分支与代码：`codex/easyinput-t06-host-actions`，T06 实现提交 `3b232f5ea3395991a15d14a18d4f1dfcabd58257`；本条纯文档收口提交后的完整交付 HEAD 以远端分支和交付报告为准，实现树不再变化。T03/T04 已锁定，T05 核心配置/语音触发已由原主电脑完成用户接受的真机确认。
+- 合同与来源：`HOST_ACTION_V1_FROZEN` 位于 `contracts/deskmate-host/easyinput-host-action-v1.md`。固定只读参考为 `F:\Codex\easyinput-wzm\easy-input-maker` 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，许可证 PolyForm Noncommercial 1.0.0；逐文件采用、修改和目标路径见 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`，未复制参考脏工作树或 build 产物。
+- 实现范围：固件新增固定文字/Host Action `0x11` kind `0x01/0x05` 有界流、唯一 TinyUSB IN owner 生命周期、UUID/UTF-8 严格校验、USB epoch/断线/溢出失败关闭；原生桥只向主进程提供脱敏元数据；Electron 主进程负责固定文字前台注入和本机 `.exe`/`.lnk` UUID 白名单执行；renderer 仅提供固定文字编辑、应用选择与脱敏结果。T03 held PTT/atomic tap/断线释放、T04 GPIO12 灯效与 GPIO8 共享电源、T05 配置事务保持不变。
+- 验证：`npm ci --include=dev`、桌面 `npm test` 87/87（含 T02-T05 回归）和 `npm run build:desktop` 通过；Visual Studio 2022/MSVC 19.44.35228.0、Host CTest 7/7；精确 `ESP-IDF v5.5.5`、Python 3.11.15、target `esp32s3`、Minimal build 和固定 16 MB 分区通过。实现提交 app 为 329,552 字节（`0x50750`），SHA-256 `CD1FAE599B1ABF85455F563268E5831DEC32DCDC3E29852A89F12FA955153F37`；文档提交改变嵌入版本，因此交付前再从最终 HEAD 重建一次，并在 Git 外报告最终大小、哈希和 app-only 范围。
+- 产物边界：dirty 工作树 app `329,552` 字节、SHA-256 `7C2649352CEFDC5D4B4C13054C50D5254F27852BC4F23150B24AD27E76A7E27F` 仅为历史证据，不能烧录；最终文档提交会改变 Git revision，必须重建和重新计算。构建目录、release 输出、sdkconfig、managed_components、bin/elf/map 均忽略且不得提交。
+- 硬件与风险：未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未 erase、未 monitor、未执行 HIL，未修改 EasyInput Maker 或小智参考目录。固定文字注入、UUID 应用启动和 T03-T05 组合回归仍需原主电脑独立审计与授权后的 HIL；已知 `window.confirm` 视觉债务保留。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / HIL_NOT_AUTHORIZED`。下一步：提交并推送本分支，接手方先 fetch、核对完整 HEAD、审计来源和范围，再重建；未经针对最终 HEAD、镜像哈希和精确 app-only 范围的新授权，不得烧录或进入 T07。
+
+## 2026-08-28 · T05 app flashed and core configuration/voice HIL accepted
+
+- 分支与代码：`codex/easyinput-t05-config-read-fix`，源码 HEAD `14e46f8233ca49fa11d2d63922d5094797e114a5`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 325,760 字节（`0x4F880`），SHA-256 `66DBA78C025E53EFCEA35031FF2D436A85DA2EE98A49FA7CC11E276324CF0905`。
+- 硬件操作：用户按精确 HEAD、哈希和 `0x010000..0x05F87F` 授权后，仅 app-only 写入 factory app；esptool 报告写入数据哈希验证通过并 hard reset。未写 bootloader、分区表、NVS 原始区域、PHY、声音区或 eFuse，未整片擦除，未操作小智。端口和设备标识不进入 Git。
+- 真机结果：配置页已能读取板上配置；K2/K4 继续作为 Maker 兼容快捷键且允许录入单键，界面将 Return/Backspace/Space 显示为“回车/退格/空格”；用户确认配置可以修改并进入脱敏预览/确认/提交链路。K1 已恢复并能正常触发 DeskMate 语音输入流程；当前语音识别服务因本机未重新配置 API 而返回“尚未配置”，这不是实体键或固件回归。
+- 桌面版本：烧录后最初仍运行旧的 `release/config-read-fix` 包，导致界面继续显示英文；已关闭旧进程并启动当前 HEAD 的 `release/win-unpacked`，并直接核对 app.asar 包含中文显示和“单键或组合键”录入逻辑。
+- 验证继承：该 HEAD 的固件 Host CTest `6/6`、桌面 `npm test` `78/78`、`npm run build:desktop`、ESP-IDF v5.5.5 固定 16 MB 分区构建及静态检查均通过。用户将当前核心功能判定为“基本合格”，明确要求更新仓库后进入下一阶段。
+- 保留边界：系统 `window.confirm` 与 DeskMate 视觉不一致，作为下一阶段开始前的桌面界面债务记录；尚未取得 API 配置后的完整 STT 证据，也未把重启回读、损坏恢复或完整 T03/T04 压力矩阵写成通过。后续改动必须保持配置读取、K1/K3 held 生命周期、K2/K4 单键、八键、旋钮、灯效和 T03 断线释放回归。
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / CORE_CONFIG_EDIT_HIL_CONFIRMED / VOICE_TRIGGER_HIL_CONFIRMED / USER_ACCEPTED_FOR_NEXT_STAGE`。下一步从本记录提交创建 `codex/easyinput-t06-host-actions`，先完整阅读 T06 任务卡并冻结/核对 HOST_ACTION 合同；不得提前开发 BLE、音频、DeskMate Link 或小智。
+
+## 2026-08-28 · T05 configuration read fixed; voice and single-key regression candidate ready for clean image
+
+- 结果：用户真机已确认配置页显示“键盘系统 已读取”，证明配置读取阻断已关闭。随后定位到三个 T05 回归：加载配置时 K1/K3 的 `voice_ptt_hold` / `edit_ptt_hold` 只保留动作类型却丢失 HID chord；K2/K4 的 Maker 单键快捷键被 renderer 的“必须有修饰键”规则拒绝；“保存当前按键”只提示本机保存而没有进入板端事务同步。
+- 修复：K1 恢复 `Ctrl+Shift+Space`、K3 恢复 `Ctrl+Shift+E`，继续使用 T03 held-source 生命周期；KEY2/KEY4 继续保持 Maker 的快捷键合同，允许回车、退格、空格、Tab、Esc、方向键、数字、字母、F1～F24 及合法组合键。界面将 Return/Backspace/Space 显示为“回车/退格/空格”，全局语音快捷键仍要求修饰键。每键保存现在走重新读取、脱敏 preview、用户确认、单次 token commit 和回读流程。
+- 参考：固定只读核对 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 `keymap.cpp`、`hid_keycode.cpp` 及对应 Host tests；只采用行为证据并在 DeskMate 内清晰重实现，未读取脏工作树或使用参考 build 产物。
+- 验证：Visual Studio 2022 x64 Host CTest `6/6`；桌面 `npm test` `78/78`；`npm run build:desktop` 通过；精确 `ESP-IDF v5.5.5`、target `esp32s3`、Minimal build、固定 16 MB 分区构建通过，dirty app 为 `0x4F880`（325,760 字节），factory 余量 90%；`git diff --check`、AGENTS/CLAUDE、来源、密钥/隐私和构建产物忽略检查通过。
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / VOICE_AND_SINGLE_KEY_FIX_PENDING_APP_FLASH / T06_BLOCKED`。本轮尚未扫描端口、识别设备、读取 Flash/NVS、烧录、erase、monitor 或执行新镜像 HIL。提交推送后必须从最终干净 HEAD 重建，展示 HEAD、app SHA-256 与 app-only 精确范围，并取得针对该镜像的新确认后才可烧录。
+
+## 2026-08-28 · T05 second config-read fix failed HIL; laptop handoff prepared
+
+- 做了什么：提交 `e10211ffedd1a27e6ec1608be9b38872a70d72ae`，补齐配置状态响应 kind `0x04` 的 TinyUSB transfer-complete 身份与 Host 回归；以 ESP-IDF v5.5.5 重建并按用户明确授权 app-only 写入当前 EasyInput。镜像 325,408 字节，SHA-256 `3074B78E6A4AD3688291E542BCA3298239BBD164427CAD925C18D9134B49D3ED`，数据范围 `0x010000..0x05F71F`，擦写扇区至 `0x05FFFF`；写入哈希和私有身份复核通过，未写 NVS/分区/eFuse，未操作小智。
+- 真机结果：用户正常关机重开后 DeskMate 仍显示 `config-read-timeout`。随后完整退出 DeskMate 与原生桥，用独立 `DeskMate.InputBridge.exe` 只读复现：`boardConnected=true`，但没有 `config-progress/config-capabilities/config-snapshot`。因此不是 renderer 缓存或软件未重启；`fac1fa8` 与 `e10211f` 两个候选均被 HIL 否决，不得再次重复烧录。
+- 怎么理解：当前证据只能把问题定位到 `0x13` Feature 请求进入固件、owner 队列、首个 `0x11` 输入报告或 Windows Raw Input 接收边界之一；既有 Host 测试制造的 64 字节 completion 形态不足以证明真实回调。下一轮必须先观测每个边界和 Maker 固定实现差异，不能提交第三个猜测性修复。
+- 产出路径：`docs/handoffs/second-computer-t05-config-read-hil-blocker-2026-08-28.md`、`flow/tasks/T05-easyinput-config-nvs.md`、`flow/lessons.md`、`docs/README.md` 及本记录。DeskMate 已在诊断结束后重新启动。
+- 当前状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED_AFTER_TWO_APP_FIXES / ROOT_CAUSE_EVIDENCE_REQUIRED / T06_BLOCKED`。
+- 下一步：另一台笔记本从 GitHub 的准确 HANDOFF HEAD 接管，按交接先取得首个丢失边界证据并修复 T05；完成只读、单字段 NVS 往返、重启回读、恢复和 T03/T04 回归后锁定 T05，再从锁定 HEAD 开始 T06 固定文字/打开应用。
+
+## 2026-08-28 · T05 Windows configuration read timeout reproduced and fixed in code
+
+- 真机结果：DeskMate 能识别当前 EasyInput，T03 按键和 T04 灯效可用，但进入按键配置页后显示“读取失败 / 键盘配置读取失败”，主进程返回 `config-read-timeout`。使用同一发布原生桥做脱敏只读复现：设备连接为 true，`0x13` 能经 `HidD_SetFeature` 被 Windows 接受，但固件没有返回能力分块；因此不是用户操作、普通断线或 renderer 展示问题，T05 配置 HIL 失败且 T06 继续阻断。
+- 根因：T05 的 `tud_hid_set_report_cb` 只接受 TinyUSB 把 Report ID 作为独立参数传入的 Feature Report。Windows 还可能以首字节携带 `0x13` Report ID 的形态交付；固定 Maker `7619bd1` 的 `usb_hid.cpp` 与 `status_hid_protocol.cpp` 明确兼容两种形态，而产品侧遗漏了这一行为。
+- 修复：在分支 `codex/easyinput-t05-config-read-fix` 增加有界 Feature Report 归一化，只接受 `0x10/0x13`、一致的独立/内嵌 Report ID、冻结长度与零填充；TinyUSB callback 仍只复制到唯一静态队列，不解析 JSON/NVS。新增 Windows 独立 ID、内嵌 ID、最大填充、冲突 ID、非零尾部及 `0x10` 回归向量。
+- 验证：修复代码提交 `fac1fa821ff024265dda73202b9f2d603bd4b749` 的固件 Host CTest `6/6` 通过；精确 ESP-IDF `v5.5.5`、target `esp32s3`、隔离 SDKCONFIG、Minimal build 和固定分区构建通过。app 为 `0x4F710`（325,392 字节），SHA-256 `333C8FEA47E54D5B0A014189717B1DAEEB4E2E3A912CACFF2FFA3FFA70725874`；分区表 SHA-256 仍为 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。`git diff --check` 通过。未读取或写入 Flash/NVS，未烧录、擦除、monitor 或写 eFuse。
+- 状态与下一步：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_FAILED / FIX_BUILD_CONFIRMED / APP_FLASH_NOT_AUTHORIZED / T06_BLOCKED`。候选仅需 app-only 数据范围 `0x010000..0x05F70F`，写入工具最多覆盖扇区至 `0x05FFFF`；只有取得针对上述代码提交、哈希和范围的明确授权后才可烧录并重测配置读取。
+
+## 2026-08-28 · T05 stack-fix restores keys and LED feedback
+
+- 用户在 app-only 烧录并正常启动后确认：实体按键功能已经恢复，T04 输入灯效也已经恢复。这证明此前首次 NVS 加载期间的启动栈溢出已不再阻止基础输入与灯效运行。
+- 本次只记录用户可观察的真机事实；旋钮行为、完整配置读取、单字段保存、重启回读、掉电恢复和 T03 断线回归尚未完成，因此不得将 T05 标记为完整 HIL 通过。
+- 当前交接状态：`REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / PARTIAL_HIL_CONFIRMED / T06_BLOCKED`。继续工作时以 GitHub 分支 `codex/easyinput-t05-config-nvs` 为唯一交换通道，不使用整目录覆盖；先完成剩余 T05 HIL，再决定是否关闭 T05。
+
+## 2026-08-28 · T05 stack-fix app flashed; functional HIL pending
+
+- 烧录源码提交：`b67371fe91847c9be3b0f6f1e3e29eb6657a5bc5`；精确 `ESP-IDF v5.5.5` / `esp32s3` 发布镜像为 325296 字节（`0x4F6B0`），SHA-256 `D7AE882F417777533CF3994E916B1F7A3B96E1DE0A80EEFBAA3E30505E091E37`。用户针对该 HEAD、哈希及 `0x010000..0x05F6AF` app-only 范围明确授权后执行。
+- 写入结果：只从 `0x010000` 写入 app；esptool 按 4 KiB 扇区实际擦除 `0x010000..0x05FFFF`，仍完全位于固定 3 MiB factory app 分区内；写入 325296 字节并完成数据哈希校验，随后自动 hard reset。未写 bootloader、分区表、NVS、PHY、声音区或 eFuse，未整片擦除。
+- 烧录前只读验明目标为 ESP32-S3，具体端口和设备标识不进入 Git。烧录后验证 helper 因本机 PowerShell Security 模块无法加载而未建立验证 session；后续有界只读日志采集也未取得应用健康标志，因此不能把烧录退出 0 冒充功能 HIL。
+- 当前状态：`REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PENDING / T06_BLOCKED`。下一步由用户观察正常启动，再测试八键、灯效、旋钮以及配置读取/保存/重启回读；通过前不开始 T06。
+
+## 2026-08-28 · T05 startup stack overflow fixed; final release image pending
+
+- 旧 T05 镜像 1cf3a4e 在首次加载 NVS 配置时循环重启。串口回溯落在 nvs_get_u8 -> ConfigNvsStore::load() -> app_main()；旧 load 栈帧约 10.4 KiB，save_config_transaction 约 4.2 KiB，config_owner_task 约 6.3 KiB，input_owner_task 约 6.7 KiB，超过约 3.5 KiB 主任务栈和 4 KiB owner task 栈。该镜像及其旧烧录授权已作废。
+- 修复把 NVS A/B 槽、加载结果、legacy JSON 和事务工作区放入唯一 ConfigNvsStore 的静态有界成员；加载、槽选择和保存改为通过稳定引用/调用方工作区写入；配置与输入 owner 的大 command/result/document 改为唯一静态缓冲；消除大聚合临时重置。没有单纯增大任务栈，也没有建立第二套输入或配置状态机。
+- 回归门禁：Visual Studio 2022/MSVC 19.44 Host CTest 6/6；桌面 npm test 73/73；npm run build:desktop 通过。代码提交 1da73b2 的干净 ESP-IDF v5.5.5/esp32s3/MINIMAL_BUILD/固定分区构建通过，app 为 325296 字节；ELF 实测 app_main 224 字节、ConfigNvsStore::load 112、save_config_transaction 96、config_owner_task 96、input_owner_task 432 字节。
+- 当前状态：REVIEW_CHANGES_REQUIRED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED。本进度提交会改变嵌入的 app 版本，因此发布镜像仍须从文档后的最终干净 HEAD 和绝对隔离 SDKCONFIG 重建；最终 SHA-256 与 app-only 范围在 Git 外报告并重新取得授权，不再以追加提交使镜像失效。未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+
+## 2026-08-28 · T05 recovery work imported; local verification pending
+
+- 已从 `F:/Codex/deskmate-t05-hardware-recovery` 的提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 导入 T05 返工代码；该提交已原样备份到远端保护分支 `codex/easyinput-t05-config-nvs-hardware`，正式分支原状态保留在本地引用 `codex/easyinput-t05-before-recovery`。
+- 恢复目录的另一台电脑报告了 T05 代码门、Host、桌面和 ESP-IDF 构建证据；本机尚未独立重建，不能把该报告当作本机确认。
+- 当前状态保持 `REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_PENDING / BUILD_PENDING / HIL_NOT_AUTHORIZED / T06_BLOCKED`；未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 下一步：在正式仓库干净提交上重跑固件 Host、桌面、原生桥和 ESP-IDF v5.5.5/esp32s3 构建，核对固定分区和镜像 SHA-256；只有独立证据完成后，另行展示精确 app-only 写入范围并取得针对该镜像的明确烧录授权。
+
+## 2026-08-28 · T05 recovery independently rebuilt on hardware computer
+
+- 角色：原主电脑/硬件电脑；分支 `codex/easyinput-t05-config-nvs`；提交 `a3f0f5fb3b4ecbb3ef859fea1b93e0561f34f22e`。恢复目录提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 已原样备份到远端保护分支 `codex/easyinput-t05-config-nvs-hardware`，并通过 cherry-pick 带入正式分支；旧正式状态保留为 `codex/easyinput-t05-before-recovery`。
+- 本机验证：固件 Host CTest `6/6`；桌面 `npm test` `73/73`；`npm run build:desktop` 通过；精确 `ESP-IDF v5.5.5`、target `esp32s3` 独立 SDKCONFIG 构建通过。预提交构建对应提交 `a3f0f5f`，应用镜像 `304848` 字节 (`0x4A6D0`)，其 SHA-256 仅作历史证据；文档提交后必须重新构建，不能把该旧镜像用于烧录。固定分区 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- 静态/范围检查：`git diff --check` 通过；根/固件 `AGENTS.md` 与 `CLAUDE.md` 一致；构建目录、`managed_components`、`sdkconfig`、镜像和发布清单均被忽略，未进入提交；外部 EasyInput/小智目录未修改、未复制、未使用其 build 产物。
+- 状态：代码门与本机测试/构建证据已完成，仍保持 `CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED`。本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 下一步：推送本分支后，若要硬件验证，必须针对上述新 HEAD、SHA-256 和范围重新确认目标 EasyInput 身份及 app-only 写入授权；之后按只读配置读取、单字段保存/重启回读和 T03/T04 快速回归执行。不得把之前旧镜像授权或另一台电脑截图作为本机证据。
+
+## 2026-08-28 · T05 third independent audit blocks hardware and hands off rework
+
+- 审计对象：codex/easyinput-t05-config-nvs@2c1cf8d6a9d4f3c79f0adb44bbbaad8318a02122，冻结基线 a2adc9818da07119e59a6f14d125fc23576696c9；未合并 main，未开始 T06。
+- 已确认：Feature Report 精确长度、严格 JSON/UTF-8、cursor 投影、配置切换全释放、save epoch、稀疏 patch、脱敏差异和读取进度刷新已进入候选。
+- 阻断：原生读取仍有跨线程/旧分块竞态；0x13 flag 未分流且能力被桌面硬编码；NVS init 失败会中止应用；同 epoch 保存未串行；NVS 故障矩阵与 board-first UI 不完整。
+- 复验：固件 Host 6/6、桌面 73/73、原生桥 Release 0 warning/0 error、桌面构建通过；精确环境 ESP-IDF v5.5.5 / esp32s3。既有 app 303744 bytes、SHA-256 F7CCF2F44A67034AC0081B5823A7FCBEFB47AFFC7AC93FCC53FCCDCD468FB737 仅为审计证据，不得烧录。
+- 交付：第三轮审计和另一台电脑返工交接已写入 docs/reviews 与 docs/handoffs。状态保持 REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED。未访问硬件。
+
+## 2026-08-28 · T05 local continuation after copied worktree
+
+- 接手：当前分支 `codex/easyinput-t05-config-nvs`，复制来的实现与远端候选逐文件一致；未合并或 rebase `main`，未开始 T06。
+- 本轮修复：UI 只提交用户实际编辑的 `KEY1`～`KEY8`/旋钮 JSON 路径；原生桥对每个已验证读取块发脱敏 `config-progress`，Electron 从最后有效进度刷新 3 秒超时；固件整数解析在乘法前拒绝溢出。
+- 验证：ESP-IDF v5.5.5 / esp32s3 激活后 Host CTest `6/6`；`npm ci --include=dev`、`npm test` `73/73`；原生桥 Release 编译 `0` 警告 / `0` 错误；`npm run build:desktop` 通过；独立绝对 SDKCONFIG、Minimal build、固定 16 MB 分区的 IDF 构建通过，app `0x4A280`（303,744 bytes）。
+- 状态：继续保持 `REVIEW_CHANGES_REQUIRED / CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / T06_BLOCKED`，等待原主电脑第三轮独立审计；未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 来源：固定 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`（PolyForm Noncommercial 1.0.0），本轮仍为产品侧清晰重实现；外部参考目录未修改、未复制、未使用 build 产物。实现细节见 `docs/provenance/t05-easyinput-config-nvs-implementation-2026-08-27.md`。
+
+## 2026-08-27 · T05 third rework awaiting independent audit
+
+- 分支：`codex/easyinput-t05-config-nvs`，未合并或 rebase `main`；本轮继续修复第二轮审计阻断，未开始 T06。
+- 修复：0x13/0x10 Feature Report 精确 63-byte payload 边界和尾部填充；有界非异常 JSON/UTF-8/escape/surrogate/number parser；合法读取 flags `0x00/0x01/0x02`；旋钮 cursor projection 生效；配置替换先排队全零 HID 报告；保存命令/结果绑定 USB epoch；NVS legacy 只读导入可在新 namespace 不可用时继续，持久损坏来源标记为 Recovery；原生读取先登记、断线清理、完整 64-byte/metadata/padding 校验；桌面能力门与脱敏 JSON Pointer diff。
+- 新增回归：固件严格 JSON 畸形/重复键/非法 UTF-8/代理项/尾部数据、读取 flags/reserved、配置切换全释放与 cursor 行为；保留完整 T02～T04 回归。Host CTest `6/6`，桌面 `npm test` `71/71`。
+- 构建：精确 ESP-IDF `v5.5.5` / `esp32s3`，隔离绝对 SDKCONFIG、固定 16 MB 分区构建通过；最终 app 大小与 SHA-256 以交付报告为准；分区表 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `HIL_NOT_AUTHORIZED` / `T06_BLOCKED`，等待原主电脑第三轮独立审计；未扫描端口、未识别设备、未读取或写入 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL。
+- 来源：Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，PolyForm Noncommercial 1.0.0；本轮产品侧清晰重实现，外部参考目录未修改、未复制、未使用其 build 产物。详见 `docs/provenance/t05-easyinput-config-nvs-implementation-2026-08-27.md`。
+
+## 2026-08-27 · T05 second rework awaiting independent audit
+
+- 分支：`codex/easyinput-t05-config-nvs`，基于原候选 `a795d309cb88a3a740c25c159e132609e1583d73`，未合并或 rebase `main`。
+- 本轮关闭：`config-snapshot` 作为控制事件传递；旧整份 `syncKeyboardConfig` IPC fail closed 且 renderer 不再暴露；preview 前重读设备；原生读取绑定 textual/numeric request ID、严格递增与 duplicate-last 幂等、冲突/旧块/超长拒绝；配置 NVS 工作移入独立 `config_owner` 队列；旋钮配置的按压 chord、cursor HID 方向和既有 router 路由。
+- 新增测试：桌面 `config-snapshot` parser/filter 控制链回归；桌面全量 `71/71`；固件 Host CTest `6/6`；精确 ESP-IDF `v5.5.5` / `esp32s3` build 通过，app `0x49210` 字节。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED` / `HIL_NOT_AUTHORIZED`。严格 JSON/UTF-8/schema 异常矩阵与 NVS 掉电/故障注入仍需原主电脑第二轮独立审计，不能锁定 T05。
+- 安全：未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未擦除、未 monitor、未 HIL；不得开始 T06。
+
+## 2026-08-27 · T05 implementation pass awaiting independent audit
+
+- 做了什么：在 `codex/easyinput-t05-config-nvs` 上完成 `CONFIG_V1_FROZEN` 的第一版实现：0x10 分块写入、0x13/0x11 kind 0x06 完整读取、CRC16、静态 callback 命令队列、输入优先的配置响应 transfer 生命周期、纯 HID 配置投影、双槽 `deskmate` NVS 事务/回读/marker 恢复、只读 legacy 导入，以及 Electron 主进程的脱敏读取、严格白名单合并和确认 token 接口。
+- 来源与边界：依据 Maker 固定提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的配置 receiver/payload/state/status/NVS 行为审计重实现；未修改或复制两个外部参考目录。T06 Host Action/固定文字执行、BLE/Wi-Fi、音频、DeskMate Link、桌面 UI 业务均未实现。
+- 验证：已激活并真实检查 `ESP-IDF v5.5.5`、Python `3.11.15`、target `esp32s3`；`cmake`/`ctest` 6/6 Host tests 通过；隔离目录 `firmware/easyinput-controller/build-t05` 的 `idf.py -C firmware/easyinput-controller -B firmware/easyinput-controller/build-t05 build` 通过，应用镜像 `0x48e00` 字节，最小 factory app 余量 91%。
+- 状态：`REVIEW_CHANGES_REQUIRED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，等待原主电脑独立审计；当前未执行端口扫描、设备识别、Flash/NVS 读写、烧录、擦除、monitor 或 HIL。
+- 交接：详见 `docs/handoffs/second-computer-t05-config-nvs-implementation-2026-08-27.md`。
 
 ## 2026-08-27 · T05 second independent audit returns the candidate; reference-first gate reinforced
 

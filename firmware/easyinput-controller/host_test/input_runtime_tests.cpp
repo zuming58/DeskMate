@@ -130,6 +130,50 @@ void default_action_vectors() {
     }
 }
 
+void configuration_replacement_releases_host_and_applies_cursor() {
+    UsbInputRuntime runtime;
+    runtime.on_mount();
+    consume_mount_release(runtime);
+    runtime.on_input(key(0, true));
+    ConfigProjection projection{};
+    projection.encoder_cursor = true;
+    projection.encoder_speed = 4;
+    projection.keys[0] = {ConfigActionKind::VoiceInput, 3, 0x2c};
+    runtime.set_configuration(projection);
+    QueuedHidReport report{};
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload == kZeroKeyboardPayload);
+    runtime.complete_report();
+    runtime.on_input(key(0, false));
+    while (runtime.front_report(report)) runtime.complete_report();
+    runtime.on_input({InputEventType::EncoderStep, 0, 1});
+    CHECK(runtime.front_report(report));
+    CHECK(report.kind == HidReportKind::Keyboard);
+    CHECK(report.payload[2] == 0x51 || report.payload[2] == 0x52);
+}
+
+void loaded_safe_configuration_preserves_voice_shortcuts() {
+    ConfigProjection projection{};
+    CHECK(parse_config_projection(compiled_safe_config_json(), projection));
+    InputActionRouter router;
+    router.set_configuration(projection);
+
+    const auto voice = router.apply(key(0, true));
+    CHECK(voice.keyboard_changed);
+    CHECK(voice.keyboard.modifier == 0x03);
+    CHECK(voice.keyboard.usages[0] == 0x2c);
+    CHECK(!voice.keyboard_restore_pending);
+    CHECK(router.apply(key(0, false)).keyboard_changed);
+
+    const auto edit = router.apply(key(2, true));
+    CHECK(edit.keyboard_changed);
+    CHECK(edit.keyboard.modifier == 0x03);
+    CHECK(edit.keyboard.usages[0] == 0x08);
+    CHECK(!edit.keyboard_restore_pending);
+    CHECK(router.apply(key(2, false)).keyboard_changed);
+}
+
 void physical_source_ownership_and_overflow() {
     InputActionRouter router;
     const InputActionRouter::Chord same{HidUsage::A, 1};
@@ -179,6 +223,35 @@ void encoder_axis_vectors() {
     CHECK(router.axis() == ScrollAxis::Horizontal);
     router.apply({InputEventType::EncoderPressed, 0, 0});
     CHECK(router.axis() == ScrollAxis::Vertical);
+}
+
+void configured_encoder_actions_follow_maker_semantics() {
+    InputActionRouter router;
+    ConfigProjection projection{};
+    projection.encoder_press.kind = ConfigActionKind::Disabled;
+    projection.encoder_enabled = false;
+    router.set_configuration(projection);
+    CHECK(!router.apply({InputEventType::EncoderStep, 0, 1}).wheel_changed);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.axis() == ScrollAxis::Vertical);
+
+    projection.encoder_enabled = true;
+    projection.encoder_press.kind = ConfigActionKind::EncoderAxisToggle;
+    router.set_configuration(projection);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.axis() == ScrollAxis::Horizontal);
+
+    projection.encoder_cursor = true;
+    projection.encoder_horizontal = true;
+    projection.encoder_press.kind = ConfigActionKind::TextCaretSelect;
+    router.set_configuration(projection);
+    auto plain = router.apply({InputEventType::EncoderStep, 0, 1});
+    CHECK(plain.keyboard_changed && plain.keyboard.modifier == 0);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    auto selected = router.apply({InputEventType::EncoderStep, 0, 1});
+    CHECK(selected.keyboard_changed && selected.keyboard.modifier == 2);
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.apply({InputEventType::EncoderStep, 0, 1}).keyboard.modifier == 0);
 }
 
 void tap_actions_restore_without_waiting_for_physical_release() {
@@ -1329,7 +1402,7 @@ void diagnostics_are_saturating_and_redacted() {
     CHECK(snapshot.raw_edge_drops == UINT32_MAX);
     CHECK(snapshot.input_event_drops == 7);
     CHECK(snapshot.encoder_resyncs == 1);
-    CHECK(sizeof(RuntimeDiagnosticsSnapshot) == 6 * sizeof(uint32_t));
+    CHECK(sizeof(RuntimeDiagnosticsSnapshot) == 7 * sizeof(uint32_t));
 }
 
 void input_drop_recovery_waits_for_release() {
@@ -1414,12 +1487,163 @@ void event_ring_overflow_held_key_waits_for_release() {
     runtime.on_input(key(1, true));
     CHECK(runtime.queued_reports() == 1);
 }
+
+void config_status_transfer_completion_advances() {
+    UsbCallbackLifecycleState callback;
+    UsbLifecycleEventQueue events;
+    UsbInputRuntime runtime;
+    HidReportTransferState transfer;
+    ConfigTransferState config_transfer;
+
+    CHECK(events.publish(callback.on_mount()));
+    process_usb_lifecycle_events(events, runtime, transfer,
+                                 callback.snapshot(), &config_transfer);
+
+    config_transfer.active = true;
+    config_transfer.advances_status_stream = true;
+    config_transfer.report.report_id = 0x11;
+    config_transfer.report.length = 63;
+    config_transfer.report.epoch = callback.snapshot().epoch;
+    config_transfer.report.payload.fill(0);
+    config_transfer.report.payload[0] = 0x04;
+
+    std::array<uint8_t, 64> wire{};
+    wire[0] = 0x11;
+    std::copy(config_transfer.report.payload.begin(),
+              config_transfer.report.payload.end(), wire.begin() + 1);
+    const auto completion = make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, wire.data(), wire.size());
+    CHECK(completion.report_identity_valid);
+    CHECK(events.publish(completion));
+    process_usb_lifecycle_events(events, runtime, transfer,
+                                 callback.snapshot(), &config_transfer);
+    CHECK(!config_transfer.active);
+    CHECK(config_transfer.completed_status);
+
+    wire[1] = 0x05;
+    CHECK(make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, wire.data(), wire.size())
+        .report_identity_valid);
+}
+
+void host_commands_are_press_once_bounded_and_epoch_safe() {
+    const std::string uuid = "01234567-89ab-cdef-0123-456789abcdef";
+    ConfigProjection projection{};
+    projection.keys[0].kind = ConfigActionKind::HostAction;
+    projection.keys[0].value = uuid;
+    projection.keys[1].kind = ConfigActionKind::FixedText;
+    projection.keys[1].value = std::string(60, 'x');
+    projection.encoder_press.kind = ConfigActionKind::HostAction;
+    projection.encoder_press.value = uuid;
+
+    UsbInputRuntime runtime;
+    runtime.on_mount(7);
+    consume_mount_release(runtime);
+    runtime.set_configuration(projection);
+    consume_mount_release(runtime);
+
+    std::array<uint8_t, kAppCommandPayloadBytes> payload{};
+    runtime.on_input(key(0, true));
+    CHECK(runtime.front_host_command(payload));
+    CHECK(payload[0] == 0x05 && payload[1] == 0 &&
+          payload[2] == 1 && payload[3] == 36);
+    CHECK(std::equal(uuid.begin(), uuid.end(), payload.begin() + 4));
+    runtime.on_input(key(0, true));
+    runtime.on_input(key(1, true));
+    CHECK(runtime.diagnostics().host_command_drops == 1);
+    runtime.complete_host_command();
+    CHECK(!runtime.front_host_command(payload));
+    runtime.on_input(key(0, false));
+    runtime.on_input(key(0, true));
+    CHECK(runtime.front_host_command(payload));
+    runtime.fail_host_command();
+    CHECK(!runtime.front_host_command(payload));
+    CHECK(runtime.diagnostics().host_command_drops == 2);
+
+    runtime.on_input(key(0, false));
+    runtime.on_input(key(1, false));
+    runtime.on_input(key(1, true));
+    CHECK(runtime.front_host_command(payload));
+    CHECK(payload[0] == 0x01 && payload[1] == 0 &&
+          payload[2] == 2 && payload[3] == 59);
+    runtime.complete_host_command();
+    CHECK(runtime.front_host_command(payload));
+    CHECK(payload[0] == 0x01 && payload[1] == 1 &&
+          payload[2] == 2 && payload[3] == 1 && payload[4] == 'x');
+    CHECK(std::all_of(payload.begin() + 5, payload.end(),
+                      [](uint8_t value) { return value == 0; }));
+    runtime.on_unmount();
+    runtime.on_mount(8);
+    CHECK(!runtime.front_host_command(payload));
+}
+
+void host_command_transfer_lifecycle_uses_single_vendor_owner() {
+    const std::string uuid = "01234567-89ab-cdef-0123-456789abcdef";
+    ConfigProjection projection{};
+    projection.keys[0].kind = ConfigActionKind::HostAction;
+    projection.keys[0].value = uuid;
+
+    UsbLifecycleEventQueue events;
+    UsbCallbackLifecycleState callback;
+    UsbInputRuntime runtime;
+    HidReportTransferState keyboard_transfer;
+    ConfigTransferState vendor_transfer;
+    const auto mount = callback.on_mount();
+    CHECK(events.publish(mount));
+    process_usb_lifecycle_events(events, runtime, keyboard_transfer,
+                                 callback.snapshot(), &vendor_transfer);
+    consume_mount_release(runtime);
+    runtime.set_configuration(projection);
+    consume_mount_release(runtime);
+    runtime.on_input(key(0, true));
+
+    std::array<uint8_t, kAppCommandPayloadBytes> payload{};
+    CHECK(runtime.front_host_command(payload));
+    vendor_transfer.active = true;
+    vendor_transfer.advances_host_command = true;
+    vendor_transfer.report.report_id = kAppCommandReportId;
+    vendor_transfer.report.length = kAppCommandPayloadBytes;
+    vendor_transfer.report.epoch = callback.snapshot().epoch;
+    vendor_transfer.report.payload = payload;
+    std::array<uint8_t, kAppCommandPayloadBytes + 1> wire{};
+    wire[0] = kAppCommandReportId;
+    std::copy(payload.begin(), payload.end(), wire.begin() + 1);
+    CHECK(events.publish(make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferComplete,
+        callback.snapshot().epoch, wire.data(), wire.size())));
+    process_usb_lifecycle_events(events, runtime, keyboard_transfer,
+                                 callback.snapshot(), &vendor_transfer);
+    CHECK(!vendor_transfer.active);
+    CHECK(!runtime.front_host_command(payload));
+
+    runtime.on_input(key(0, false));
+    runtime.on_input(key(0, true));
+    CHECK(runtime.front_host_command(payload));
+    vendor_transfer.active = true;
+    vendor_transfer.advances_host_command = true;
+    vendor_transfer.report.report_id = kAppCommandReportId;
+    vendor_transfer.report.length = kAppCommandPayloadBytes;
+    vendor_transfer.report.epoch = callback.snapshot().epoch;
+    vendor_transfer.report.payload = payload;
+    CHECK(events.publish(make_usb_transfer_event(
+        UsbLifecycleEventKind::TransferFailed,
+        callback.snapshot().epoch, wire.data(), wire.size())));
+    process_usb_lifecycle_events(events, runtime, keyboard_transfer,
+                                 callback.snapshot(), &vendor_transfer);
+    CHECK(!runtime.front_host_command(payload));
+    CHECK(runtime.diagnostics().host_command_drops == 1);
+}
 }
 
 int main() {
     default_action_vectors();
+    configuration_replacement_releases_host_and_applies_cursor();
+    loaded_safe_configuration_preserves_voice_shortcuts();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
+    configured_encoder_actions_follow_maker_semantics();
     tap_actions_restore_without_waiting_for_physical_release();
     tap_actions_restore_concurrent_held_voice_snapshot();
     tap_pair_admission_and_transfer_fail_closed();
@@ -1443,6 +1667,9 @@ int main() {
     input_drop_recovery_waits_for_release();
     event_ring_overflow_discards_stale_key_down();
     event_ring_overflow_held_key_waits_for_release();
+    config_status_transfer_completion_advances();
+    host_commands_are_press_once_bounded_and_epoch_safe();
+    host_command_transfer_lifecycle_uses_single_vendor_owner();
     if (failures) {
         std::cerr << "input_runtime_tests: " << failures << " failure(s)\n";
         return 1;

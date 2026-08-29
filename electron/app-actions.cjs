@@ -4,6 +4,7 @@ const path = require("path");
 
 const ALLOWED_EXTENSIONS = new Set([".exe", ".lnk"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const LOCAL_DRIVE_PATTERN = /^[a-zA-Z]:[\\/]/;
 
 function safeLabel(value) {
   return String(value || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 120);
@@ -48,7 +49,9 @@ class AppActionStore {
   }
 
   isAllowedTarget(target) {
-    return typeof target === "string" && path.isAbsolute(target) && ALLOWED_EXTENSIONS.has(path.extname(target).toLowerCase());
+    if (typeof target !== "string" || !LOCAL_DRIVE_PATTERN.test(target) || !path.win32.isAbsolute(target)) return false;
+    if (target.startsWith("\\\\") || target.startsWith("\\\\?\\") || target.startsWith("\\\\.\\") || /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(target)) return false;
+    return ALLOWED_EXTENSIONS.has(path.win32.extname(target).toLowerCase());
   }
 
   async discover() {
@@ -87,6 +90,13 @@ class AppActionStore {
     return this.registerTarget(target, path.basename(target, path.extname(target)));
   }
 
+  describe(id) {
+    const value = String(id || "");
+    if (!UUID_PATTERN.test(value)) return null;
+    const item = this.actions.get(value);
+    return item ? { id: value, label: item.label } : null;
+  }
+
   async choose(parentWindow) {
     const result = await this.dialog.showOpenDialog(parentWindow, {
       title: "选择要打开的应用",
@@ -100,10 +110,40 @@ class AppActionStore {
   async execute(id) {
     const item = this.actions.get(String(id || ""));
     if (!item) return { ok: false, reason: "host-action-not-mapped" };
-    if (!fs.existsSync(item.target)) return { ok: false, reason: "application-missing", label: item.label };
-    const error = await this.shell.openPath(item.target);
+    if (!this.isAllowedTarget(item.target) || !fs.existsSync(item.target)) return { ok: false, reason: "application-missing", label: item.label };
+    let launchTarget = item.target;
+    if (path.win32.extname(item.target).toLowerCase() === ".lnk") {
+      if (typeof this.shell.readShortcutLink !== "function") return { ok: false, reason: "shortcut-target-unverified", label: item.label };
+      let shortcut;
+      try { shortcut = this.shell.readShortcutLink(item.target); } catch { return { ok: false, reason: "shortcut-target-unverified", label: item.label }; }
+      if (!shortcut || String(shortcut.args || "").trim() || !this.isAllowedTarget(shortcut.target) || path.win32.extname(shortcut.target).toLowerCase() !== ".exe" || !fs.existsSync(shortcut.target)) return { ok: false, reason: "shortcut-target-unverified", label: item.label };
+      launchTarget = shortcut.target;
+    }
+    const error = await this.shell.openPath(launchTarget);
     return error ? { ok: false, reason: "application-open-failed", label: item.label } : { ok: true, label: item.label };
   }
 }
 
-module.exports = { AppActionStore, safeLabel };
+class HostActionExecutor {
+  constructor({ store, now = () => Date.now(), duplicateWindowMs = 250 } = {}) {
+    this.store = store;
+    this.now = now;
+    this.duplicateWindowMs = duplicateWindowMs;
+    this.lastById = new Map();
+    this.tail = Promise.resolve();
+  }
+
+  execute(id) {
+    const value = String(id || "");
+    if (!UUID_PATTERN.test(value)) return Promise.resolve({ ok: false, reason: "host-action-invalid" });
+    const timestamp = this.now();
+    const previous = this.lastById.get(value);
+    if (previous !== undefined && timestamp - previous < this.duplicateWindowMs) return Promise.resolve({ ok: false, reason: "host-action-duplicate" });
+    this.lastById.set(value, timestamp);
+    const operation = this.tail.then(() => this.store.execute(value));
+    this.tail = operation.catch(() => {});
+    return operation;
+  }
+}
+
+module.exports = { AppActionStore, HostActionExecutor, safeLabel };

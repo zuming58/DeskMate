@@ -171,3 +171,35 @@
 - 决策：T05 冻结 `CONFIG_V1_FROZEN`，通过完整板载配置读取、Electron 主进程无损 read-modify-write、脱敏差异确认、DeskMate 双槽 NVS 和写后回读开放配置同步；React 不接触完整配置、网络/音频字段或设备路径。
 - 原因：Maker `ai_keyboard.v1` 是整份覆盖，`0x13` 的状态/指纹不是完整配置；局部构造 JSON 会破坏既有字段，单槽直接覆盖也无法对掉电和坏配置提供确定恢复。
 - 边界：T05 只激活纯 HID 按键与旋钮动作，继续复用 T03 held PTT/atomic tap 和 T04 灯效/GPIO8 owner。固定文字、Host Action/打开应用及其他 Windows 主机动作保留原始配置但不执行，统一留到 T06；旧 `ai_keyboard/config_v2` 只读导入，禁止自动擦除 NVS。
+# 2026-08-28 · Cross-computer exchange uses Git only
+
+- 两台电脑之间只通过 GitHub 的准确提交和短分支交换产品代码；不再整目录复制覆盖工作树。
+- 每次换电脑前必须在 `flow/progress.md` 顶部记录角色、分支、HEAD、验证、硬件操作、未决风险和下一步；详细规范见 `flow/guides/two-computer-handoff.md`。
+
+## D027 · Companion tools share one primary destination and one expression renderer
+
+- 日期：2026-08-29
+- 决策：T06 锁定后，桌面主导航收敛为工作台、语音输入、AI 陪伴、历史记录、词库、按键配置、设备与诊断。设备连接嵌入设备与诊断；AI 联动、表情库、动作编排和记忆管理嵌入 AI 陪伴；表情编辑与环境感知不再作为主入口。默认、眨眼、开心、难过、生气、思考、聆听七种状态共用一套真实光栅图片和一个 `CompanionFace` 渲染器。
+- 原因：保持 T06 已验收功能入口不变的同时，减少侧栏碎片化；统一脸部资产可让品牌、软件预览和未来 OLED 状态使用同一语义，避免各页面出现不同机器人形象。
+- 边界：本地记忆数据库和审核结构已经实现，但陪伴对话写入、自动摘要、embedding、提醒、上传持久化、小智屏幕与舵机仍未接入。当前陪伴按钮和动作只做软件预览，不创建第二套麦克风流程、不发送硬件命令，也不构成 DeskMate Link、OLED 或舵机合同冻结。
+
+## D028 · Voice edit reuses VoiceWorkflow and AI services remain split by plane
+
+- 日期：2026-08-29
+- 决策：Maker KEY3 的 `Ctrl+Shift+E` 由 Windows host 实现为 VoiceWorkflow 的 `edit` 模式；Electron 主进程先捕获精确前台窗口与选中文字，转写口述指令，再使用与智能整理共享的文本模型改写。文本大模型与实时语音分别配置和加密保存；实时语音输出不得直接执行 Windows 动作，必须经过类型化 Bridge 与既有 Host Action 白名单。
+- 原因：固定参考固件只产生快捷键和音频生命周期，不含选区读取或模型逻辑；复用同一语音状态机可保证文字输入打断陪伴对话且不抢麦克风。文本理解与实时语音拆分后，可独立选择便宜快速的整理/Bridge 模型和低延时对话服务。
+- 边界：百炼 ASR 继续独立负责转写。OpenAI 兼容文本模型已用于智能整理和 KEY3 语音编辑；意图 Bridge、自动记忆摘要、embedding 和豆包实时会话仍未启用。所有密钥只在 Electron 主进程解密，不进入 React、配置导出、诊断或 Git。
+
+## D029 · Companion memory is local SQLite with reviewable promotion
+
+- 日期：2026-08-29
+- 决策：DeskMate 以 Electron `userData` 下的 SQLite WAL 作为陪伴记忆唯一权威存储；每轮会话先同步事务落盘，再异步生成每日摘要和候选。候选必须可审核后才提升为长期记忆；原文、摘要、结构化候选和 embedding 分表保存。`F:\wiki` 以后只能作为经审核 Markdown 的导出/同步适配器，不作为第二个未经追踪的事实源。
+- 原因：即时事务可以在突然关机时保留已完成轮次，候选审核避免啰嗦对话被无声固化，分层存储允许更换 LLM/embedding 后重建索引而不丢来源。
+- 边界：当前已实现数据库/schema、状态、搜索列表和候选审核；实时陪伴尚未产生会话，因此空库必须显示为 0。自动摘要调度、敏感信息过滤、embedding、人物隔离、备份恢复和 wiki 同步仍需独立功能包与验收。
+
+## D030 · T07 Desktop UI V1 is the shared firmware-development baseline
+
+- 日期：2026-08-29
+- 决策：用户确认智能整理与 KEY3 语音编辑可用后，把 `docs/contracts/t07-desktop-ui-v1.md` 标记为 `T07_DESKTOP_UI_V1_FROZEN`。工作台、语音输入、AI 陪伴、历史记录、词库、按键配置、设备与诊断七入口及其内部页面归属、统一七表情脸和单一 VoiceWorkflow 成为 EasyInput 与小智两条后续固件开发共同依赖的桌面基线。
+- 原因：两条固件线将并行开发；如果各自继续修改导航和桌面状态入口，会重新制造已经解决的 T06/T07 界面分叉，并让三端联调无法确定唯一 Host 行为。
+- 边界：修复缺陷、无障碍/响应式修正和把已冻结的能力状态接入现有页面仍可进行。改变七入口、页面归属、共享脸或 VoiceWorkflow，或移除 T06 能力，必须显式开启新的 UI 版本并重跑完整桌面回归。实时陪伴、自动记忆、DeskMate Link、小智 OLED/舵机仍是待冻结功能，不能因界面存在就宣称完成。

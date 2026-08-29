@@ -21,6 +21,8 @@
 - `flow/tasks/`：大任务说明书；结果写入 `flow/progress.md`，不要堆回任务卡。
 - `flow/guides/`：Project Flow 方法规范的本地副本。
 
+两台电脑交替工作时必须执行 `flow/guides/two-computer-handoff.md`：GitHub 是唯一代码交换通道；每次换电脑都要提交、推送并在 `flow/progress.md` 顶部记录准确分支、HEAD、验证、硬件操作和下一步。不得再用整目录覆盖另一台电脑的工作树。
+
 用户要求所有目录使用英文 ASCII 名称。文件名也优先使用英文 kebab-case；正文可以使用中文。
 
 ## Product constraints
@@ -74,6 +76,12 @@ npm run build:desktop
 有板子的电脑再执行 `docs/testing/voice-loop-acceptance.md`。无板子电脑只做协议单测、模拟板、构建和脱敏检查，不声称真机通过。
 
 正式固件模块建立后，必须在各自局部入口补充精确 ESP-IDF 版本、host test、build 和真机验收命令。外部参考工程的构建通过只能作为参考证据，不能替代本仓新固件的验证。
+
+## Espressif MCP support
+
+- 项目级 `.codex/config.toml` 配置乐鑫文档、组件注册表和工程排障 MCP；使用流程与脱敏边界见 `flow/guides/espressif-mcp-troubleshooting.md`。
+- MCP 回答只作为外部建议，不替代冻结合同、固定 Maker 参考、ESP-IDF v5.5.5 源码/文档、自动化测试或获授权真机证据。采用建议前必须在产品代码和精确版本中复核，并补能失败的回归测试。
+- 向任何 MCP 提问不得包含密钥、Wi-Fi、原始配置、录音/转写、IP/MAC、序列号、COM 口、完整设备/用户路径、窗口标题或未脱敏日志。MCP 调用不构成端口扫描、Flash/NVS、烧录、monitor 或其他硬件授权。
 
 ## Closure check
 

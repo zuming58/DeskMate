@@ -1,6 +1,7 @@
 export const pageMeta = {
   dashboard: { title: "工作台", subtitle: "查看桌宠状态、AI 任务进度与设备运行情况" },
   voice: { title: "语音输入", subtitle: "专注录音、实时转写与智能整理" },
+  companion: { title: "AI 陪伴", subtitle: "陪伴对话、记忆提醒、表情与动作的统一入口" },
   history: { title: "历史记录", subtitle: "管理、搜索和导出最近的语音输入" },
   vocabulary: { title: "词库", subtitle: "提高专有名词识别率并自动修正常见表达" },
   keymap: { title: "按键配置", subtitle: "配置键盘按键、旋钮和快捷动作" },
@@ -28,12 +29,13 @@ export const agents = [
 ];
 
 export const expressionPresets = [
-  { id: "focus", name: "专注", description: "分析、编码和长任务", mood: "focus", color: "cyan" },
-  { id: "listen", name: "倾听", description: "等待用户讲话或确认", mood: "listen", color: "blue" },
-  { id: "think", name: "思考", description: "规划与推理阶段", mood: "think", color: "violet" },
+  { id: "focus", name: "默认", description: "放松、专注的日常状态", mood: "focus", color: "cyan" },
+  { id: "sleep", name: "眨眼", description: "自然短暂闭眼，增加生命感", mood: "sleep", color: "indigo" },
   { id: "happy", name: "开心", description: "任务完成或收到表扬", mood: "happy", color: "green" },
-  { id: "sleep", name: "休息", description: "空闲与夜间模式", mood: "sleep", color: "indigo" },
-  { id: "alert", name: "提醒", description: "错误、警告和需确认", mood: "alert", color: "amber" },
+  { id: "sad", name: "难过", description: "温柔低落，需要安慰", mood: "sad", color: "blue" },
+  { id: "alert", name: "生气", description: "错误、受阻或需要强调", mood: "alert", color: "amber" },
+  { id: "think", name: "思考", description: "规划与推理阶段", mood: "think", color: "violet" },
+  { id: "listen", name: "聆听", description: "等待用户讲话或确认", mood: "listen", color: "blue" },
 ];
 
 export const keyActions = ["语音输入", "语音编辑", "回车", "退格", "全选", "复制", "粘贴", "撤销", "快捷键", "固定文字", "禁用"];

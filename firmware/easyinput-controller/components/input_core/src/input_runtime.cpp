@@ -173,18 +173,88 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
     if ((event.type == InputEventType::KeyPressed || event.type == InputEventType::KeyReleased) && event.index < owned_.size()) {
         const auto source = static_cast<InputSourceId>(event.index);
         const bool pressed = event.type == InputEventType::KeyPressed;
-        if (kDefaultKeyModes[event.index] == DefaultKeyMode::Tap) {
-            return apply_tap_source(source, pressed, kDefaultChords[event.index]);
+        if (configured_ &&
+            (configured_actions_[event.index].kind == ConfigActionKind::FixedText ||
+             configured_actions_[event.index].kind == ConfigActionKind::HostAction)) {
+            return apply_command_source(source, pressed, configured_actions_[event.index]);
         }
-        return apply_key_source(source, pressed, kDefaultChords[event.index]);
+        const Chord chord = configured_ ? configured_chords_[event.index] : kDefaultChords[event.index];
+        const bool hold = configured_ ? configured_hold_[event.index] : kDefaultKeyModes[event.index] == DefaultKeyMode::Hold;
+        if (!hold) {
+            return apply_tap_source(source, pressed, chord);
+        }
+        return apply_key_source(source, pressed, chord);
     } else if (event.type == InputEventType::EncoderStep) {
+        if (!encoder_enabled_) return result;
         result.wheel_changed = event.value != 0;
-        if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = event.value > 0 ? -3 : 3;
-        else result.wheel.horizontal = event.value > 0 ? 3 : -3;
+        if (encoder_cursor_) {
+            const HidUsage usage = axis_ == ScrollAxis::Vertical
+                ? (((event.value > 0) ^ reverse_vertical_) ? HidUsage::Down : HidUsage::Up)
+                : (((event.value > 0) ^ reverse_horizontal_) ? HidUsage::Right : HidUsage::Left);
+            result.wheel_changed = false;
+            result.keyboard_changed = true;
+            result.keyboard_restore_pending = true;
+            result.keyboard_restore = compose();
+            compose_tap(result.keyboard_restore, {usage, static_cast<uint8_t>(text_caret_select_ ? 2 : 0)}, result.keyboard);
+        } else {
+            const int8_t amount = static_cast<int8_t>(encoder_speed_);
+            if (axis_ == ScrollAxis::Vertical) result.wheel.vertical = ((event.value > 0) ^ reverse_vertical_) ? -amount : amount;
+            else result.wheel.horizontal = ((event.value > 0) ^ reverse_horizontal_) ? amount : -amount;
+        }
     } else if (event.type == InputEventType::EncoderPressed) {
-        axis_ = axis_ == ScrollAxis::Vertical ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+        if (configured_ &&
+            (encoder_press_action_.kind == ConfigActionKind::FixedText ||
+             encoder_press_action_.kind == ConfigActionKind::HostAction)) {
+            return apply_command_source(InputSourceId::EncoderPress, true,
+                                        encoder_press_action_);
+        }
+        if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
+            return apply_tap_source(InputSourceId::EncoderPress, true, encoder_press_chord_);
+        }
+        if (!configured_ || encoder_press_kind_ == ConfigActionKind::EncoderAxisToggle) {
+            axis_ = axis_ == ScrollAxis::Vertical ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+        } else if (encoder_press_kind_ == ConfigActionKind::TextCaretSelect) {
+            text_caret_select_ = !text_caret_select_;
+        }
+    } else if (event.type == InputEventType::EncoderReleased) {
+        if (configured_ &&
+            (encoder_press_action_.kind == ConfigActionKind::FixedText ||
+             encoder_press_action_.kind == ConfigActionKind::HostAction)) {
+            return apply_command_source(InputSourceId::EncoderPress, false,
+                                        encoder_press_action_);
+        }
+        if (configured_ && encoder_press_chord_.usage != HidUsage::None) {
+            return apply_tap_source(InputSourceId::EncoderPress, false, encoder_press_chord_);
+        }
     }
     return result;
+}
+
+void InputActionRouter::set_configuration(const ConfigProjection& projection) {
+    release_all();
+    for (size_t index = 0; index < configured_chords_.size(); ++index) {
+        configured_actions_[index] = projection.keys[index];
+        configured_chords_[index] = {static_cast<HidUsage>(projection.keys[index].usage), projection.keys[index].modifiers};
+        configured_hold_[index] = projection.keys[index].kind == ConfigActionKind::VoiceInput || projection.keys[index].kind == ConfigActionKind::VoiceEdit;
+    }
+    encoder_press_chord_ = {static_cast<HidUsage>(projection.encoder_press.usage), projection.encoder_press.modifiers};
+    encoder_press_action_ = projection.encoder_press;
+    encoder_press_kind_ = projection.encoder_press.kind;
+    encoder_enabled_ = projection.encoder_enabled;
+    encoder_cursor_ = projection.encoder_cursor;
+    text_caret_select_ = false;
+    axis_ = projection.encoder_horizontal ? ScrollAxis::Horizontal : ScrollAxis::Vertical;
+    reverse_vertical_ = projection.reverse_vertical;
+    reverse_horizontal_ = projection.reverse_horizontal;
+    encoder_speed_ = projection.encoder_speed;
+    configured_ = true;
+}
+
+void UsbInputRuntime::set_configuration(const ConfigProjection& projection) {
+    // Make the replacement observable to the host before any new projection
+    // can produce a report. This prevents old modifiers from surviving a save.
+    if (mounted_) recover_release();
+    router_.set_configuration(projection);
 }
 
 RoutedAction InputActionRouter::apply_key_source(InputSourceId source, bool pressed, Chord chord) {
@@ -245,9 +315,30 @@ RoutedAction InputActionRouter::apply_tap_source(InputSourceId source,
     return result;
 }
 
+RoutedAction InputActionRouter::apply_command_source(
+    InputSourceId source, bool pressed, const ConfigAction& action) {
+    RoutedAction result{};
+    const size_t index = static_cast<size_t>(source);
+    if (index >= tap_pressed_.size() || tap_pressed_[index] == pressed) {
+        return result;
+    }
+    tap_pressed_[index] = pressed;
+    if (!pressed) return result;
+    if (action.kind == ConfigActionKind::FixedText) {
+        result.host_command_kind = HostCommandKind::FixedText;
+    } else if (action.kind == ConfigActionKind::HostAction) {
+        result.host_command_kind = HostCommandKind::HostAction;
+    } else {
+        return {};
+    }
+    result.host_command_value = action.value;
+    return result;
+}
+
 void InputActionRouter::release_all() {
     owned_ = {};
     tap_pressed_ = {};
+    text_caret_select_ = false;
 }
 KeyboardSnapshot InputActionRouter::keyboard() const { return compose(); }
 
@@ -268,7 +359,11 @@ void UsbInputRuntime::saturating_add(uint32_t& value, uint32_t amount) {
     value = amount > max - value ? max : value + amount;
 }
 
-void UsbInputRuntime::clear_queue() { queue_head_ = 0; queue_size_ = 0; }
+void UsbInputRuntime::clear_queue() {
+    queue_head_ = 0;
+    queue_size_ = 0;
+    host_command_stream_.abort();
+}
 bool UsbInputRuntime::any_held() const { return std::any_of(physically_held_.begin(), physically_held_.end(), [](bool v) { return v; }); }
 
 void UsbInputRuntime::on_mount() {
@@ -504,6 +599,34 @@ enqueue_new_wheel:
     enqueue(report);
 }
 
+bool UsbInputRuntime::enqueue_host_command(HostCommandKind kind,
+                                           std::string_view value) {
+    if (!mounted_ || host_command_stream_.pending() ||
+        !host_command_stream_.start(kind, value, diagnostics_.usb_mount_epoch)) {
+        saturating_add(diagnostics_.host_command_drops, 1);
+        return false;
+    }
+    return true;
+}
+
+bool UsbInputRuntime::front_host_command(
+    std::array<uint8_t, kAppCommandPayloadBytes>& payload) const {
+    return mounted_ && host_command_stream_.pending() &&
+           host_command_stream_.epoch() == diagnostics_.usb_mount_epoch &&
+           host_command_stream_.encode_next(payload);
+}
+
+void UsbInputRuntime::complete_host_command() {
+    (void)host_command_stream_.mark_sent();
+}
+
+void UsbInputRuntime::fail_host_command() {
+    if (host_command_stream_.pending()) {
+        saturating_add(diagnostics_.host_command_drops, 1);
+        host_command_stream_.abort();
+    }
+}
+
 void UsbInputRuntime::recover_release() {
     clear_queue();
     router_.release_all();
@@ -545,6 +668,10 @@ void UsbInputRuntime::on_input(const InputEvent& event) {
         enqueue_keyboard(action.keyboard);
     }
     if (action.wheel_changed) enqueue_wheel(action.wheel);
+    if (action.host_command_kind != HostCommandKind::None) {
+        (void)enqueue_host_command(action.host_command_kind,
+                                   action.host_command_value);
+    }
 }
 
 void UsbInputRuntime::on_raw_edge_drops(uint32_t count) { saturating_add(diagnostics_.raw_edge_drops, count); }
@@ -619,12 +746,14 @@ bool UsbInputRuntime::reject_vendor_feature(uint8_t report_id, const uint8_t* da
 UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
     HidReportTransferState& transfer,
-    UsbCallbackSnapshot callback) {
+    UsbCallbackSnapshot callback,
+    ConfigTransferState* config_transfer) {
     UsbLifecycleProcessResult result{};
     result.dropped_events = events.take_drops();
     if (result.dropped_events != 0) {
         events.discard_pending();
         transfer.clear();
+        if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
         runtime.on_usb_lifecycle_drops(result.dropped_events);
         runtime.reconcile_usb_lifecycle(callback);
         return result;
@@ -639,6 +768,7 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                     event.epoch != runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_mount(event.epoch);
                     transfer.clear();
+                    if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
                 }
                 break;
             case UsbLifecycleEventKind::Unmount:
@@ -646,6 +776,7 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                     event.epoch == runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_unmount();
                     transfer.clear();
+                    if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
                 }
                 break;
             case UsbLifecycleEventKind::Resume:
@@ -655,7 +786,22 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                 }
                 break;
             case UsbLifecycleEventKind::TransferComplete:
-                if (transfer.active && event.report_identity_valid &&
+                if (config_transfer && config_transfer->active && event.report_identity_valid &&
+                    event.epoch == config_transfer->report.epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch &&
+                    event.report_id == config_transfer->report.report_id &&
+                    event.length == config_transfer->report.length &&
+                    std::equal(event.payload.begin(),
+                               event.payload.begin() + event.length,
+                               config_transfer->report.payload.begin())) {
+                    const bool advances = config_transfer->advances_read_stream;
+                    const bool advances_status = config_transfer->advances_status_stream;
+                    const bool advances_host = config_transfer->advances_host_command;
+                    config_transfer->clear();
+                    config_transfer->completed = advances;
+                    config_transfer->completed_status = advances_status;
+                    if (advances_host) runtime.complete_host_command();
+                } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
                     event.epoch == runtime.diagnostics().usb_mount_epoch &&
                     event.report_id == transfer.report.report_id &&
@@ -668,7 +814,19 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                 }
                 break;
             case UsbLifecycleEventKind::TransferFailed:
-                if (transfer.active && event.report_identity_valid &&
+                if (config_transfer && config_transfer->active && event.report_identity_valid &&
+                    event.epoch == config_transfer->report.epoch &&
+                    event.epoch == runtime.diagnostics().usb_mount_epoch &&
+                    event.report_id == config_transfer->report.report_id &&
+                    event.length == config_transfer->report.length &&
+                    std::equal(event.payload.begin(),
+                               event.payload.begin() + event.length,
+                               config_transfer->report.payload.begin())) {
+                    const bool failed_host = config_transfer->advances_host_command;
+                    config_transfer->clear();
+                    if (failed_host) runtime.fail_host_command();
+                    else config_transfer->failed = true;
+                } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
                     event.epoch == runtime.diagnostics().usb_mount_epoch &&
                     event.report_id == transfer.report.report_id &&
@@ -719,7 +877,17 @@ UsbLifecycleEvent make_usb_transfer_event(
     const uint8_t* wire_report, uint16_t wire_length) {
     UsbLifecycleEvent event{kind, epoch};
     if (wire_report == nullptr || wire_length == 0) return event;
-    const uint16_t expected_length = usb_wire_report_length(wire_report[0]);
+    uint16_t expected_length = usb_wire_report_length(wire_report[0]);
+    // App-command configuration responses carry report ID 0x11 followed by
+    // a 63-byte payload. T05 emits acknowledgements (0x03), capability/status
+    // chunks (0x04), and complete-configuration chunks (0x06); ordinary
+    // keyboard report 0x11 is not emitted.
+    if (wire_report[0] == 0x11 && wire_length == 64 &&
+        (wire_report[1] == 0x03 || wire_report[1] == 0x04 ||
+         wire_report[1] == 0x06 || wire_report[1] == 0x01 ||
+         wire_report[1] == 0x05)) {
+        expected_length = 64;
+    }
     if (expected_length == 0 || wire_length != expected_length) return event;
     event.report_id = wire_report[0];
     event.length = static_cast<uint8_t>(wire_length - 1u);

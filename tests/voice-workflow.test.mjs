@@ -4,14 +4,23 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { downsampleToPcm16, shouldIgnoreToggle } from "../src/hooks/useRecorder.js";
 import { DesktopBridgeAdapter, EasyInputLanAudioAdapter, TextOutputAdapter } from "../src/adapters/voiceAdapters.js";
-import { shortcutFromKeyboardEvent } from "../src/domain/shortcutCapture.js";
+import { shortcutDisplay, shortcutFromKeyboardEvent } from "../src/domain/shortcutCapture.js";
 
 const require = createRequire(import.meta.url);
 const { normalizeShortcut } = require("../electron/shortcut.cjs");
+const { isVoiceActivityActive } = require("../electron/voice-trigger-state.cjs");
 
 test("the recorder debounce used by the real VoicePage ignores repeated toggles", () => {
   assert.equal(shouldIgnoreToggle(1000, 1050, 100), true);
   assert.equal(shouldIgnoreToggle(1000, 1200, 100), false);
+});
+
+test("Escape cancellation is ignored while voice is idle", () => {
+  assert.equal(isVoiceActivityActive({ recording: false, state: "idle" }), false);
+  assert.equal(isVoiceActivityActive({ recording: false, state: "completed" }), false);
+  assert.equal(isVoiceActivityActive({ recording: false, state: "error" }), false);
+  assert.equal(isVoiceActivityActive({ recording: true, state: "idle" }), true);
+  for (const state of ["recording", "transcribing", "organizing", "outputting"]) assert.equal(isVoiceActivityActive({ state }), true);
 });
 
 test("microphone samples are converted to 16 kHz PCM without clipping", () => {
@@ -29,10 +38,30 @@ test("desktop shortcuts are normalized and unsafe values are rejected", () => {
   assert.throws(() => normalizeShortcut("DefinitelyNotAnAccelerator"), /修饰键/);
 });
 
+test("the dedicated voice-edit shortcut cannot be reused by normal voice input", async () => {
+  const main = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /DEFAULT_EDIT_SHORTCUT = "Ctrl\+Shift\+E"/);
+  assert.match(main, /candidate === DEFAULT_EDIT_SHORTCUT/);
+  assert.match(main, /已保留给语音编辑/);
+});
+
 test("shortcut capture derives an accelerator from physical key presses", () => {
   assert.deepEqual(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), { shortcut: "Ctrl+Alt+K" });
   assert.equal(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }).error.includes("修饰键"), true);
   assert.deepEqual(shortcutFromKeyboardEvent({ code: "ControlLeft", key: "Control", ctrlKey: true, altKey: false, shiftKey: false, metaKey: false }), { pending: true, display: "Ctrl" });
+});
+
+test("key mapping shortcut capture accepts single keys and localizes common labels", () => {
+  const base = { ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Enter", key: "Enter" }, { allowSingle: true }), { shortcut: "Enter" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Backspace", key: "Backspace" }, { allowSingle: true }), { shortcut: "Backspace" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Space", key: " " }, { allowSingle: true }), { shortcut: "Space" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Escape", key: "Escape" }, { allowSingle: true }), { shortcut: "Esc" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "Digit7", key: "7" }, { allowSingle: true }), { shortcut: "7" });
+  assert.deepEqual(shortcutFromKeyboardEvent({ ...base, code: "ArrowLeft", key: "ArrowLeft" }, { allowSingle: true }), { shortcut: "ArrowLeft" });
+  assert.equal(shortcutDisplay("Return"), "回车");
+  assert.equal(shortcutDisplay("Backspace"), "退格");
+  assert.equal(shortcutDisplay("Ctrl+Space"), "Ctrl+空格");
 });
 
 test("web desktop bridge safely degrades and LAN audio stays unavailable", async () => {

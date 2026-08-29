@@ -1,8 +1,8 @@
+import { shortcutDisplay } from "./shortcutCapture.js";
+
 export const KEY_ACTIONS = [
   { id: "voice-input", label: "语音输入" },
   { id: "voice-edit", label: "语音编辑" },
-  { id: "enter", label: "回车" },
-  { id: "backspace", label: "退格" },
   { id: "select-all", label: "全选" },
   { id: "copy", label: "复制" },
   { id: "paste", label: "粘贴" },
@@ -20,8 +20,15 @@ export const ENCODER_PRESS_ACTIONS = [
 ];
 
 export const DEFAULT_KEYMAP = [
-  "voice-input", "enter", "voice-edit", "backspace", "select-all", "copy", "paste", "undo",
-].map((action) => ({ action }));
+  { action: "voice-input" },
+  { action: "hotkey", shortcut: "Return" },
+  { action: "voice-edit" },
+  { action: "hotkey", shortcut: "Backspace" },
+  { action: "select-all" },
+  { action: "copy" },
+  { action: "paste" },
+  { action: "undo" },
+];
 
 export const DEFAULT_ENCODER = {
   mode: "scroll",
@@ -33,10 +40,25 @@ export const DEFAULT_ENCODER = {
 };
 
 const LEGACY_ACTIONS = new Map(KEY_ACTIONS.map((item) => [item.label, item.id]));
-const ACTION_IDS = new Set(KEY_ACTIONS.map((item) => item.id));
+const ACTION_IDS = new Set([...KEY_ACTIONS.map((item) => item.id), "enter", "backspace"]);
 const ENCODER_ACTION_IDS = new Set(ENCODER_PRESS_ACTIONS.map((item) => item.id));
 const ALL_ACTION_IDS = new Set([...ACTION_IDS, ...ENCODER_ACTION_IDS]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const FIXED_TEXT_MAX_BYTES = 960;
+
+export function limitUtf8Bytes(value, maxBytes = FIXED_TEXT_MAX_BYTES) {
+  const source = typeof value === "string" ? value : "";
+  const encoder = new TextEncoder();
+  let result = "";
+  let bytes = 0;
+  for (const character of source) {
+    const count = encoder.encode(character).length;
+    if (bytes + count > maxBytes) break;
+    result += character;
+    bytes += count;
+  }
+  return result;
+}
 
 export function normalizeKeyBinding(value, fallback = { action: "disabled" }) {
   if (typeof value === "string") return { action: LEGACY_ACTIONS.get(value) || "disabled" };
@@ -44,7 +66,7 @@ export function normalizeKeyBinding(value, fallback = { action: "disabled" }) {
   return {
     action: value.action,
     ...(typeof value.shortcut === "string" && value.shortcut ? { shortcut: value.shortcut.slice(0, 64) } : {}),
-    ...(typeof value.text === "string" && value.text ? { text: value.text.slice(0, 512) } : {}),
+    ...(typeof value.text === "string" && value.text ? { text: limitUtf8Bytes(value.text) } : {}),
     ...(typeof value.appActionId === "string" && UUID_PATTERN.test(value.appActionId) ? { appActionId: value.appActionId } : {}),
     ...(typeof value.appName === "string" && value.appName ? { appName: value.appName.slice(0, 120) } : {}),
   };
@@ -67,7 +89,9 @@ export function normalizeEncoder(value) {
 export function actionLabel(binding) {
   const value = normalizeKeyBinding(binding);
   if (value.action === "open-app" && value.appName) return value.appName;
-  if (value.action === "hotkey" && value.shortcut) return value.shortcut;
+  if (value.action === "hotkey" && value.shortcut) return shortcutDisplay(value.shortcut);
+  if (value.action === "enter") return "回车";
+  if (value.action === "backspace") return "退格";
   if (value.action === "fixed-text" && value.text) return value.text.length > 12 ? `${value.text.slice(0, 12)}…` : value.text;
   return KEY_ACTIONS.find((item) => item.id === value.action)?.label
     || ENCODER_PRESS_ACTIONS.find((item) => item.id === value.action)?.label

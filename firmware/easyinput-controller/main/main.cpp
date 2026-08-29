@@ -4,6 +4,7 @@
 #include "led_feedback.h"
 #include "led_strip.h"
 #include "peripheral_power.h"
+#include "config_store.h"
 
 #include "class/hid/hid_device.h"
 #include "driver/gpio.h"
@@ -17,6 +18,7 @@
 #include "tusb.h"
 
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 
@@ -28,9 +30,28 @@ struct RawEdge {
     uint32_t at_ms;
 };
 
+struct ConfigFeatureCommand {
+    uint8_t report_id;
+    uint8_t length;
+    uint32_t epoch;
+    std::array<uint8_t, kConfigFeaturePayloadBytes> payload;
+};
+struct ConfigSaveCommand { ConfigDocument document{}; ConfigSlot active{ConfigSlot::Invalid}; uint32_t generation{0}; uint32_t epoch{0}; };
+struct ConfigSaveResult { ConfigSaveStatus status{ConfigSaveStatus::WriteFailed}; ConfigDocument document{}; ConfigSlot slot{ConfigSlot::Invalid}; uint32_t generation{0}; uint32_t epoch{0}; };
+
 StaticQueue_t raw_edge_queue_control{};
 std::array<uint8_t, kRawEdgeQueueCapacity * sizeof(RawEdge)> raw_edge_queue_storage{};
 QueueHandle_t raw_edge_queue = nullptr;
+StaticQueue_t config_command_queue_control{};
+constexpr size_t kConfigCommandQueueCapacity = 8;
+std::array<uint8_t, kConfigCommandQueueCapacity * sizeof(ConfigFeatureCommand)>
+    config_command_queue_storage{};
+QueueHandle_t config_command_queue = nullptr;
+QueueHandle_t config_save_queue = nullptr;
+QueueHandle_t config_result_queue = nullptr;
+StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
+std::array<uint8_t, sizeof(ConfigSaveCommand) * 2> config_save_queue_storage{};
+std::array<uint8_t, sizeof(ConfigSaveResult) * 2> config_result_queue_storage{};
 TaskHandle_t owner_task = nullptr;
 TaskHandle_t led_task_handle = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
@@ -43,6 +64,50 @@ std::atomic<bool> tinyusb_driver_ready{false};
 LedFeedbackMailbox led_feedback_mailbox;
 LedFeedbackDiagnostics led_feedback_diagnostics;
 PeripheralPowerController peripheral_power;
+ConfigNvsStore config_store;
+ConfigDocument active_config{};
+ConfigSlot active_config_slot{ConfigSlot::Invalid};
+uint32_t active_config_generation{0};
+ConfigSaveCommand config_owner_command{};
+ConfigSaveResult config_owner_result{};
+ConfigSaveResult input_owner_save_result{};
+ConfigFeatureCommand input_owner_config_command{};
+ConfigSaveCommand input_owner_save_command{};
+ConfigWriteAssembler config_write_assembler;
+ConfigReadStream config_read_stream;
+ConfigStatusStream config_status_stream;
+bool config_save_in_flight = false;
+std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
+ConfigTransferState config_transfer;
+bool config_ack_pending = false;
+std::array<uint8_t, kConfigFeaturePayloadBytes> config_ack_payload{};
+void reset_config_save_result(ConfigSaveResult& result) {
+    result.status = ConfigSaveStatus::WriteFailed;
+    result.document.bytes.fill(0);
+    result.document.length = 0;
+    result.document.crc16 = 0;
+    result.document.source = ConfigSource::Default;
+    result.slot = ConfigSlot::Invalid;
+    result.generation = 0;
+    result.epoch = 0;
+}
+void queue_config_ack(uint8_t phase, bool ok, bool saved, uint16_t bytes,
+                      uint16_t crc16) {
+    config_ack_payload.fill(0);
+    config_ack_payload[0] = 0x03;
+    config_ack_payload[1] = 0;
+    config_ack_payload[2] = 1;
+    config_ack_payload[3] = 7;
+    config_ack_payload[4] = 1;
+    config_ack_payload[5] = phase;
+    config_ack_payload[6] = ok ? 1 : 0;
+    config_ack_payload[7] = static_cast<uint8_t>(bytes);
+    config_ack_payload[8] = static_cast<uint8_t>(bytes >> 8);
+    config_ack_payload[9] = static_cast<uint8_t>(crc16);
+    config_ack_payload[10] = static_cast<uint8_t>(crc16 >> 8);
+    config_ack_payload[11] = saved ? 1 : 0;
+    config_ack_pending = true;
+}
 constexpr char kLogTag[] = "easyinput";
 
 void IRAM_ATTR notify_owner_from_isr(BaseType_t* higher_priority_woken) {
@@ -138,12 +203,49 @@ void led_feedback_task(void*) {
     }
 }
 
+void config_owner_task(void*) {
+    for (;;) {
+        if (xQueueReceive(config_save_queue, &config_owner_command, portMAX_DELAY) != pdTRUE) continue;
+        reset_config_save_result(config_owner_result);
+        config_owner_result.document = config_owner_command.document;
+        config_owner_result.epoch = config_owner_command.epoch;
+        config_owner_result.status = config_store.save(config_owner_command.document, config_owner_command.active, config_owner_command.generation);
+        if (config_owner_result.status == ConfigSaveStatus::Saved) {
+            const ConfigLoadResult& loaded = config_store.load();
+            ConfigProjection projection{};
+            if (loaded.slot == ConfigSlot::Invalid || !parse_config_projection(loaded.document.view(), projection)) {
+                config_owner_result.status = ConfigSaveStatus::ReadbackFailed;
+            } else {
+                config_owner_result.document = loaded.document;
+                config_owner_result.slot = loaded.slot;
+                config_owner_result.generation = loaded.generation;
+            }
+        }
+        (void)xQueueSend(config_result_queue, &config_owner_result, portMAX_DELAY);
+    }
+}
+
 void input_owner_task(void*) {
     InputCore input;
     HidReportTransferState transfer;
     for (;;) {
         const auto lifecycle = process_usb_lifecycle_events(
-            lifecycle_events, runtime, transfer, callback_snapshot());
+            lifecycle_events, runtime, transfer, callback_snapshot(),
+            &config_transfer);
+        if (config_transfer.completed) {
+            config_transfer.completed = false;
+            (void)config_read_stream.mark_sent();
+        }
+        if (config_transfer.completed_status) {
+            config_transfer.completed_status = false;
+            (void)config_status_stream.mark_sent();
+        }
+        if (config_transfer.failed) {
+            config_transfer.failed = false;
+            config_read_stream.abort();
+            config_status_stream.abort();
+            config_ack_pending = false;
+        }
         if (lifecycle.dropped_events != 0) {
             ESP_LOGW(kLogTag, "USB lifecycle queue recovered after %lu dropped events",
                      static_cast<unsigned long>(lifecycle.dropped_events));
@@ -216,13 +318,153 @@ void input_owner_task(void*) {
             }
         }
 
+        while (xQueueReceive(config_result_queue, &input_owner_save_result, 0) == pdTRUE) {
+            config_save_in_flight = false;
+            if (input_owner_save_result.epoch != runtime.diagnostics().usb_mount_epoch || !runtime.mounted()) {
+                continue;
+            }
+            if (input_owner_save_result.status == ConfigSaveStatus::Saved) {
+                ConfigProjection projection{};
+                if (parse_config_projection(input_owner_save_result.document.view(), projection)) {
+                    active_config = input_owner_save_result.document;
+                    active_config_slot = input_owner_save_result.slot;
+                    active_config_generation = input_owner_save_result.generation;
+                    runtime.set_configuration(projection);
+                    queue_config_ack(2, true, true, input_owner_save_result.document.length, input_owner_save_result.document.crc16);
+                } else {
+                    queue_config_ack(3, false, false, input_owner_save_result.document.length, input_owner_save_result.document.crc16);
+                }
+            } else {
+                queue_config_ack(static_cast<uint8_t>(input_owner_save_result.status), false, false,
+                                 input_owner_save_result.document.length, input_owner_save_result.document.crc16);
+            }
+        }
+        while (xQueueReceive(config_command_queue, &input_owner_config_command, 0) == pdTRUE) {
+            if (input_owner_config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
+                config_write_assembler.abort();
+                config_read_stream.abort();
+                config_status_stream.abort();
+                continue;
+            }
+            if (input_owner_config_command.report_id == 0x10) {
+                if (config_save_in_flight || config_read_stream.pending() || config_status_stream.pending()) {
+                    queue_config_ack(1, false, false, 0, 0);
+                    continue;
+                }
+                const auto result = config_write_assembler.accept(
+                    input_owner_config_command.payload.data(), input_owner_config_command.length,
+                    input_owner_config_command.epoch);
+                if (result == ConfigReceiveStatus::Complete) {
+                    const ConfigDocument& candidate = config_write_assembler.document();
+                    input_owner_save_command.document = candidate;
+                    input_owner_save_command.active = active_config_slot;
+                    input_owner_save_command.generation = active_config_generation;
+                    input_owner_save_command.epoch = input_owner_config_command.epoch;
+                    if (xQueueSend(config_save_queue, &input_owner_save_command, 0) == pdTRUE) {
+                        config_save_in_flight = true;
+                    } else {
+                        queue_config_ack(4, false, false, candidate.length, candidate.crc16);
+                    }
+                } else if (result == ConfigReceiveStatus::Rejected) {
+                    queue_config_ack(1, false, false, 0, 0);
+                }
+            } else {
+                ConfigReadRequest request{};
+                if (decode_config_read_request(input_owner_config_command.payload.data(),
+                                               input_owner_config_command.length, request)) {
+                    if (config_save_in_flight || config_write_assembler.active()) continue;
+                    config_read_stream.abort();
+                    config_status_stream.abort();
+                    if (request.flag == ConfigReadFlag::CompleteConfig) {
+                        (void)config_read_stream.replace(
+                            request.request_id, active_config, input_owner_config_command.epoch);
+                    } else {
+                        (void)config_status_stream.replace(
+                            request.request_id, input_owner_config_command.epoch);
+                    }
+                }
+            }
+        }
+
         runtime.service_release_reassertion(now_ms);
 
         QueuedHidReport report{};
-        if (prepare_hid_report(runtime, tud_hid_ready(), transfer, report)) {
+        if (prepare_hid_report(runtime, tud_hid_ready() && !config_transfer.active,
+                               transfer, report)) {
             const bool accepted = tud_hid_report(
                 report.report_id, report.payload.data(), report.length);
             finish_hid_send_attempt(runtime, report, accepted, transfer);
+        }
+        if (config_ack_pending && tud_hid_ready() && !transfer.active &&
+            !config_transfer.active) {
+            const bool accepted = tud_hid_report(0x11, config_ack_payload.data(), config_ack_payload.size());
+            if (accepted) {
+                config_ack_pending = false;
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = false;
+                config_transfer.report.report_id = 0x11;
+                config_transfer.report.length = static_cast<uint8_t>(config_ack_payload.size());
+                config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
+                std::copy(config_ack_payload.begin(), config_ack_payload.end(), config_transfer.report.payload.begin());
+            }
+        }
+        if (config_status_stream.pending() && tud_hid_ready() && !transfer.active &&
+            !config_transfer.active && !config_ack_pending) {
+            if (config_status_stream.encode_next(config_response_payload) &&
+                tud_hid_report(0x11, config_response_payload.data(),
+                               config_response_payload.size())) {
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = true;
+                config_transfer.advances_host_command = false;
+                config_transfer.report.report_id = 0x11;
+                config_transfer.report.length = static_cast<uint8_t>(config_response_payload.size());
+                config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
+                std::copy(config_response_payload.begin(), config_response_payload.end(),
+                           config_transfer.report.payload.begin());
+            }
+        }
+        if (!config_ack_pending && !config_status_stream.pending() && config_read_stream.pending() && tud_hid_ready() &&
+            !transfer.active && !config_transfer.active) {
+            if (config_read_stream.encode_next(config_response_payload)) {
+                const bool accepted = tud_hid_report(0x11, config_response_payload.data(), config_response_payload.size());
+                if (accepted) {
+                    config_transfer.active = true;
+                    config_transfer.advances_read_stream = true;
+                    config_transfer.advances_status_stream = false;
+                    config_transfer.advances_host_command = false;
+                    config_transfer.report.report_id = 0x11;
+                    config_transfer.report.length = static_cast<uint8_t>(config_response_payload.size());
+                    config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
+                    std::copy(config_response_payload.begin(), config_response_payload.end(), config_transfer.report.payload.begin());
+                } else config_read_stream.abort();
+            }
+        }
+        if (!config_ack_pending && !config_status_stream.pending() &&
+            !config_read_stream.pending() && tud_hid_ready() &&
+            !transfer.active && !config_transfer.active &&
+            runtime.front_host_command(config_response_payload)) {
+            const bool accepted = tud_hid_report(
+                kAppCommandReportId, config_response_payload.data(),
+                config_response_payload.size());
+            if (accepted) {
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = true;
+                config_transfer.report.report_id = kAppCommandReportId;
+                config_transfer.report.length =
+                    static_cast<uint8_t>(config_response_payload.size());
+                config_transfer.report.epoch =
+                    runtime.diagnostics().usb_mount_epoch;
+                std::copy(config_response_payload.begin(),
+                          config_response_payload.end(),
+                          config_transfer.report.payload.begin());
+            } else {
+                runtime.fail_host_command();
+            }
         }
         ulTaskNotifyTake(pdTRUE, 1);
     }
@@ -247,10 +489,25 @@ void publish_transfer_event(UsbLifecycleEventKind kind,
 }  // namespace
 
 extern "C" void app_main(void) {
+    ESP_ERROR_CHECK(config_store.begin());
+    const ConfigLoadResult& loaded_config = config_store.load();
+    active_config = loaded_config.document;
+    active_config_slot = loaded_config.slot;
+    active_config_generation = loaded_config.generation;
+    ConfigProjection projection{};
+    if (parse_config_projection(active_config.view(), projection)) runtime.set_configuration(projection);
     raw_edge_queue = xQueueCreateStatic(
         kRawEdgeQueueCapacity, sizeof(RawEdge), raw_edge_queue_storage.data(),
         &raw_edge_queue_control);
     ESP_ERROR_CHECK(raw_edge_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    config_command_queue = xQueueCreateStatic(
+        kConfigCommandQueueCapacity, sizeof(ConfigFeatureCommand),
+        config_command_queue_storage.data(), &config_command_queue_control);
+    ESP_ERROR_CHECK(config_command_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
+    config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
+    ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    ESP_ERROR_CHECK(xTaskCreate(config_owner_task, "config_owner", 4096, nullptr, 8, nullptr) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     if (xTaskCreate(led_feedback_task, "led_feedback", 4096, nullptr, 5,
                     &led_task_handle) != pdPASS) {
@@ -360,7 +617,17 @@ extern "C" uint16_t tud_hid_get_report_cb(
 extern "C" void tud_hid_set_report_cb(
     uint8_t, uint8_t report_id, hid_report_type_t report_type,
     uint8_t const* buffer, uint16_t length) {
-    if (report_type == HID_REPORT_TYPE_FEATURE) {
-        (void)runtime.reject_vendor_feature(report_id, buffer, length);
+    ConfigFeatureReportView feature{};
+    if (report_type != HID_REPORT_TYPE_FEATURE ||
+        !normalize_config_feature_report(report_id, buffer, length, feature)) return;
+    const bool config_read = feature.report_id == 0x13;
+    ConfigFeatureCommand command{};
+    command.report_id = feature.report_id;
+    command.length = static_cast<uint8_t>(config_read ? kConfigReadRequestPayloadBytes : feature.length);
+    command.epoch = callback_lifecycle.snapshot().epoch;
+    std::copy_n(feature.payload, command.length, command.payload.begin());
+    if (config_command_queue != nullptr &&
+        xQueueSend(config_command_queue, &command, 0) == pdTRUE) {
+        notify_owner_from_callback();
     }
 }

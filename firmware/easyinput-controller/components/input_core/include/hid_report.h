@@ -19,6 +19,10 @@ enum class HidUsage : uint8_t {
     Space = 0x2c,
     V = 0x19,
     Z = 0x1d,
+    Right = 0x4f,
+    Left = 0x50,
+    Down = 0x51,
+    Up = 0x52,
 };
 
 struct HidAction {

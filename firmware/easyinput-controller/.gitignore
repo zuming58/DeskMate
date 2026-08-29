@@ -7,3 +7,5 @@ managed_components/
 *.map
 sdkconfig
 sdkconfig.old
+sdkconfig.*
+!sdkconfig.defaults

@@ -6,11 +6,10 @@
 
 - [`easyinput-input-v1.md`](easyinput-input-v1.md)：`INPUT_V1_FROZEN`，冻结 EasyInput 默认实体输入、USB HID 身份、报告布局和断线安全语义；2026-08-27 修订普通命令键为原子 tap，S1/S3 held PTT 不变。
 - [`easyinput-config-v1.md`](easyinput-config-v1.md)：`CONFIG_V1_FROZEN`，冻结完整配置读取、无损主进程合并、脱敏确认、双槽 NVS、恢复与回读；只开放纯 HID 映射，Windows 主机动作仍未冻结。
+- [`easyinput-host-action-v1.md`](easyinput-host-action-v1.md)：`HOST_ACTION_V1_FROZEN`，冻结固定文字与 UUID 打开应用的 Maker 兼容 AppCommand、USB 生命周期和 Windows 主进程安全执行边界。
 
 现有 Maker `ai_keyboard.v1`、厂商 HID 和 Host Action 证据仍以 [`docs/contracts/easyinput-maker-protocol.md`](../../docs/contracts/easyinput-maker-protocol.md) 为来源合同。切片冻结不等于整份 Host Contract 已冻结。
 
 T04 的实体输入灯效是固件内部行为合同，不新增 Windows↔EasyInput 报告，见 [`INPUT_LED_V1_FROZEN`](../../docs/contracts/easyinput-input-led-feedback-v1.md)。
 
-以下跨端任务仍受前序门禁阻挡，不代表合同已经冻结：
-
-- [`T06-easyinput-host-actions.md`](../../flow/tasks/T06-easyinput-host-actions.md)：必须在 T05 锁定后提出并自审 Host Action 合同，显式标为 `HOST_ACTION_V1_FROZEN` 后才能实现。
+T06 只可实现上述冻结切片；其他 AppCommand、BLE、音频和 DeskMate Link 仍为 `NOT_FROZEN`。

@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+
 const endpoint = "http://127.0.0.1:9222";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -6,7 +9,7 @@ async function waitForTarget() {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
       const targets = await fetch(`${endpoint}/json/list`).then((response) => response.json());
-      const target = targets.find((item) => item.type === "page" && item.url.includes("localhost:4173"));
+      const target = targets.find((item) => item.type === "page" && /(?:localhost|127\.0\.0\.1):4174/.test(item.url));
       if (target) return target;
     } catch {
       // Browser is still starting.
@@ -57,17 +60,11 @@ const checks = [];
 const check = (name, passed, detail = "") => checks.push({ name, passed: Boolean(passed), detail });
 
 check("app shell renders", await evaluate("Boolean(document.querySelector('.app-shell'))"));
-check("twelve navigation items render", (await evaluate("document.querySelectorAll('.sidebar__nav button').length")) === 12);
+check("seven navigation items render", (await evaluate("document.querySelectorAll('.sidebar__nav button').length")) === 7);
 
 await evaluate("location.hash='#/voice'");
 await delay(350);
 check("voice route opens", (await evaluate("document.querySelector('h1')?.textContent")) === "语音输入");
-await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('开始录音'))?.click()");
-await delay(350);
-check("recording starts", await evaluate("document.querySelector('.recorder')?.classList.contains('is-recording')"));
-await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('停止录音'))?.click()");
-await delay(250);
-check("recording completes with transcript", await evaluate("document.querySelector('.recorder__transcript')?.textContent.includes('软件端')"));
 
 await evaluate("location.hash='#/history'");
 await delay(250);
@@ -81,22 +78,29 @@ await delay(250);
 await evaluate("document.querySelectorAll('.hardware-key')[2]?.click()");
 check("key selection changes", await evaluate("document.querySelectorAll('.hardware-key')[2]?.classList.contains('is-selected')"));
 
-await evaluate("location.hash='#/expressions'");
+await evaluate("location.hash='#/companion'");
+await delay(250);
+await evaluate("[...document.querySelectorAll('.companion-tabs button')].find(b=>b.textContent.includes('表情库'))?.click()");
 await delay(250);
 await evaluate("document.querySelectorAll('.expression-library .expression-tile')[5]?.click()");
 check("expression selection changes", await evaluate("document.querySelectorAll('.expression-library .expression-tile')[5]?.classList.contains('is-selected')"));
-
-await evaluate("location.hash='#/motion'");
+await evaluate("[...document.querySelectorAll('.companion-tabs button')].find(b=>b.textContent.includes('记忆管理'))?.click()");
 await delay(250);
-await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('测试动作'))?.click()");
-await delay(120);
-check("motion preview starts", await evaluate("document.querySelector('.motion-avatar')?.classList.contains('is-playing')"));
+check("memory management opens honestly", await evaluate("document.querySelector('.memory-management')?.textContent.includes('尚无可管理的记忆')"));
 
 await evaluate("location.hash='#/settings'");
 await delay(250);
+await evaluate("[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.includes('设备连接'))?.click()");
+await delay(120);
+check("device connections are embedded in settings", await evaluate("Boolean(document.querySelector('.connections-embedded'))"));
+await evaluate("[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.includes('AI 服务'))?.click()");
+await delay(120);
+check("AI services expose three isolated planes", await evaluate("document.querySelectorAll('.service-config-block').length === 3"));
+await send("Page.enable");
+await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }).then(async ({ data }) => fs.writeFile(path.resolve("design/qa/t07d-ai-services.png"), Buffer.from(data, "base64")));
 await evaluate("[...document.querySelectorAll('.settings-nav button')].find(b=>b.textContent.includes('系统诊断'))?.click()");
 await delay(120);
-check("diagnostics section opens", await evaluate("document.querySelector('.diagnostic-list')?.children.length === 6"));
+check("diagnostics section opens", await evaluate("document.querySelector('.diagnostic-list')?.children.length === 7"));
 
 check("no runtime or browser log errors", exceptions.length === 0, exceptions.join(" | "));
 const failed = checks.filter((item) => !item.passed);

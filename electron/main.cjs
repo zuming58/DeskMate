@@ -2,6 +2,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session,
 const path = require("path");
 const { fileURLToPath } = require("url");
 const { spawn } = require("child_process");
+const { randomUUID } = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const { summarizeNetworkInterfaces } = require("./network-summary.cjs");
@@ -11,14 +12,22 @@ const { transcribe: transcribeBailian } = require("./bailian.cjs");
 const { organize: organizeBailian } = require("./bailian-organizer.cjs");
 const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
-const { AppActionStore } = require("./app-actions.cjs");
+const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
+const { CompanionMemoryStore } = require("./companion-memory.cjs");
+const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
+const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
+const { completeConfigWrite } = require("./config-readback.cjs");
+const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
+const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capture.cjs");
+const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
+const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
+const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
-const PASTE_SCRIPT = "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -28,19 +37,62 @@ let overlayWindow;
 let tray;
 let inputBridge;
 let shortcut = DEFAULT_SHORTCUT;
+let editShortcutRegistered = false;
 let voiceSessionRecording = false;
+let activeVoiceWorkflow = "input";
+let voiceEditContext = null;
 let voiceTargetWindow = null;
 let voiceTargetCaptureToken = 0;
 let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
+let aiServiceStore;
+let companionMemoryStore;
 let appActionStore;
+let hostActionExecutor;
 let isQuitting = false;
+let keyboardConfigState = { raw: null, fingerprint: "", source: 2, token: null };
 let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
+let pendingEditShortcutTimer = null;
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
+
+function loadTextModelSecret() {
+  if (aiServiceStore?.status().text.configured) return aiServiceStore.loadTextSecret();
+  return { ...bailianStore.loadSecret(), provider: "bailian" };
+}
+
+function configFingerprint(value) {
+  return stableConfigFingerprint(value);
+}
+
+function sanitizeKeyboardConfig(value) {
+  return stableSanitizeKeyboardConfig(value, (id) => appActionStore?.describe(id));
+}
+
+function mergeKeyboardPatch(raw, patch) {
+  return strictMergeKeyboardPatch(raw, patch);
+  /* if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("配置修改格式无效");
+  const merged = structuredClone(raw); const profile = Array.isArray(merged.profiles) && merged.profiles[0];
+  if (!profile || typeof profile !== "object") throw new Error("配置缺少默认 Profile");
+  if (patch.encoder && typeof patch.encoder === "object") {
+    profile.encoder = profile.encoder || {}; profile.encoder.scroll = profile.encoder.scroll || {};
+    const e = patch.encoder;
+    for (const [source, target] of [["mode", "mode"], ["axis", "axis"], ["speed", "speed"], ["reverseVertical", "windows_reverse_vertical"], ["reverseHorizontal", "windows_reverse_horizontal"]]) if (e[source] !== undefined) profile.encoder.scroll[target] = e[source];
+    if (e.press !== undefined) profile.encoder.press = typeof e.press === "string" ? e.press : e.press?.action || "disabled";
+  }
+  if (Array.isArray(patch.keymap)) {
+    profile.keys = profile.keys || {};
+    for (let index = 0; index < Math.min(8, patch.keymap.length); index += 1) {
+      const item = patch.keymap[index]; if (!item || typeof item !== "object") continue; const action = item.action;
+      if (["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled"].includes(action)) profile.keys[`KEY${index + 1}`] = { ...(profile.keys[`KEY${index + 1}`] || {}), press: ({ "voice-input": "voice_ptt_hold", "voice-edit": "edit_ptt_hold", "select-all": "select_all", copy: "copy", paste: "paste", undo: "undo", disabled: "disabled" })[action] };
+      else if (action === "enter" || action === "backspace" || action === "hotkey") profile.keys[`KEY${index + 1}`] = { ...(profile.keys[`KEY${index + 1}`] || {}), press: { hotkey: action === "enter" ? "Return" : action === "backspace" ? "Backspace" : String(item.shortcut || "") } };
+    }
+  }
+  return merged; */
+}
 const smokeMode = process.argv.includes("--deskmate-smoke-test");
 const bailianTestAudio = process.argv.find((value) => value.startsWith("--bailian-test-audio="))?.slice("--bailian-test-audio=".length) || "";
 const bailianTestOrganizer = process.argv.find((value) => value.startsWith("--bailian-test-organizer="))?.slice("--bailian-test-organizer=".length) || "";
@@ -103,9 +155,9 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
-function runPowershell(script, timeoutMs = 3000) {
+function runPowershell(script, timeoutMs = 3000, environment = {}) {
   return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true });
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, env: { ...process.env, ...environment } });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -123,43 +175,125 @@ async function getForegroundWindowId() {
   return result.ok && /^\d+$/.test(result.value) ? result.value : null;
 }
 
+function snapshotSystemClipboard() {
+  return {
+    text: clipboard.readText(),
+    html: clipboard.readHTML(),
+    rtf: clipboard.readRTF(),
+    bookmark: clipboard.readBookmark(),
+    image: clipboard.readImage(),
+  };
+}
+
+function restoreSystemClipboard(snapshot = {}) {
+  clipboard.write({
+    text: String(snapshot.text || ""),
+    html: String(snapshot.html || ""),
+    rtf: String(snapshot.rtf || ""),
+    bookmark: String(snapshot.bookmark || ""),
+    image: snapshot.image,
+  });
+}
+
+async function captureVoiceEditSelection(targetWindow) {
+  return captureSelectedText({
+    targetWindow,
+    readClipboardText: () => clipboard.readText(),
+    writeClipboardText: (value) => clipboard.writeText(value),
+    snapshotClipboard: snapshotSystemClipboard,
+    restoreClipboard: restoreSystemClipboard,
+    runCopy: (expectedWindow) => runPowershell(COPY_SELECTION_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
+    marker: `deskmate-selection-${randomUUID()}`,
+  });
+}
+
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
-async function emitVoiceToggle(source = "global-shortcut", label = shortcut) {
+async function emitVoiceToggle(source = "global-shortcut", label = shortcut, requestedWorkflow = "input") {
   const now = Date.now();
   if (now - lastVoiceToggleAt < 350) return { ignored: true, reason: "duplicate-trigger" };
   lastVoiceToggleAt = now;
   const phase = voiceSessionRecording ? "stop" : "start";
+  const workflow = phase === "stop" ? activeVoiceWorkflow : requestedWorkflow === "edit" ? "edit" : "input";
   if (phase === "start") {
     const captureToken = ++voiceTargetCaptureToken;
     voiceTargetWindow = null;
-    voiceTargetCapturePromise = getForegroundWindowId().then((windowId) => {
-      if (captureToken === voiceTargetCaptureToken) voiceTargetWindow = windowId;
-      return windowId;
-    }).catch(() => null);
+    voiceEditContext = null;
+    if (workflow === "edit") {
+      updateVoiceState({ state: "organizing", message: "正在读取选中文字…", floating: lastVoiceState.floating });
+      const windowId = await getForegroundWindowId().catch(() => null);
+      if (!windowId || captureToken !== voiceTargetCaptureToken) {
+        sendToMain("voice-edit-error", { source, reason: "no-captured-target", at: new Date().toISOString() });
+        updateVoiceState({ state: "error", message: "未能锁定原输入窗口", floating: lastVoiceState.floating });
+        return { ignored: true, reason: "no-captured-target" };
+      }
+      const selection = await captureVoiceEditSelection(windowId);
+      if (!selection.ok || captureToken !== voiceTargetCaptureToken) {
+        sendToMain("voice-edit-error", { source, reason: selection.reason || "selection-capture-failed", at: new Date().toISOString() });
+        const message = selection.reason === "selection-empty" ? "没有检测到选中文字" : selection.reason === "selection-too-long" ? "选中文字过长" : selection.reason === "target-window-changed" ? "原输入窗口已经变化" : "未能读取选中文字";
+        updateVoiceState({ state: "error", message, floating: lastVoiceState.floating });
+        return { ignored: true, reason: selection.reason || "selection-capture-failed" };
+      }
+      voiceTargetWindow = windowId;
+      voiceTargetCapturePromise = Promise.resolve(windowId);
+      voiceEditContext = { selectedText: selection.text, capturedAt: Date.now() };
+    } else {
+      voiceTargetCapturePromise = getForegroundWindowId().then((windowId) => {
+        if (captureToken === voiceTargetCaptureToken) voiceTargetWindow = windowId;
+        return windowId;
+      }).catch(() => null);
+    }
+    activeVoiceWorkflow = workflow;
   }
   voiceSessionRecording = phase === "start";
   const at = new Date().toISOString();
-  const payload = { source, shortcut: label, phase, targetCaptured: Boolean(voiceTargetWindow), at };
+  const payload = { source, shortcut: label, phase, workflow, targetCaptured: Boolean(voiceTargetWindow), selectionCaptured: workflow === "edit" ? Boolean(voiceEditContext?.selectedText) : undefined, at };
   sendToMain("key-diagnostic", { source, key: label, action: "release", at });
   sendToMain("voice-toggle", payload);
   return payload;
 }
 
 function emitVoiceCancel(source = "keyboard") {
+  if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ignored: true, reason: "voice-idle" };
   voiceSessionRecording = false;
   voiceTargetCaptureToken += 1;
   voiceTargetWindow = null;
+  voiceEditContext = null;
+  activeVoiceWorkflow = "input";
   voiceTargetCapturePromise = Promise.resolve(null);
   sendToMain("voice-cancel", { source, at: new Date().toISOString() });
+  return { cancelled: true };
+}
+
+function cancelPendingEditShortcut() {
+  if (!pendingEditShortcutTimer) return;
+  clearTimeout(pendingEditShortcutTimer);
+  pendingEditShortcutTimer = null;
+}
+
+function scheduleEditShortcutFallback() {
+  cancelPendingEditShortcut();
+  const bridgeAvailable = Boolean(inputBridge?.snapshot?.().available);
+  pendingEditShortcutTimer = setTimeout(() => {
+    pendingEditShortcutTimer = null;
+    void emitVoiceToggle("voice-edit-shortcut", DEFAULT_EDIT_SHORTCUT, "edit");
+  }, bridgeAvailable ? 1200 : 180);
+}
+
+function registerEditShortcut() {
+  if (globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT)) { editShortcutRegistered = true; return { registered: true, shortcut: DEFAULT_EDIT_SHORTCUT }; }
+  try { editShortcutRegistered = globalShortcut.register(DEFAULT_EDIT_SHORTCUT, scheduleEditShortcutFallback); }
+  catch (error) { editShortcutRegistered = false; return { registered: false, shortcut: DEFAULT_EDIT_SHORTCUT, reason: error.message }; }
+  return { registered: editShortcutRegistered, shortcut: DEFAULT_EDIT_SHORTCUT, reason: editShortcutRegistered ? undefined : "shortcut-unavailable" };
 }
 
 function registerShortcut(nextShortcut = shortcut) {
   let candidate;
   try { candidate = normalizeShortcut(nextShortcut || DEFAULT_SHORTCUT); }
   catch (error) { return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: error.message }; }
+  if (candidate === DEFAULT_EDIT_SHORTCUT) return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: `${DEFAULT_EDIT_SHORTCUT} 已保留给语音编辑` };
   if (candidate === shortcut && globalShortcut.isRegistered(shortcut)) return { registered: true, shortcut };
   let registered = false;
   try { registered = globalShortcut.register(candidate, () => { void emitVoiceToggle("fallback-shortcut", candidate); }); }
@@ -176,29 +310,31 @@ function setShortcutCapture(active) {
   shortcutCaptureActive = Boolean(active);
   if (shortcutCaptureActive) {
     if (globalShortcut.isRegistered(shortcut)) globalShortcut.unregister(shortcut);
+    if (globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT)) globalShortcut.unregister(DEFAULT_EDIT_SHORTCUT);
+    editShortcutRegistered = false;
     return { ok: true, active: true, shortcut };
   }
-  if (globalShortcut.isRegistered(shortcut)) return { ok: true, active: false, shortcut };
-  const result = registerShortcut(shortcut);
-  return { ok: Boolean(result.registered), active: false, shortcut: result.shortcut, reason: result.reason };
+  const result = globalShortcut.isRegistered(shortcut) ? { registered: true, shortcut } : registerShortcut(shortcut);
+  const editResult = registerEditShortcut();
+  return { ok: Boolean(result.registered), active: false, shortcut: result.shortcut, editShortcutRegistered: Boolean(editResult.registered), reason: result.reason };
 }
 
 async function pasteIntoCapturedWindow(text) {
-  const value = String(text || "");
-  if (!value || value.length > 100000) return { ok: false, reason: "invalid-text" };
   if (!voiceTargetWindow) await voiceTargetCapturePromise;
-  if (!voiceTargetWindow) return { ok: false, reason: "no-captured-target" };
-  const currentWindow = await getForegroundWindowId();
-  if (!currentWindow || currentWindow !== voiceTargetWindow) return { ok: false, reason: "target-window-changed" };
-  clipboard.writeText(value);
-  const result = await runPowershell(PASTE_SCRIPT);
+  const targetWindow = voiceTargetWindow;
+  const result = await pasteToCapturedWindow({
+    text,
+    targetWindow,
+    writeClipboard: (value) => clipboard.writeText(value),
+    runPaste: (expectedWindow) => runPowershell(PASTE_CAPTURED_WINDOW_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
+  });
   if (result.ok) voiceTargetWindow = null;
-  return result.ok ? { ok: true, mode: "active-window" } : result;
+  return result;
 }
 
 function createOverlayWindow() {
   overlayWindow = new BrowserWindow({
-    width: 520,
+    width: 320,
     height: 58,
     frame: false,
     transparent: true,
@@ -212,7 +348,7 @@ function createOverlayWindow() {
   });
   overlayWindow.setAlwaysOnTop(true, "floating");
   overlayWindow.setIgnoreMouseEvents(true);
-  const html = "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent;font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#f7fbff;overflow:hidden}.shell{box-sizing:border-box;height:46px;margin:6px;padding:0 10px 0 12px;border:1px solid rgba(102,205,238,.38);border-radius:14px;background:rgba(22,31,44,.84);box-shadow:0 8px 22px rgba(8,20,36,.18);backdrop-filter:blur(16px);display:flex;align-items:center;gap:10px}.state-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:#44c7eb;box-shadow:0 0 0 3px rgba(68,199,235,.12)}.recording .state-dot{animation:pulse 1.2s ease-out infinite}.error .state-dot{background:#ff7b83}.completed .state-dot{background:#5bd5ae}.wave{width:62px;height:22px;display:flex;align-items:center;justify-content:center;gap:2px;flex:0 0 auto}.wave i{display:block;width:2px;height:var(--h);border-radius:2px;background:#58d4ee;opacity:.9;transition:height .12s ease}.copy{min-width:0;flex:1;color:#fff;font-size:12px;white-space:nowrap;overflow:hidden}.copy.placeholder{color:#9babbc}.copy .lead{color:#8ea1b5}.meter{width:42px;text-align:right;color:#65d7ef;font-size:11px;font-variant-numeric:tabular-nums}.escape{height:22px;padding-left:8px;border-left:1px solid rgba(255,255,255,.11);display:flex;align-items:center;color:#8fa1b3;font-size:9px;white-space:nowrap}@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(68,199,235,0)}100%{box-shadow:0 0 0 0 rgba(68,199,235,0)}}</style></head><body><div id='root'></div></body></html>";
+  const html = "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent;font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#f7fbff;overflow:hidden}.shell{box-sizing:border-box;height:46px;margin:6px;padding:0 9px 0 11px;border:1px solid rgba(102,205,238,.38);border-radius:14px;background:rgba(22,31,44,.84);box-shadow:0 8px 22px rgba(8,20,36,.18);backdrop-filter:blur(16px);display:flex;align-items:center;gap:7px}.state-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:#44c7eb;box-shadow:0 0 0 3px rgba(68,199,235,.12)}.recording .state-dot{animation:pulse 1.2s ease-out infinite}.error .state-dot{background:#ff7b83}.completed .state-dot{background:#5bd5ae}.wave{width:48px;height:22px;display:flex;align-items:center;justify-content:center;gap:1px;flex:0 0 auto}.wave i{display:block;width:2px;height:var(--h);border-radius:2px;background:#58d4ee;opacity:.9;transition:height .12s ease}.copy{min-width:0;flex:1;color:#fff;font-size:11px;white-space:nowrap;overflow:hidden}.copy.placeholder{color:#9babbc}.copy .lead{color:#8ea1b5}.meter{width:34px;text-align:right;color:#65d7ef;font-size:10px;font-variant-numeric:tabular-nums}.escape{height:22px;padding-left:7px;border-left:1px solid rgba(255,255,255,.11);display:flex;align-items:center;color:#8fa1b3;font-size:8px;white-space:nowrap}@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(68,199,235,0)}100%{box-shadow:0 0 0 0 rgba(68,199,235,0)}}</style></head><body><div id='root'></div></body></html>";
   overlayWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
@@ -306,11 +442,23 @@ function startInputBridge() {
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => sendToMain("input-bridge-status", value));
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
-  inputBridge.on("trigger", (event) => { sendToMain("key-diagnostic", event); void emitVoiceToggle(event.source, event.key); });
+  inputBridge.on("trigger", (event) => {
+    sendToMain("key-diagnostic", event);
+    if (event.key === "VoiceEdit") cancelPendingEditShortcut();
+    void emitVoiceToggle(event.source, event.key, event.key === "VoiceEdit" ? "edit" : "input");
+  });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
-    const result = await appActionStore.execute(event.hostActionId);
-    sendToMain("host-action-result", { ...result, at: new Date().toISOString() });
+    const result = await hostActionExecutor.execute(event.hostActionId);
+    sendToMain("host-action-result", { kind: "open-app", ...result, at: new Date().toISOString() });
+  });
+  inputBridge.on("fixed-text", async (event) => {
+    const blockedWindowHandles = [mainWindow, overlayWindow].filter(Boolean).map((window) => {
+      const value = window.getNativeWindowHandle();
+      return (value.length >= 8 ? value.readBigUInt64LE(0) : BigInt(value.readUInt32LE(0))).toString();
+    });
+    const result = await inputBridge.injectFixedText(event.requestId, { blockedProcessId: process.pid, blockedWindowHandles });
+    sendToMain("host-action-result", { kind: "fixed-text", ...result, at: new Date().toISOString() });
   });
   inputBridge.start();
 }
@@ -372,14 +520,17 @@ async function runBailianOrganizerTest(text) {
 app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
+  aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
+  companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
+  hostActionExecutor = new HostActionExecutor({ store: appActionStore });
   if (bailianTestAudio) { await runBailianConnectionTest(bailianTestAudio); return; }
   if (bailianTestOrganizer) { await runBailianOrganizerTest(bailianTestOrganizer); return; }
   createWindow();
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => ({ supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: false, reason: "full-config-merge-required", transport: "vendor-hid-0x10" }, inputBridge: inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false } }));
+  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
@@ -387,11 +538,41 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
   handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
-  handleTrusted("desktop:sync-keyboard-config", () => ({
-    ok: false,
-    reason: "full-config-merge-required",
-    message: "需要先读取并合并键盘现有的网络、音频和按键配置；本次已阻止覆盖写入。",
-  }));
+  handleTrusted("desktop:sync-keyboard-config", () => ({ ok: false, reason: "config-write-requires-preview-and-confirmation" }));
+  handleTrusted("desktop:read-keyboard-config", async () => {
+    const result = await inputBridge?.readConfig?.() || { ok: false, reason: "input-bridge-unavailable" };
+    if (!result.ok) return result;
+    let raw; try { raw = JSON.parse(result.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (raw.schema !== "ai_keyboard.v1") return { ok: false, reason: "config-schema-invalid" };
+    keyboardConfigState = { raw, fingerprint: configFingerprint(raw), source: result.source, token: null };
+    return { ok: true, config: sanitizeKeyboardConfig(raw), source: result.source, fingerprint: keyboardConfigState.fingerprint };
+  });
+  handleTrusted("desktop:preview-keyboard-config-patch", async (patch) => {
+    const fresh = await inputBridge?.readConfig?.();
+    if (!fresh?.ok) return { ok: false, reason: "config-device-disconnected" };
+    let current; try { current = JSON.parse(fresh.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (current.schema !== "ai_keyboard.v1") return { ok: false, reason: "config-schema-invalid" };
+    keyboardConfigState = { raw: current, fingerprint: configFingerprint(current), source: fresh.source, token: null };
+    let merged; try { merged = mergeKeyboardPatch(current, patch); } catch (error) { return { ok: false, reason: error.message }; }
+    const capabilityGate = checkHostCapabilities(merged, inputBridge?.snapshot()?.configCapabilities);
+    if (!capabilityGate.ok) return capabilityGate;
+    const token = randomUUID(); keyboardConfigState.token = { value: token, expires: Date.now() + 60000, fingerprint: keyboardConfigState.fingerprint, merged };
+    return { ok: true, token, expiresInMs: 60000, fingerprint: keyboardConfigState.fingerprint, config: sanitizeKeyboardConfig(merged), diff: sanitizedDiff(current, merged, (id) => appActionStore?.describe(id)) };
+  });
+  handleTrusted("desktop:commit-keyboard-config", async (token) => {
+    const pending = keyboardConfigState.token;
+    if (!pending || token !== pending.value || Date.now() > pending.expires) return { ok: false, reason: "config-confirmation-expired" };
+    keyboardConfigState.token = null;
+    const fresh = await inputBridge?.readConfig?.(); if (!fresh?.ok) return { ok: false, reason: "config-device-disconnected" };
+    let current; try { current = JSON.parse(fresh.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
+    if (configFingerprint(current) !== pending.fingerprint) return { ok: false, reason: "config-changed-concurrently" };
+    const capabilityGate = checkHostCapabilities(pending.merged, inputBridge?.snapshot()?.configCapabilities);
+    if (!capabilityGate.ok) return capabilityGate;
+    const verified = await completeConfigWrite({ syncConfig: (value) => inputBridge.syncConfig(value), readConfig: () => inputBridge.readConfig(), expectedConfig: pending.merged, fingerprint: configFingerprint });
+    if (!verified.ok) return verified;
+    keyboardConfigState = { raw: verified.config, fingerprint: verified.fingerprint, source: verified.source, token: null };
+    return { ok: true, saved: true, source: verified.source, fingerprint: verified.fingerprint, verificationAttempts: verified.attempts };
+  });
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
   handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));
@@ -401,6 +582,14 @@ app.whenReady().then(async () => {
   handleTrusted("bailian:get-status", () => bailianStore.status());
   handleTrusted("bailian:save-credentials", (value) => bailianStore.save(value || {}));
   handleTrusted("bailian:clear-credentials", () => bailianStore.clear());
+  handleTrusted("ai-services:get-status", () => aiServiceStore.status());
+  handleTrusted("ai-services:save-text", (value) => aiServiceStore.saveText(value || {}));
+  handleTrusted("ai-services:clear-text", () => aiServiceStore.clearText());
+  handleTrusted("ai-services:save-realtime", (value) => aiServiceStore.saveRealtime(value || {}));
+  handleTrusted("ai-services:clear-realtime", () => aiServiceStore.clearRealtime());
+  handleTrusted("memory:get-status", () => companionMemoryStore.status());
+  handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
+  handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
   handleTrusted("bailian:transcribe", async (value = {}) => {
     const secret = bailianStore.loadSecret();
     const audio = value.audio instanceof ArrayBuffer ? Buffer.from(value.audio) : Buffer.from(value.audio || []);
@@ -412,14 +601,13 @@ app.whenReady().then(async () => {
   });
   handleTrusted("bailian:cancel", (requestId) => { const controller = activeBailianRequests.get(String(requestId || "")); if (!controller) return { ok: false, reason: "request-not-active" }; controller.abort(); return { ok: true }; });
   handleTrusted("bailian:organize", async (value = {}) => {
-    const secret = bailianStore.loadSecret();
+    const secret = loadTextModelSecret();
     const requestId = typeof value.requestId === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(value.requestId) ? value.requestId : `organizer-${Date.now()}`;
     const controller = new AbortController();
     activeBailianOrganizers.set(requestId, controller);
     try {
       return await organizeBailian({
         ...secret,
-        model: "qwen3.7-flash",
         text: value.text,
         mode: value.mode,
         hotwords: value.hotwords,
@@ -428,6 +616,18 @@ app.whenReady().then(async () => {
         signal: controller.signal,
       });
     } finally { activeBailianOrganizers.delete(requestId); }
+  });
+  handleTrusted("bailian:edit-selected-text", async (value = {}) => {
+    const context = voiceEditContext;
+    voiceEditContext = null;
+    if (!context?.selectedText) throw new Error("没有可用的选中文字，请重新选择后按语音编辑键");
+    if (Date.now() - context.capturedAt > 10 * 60 * 1000) throw new Error("选中文字已过期，请重新选择后再试");
+    const secret = loadTextModelSecret();
+    const requestId = typeof value.requestId === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(value.requestId) ? value.requestId : `voice-edit-${Date.now()}`;
+    const controller = new AbortController();
+    activeBailianOrganizers.set(requestId, controller);
+    try { return await editSelectedTextWithBailian({ ...secret, selectedText: context.selectedText, instruction: value.instruction, signal: controller.signal }); }
+    finally { activeBailianOrganizers.delete(requestId); }
   });
   handleTrusted("bailian:cancel-organize", (requestId) => { const controller = activeBailianOrganizers.get(String(requestId || "")); if (!controller) return { ok: false, reason: "request-not-active" }; controller.abort(); return { ok: true }; });
   handleTrusted("bailian:realtime-start", async () => {
@@ -457,11 +657,12 @@ app.whenReady().then(async () => {
     realtime.cancel(); activeRealtimeSessions.delete(key); return { ok: true };
   });
   registerShortcut(DEFAULT_SHORTCUT);
+  registerEditShortcut();
   startInputBridge();
   app.on("activate", () => showMain());
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; inputBridge?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

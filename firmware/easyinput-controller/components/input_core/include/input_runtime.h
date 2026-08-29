@@ -7,6 +7,8 @@
 
 #include "hid_report.h"
 #include "input_core.h"
+#include "config_core.h"
+#include "host_action_core.h"
 
 namespace deskmate::easyinput {
 
@@ -43,7 +45,7 @@ struct UsbLifecycleEvent {
     uint32_t epoch{0};
     uint8_t report_id{0};
     uint8_t length{0};
-    std::array<uint8_t, 8> payload{};
+    std::array<uint8_t, 63> payload{};
     bool report_identity_valid{false};
 };
 
@@ -82,6 +84,7 @@ struct RuntimeDiagnosticsSnapshot {
     uint32_t encoder_resyncs{0};
     uint32_t usb_mount_epoch{0};
     uint32_t usb_lifecycle_drops{0};
+    uint32_t host_command_drops{0};
 };
 
 struct UsbCallbackSnapshot {
@@ -152,14 +155,19 @@ struct RoutedAction {
     KeyboardSnapshot keyboard_restore{};
     bool wheel_changed{false};
     MouseWheelSnapshot wheel{};
+    HostCommandKind host_command_kind{HostCommandKind::None};
+    std::string host_command_value{};
 };
 
 class InputActionRouter {
 public:
     struct Chord { HidUsage usage; uint8_t modifiers; };
     RoutedAction apply(const InputEvent& event);
+    void set_configuration(const ConfigProjection& projection);
     RoutedAction apply_key_source(InputSourceId source, bool pressed, Chord chord);
     RoutedAction apply_tap_source(InputSourceId source, bool pressed, Chord chord);
+    RoutedAction apply_command_source(InputSourceId source, bool pressed,
+                                      const ConfigAction& action);
     void release_all();
     KeyboardSnapshot keyboard() const;
     ScrollAxis axis() const { return axis_; }
@@ -167,7 +175,20 @@ public:
 private:
     struct OwnedChord { bool held{false}; Chord chord{HidUsage::None, 0}; };
     std::array<OwnedChord, 8> owned_{};
-    std::array<bool, 8> tap_pressed_{};
+    std::array<bool, 9> tap_pressed_{};
+    std::array<Chord, 8> configured_chords_{};
+    std::array<bool, 8> configured_hold_{};
+    std::array<ConfigAction, 8> configured_actions_{};
+    ConfigAction encoder_press_action_{};
+    Chord encoder_press_chord_{HidUsage::None, 0};
+    ConfigActionKind encoder_press_kind_{ConfigActionKind::EncoderAxisToggle};
+    bool encoder_enabled_{true};
+    bool encoder_cursor_{false};
+    bool text_caret_select_{false};
+    bool reverse_vertical_{false};
+    bool reverse_horizontal_{false};
+    uint8_t encoder_speed_{3};
+    bool configured_{false};
     ScrollAxis axis_{ScrollAxis::Vertical};
     KeyboardSnapshot compose() const;
     static bool compose_tap(const KeyboardSnapshot& held, Chord chord,
@@ -193,8 +214,37 @@ struct HidReportTransferState {
     }
 };
 
+// Configuration responses use the same HID input endpoint but have a
+// different payload length and must not consume the keyboard/mouse queue.
+struct ConfigTransferReport {
+    uint8_t report_id{0};
+    uint8_t length{0};
+    std::array<uint8_t, 63> payload{};
+    uint32_t epoch{0};
+};
+
+struct ConfigTransferState {
+    bool active{false};
+    ConfigTransferReport report{};
+    bool advances_read_stream{false};
+    bool advances_status_stream{false};
+    bool advances_host_command{false};
+    bool completed{false};
+    bool completed_status{false};
+    bool failed{false};
+    void clear() {
+        active = false;
+        report = {};
+        advances_read_stream = false;
+        advances_status_stream = false;
+        advances_host_command = false;
+    }
+    void reset_outcome() { completed = false; completed_status = false; failed = false; }
+};
+
 class UsbInputRuntime {
 public:
+    void set_configuration(const ConfigProjection& projection);
     void on_mount();
     void on_mount(uint32_t epoch);
     void on_unmount();
@@ -216,6 +266,10 @@ public:
     void on_transfer_failed();
     bool front_report(QueuedHidReport& report) const;
     void complete_report();
+    bool front_host_command(
+        std::array<uint8_t, kAppCommandPayloadBytes>& payload) const;
+    void complete_host_command();
+    void fail_host_command();
     bool reject_vendor_feature(uint8_t report_id, const uint8_t* data, size_t length) const;
     RuntimeDiagnosticsSnapshot diagnostics() const { return diagnostics_; }
     bool mounted() const { return mounted_; }
@@ -223,6 +277,7 @@ public:
 
 private:
     InputActionRouter router_;
+    HostCommandStream host_command_stream_;
     RuntimeDiagnosticsSnapshot diagnostics_{};
     std::array<QueuedHidReport, kHidReportQueueCapacity> queue_{};
     std::array<bool, 8> physically_held_{};
@@ -250,6 +305,7 @@ private:
     void enqueue_keyboard_pair(const KeyboardSnapshot& pressed,
                                const KeyboardSnapshot& restored);
     void enqueue_wheel(const MouseWheelSnapshot& snapshot);
+    bool enqueue_host_command(HostCommandKind kind, std::string_view value);
     bool any_held() const;
     void maybe_enqueue_release_report(bool had_snapshot, bool was_held,
                                       bool now_held);
@@ -260,7 +316,8 @@ private:
 UsbLifecycleProcessResult process_usb_lifecycle_events(
     UsbLifecycleEventQueue& events, UsbInputRuntime& runtime,
     HidReportTransferState& transfer,
-    UsbCallbackSnapshot callback);
+    UsbCallbackSnapshot callback,
+    ConfigTransferState* config_transfer = nullptr);
 
 bool prepare_hid_report(UsbInputRuntime& runtime, bool endpoint_ready,
                         const HidReportTransferState& transfer,
