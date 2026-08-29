@@ -6,18 +6,12 @@ import {
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
   IconCircleCheck as CircleCheck,
-  IconCode as Code,
   IconKeyboard as Keyboard,
   IconLayoutDashboard as LayoutDashboard,
   IconMenu2 as Menu2,
+  IconMessageCircle as MessageCircle,
   IconMicrophone2 as Microphone2,
-  IconMoodSmile as MoodSmile,
-  IconPalette as Palette,
-  IconPlugConnected as PlugConnected,
-  IconRotate3d as Rotate3d,
-  IconSettings2 as Settings2,
   IconSparkles as Sparkles,
-  IconTemperature as Temperature,
   IconX as X,
 } from "@tabler/icons-react";
 import { pageMeta } from "./appData.js";
@@ -27,6 +21,7 @@ import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
 import {
   AgentsPage,
+  CompanionPage,
   ConnectionsPage,
   DashboardPage,
   ExpressionEditorPage,
@@ -40,25 +35,19 @@ import {
   VoicePage,
 } from "./pages.jsx";
 
-const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-focus-face.png`;
+const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-face-large-eyes.png`;
 
 const navigation = [
   { id: "dashboard", label: "工作台", icon: LayoutDashboard },
   { id: "voice", label: "语音输入", icon: Microphone2 },
+  { id: "companion", label: "陪伴", icon: MessageCircle },
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
   { id: "keymap", label: "按键配置", icon: Keyboard },
-  { id: "connections", label: "设备连接", icon: PlugConnected },
-  { id: "agents", label: "AI 联动", icon: Code },
-  { id: "expressions", label: "表情库", icon: MoodSmile },
-  { id: "editor", label: "表情编辑", icon: Palette },
-  { id: "motion", label: "动作编排", icon: Rotate3d },
-  { id: "sensors", label: "环境感知", icon: Temperature },
-  { id: "settings", label: "设置诊断", icon: Settings2 },
 ];
 
 function BrandMark() {
-  return <span className="brand-mark"><MoodSmile size={23} stroke={1.8} /></span>;
+  return <span className="brand-mark"><img src={DEVICE_FACE_URL} alt="" /></span>;
 }
 
 function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, boardConnected }) {
@@ -104,7 +93,7 @@ function AppHeader({ current, setMobileOpen }) {
       <div className="breadcrumbs"><strong>DESKMATE</strong><span>/</span><span>{meta.title}</span></div>
       <div className="app-header__right">
         <span className="service-status"><i />本地核心已运行</span>
-        <span className="app-date">8月20日 · 周四</span>
+        <span className="app-date">8月29日 · 周六</span>
         <button className="header-icon" aria-label="通知"><Bell size={19} stroke={1.7} /><i /></button>
       </div>
     </header>
@@ -114,6 +103,7 @@ function AppHeader({ current, setMobileOpen }) {
 const pages = {
   dashboard: DashboardPage,
   voice: VoicePage,
+  companion: CompanionPage,
   history: HistoryPage,
   vocabulary: VocabularyPage,
   keymap: KeymapPage,

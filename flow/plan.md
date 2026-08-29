@@ -11,6 +11,7 @@
 - 当前开放 T06：从 T05 最终交接提交创建 `codex/easyinput-t06-host-actions`，先读取任务卡、冻结/核对 Host Action 合同，再实现固定文字和安全打开应用闭环；不得提前开发 BLE、音频、DeskMate Link 或小智。
 - 用户已明确授权与 T06 并行启动受限的 T07A：仅实现 Windows 纯领域层 `ForegroundSessionArbiter` 与 host test，合同为 `FOREGROUND_SESSION_V1_FROZEN`；不得修改 T06 路径、既有 VoiceWorkflow、Electron/React 集成、Host Action、任何硬件或 DeskMate Link。T07B 记忆持久化仍为 `NOT_FROZEN`，等待独立合同。
 - T07A 已作为独立分支实现并通过 host/full regression；T07B1 的 `MEMORY_OUTBOX_V1_FROZEN` 纯领域队列也已实现并通过定向、全量和桌面构建验证。数据库、加密、提醒、embedding、Wiki 运行时写入和现有 VoiceWorkflow/UI 集成仍属于后续未冻结切片。
+- T07C 已实现软件端陪伴外壳：左栏冻结为工作台、语音输入、陪伴、历史记录、词库、按键配置六个高频入口；设备、AI 联动、表情/动作、环境、设置与诊断保留原页面并收敛到陪伴页管理入口。陪伴聆听、提醒、记忆和小智动作当前均明确标为软件预览/待接入，不改变 T06、VoiceWorkflow、持久化或硬件合同。
 - T03 已完成五次真机断线矩阵并由原主电脑完成独立代码、Host、IDF 和桌面组合审计：最终 atomic tap 镜像在正常断电重启后均得到 `123abc`，未出现全选或残留 Ctrl。S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获继续保留通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。T03 状态为 `T03_LOCKED`。
 - T03 的历史失败候选和验证过程保留在 `flow/progress.md` 与 `docs/handoffs/`；最终 atomic tap 提交已推送并完成授权 app-only 烧录及五次断线 HIL。旧候选只作为审计历史，不代表当前状态。
 

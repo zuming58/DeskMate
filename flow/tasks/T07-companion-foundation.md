@@ -1,6 +1,6 @@
 # T07 - Companion desktop foundation
 
-Status: `T07A_IMPLEMENTED / T07B1_IMPLEMENTED / T07B2_NOT_FROZEN`
+Status: `T07A_IMPLEMENTED / T07B1_IMPLEMENTED / T07C_IMPLEMENTED / T07B2_NOT_FROZEN`
 
 ## Why this package can run in parallel with T06
 
@@ -47,6 +47,23 @@ Forbidden paths and behavior:
 Status: `NOT_FROZEN`.
 
 Before code, separately freeze the persistence engine, reminder confirmation, deletion/retention, encryption, embedding-provider and optional Wiki-mirror contracts. No current task authorizes a database migration, embedding provider, cloud request, or a runtime write to `F:\wiki\deskmate-memory`.
+
+## T07C: Companion desktop shell
+
+Status: `IMPLEMENTED`.
+
+T07C adds a software-only Companion surface without opening any unfrozen audio, memory, reminder, Host Action or hardware contract. The permanent left navigation contains exactly six daily workflows: Workbench, Voice, Companion, History, Vocabulary and Key mapping. Existing low-frequency pages remain available through the Companion management hub rather than occupying the sidebar.
+
+The Companion page provides an honest UI preview for listening, reminders, memory candidates, expressions and device management. Preview controls only update local React state/store presentation; they do not capture audio, persist memory, schedule reminders, execute Host Actions, write serial/HID, or claim Xiaozhi connectivity. The shared software identity uses the selected large-eye cyan face asset. The current fixed Xiaozhi reference remains a 128×64 one-bit SSD1306 display, so the eventual physical display mapping is black background with white eyes until real-board evidence proves otherwise.
+
+Allowed scope:
+
+- `src/App.jsx`, `src/appData.js`, `src/pages.jsx`, `src/styles.css`
+- the selected face asset, UI source tests, design QA and tightly related documentation/progress records
+
+Explicitly excluded:
+
+- Existing `VoiceWorkflow`, Electron IPC, T06 input bridge/Host Action behavior, durable memory, reminders, embeddings, Wiki writes, DeskMate Link, firmware, hardware access, OLED writes and servo motion
 
 ## Handoff requirement
 

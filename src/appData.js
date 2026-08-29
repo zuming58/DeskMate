@@ -1,6 +1,7 @@
 export const pageMeta = {
   dashboard: { title: "工作台", subtitle: "查看桌宠状态、AI 任务进度与设备运行情况" },
   voice: { title: "语音输入", subtitle: "专注录音、实时转写与智能整理" },
+  companion: { title: "陪伴", subtitle: "陪你对话、记录重要事项并统一管理桌宠能力" },
   history: { title: "历史记录", subtitle: "管理、搜索和导出最近的语音输入" },
   vocabulary: { title: "词库", subtitle: "提高专有名词识别率并自动修正常见表达" },
   keymap: { title: "按键配置", subtitle: "配置键盘按键、旋钮和快捷动作" },

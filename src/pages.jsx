@@ -26,10 +26,6 @@ import {
   IconLink as Link,
   IconLock as Lock,
   IconMicrophone2 as Microphone2,
-  IconMoodHappy as MoodHappy,
-  IconMoodNerd as MoodNerd,
-  IconMoodSmile as MoodSmile,
-  IconMoon as Moon,
   IconMusic as Music,
   IconPlayerPause as PlayerPause,
   IconPlayerPlay as PlayerPlay,
@@ -77,15 +73,6 @@ import {
   StatusBadge,
   Toggle,
 } from "./ui.jsx";
-
-const moodIcons = {
-  focus: MoodNerd,
-  listen: MoodSmile,
-  think: Brain,
-  happy: MoodHappy,
-  sleep: Moon,
-  alert: AlertCircle,
-};
 
 function ShortcutRecorder({ value, onConfirm, global = false, allowSingle = false }) {
   const [capturing, setCapturing] = useState(false);
@@ -186,16 +173,81 @@ function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
     {current.action === "open-app" && <ApplicationPicker binding={current} onChange={onChange} notify={notify} />}
   </>;
 }
-const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-focus-face.png`;
+const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-face-large-eyes.png`;
 
 function ExpressionTile({ preset, selected, onClick, compact = false }) {
-  const Icon = moodIcons[preset.mood] || MoodSmile;
   return (
     <button className={`expression-tile expression-tile--${preset.color} ${selected ? "is-selected" : ""} ${compact ? "is-compact" : ""}`} onClick={onClick}>
-      <span className="expression-screen"><Icon size={compact ? 28 : 38} stroke={1.6} /></span>
+      <span className="expression-screen"><img src={DEVICE_FACE_URL} alt="" /></span>
       <span><strong>{preset.name}</strong>{!compact && <small>{preset.description}</small>}</span>
       {selected && <span className="expression-check"><Check size={14} /></span>}
     </button>
+  );
+}
+
+export function CompanionPage({ navigate, notify }) {
+  const { state, event } = useAppStore();
+  const [previewListening, setPreviewListening] = useState(false);
+  const expression = state.currentExpression;
+  const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
+  const companionExpressions = expressionPresets.slice(0, 5);
+  const togglePreview = () => {
+    const next = !previewListening;
+    setPreviewListening(next);
+    event({
+      type: next ? "listening" : "idle",
+      agent: "DeskMate Companion",
+      progress: 0,
+      detail: next ? "陪伴界面正在模拟聆听状态" : "陪伴语音与小智控制仍待接入",
+    });
+    notify(next ? "已进入模拟聆听；当前不会采集或上传语音" : "已结束模拟聆听");
+  };
+  const openPending = (label) => notify(`${label}将在后续软件切片接入；当前未写入真实数据`);
+  const hubRows = [
+    { label: "设备连接", detail: boardConnected ? "EasyInput 已连接" : "等待 EasyInput", icon: Link, route: "connections", tone: boardConnected ? "success" : "warning" },
+    { label: "AI 联动", detail: "适配器状态与桌宠映射", icon: Code, route: "agents", tone: "demo" },
+    { label: "环境感知", detail: "模拟数据 · 传感器待接入", icon: Temperature, route: "sensors", tone: "warning" },
+    { label: "应用设置", detail: "输入、外观、账户与隐私", icon: Settings2, route: "settings", tone: "neutral" },
+    { label: "设备诊断", detail: "查看脱敏运行状态", icon: Gauge, route: "settings", tone: "neutral" },
+  ];
+  return (
+    <div className="page page--companion">
+      <PageIntro title="陪伴" description="陪你对话、记录重要事项，并从这里进入桌宠的低频管理功能。" actions={<StatusBadge tone="demo">软件预览</StatusBadge>} />
+      <div className="companion-layout">
+        <Card className="companion-stage">
+          <div className={`companion-stage__face ${previewListening ? "is-listening" : ""}`}><img src={DEVICE_FACE_URL} alt="DeskMate 大眼睛表情" /></div>
+          <div className="companion-stage__copy">
+            <span className="blue-kicker">DESKMATE COMPANION</span>
+            <h2>{previewListening ? "我在模拟聆听…" : "你好，我在这里"}</h2>
+            <p>{previewListening ? "这是界面状态预览，不会启动麦克风或云端会话。" : "实时陪伴语音、长期记忆和小智动作将在后续切片逐项接入。"}</p>
+          </div>
+          <Button icon={Microphone2} variant="primary" className="companion-talk" onClick={togglePreview}>{previewListening ? "结束模拟聆听" : "预览陪伴聆听"}</Button>
+          <div className="companion-readiness">
+            <span><Microphone2 size={18} /><strong>语音通道</strong><small>待接入</small></span>
+            <span><Sparkles size={18} /><strong>小智云台</strong><small>待接入</small></span>
+            <span><Gauge size={18} /><strong>当前状态</strong><small>{boardConnected ? "EasyInput 已连接" : "软件模拟"}</small></span>
+          </div>
+        </Card>
+
+        <div className="companion-side">
+          <Card className="companion-panel companion-memory">
+            <div className="card-heading"><div><strong>陪伴与记忆</strong><small>REMINDER · MEMORY</small></div><button className="text-link" onClick={() => openPending("记忆与提醒中心")}>更多 <ArrowRight size={14} /></button></div>
+            <button className="companion-summary" onClick={() => openPending("提醒编辑")}><span className="setting-row__icon"><AlertCircle size={19} /></span><span><small>下一个提醒 · 示例</small><strong>今天 15:00 · 团队周会</strong><em>提醒调度尚未接入</em></span><ArrowRight size={16} /></button>
+            <button className="companion-summary" onClick={() => openPending("记忆检索")}><span className="setting-row__icon"><History size={19} /></span><span><small>记忆候选 · 示例</small><strong>你偏好简洁直接的方案</strong><em>尚未写入长期记忆</em></span><ArrowRight size={16} /></button>
+          </Card>
+
+          <Card className="companion-panel">
+            <div className="card-heading"><div><strong>表情与动作</strong><small>模拟 · 小智待接入</small></div><button className="text-link" onClick={() => navigate("expressions")}>管理 <ArrowRight size={14} /></button></div>
+            <div className="companion-expression-row">{companionExpressions.map((item) => <ExpressionTile key={item.id} compact preset={item} selected={expression === item.id} onClick={() => event({ type: item.id === "focus" ? "working" : item.id === "listen" ? "listening" : item.id === "think" ? "thinking" : "completed", agent: "DeskMate Companion", progress: 0, detail: "仅更新软件表情预览；未发送到小智" })} />)}</div>
+          </Card>
+
+          <Card className="companion-panel companion-hub">
+            <div className="card-heading"><div><strong>设备、设置与诊断</strong><small>原功能统一入口</small></div><StatusBadge tone="neutral">集中管理</StatusBadge></div>
+            <div className="companion-hub__list">{hubRows.map((item) => <button key={item.label} onClick={() => navigate(item.route)}><item.icon size={18} /><span><strong>{item.label}</strong><small>{item.detail}</small></span><i className={`hub-state hub-state--${item.tone}`} /><ArrowRight size={16} /></button>)}</div>
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -772,7 +824,7 @@ export function ExpressionEditorPage({ notify }) {
     <div className="page">
       <PageIntro title="表情编辑" description="调整眼睛、嘴型、颜色和动画节奏" actions={<><Button icon={Eye} onClick={() => notify("预览已同步到虚拟桌宠")}>实时预览</Button><Button icon={DeviceFloppy} variant="primary" onClick={() => notify("表情“专注 Pro”已保存")}>保存表情</Button></>} />
       <div className="editor-grid">
-        <Card className="editor-preview"><div className="card-heading"><strong>实时预览</strong><StatusBadge tone="demo">虚拟设备</StatusBadge></div><div className={`editor-face editor-face--${color}`} style={{ "--eye-size": `${eyeSize}%`, "--eye-gap": `${eyeGap}px`, opacity: 0.55 + brightness / 220, backgroundImage: `url(${DEVICE_FACE_URL})` }}><MoodNerd size={230} stroke={1.25} /></div><div className="preview-note">硬件屏幕协议接入后，将使用相同参数生成端侧动画。</div></Card>
+        <Card className="editor-preview"><div className="card-heading"><strong>实时预览</strong><StatusBadge tone="demo">虚拟设备</StatusBadge></div><div className={`editor-face editor-face--${color}`} style={{ "--eye-size": `${eyeSize}%`, "--eye-gap": `${eyeGap}px`, opacity: 0.55 + brightness / 220, backgroundImage: `url(${DEVICE_FACE_URL})` }} /><div className="preview-note">当前统一使用 DeskMate 大眼睛软件形象；实机 OLED 映射与参数控制待协议冻结后接入。</div></Card>
         <Card className="editor-controls">
           <SectionTitle index="01" title="眼睛" />
           <SettingRow title="眼睛尺寸" description="控制两只眼睛的整体大小"><Slider label="眼睛尺寸" value={eyeSize} onChange={(value) => updateEditor({ eyeSize: value })} /></SettingRow>

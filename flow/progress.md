@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07C Companion desktop shell implemented with six-entry navigation
+
+- 做了什么：在 `codex/companion-t07c-ui-shell` 上新增“陪伴”一级页面，并按用户确认把左栏固定为工作台、语音输入、陪伴、历史记录、词库、按键配置六项；设备连接、AI 联动、表情/动作、环境感知、应用设置与设备诊断保留既有页面/路由，统一从陪伴页右侧进入。品牌标识、陪伴主视觉、侧栏状态和表情入口统一使用用户选定的第 4 个“大眼睛”形象。
+- 真实能力边界：陪伴聆听按钮只切换本地软件预览，不采集或上传音频；提醒和记忆卡均明确为示例/待接入，不写入真实数据；表情选择只更新软件状态，不发送小智命令。未修改现有 `VoiceWorkflow`、Electron IPC、T06 Host Action/input bridge 行为、记忆持久化、提醒调度、DeskMate Link 或固件。
+- 显示结论：固定参考 `esp32-s3n16r8-emoji` 的 `board_config.h` 与 `emoji_board.cc` 继续证明当前小智为 128×64、1-bit SSD1306 OLED；因此 Windows 软件形象可使用青蓝眼睛，但实机视觉保持黑底白眼，不能据软件效果宣称彩屏已确认。
+- 产出：`src/App.jsx`、`src/appData.js`、`src/pages.jsx`、`src/styles.css`、`public/assets/deskmate-face-large-eyes.png`、`tests/companion-ui-shell.test.mjs`、`design/qa/companion-t07c-*.png`、`design-qa.md`，并同步 `DESIGN.md`、`flow/plan.md`、`flow/tasks/T07-companion-foundation.md` 与 `flow/decisions.md` D028。
+- 验证：`npm test` 92/92 通过（同时完成 Vite 生产构建）；浏览器在 1440×1024 下确认为 6 项导航、双栏约 `711/432 px`、水平溢出 0，日期为 `8月29日 · 周六`；900×800 下单栏且水平溢出 0；陪伴预览切换和管理路由通过，控制台无错误。`npm run build:desktop` 的 input bridge 与 Vite 阶段通过，但 electron-builder 在把新解压目录 `win-unpacked.tmp` 重命名为 `win-unpacked` 时被当前 Windows 环境以 `EPERM` 拒绝；换输出目录复验得到同一环境阻断，因此本轮不能声称桌面目录包完成。
+- 硬件操作：未扫描或访问设备，未读取/写入 Flash/NVS，未烧录、接线、上电、写 OLED 或驱动舵机。
+- 下一步：T07B2 的数据库、加密、提醒、embedding 与 Wiki 镜像仍须分别冻结后实现；陪伴实时语音需在现有 `VoiceWorkflow`/前台会话仲裁器上接适配器。T06 仍由另一台电脑独占 Host Action、应用打开和相关固件/输入桥工作；合并前需检查交叉路径并在硬件电脑重新完成 desktop package。
+
 ## 2026-08-29 · T07B1 Companion memory outbox implemented; navigation consolidation requested
 
 - 做了什么：冻结 `MEMORY_OUTBOX_V1_FROZEN`，实现纯领域 `CompanionMemoryOutbox`，覆盖最终用户/助手回合、已完成工具结果、明确“请记住”请求、稳定事件 ID、幂等入队、冲突拒绝、有界 FIFO claim、worker ownership、release/complete 和启动恢复。流式片段、音频载荷和未知事件均拒绝进入长期记忆候选链。
