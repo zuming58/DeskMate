@@ -2,6 +2,7 @@ node_modules/
 dist/
 build-*/
 release/
+release-*/
 release-phase3b/
 release-phase3b-verify/
 native/**/bin/

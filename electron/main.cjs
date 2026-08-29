@@ -12,8 +12,8 @@ const { transcribe: transcribeBailian } = require("./bailian.cjs");
 const { organize: organizeBailian } = require("./bailian-organizer.cjs");
 const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
-const { AppActionStore } = require("./app-actions.cjs");
-const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff } = require("./config-merge.cjs");
+const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
+const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
@@ -36,6 +36,7 @@ let voiceTargetCaptureToken = 0;
 let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
 let appActionStore;
+let hostActionExecutor;
 let isQuitting = false;
 let keyboardConfigState = { raw: null, fingerprint: "", source: 2, token: null };
 let shortcutCaptureActive = false;
@@ -50,16 +51,7 @@ function configFingerprint(value) {
 }
 
 function sanitizeKeyboardConfig(value) {
-  return stableSanitizeKeyboardConfig(value);
-  /* const profile = Array.isArray(value?.profiles) ? value.profiles[0] : null;
-  const keys = profile?.keys && typeof profile.keys === "object" ? Object.keys(profile.keys).sort().map((key) => {
-    const press = profile.keys[key]?.press;
-    if (typeof press === "string") return { action: press.startsWith("host_action:") ? "open-app" : press };
-    if (press && typeof press === "object" && typeof press.hotkey === "string") return { action: "hotkey", shortcut: press.hotkey };
-    return { action: press && typeof press.text === "string" ? "fixed-text" : "disabled" };
-  }) : [];
-  const scroll = profile?.encoder?.scroll || {};
-  return { keymap: keys, encoder: { mode: scroll.mode === "cursor" ? "cursor" : "scroll", axis: scroll.axis === "horizontal" ? "horizontal" : "vertical", speed: Math.max(1, Math.min(5, Number(scroll.speed) || 3)), reverseVertical: Boolean(scroll.windows_reverse_vertical), reverseHorizontal: Boolean(scroll.windows_reverse_horizontal), press: typeof profile?.encoder?.press === "string" ? { action: profile.encoder.press } : { action: "disabled" } } }; */
+  return stableSanitizeKeyboardConfig(value, (id) => appActionStore?.describe(id));
 }
 
 function mergeKeyboardPatch(raw, patch) {
@@ -351,8 +343,16 @@ function startInputBridge() {
   inputBridge.on("trigger", (event) => { sendToMain("key-diagnostic", event); void emitVoiceToggle(event.source, event.key); });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
-    const result = await appActionStore.execute(event.hostActionId);
-    sendToMain("host-action-result", { ...result, at: new Date().toISOString() });
+    const result = await hostActionExecutor.execute(event.hostActionId);
+    sendToMain("host-action-result", { kind: "open-app", ...result, at: new Date().toISOString() });
+  });
+  inputBridge.on("fixed-text", async (event) => {
+    const blockedWindowHandles = [mainWindow, overlayWindow].filter(Boolean).map((window) => {
+      const value = window.getNativeWindowHandle();
+      return (value.length >= 8 ? value.readBigUInt64LE(0) : BigInt(value.readUInt32LE(0))).toString();
+    });
+    const result = await inputBridge.injectFixedText(event.requestId, { blockedProcessId: process.pid, blockedWindowHandles });
+    sendToMain("host-action-result", { kind: "fixed-text", ...result, at: new Date().toISOString() });
   });
   inputBridge.start();
 }
@@ -415,13 +415,14 @@ app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
+  hostActionExecutor = new HostActionExecutor({ store: appActionStore });
   if (bailianTestAudio) { await runBailianConnectionTest(bailianTestAudio); return; }
   if (bailianTestOrganizer) { await runBailianOrganizerTest(bailianTestOrganizer); return; }
   createWindow();
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1) }, inputBridge: bridge }; });
+  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
@@ -445,8 +446,10 @@ app.whenReady().then(async () => {
     if (current.schema !== "ai_keyboard.v1") return { ok: false, reason: "config-schema-invalid" };
     keyboardConfigState = { raw: current, fingerprint: configFingerprint(current), source: fresh.source, token: null };
     let merged; try { merged = mergeKeyboardPatch(current, patch); } catch (error) { return { ok: false, reason: error.message }; }
+    const capabilityGate = checkHostCapabilities(merged, inputBridge?.snapshot()?.configCapabilities);
+    if (!capabilityGate.ok) return capabilityGate;
     const token = randomUUID(); keyboardConfigState.token = { value: token, expires: Date.now() + 60000, fingerprint: keyboardConfigState.fingerprint, merged };
-    return { ok: true, token, expiresInMs: 60000, fingerprint: keyboardConfigState.fingerprint, config: sanitizeKeyboardConfig(merged), diff: sanitizedDiff(current, merged) };
+    return { ok: true, token, expiresInMs: 60000, fingerprint: keyboardConfigState.fingerprint, config: sanitizeKeyboardConfig(merged), diff: sanitizedDiff(current, merged, (id) => appActionStore?.describe(id)) };
   });
   handleTrusted("desktop:commit-keyboard-config", async (token) => {
     const pending = keyboardConfigState.token;
@@ -455,6 +458,8 @@ app.whenReady().then(async () => {
     const fresh = await inputBridge?.readConfig?.(); if (!fresh?.ok) return { ok: false, reason: "config-device-disconnected" };
     let current; try { current = JSON.parse(fresh.json); } catch { return { ok: false, reason: "config-json-invalid" }; }
     if (configFingerprint(current) !== pending.fingerprint) return { ok: false, reason: "config-changed-concurrently" };
+    const capabilityGate = checkHostCapabilities(pending.merged, inputBridge?.snapshot()?.configCapabilities);
+    if (!capabilityGate.ok) return capabilityGate;
     const written = await inputBridge.syncConfig(pending.merged); if (!written?.ok) return written;
     const readback = await inputBridge.readConfig(); if (!readback?.ok) return { ok: false, reason: "config-readback-failed" };
     let readbackJson; try { readbackJson = JSON.parse(readback.json); } catch { return { ok: false, reason: "config-readback-invalid" }; }

@@ -22,3 +22,23 @@ test("Raw Input production path uses the shared vendor envelope validator", () =
   assert.match(source, /if \(!VendorReportProtocol\.HasValidEnvelope\(report\)\) return;/);
   assert.doesNotMatch(source, /kind != 0x06 && \(report\[2\] != 0 \|\| report\[3\] != 1\)/);
 });
+
+test("native fixed-text path is bounded, private, and main-process authorized", () => {
+  const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
+  const protocol = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "VendorReportProtocol.cs"), "utf8");
+  assert.match(source, /type\.GetString\(\) != "sync-config".*type\.GetString\(\) != "read-config".*type\.GetString\(\) != "inject-fixed-text"/s);
+  assert.equal(source.includes("GetForegroundWindow()"), true);
+  assert.equal(source.includes("foregroundProcessId == blockedProcessId"), true);
+  assert.equal(source.includes("blockedWindows.Contains(foreground)"), true);
+  assert.equal(source.includes("fixed-text-send-input-incomplete"), true);
+  assert.match(source, /public void FixedTextReady\(string requestId, int bytes\)/);
+  assert.doesNotMatch(source, /FixedTextReady\(string requestId, string text/);
+  assert.equal(protocol.includes("_bytes.Count + length > 960"), true);
+  assert.equal(protocol.includes("TimeSpan.FromSeconds(3)"), true);
+  assert.equal(protocol.includes("ContainsAnyExcept((byte)0)"), true);
+  assert.match(protocol, /hostActionWithPadding\[41\] = 1/);
+  assert.match(protocol, /duplicateFirst\.Accept\(first, out _\).*?!duplicateFirst\.Accept\(first, out _\).*?!duplicateFirst\.Accept\(last, out _\)/s);
+  assert.match(protocol, /invalidPadding\[6\] = 1/);
+  assert.match(protocol, /invalidUtf8\[5\] = 0xc3/);
+  assert.match(protocol, /if \(_next != 0\).*?ResetActive\(\);.*?return false;/s);
+});

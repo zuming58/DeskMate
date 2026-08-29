@@ -19,6 +19,7 @@ class InputBridgeManager extends EventEmitter {
     this.restartTimer = null;
     this.pendingConfig = null;
     this.pendingRead = null;
+    this.pendingFixedText = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
   }
 
@@ -52,6 +53,7 @@ class InputBridgeManager extends EventEmitter {
       this.restartAttempts = 0;
       this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null }) };
       this.emit("status", this.snapshot());
+      if (!event.boardConnected) this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
     if (result.kind === "config-ack" && this.pendingConfig) {
@@ -64,12 +66,16 @@ class InputBridgeManager extends EventEmitter {
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
     }
     if (result.kind === "config-capabilities" && this.pendingRead?.requestId === event.requestId) {
-      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1 };
+      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1 };
       this.status = { ...this.status, configCapabilities: capabilities };
       this.finishRead({ ok: true, capabilities });
       this.emit("status", this.snapshot());
     }
     if (result.kind === "host-action") this.emit("host-action", event);
+    if (result.kind === "fixed-text") this.emit("fixed-text", event);
+    if (result.kind === "fixed-text-result" && this.pendingFixedText?.requestId === event.requestId) {
+      this.finishFixedText(event.ok ? { ok: true, bytes: event.bytes } : { ok: false, reason: event.reason || "fixed-text-injection-failed", bytes: event.bytes });
+    }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
 
@@ -108,6 +114,19 @@ class InputBridgeManager extends EventEmitter {
     return this.requestRead(0, "capabilities");
   }
 
+  injectFixedText(requestId, { blockedProcessId = 0, blockedWindowHandles = [] } = {}) {
+    if (this.pendingFixedText) return Promise.resolve({ ok: false, reason: "fixed-text-busy", bytes: 0 });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable", bytes: 0 });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected", bytes: 0 });
+    if (!/^fixed-[a-zA-Z0-9-]{8,74}$/.test(String(requestId || "")) || !Number.isInteger(blockedProcessId) || blockedProcessId < 0 || blockedProcessId > 0xffffffff || !Array.isArray(blockedWindowHandles) || blockedWindowHandles.length > 4 || blockedWindowHandles.some((value) => !/^[0-9]{1,20}$/.test(String(value)))) return Promise.resolve({ ok: false, reason: "fixed-text-request-invalid", bytes: 0 });
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishFixedText({ ok: false, reason: "fixed-text-injection-timeout", bytes: 0 }), 3000);
+      this.pendingFixedText = { requestId, timeout, resolve };
+      const command = { version: 1, type: "inject-fixed-text", requestId, expiresUnixMs: Date.now() + 3000, blockedProcessId, blockedWindowHandles: blockedWindowHandles.map(String) };
+      this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => { if (error) this.finishFixedText({ ok: false, reason: "input-bridge-write-failed", bytes: 0 }); });
+    });
+  }
+
   requestRead(flag, mode) {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
@@ -140,6 +159,14 @@ class InputBridgeManager extends EventEmitter {
     pending.resolve(result);
   }
 
+  finishFixedText(result) {
+    const pending = this.pendingFixedText;
+    if (!pending) return;
+    this.pendingFixedText = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
   refreshReadTimeout() {
     const pending = this.pendingRead;
     if (!pending) return;
@@ -152,6 +179,7 @@ class InputBridgeManager extends EventEmitter {
     this.child = null;
     this.finishConfig({ ok: false, reason: "input-bridge-exited" });
     this.finishRead({ ok: false, reason: "input-bridge-exited" });
+    this.finishFixedText({ ok: false, reason: "input-bridge-exited", bytes: 0 });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -170,6 +198,7 @@ class InputBridgeManager extends EventEmitter {
     this.child = null;
     this.finishConfig({ ok: false, reason: "input-bridge-stopped" });
     this.finishRead({ ok: false, reason: "input-bridge-stopped" });
+    this.finishFixedText({ ok: false, reason: "input-bridge-stopped", bytes: 0 });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };

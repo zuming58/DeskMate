@@ -3,6 +3,13 @@ project(easyinput_host_test LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 enable_testing()
+add_executable(host_action_core_tests
+    host_action_core_tests.cpp
+    ../components/input_core/src/host_action_core.cpp
+)
+target_include_directories(host_action_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME host_action_core_tests COMMAND host_action_core_tests)
+
 add_executable(input_core_tests input_core_tests.cpp ../components/input_core/src/input_core.cpp ../components/input_core/src/hid_report.cpp)
 target_include_directories(input_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_core_tests COMMAND input_core_tests)
@@ -13,6 +20,7 @@ add_executable(input_runtime_tests
     ../components/input_core/src/input_core.cpp
     ../components/input_core/src/hid_report.cpp
     ../components/input_core/src/config_core.cpp
+    ../components/input_core/src/host_action_core.cpp
 )
 target_include_directories(input_runtime_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_runtime_tests COMMAND input_runtime_tests)
@@ -23,6 +31,7 @@ add_executable(led_feedback_tests
     ../components/input_core/src/input_runtime.cpp
     ../components/input_core/src/input_core.cpp
     ../components/input_core/src/hid_report.cpp
+    ../components/input_core/src/host_action_core.cpp
 )
 target_include_directories(led_feedback_tests PRIVATE ../components/input_core/include)
 add_test(NAME led_feedback_tests COMMAND led_feedback_tests)
@@ -34,7 +43,7 @@ add_executable(peripheral_power_lease_tests
 target_include_directories(peripheral_power_lease_tests PRIVATE ../components/input_core/include)
 add_test(NAME peripheral_power_lease_tests COMMAND peripheral_power_lease_tests)
 
-add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp)
+add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp ../components/input_core/src/host_action_core.cpp)
 target_include_directories(config_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME config_core_tests COMMAND config_core_tests)
 

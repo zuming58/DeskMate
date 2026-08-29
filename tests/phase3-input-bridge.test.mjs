@@ -27,6 +27,39 @@ test("bridge protocol accepts sanitized Host Action and config acknowledgements"
   assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 })), { ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 });
 });
 
+test("fixed text bridge events expose metadata only", () => {
+  const base = { version: 1, source: "easyinput-hid", time: "2026-08-21T10:00:00.000Z", sequence: 9 };
+  const ready = parseBridgeLine(JSON.stringify({ ...base, type: "fixed-text", requestId: "fixed-12345678", bytes: 12, text: "private", devicePath: "private" }));
+  assert.deepEqual(ready, { ...base, type: "fixed-text", requestId: "fixed-12345678", bytes: 12 });
+  assert.equal(JSON.stringify(ready).includes("private"), false);
+  const result = parseBridgeLine(JSON.stringify({ ...base, type: "fixed-text-result", requestId: "fixed-12345678", ok: true, bytes: 12, text: "private" }));
+  assert.deepEqual(result, { ...base, type: "fixed-text-result", requestId: "fixed-12345678", ok: true, reason: "", bytes: 12 });
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, type: "fixed-text", requestId: "fixed-12345678", bytes: 961 })), null);
+});
+
+test("fixed text injection is single-flight, bounded, and fails on bridge exit", async () => {
+  const writes = [];
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: "2026-08-21T10:00:00.000Z", sequence: 1 }));
+  const first = manager.injectFixedText("fixed-12345678", { blockedProcessId: 42, blockedWindowHandles: ["1234"] });
+  assert.equal((await manager.injectFixedText("fixed-87654321")).reason, "fixed-text-busy");
+  assert.deepEqual(Object.keys(writes[0]).sort(), ["blockedProcessId", "blockedWindowHandles", "expiresUnixMs", "requestId", "type", "version"].sort());
+  assert.deepEqual(writes[0].blockedWindowHandles, ["1234"]);
+  assert.equal(JSON.stringify(writes[0]).includes("text"), true); // only the command type contains the word, never payload text
+  manager.handleLine(JSON.stringify({ version: 1, type: "fixed-text-result", source: "easyinput-hid", requestId: "fixed-12345678", ok: true, reason: "", bytes: 12, time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.deepEqual(await first, { ok: true, bytes: 12 });
+  const interrupted = manager.injectFixedText("fixed-abcdef12");
+  child.emit("exit", 7);
+  assert.deepEqual(await interrupted, { ok: false, reason: "input-bridge-exited", bytes: 0 });
+  manager.stop();
+});
+
 test("config snapshots remain control events through the trigger filter", () => {
   const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
   const event = JSON.stringify({
@@ -43,6 +76,12 @@ test("config snapshots remain control events through the trigger filter", () => 
   });
   const parsed = parseBridgeLine(event);
   assert.equal(new InputTriggerFilter().accept(parsed).kind, "config-snapshot");
+});
+
+test("T06 capabilities are explicit and fail closed when absent", () => {
+  const base = { version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: "read-12345678", configReadV1: true, configWriteV1: true, hostActionV1: true, fixedTextV1: true, time: "2026-08-21T10:00:00.000Z", sequence: 4 };
+  assert.deepEqual(parseBridgeLine(JSON.stringify(base)), base);
+  assert.deepEqual(parseBridgeLine(JSON.stringify(({ ...base, fixedTextV1: undefined }))), { ...base, fixedTextV1: false });
 });
 
 test("config progress is validated and refreshes a matching read deadline", () => {

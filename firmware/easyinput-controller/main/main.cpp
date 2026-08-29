@@ -389,7 +389,8 @@ void input_owner_task(void*) {
         runtime.service_release_reassertion(now_ms);
 
         QueuedHidReport report{};
-        if (prepare_hid_report(runtime, tud_hid_ready(), transfer, report)) {
+        if (prepare_hid_report(runtime, tud_hid_ready() && !config_transfer.active,
+                               transfer, report)) {
             const bool accepted = tud_hid_report(
                 report.report_id, report.payload.data(), report.length);
             finish_hid_send_attempt(runtime, report, accepted, transfer);
@@ -402,6 +403,7 @@ void input_owner_task(void*) {
                 config_transfer.active = true;
                 config_transfer.advances_read_stream = false;
                 config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = false;
                 config_transfer.report.report_id = 0x11;
                 config_transfer.report.length = static_cast<uint8_t>(config_ack_payload.size());
                 config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
@@ -416,6 +418,7 @@ void input_owner_task(void*) {
                 config_transfer.active = true;
                 config_transfer.advances_read_stream = false;
                 config_transfer.advances_status_stream = true;
+                config_transfer.advances_host_command = false;
                 config_transfer.report.report_id = 0x11;
                 config_transfer.report.length = static_cast<uint8_t>(config_response_payload.size());
                 config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
@@ -431,11 +434,36 @@ void input_owner_task(void*) {
                     config_transfer.active = true;
                     config_transfer.advances_read_stream = true;
                     config_transfer.advances_status_stream = false;
+                    config_transfer.advances_host_command = false;
                     config_transfer.report.report_id = 0x11;
                     config_transfer.report.length = static_cast<uint8_t>(config_response_payload.size());
                     config_transfer.report.epoch = runtime.diagnostics().usb_mount_epoch;
                     std::copy(config_response_payload.begin(), config_response_payload.end(), config_transfer.report.payload.begin());
                 } else config_read_stream.abort();
+            }
+        }
+        if (!config_ack_pending && !config_status_stream.pending() &&
+            !config_read_stream.pending() && tud_hid_ready() &&
+            !transfer.active && !config_transfer.active &&
+            runtime.front_host_command(config_response_payload)) {
+            const bool accepted = tud_hid_report(
+                kAppCommandReportId, config_response_payload.data(),
+                config_response_payload.size());
+            if (accepted) {
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = true;
+                config_transfer.report.report_id = kAppCommandReportId;
+                config_transfer.report.length =
+                    static_cast<uint8_t>(config_response_payload.size());
+                config_transfer.report.epoch =
+                    runtime.diagnostics().usb_mount_epoch;
+                std::copy(config_response_payload.begin(),
+                          config_response_payload.end(),
+                          config_transfer.report.payload.begin());
+            } else {
+                runtime.fail_host_command();
             }
         }
         ulTaskNotifyTake(pdTRUE, 1);

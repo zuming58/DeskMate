@@ -8,21 +8,28 @@ const firmwareToUi = new Map([
   ["scroll_axis_toggle", "scroll-axis-toggle"], ["text_caret_select", "text-caret-select"],
 ]);
 
-function sanitizedBinding(press) {
-  if (typeof press === "string") return { action: press.startsWith("host_action:") ? "open-app" : (firmwareToUi.get(press) || press) };
+function sanitizedBinding(press, describeAppAction) {
+  if (typeof press === "string" && press.startsWith("host_action:")) {
+    const appActionId = press.slice(12);
+    const description = typeof describeAppAction === "function" ? describeAppAction(appActionId) : null;
+    return description?.id === appActionId && typeof description.label === "string"
+      ? { action: "open-app", appActionId, appName: description.label }
+      : { action: "open-app" };
+  }
+  if (typeof press === "string") return { action: firmwareToUi.get(press) || press };
   if (press && typeof press === "object" && typeof press.hotkey === "string") return { action: "hotkey", shortcut: press.hotkey };
   return { action: press && typeof press.text === "string" ? "fixed-text" : "disabled" };
 }
 
-function sanitizeKeyboardConfig(value) {
+function sanitizeKeyboardConfig(value, describeAppAction) {
   const profile = Array.isArray(value?.profiles) ? value.profiles[0] : null;
-  const keys = profile?.keys && typeof profile.keys === "object" ? Array.from({ length: 8 }, (_, index) => sanitizedBinding(profile.keys[`KEY${index + 1}`]?.press)) : [];
+  const keys = profile?.keys && typeof profile.keys === "object" ? Array.from({ length: 8 }, (_, index) => sanitizedBinding(profile.keys[`KEY${index + 1}`]?.press, describeAppAction)) : [];
   const scroll = profile?.encoder?.scroll || {};
-  return { keymap: keys, encoder: { mode: scroll.mode === "cursor" ? "cursor" : "scroll", axis: scroll.axis === "horizontal" ? "horizontal" : "vertical", speed: Math.max(1, Math.min(5, Number(scroll.speed) || 3)), reverseVertical: Boolean(scroll.windows_reverse_vertical), reverseHorizontal: Boolean(scroll.windows_reverse_horizontal), press: sanitizedBinding(profile?.encoder?.press) } };
+  return { keymap: keys, encoder: { mode: scroll.mode === "cursor" ? "cursor" : "scroll", axis: scroll.axis === "horizontal" ? "horizontal" : "vertical", speed: Math.max(1, Math.min(5, Number(scroll.speed) || 3)), reverseVertical: Boolean(scroll.windows_reverse_vertical), reverseHorizontal: Boolean(scroll.windows_reverse_horizontal), press: sanitizedBinding(profile?.encoder?.press, describeAppAction) } };
 }
 
-const KEY_ACTIONS = new Set(["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled", "enter", "backspace", "hotkey"]);
-const ENCODER_ACTIONS = new Set(["scroll-axis-toggle", "text-caret-select", "disabled", "hotkey", "enter", "backspace"]);
+const KEY_ACTIONS = new Set(["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled", "enter", "backspace", "hotkey", "fixed-text", "open-app"]);
+const ENCODER_ACTIONS = new Set(["scroll-axis-toggle", "text-caret-select", "disabled", "hotkey", "enter", "backspace", "fixed-text", "open-app"]);
 
 function bindingToPress(item, allowed = KEY_ACTIONS) {
   if (!item || typeof item !== "object" || !allowed.has(item.action)) throw new Error("按键动作未批准");
@@ -32,6 +39,16 @@ function bindingToPress(item, allowed = KEY_ACTIONS) {
   if (item.action === "scroll-axis-toggle") return "scroll_axis_toggle";
   if (item.action === "text-caret-select") return "text_caret_select";
   if (["copy", "paste", "undo", "disabled"].includes(item.action)) return item.action;
+  if (item.action === "fixed-text") {
+    if (typeof item.text !== "string") throw new Error("固定文字无效");
+    const bytes = Buffer.from(item.text, "utf8");
+    if (bytes.length < 1 || bytes.length > 960 || item.text.includes("\0") || /[\u0001-\u0008\u000b\u000c\u000e-\u001f]/.test(item.text)) throw new Error("固定文字无效");
+    return { text: item.text };
+  }
+  if (item.action === "open-app") {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(item.appActionId || "")) throw new Error("应用映射无效");
+    return `host_action:${item.appActionId}`;
+  }
   const hotkey = item.action === "enter" ? "Return" : item.action === "backspace" ? "Backspace" : item.shortcut;
   if (typeof hotkey !== "string" || !hotkey || hotkey.length > 64) throw new Error("快捷键无效");
   return { hotkey };
@@ -64,6 +81,22 @@ function mergeKeyboardPatch(raw, patch) {
   return merged;
 }
 
-function sanitizedDiff(before, after) { const a = sanitizeKeyboardConfig(before); const b = sanitizeKeyboardConfig(after); const diff = []; a.keymap.forEach((value, index) => { if (JSON.stringify(value) !== JSON.stringify(b.keymap[index])) diff.push({ path: `/profiles/0/keys/KEY${index + 1}/press`, before: value, after: b.keymap[index] }); }); for (const key of ["mode", "axis", "speed", "reverseVertical", "reverseHorizontal", "press"]) { const beforeValue = a.encoder[key]; const afterValue = b.encoder[key]; if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) diff.push({ path: `/profiles/0/encoder/${key}`, before: beforeValue, after: afterValue }); } return diff; }
+function sanitizedDiff(before, after, describeAppAction) { const a = sanitizeKeyboardConfig(before, describeAppAction); const b = sanitizeKeyboardConfig(after, describeAppAction); const diff = []; a.keymap.forEach((value, index) => { if (JSON.stringify(value) !== JSON.stringify(b.keymap[index])) diff.push({ path: `/profiles/0/keys/KEY${index + 1}/press`, before: value, after: b.keymap[index] }); }); for (const key of ["mode", "axis", "speed", "reverseVertical", "reverseHorizontal", "press"]) { const beforeValue = a.encoder[key]; const afterValue = b.encoder[key]; if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) diff.push({ path: `/profiles/0/encoder/${key}`, before: beforeValue, after: afterValue }); } return diff; }
 
-module.exports = { stable, configFingerprint, sanitizeKeyboardConfig, mergeKeyboardPatch, sanitizedDiff };
+function requiredHostCapabilities(value) {
+  const required = new Set();
+  const profile = Array.isArray(value?.profiles) ? value.profiles[0] : null;
+  const presses = [...Object.values(profile?.keys || {}).map((item) => item?.press), profile?.encoder?.press];
+  for (const press of presses) {
+    if (typeof press === "string" && press.startsWith("host_action:")) required.add("host_action_v1");
+    if (press && typeof press === "object" && !Array.isArray(press) && typeof press.text === "string") required.add("fixed_text_v1");
+  }
+  return [...required].sort();
+}
+
+function checkHostCapabilities(value, capabilities) {
+  const missing = requiredHostCapabilities(value).filter((capability) => capabilities?.[capability] !== true);
+  return missing.length ? { ok: false, reason: `${missing[0]}-unsupported`, missing } : { ok: true };
+}
+
+module.exports = { stable, configFingerprint, sanitizeKeyboardConfig, mergeKeyboardPatch, sanitizedDiff, requiredHostCapabilities, checkHostCapabilities };

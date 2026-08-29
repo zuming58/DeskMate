@@ -53,7 +53,7 @@ import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { BailianSttAdapter, BailianTextOrganizer, ConfigurableTextOrganizer, HttpSttAdapter, MockSttAdapter } from "./adapters/sttAdapters.js";
 import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
-import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
+import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, limitUtf8Bytes, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
 import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
@@ -182,7 +182,7 @@ function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
   return <>
     <label>按下动作<Select value={current.action} onChange={changeAction} ariaLabel="按键动作">{options.map((action) => <option value={action.id} key={action.id}>{action.label}</option>)}</Select></label>
     {current.action === "hotkey" && <label>快捷键<ShortcutRecorder allowSingle value={current.shortcut || "点击录制快捷键"} onConfirm={async (shortcut) => onChange({ ...current, shortcut })} /></label>}
-    {current.action === "fixed-text" && <label>固定文字<textarea maxLength={512} value={current.text || ""} onChange={(event) => onChange({ ...current, text: event.target.value })} placeholder="输入按键要写出的文字" /></label>}
+    {current.action === "fixed-text" && <label>固定文字<textarea value={current.text || ""} onChange={(event) => onChange({ ...current, text: limitUtf8Bytes(event.target.value) })} placeholder="输入按键要写出的文字" /><small>{new TextEncoder().encode(current.text || "").length} / 960 字节</small></label>}
     {current.action === "open-app" && <ApplicationPicker binding={current} onChange={onChange} notify={notify} />}
   </>;
 }

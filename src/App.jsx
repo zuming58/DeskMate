@@ -171,7 +171,9 @@ function AppContent() {
     deviceEventBus.publish(createDeviceEvent("key-diagnostic", source, { key: detail.key || "", action: detail.action || "", sequence: Number(detail.sequence) || null }, { at: detail.time || detail.at }));
   }), []);
   useEffect(() => voiceAdapters.desktop.onHostActionResult((result) => {
-    setToast(result?.ok ? `已打开 ${result.label || "应用"}` : `打开应用失败：${result?.reason || "未找到映射"}`);
+    if (result?.kind === "fixed-text") setToast(result?.ok ? `已输入固定文字（${result.bytes || 0} 字节）` : `固定文字输入失败：${result?.reason || "未知错误"}`);
+    else if (result?.reason === "host-action-duplicate") return;
+    else setToast(result?.ok ? `已打开 ${result.label || "应用"}` : `打开应用失败：${result?.reason || "未找到映射"}`);
   }), []);
   useEffect(() => {
     const updateBridge = (inputBridge) => {

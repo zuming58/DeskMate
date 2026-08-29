@@ -2,6 +2,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <string_view>
 namespace deskmate::easyinput {
 inline constexpr size_t kConfigMaxJsonBytes = 2048;
@@ -31,8 +32,8 @@ class ConfigStatusStream {
  public: bool replace(uint32_t,uint32_t); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
  private: uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; uint16_t length_{},crc16_{}; bool pending_{};
 };
-enum class ConfigActionKind:uint8_t { Disabled,VoiceInput,VoiceEdit,Enter,Backspace,SelectAll,Copy,Paste,Undo,Hotkey,EncoderAxisToggle,TextCaretSelect,Unsupported };
-struct ConfigAction { ConfigActionKind kind{ConfigActionKind::Disabled}; uint8_t modifiers{},usage{}; };
+enum class ConfigActionKind:uint8_t { Disabled,VoiceInput,VoiceEdit,Enter,Backspace,SelectAll,Copy,Paste,Undo,Hotkey,EncoderAxisToggle,TextCaretSelect,FixedText,HostAction,Unsupported };
+struct ConfigAction { ConfigActionKind kind{ConfigActionKind::Disabled}; uint8_t modifiers{},usage{}; std::string value{}; };
 struct ConfigProjection { std::array<ConfigAction,8> keys{}; ConfigAction encoder_press{}; bool encoder_enabled{true},encoder_cursor{},encoder_horizontal{},reverse_vertical{},reverse_horizontal{}; uint8_t encoder_speed{3}; };
 bool parse_config_projection(std::string_view,ConfigProjection&); const char* compiled_safe_config_json();
 inline constexpr uint32_t kConfigRecordMagic=0x31474643; inline constexpr uint16_t kConfigRecordVersion=1;

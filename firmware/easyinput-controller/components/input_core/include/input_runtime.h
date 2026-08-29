@@ -8,6 +8,7 @@
 #include "hid_report.h"
 #include "input_core.h"
 #include "config_core.h"
+#include "host_action_core.h"
 
 namespace deskmate::easyinput {
 
@@ -83,6 +84,7 @@ struct RuntimeDiagnosticsSnapshot {
     uint32_t encoder_resyncs{0};
     uint32_t usb_mount_epoch{0};
     uint32_t usb_lifecycle_drops{0};
+    uint32_t host_command_drops{0};
 };
 
 struct UsbCallbackSnapshot {
@@ -153,6 +155,8 @@ struct RoutedAction {
     KeyboardSnapshot keyboard_restore{};
     bool wheel_changed{false};
     MouseWheelSnapshot wheel{};
+    HostCommandKind host_command_kind{HostCommandKind::None};
+    std::string host_command_value{};
 };
 
 class InputActionRouter {
@@ -162,6 +166,8 @@ public:
     void set_configuration(const ConfigProjection& projection);
     RoutedAction apply_key_source(InputSourceId source, bool pressed, Chord chord);
     RoutedAction apply_tap_source(InputSourceId source, bool pressed, Chord chord);
+    RoutedAction apply_command_source(InputSourceId source, bool pressed,
+                                      const ConfigAction& action);
     void release_all();
     KeyboardSnapshot keyboard() const;
     ScrollAxis axis() const { return axis_; }
@@ -172,6 +178,8 @@ private:
     std::array<bool, 9> tap_pressed_{};
     std::array<Chord, 8> configured_chords_{};
     std::array<bool, 8> configured_hold_{};
+    std::array<ConfigAction, 8> configured_actions_{};
+    ConfigAction encoder_press_action_{};
     Chord encoder_press_chord_{HidUsage::None, 0};
     ConfigActionKind encoder_press_kind_{ConfigActionKind::EncoderAxisToggle};
     bool encoder_enabled_{true};
@@ -220,6 +228,7 @@ struct ConfigTransferState {
     ConfigTransferReport report{};
     bool advances_read_stream{false};
     bool advances_status_stream{false};
+    bool advances_host_command{false};
     bool completed{false};
     bool completed_status{false};
     bool failed{false};
@@ -228,6 +237,7 @@ struct ConfigTransferState {
         report = {};
         advances_read_stream = false;
         advances_status_stream = false;
+        advances_host_command = false;
     }
     void reset_outcome() { completed = false; completed_status = false; failed = false; }
 };
@@ -256,6 +266,10 @@ public:
     void on_transfer_failed();
     bool front_report(QueuedHidReport& report) const;
     void complete_report();
+    bool front_host_command(
+        std::array<uint8_t, kAppCommandPayloadBytes>& payload) const;
+    void complete_host_command();
+    void fail_host_command();
     bool reject_vendor_feature(uint8_t report_id, const uint8_t* data, size_t length) const;
     RuntimeDiagnosticsSnapshot diagnostics() const { return diagnostics_; }
     bool mounted() const { return mounted_; }
@@ -263,6 +277,7 @@ public:
 
 private:
     InputActionRouter router_;
+    HostCommandStream host_command_stream_;
     RuntimeDiagnosticsSnapshot diagnostics_{};
     std::array<QueuedHidReport, kHidReportQueueCapacity> queue_{};
     std::array<bool, 8> physically_held_{};
@@ -290,6 +305,7 @@ private:
     void enqueue_keyboard_pair(const KeyboardSnapshot& pressed,
                                const KeyboardSnapshot& restored);
     void enqueue_wheel(const MouseWheelSnapshot& snapshot);
+    bool enqueue_host_command(HostCommandKind kind, std::string_view value);
     bool any_held() const;
     void maybe_enqueue_release_report(bool had_snapshot, bool was_held,
                                       bool now_held);

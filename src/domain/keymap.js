@@ -44,6 +44,21 @@ const ACTION_IDS = new Set([...KEY_ACTIONS.map((item) => item.id), "enter", "bac
 const ENCODER_ACTION_IDS = new Set(ENCODER_PRESS_ACTIONS.map((item) => item.id));
 const ALL_ACTION_IDS = new Set([...ACTION_IDS, ...ENCODER_ACTION_IDS]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const FIXED_TEXT_MAX_BYTES = 960;
+
+export function limitUtf8Bytes(value, maxBytes = FIXED_TEXT_MAX_BYTES) {
+  const source = typeof value === "string" ? value : "";
+  const encoder = new TextEncoder();
+  let result = "";
+  let bytes = 0;
+  for (const character of source) {
+    const count = encoder.encode(character).length;
+    if (bytes + count > maxBytes) break;
+    result += character;
+    bytes += count;
+  }
+  return result;
+}
 
 export function normalizeKeyBinding(value, fallback = { action: "disabled" }) {
   if (typeof value === "string") return { action: LEGACY_ACTIONS.get(value) || "disabled" };
@@ -51,7 +66,7 @@ export function normalizeKeyBinding(value, fallback = { action: "disabled" }) {
   return {
     action: value.action,
     ...(typeof value.shortcut === "string" && value.shortcut ? { shortcut: value.shortcut.slice(0, 64) } : {}),
-    ...(typeof value.text === "string" && value.text ? { text: value.text.slice(0, 512) } : {}),
+    ...(typeof value.text === "string" && value.text ? { text: limitUtf8Bytes(value.text) } : {}),
     ...(typeof value.appActionId === "string" && UUID_PATTERN.test(value.appActionId) ? { appActionId: value.appActionId } : {}),
     ...(typeof value.appName === "string" && value.appName ? { appName: value.appName.slice(0, 120) } : {}),
   };

@@ -1,13 +1,13 @@
 # T06 · EasyInput Windows host actions
 
-- 状态：`BLOCKED_BY_T05 / HOST_ACTION_CONTRACT_NOT_FROZEN`
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / HIL_NOT_AUTHORIZED`
 - 前置：T03～T05 均锁定，T05 已提供事务配置和重启回读。
 - 计划分支：`codex/easyinput-t06-host-actions`，从 T05 锁定 HEAD 创建。
 - 目标：统一接入必须由 Windows 执行的按键动作：固定文字、打开应用，以及经产品确认的历史/设置/Profile 等 AppCommand；先把 DeskMate 已有“选择应用/本地 UUID 映射/测试打开”与 EasyInput 实体键打通，并完成确认、失败、断线和重启恢复。
 
 ## Contract gate
 
-编码前在 `contracts/deskmate-host/easyinput-host-action-v1.md` 提出并自审合同；只有显式标为 `HOST_ACTION_V1_FROZEN` 后才能实现。固定 Maker 证据中的 `0x11` kind `0x05`、规范小写 UUID 和按下一次触发可作为兼容起点，但不能直接等同于 DeskMate 已冻结合同。
+合同已在 `contracts/deskmate-host/easyinput-host-action-v1.md` 自审并标记 `HOST_ACTION_V1_FROZEN`。固定 Maker 证据中的 `0x11` kind `0x01/0x05`、规范小写 UUID、59 字节固定文字分块和按下一次触发是实现边界。
 
 合同至少定义 capability、版本、动作 kind、UUID/固定文字载荷、事件序列、按下/释放、分块、重复、断线、超时、确认；USB 唯一传输所有权；Windows 主进程独占路径映射与文字注入；非法/缺失映射 fail-closed；重启恢复；Host Action 不得复用为 DeskMate Link。
 
@@ -26,3 +26,5 @@
 - 桌面覆盖渲染进程无路径、主进程白名单映射和安全启动；
 - 回归 T02～T05、ESP-IDF v5.5.5 构建和桌面基线；烧录继续单独授权；
 - 完成后推送 T06 分支并停止，不合并 `main`、不开始后续包，由原主电脑独立审计和真机验收。
+
+本状态只表示本开发机的 Host/桌面测试和 ESP-IDF 构建证据；不表示真机通过、可烧录或 HIL 已授权。

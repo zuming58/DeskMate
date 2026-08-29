@@ -1,4 +1,5 @@
 #include "config_core.h"
+#include "host_action_core.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -61,7 +62,41 @@ class JsonParser {
 bool integer(const JsonValue& v, int& out) { if (v.kind != JsonValue::Kind::Number || v.number.empty() || v.number.find_first_of(".eE") != std::string::npos) return false; size_t i = 0; bool neg = false; if (v.number[0] == '-') { neg = true; i = 1; } if (i == v.number.size()) return false; const uint64_t limit = neg ? 2147483648ULL : 2147483647ULL; uint64_t n = 0; for (; i < v.number.size(); ++i) { if (v.number[i] < '0' || v.number[i] > '9') return false; const uint64_t digit = static_cast<uint64_t>(v.number[i] - '0'); if (n > (limit - digit) / 10u) return false; n = n * 10u + digit; } out = neg ? (n == 2147483648ULL ? std::numeric_limits<int>::min() : -static_cast<int>(n)) : static_cast<int>(n); return true; }
 bool string_value(const JsonValue* v, std::string_view expected, std::string* out = nullptr) { if (!v || v->kind != JsonValue::Kind::String || (!expected.empty() && v->string != expected)) return false; if (out) *out = v->string; return true; }
 bool parse_hotkey(const std::string& value, ConfigAction& action) { if (value.empty() || value.size() > 64) return false; uint8_t modifiers = 0, usage = 0; size_t begin = 0; while (begin <= value.size()) { const size_t end = value.find('+', begin); const std::string token = value.substr(begin, end == std::string::npos ? end : end - begin); if (token == "Ctrl" || token == "Control") modifiers |= 1; else if (token == "Shift") modifiers |= 2; else if (token == "Alt" || token == "Option") modifiers |= 4; else if (token == "Meta" || token == "Command" || token == "Super") modifiers |= 8; else if (token == "Return" || token == "Enter") usage = 0x28; else if (token == "Escape" || token == "Esc") usage = 0x29; else if (token == "Backspace") usage = 0x2a; else if (token == "Tab") usage = 0x2b; else if (token == "Space") usage = 0x2c; else if (token == "ArrowRight") usage = 0x4f; else if (token == "ArrowLeft") usage = 0x50; else if (token == "ArrowDown") usage = 0x51; else if (token == "ArrowUp") usage = 0x52; else if (token.size() == 1 && token[0] >= 'A' && token[0] <= 'Z') usage = static_cast<uint8_t>(0x04 + token[0] - 'A'); else if (token.size() == 1 && token[0] >= '1' && token[0] <= '9') usage = static_cast<uint8_t>(0x1e + token[0] - '1'); else if (token == "0") usage = 0x27; else if (token.size() >= 2 && token[0] == 'F') { JsonValue n{}; n.kind = JsonValue::Kind::Number; n.number = token.substr(1); int f = 0; if (!integer(n, f) || f < 1 || f > 24) return false; usage = static_cast<uint8_t>(0x3a + f - 1); } else return false; if (end == std::string::npos) break; begin = end + 1; } if (!usage) return false; action = {ConfigActionKind::Hotkey, modifiers, usage}; return true; }
-bool action(const JsonValue* value, ConfigAction& out) { if (!value) return false; if (value->kind == JsonValue::Kind::String) { out = {}; const auto& s = value->string; if (s == "disabled") out.kind = ConfigActionKind::Disabled; else if (s == "voice_ptt_hold") out = {ConfigActionKind::VoiceInput, 0x03, 0x2c}; else if (s == "edit_ptt_hold") out = {ConfigActionKind::VoiceEdit, 0x03, 0x08}; else if (s == "select_all") out = {ConfigActionKind::SelectAll, 1, 0x04}; else if (s == "copy") out = {ConfigActionKind::Copy, 1, 0x06}; else if (s == "paste") out = {ConfigActionKind::Paste, 1, 0x19}; else if (s == "undo") out = {ConfigActionKind::Undo, 1, 0x1d}; else if (s == "scroll_axis_toggle") out.kind = ConfigActionKind::EncoderAxisToggle; else if (s == "text_caret_select") out.kind = ConfigActionKind::TextCaretSelect; else out.kind = ConfigActionKind::Unsupported; return true; } if (value->kind != JsonValue::Kind::Object) return false; std::string hotkey; if (!string_value(value->member("hotkey"), {}, &hotkey)) return false; return parse_hotkey(hotkey, out); }
+bool action(const JsonValue* value, ConfigAction& out) {
+  if (!value) return false;
+  out = {};
+  if (value->kind == JsonValue::Kind::String) {
+    const auto& s = value->string;
+    if (s == "disabled") out.kind = ConfigActionKind::Disabled;
+    else if (s == "voice_ptt_hold") out = {ConfigActionKind::VoiceInput, 0x03, 0x2c};
+    else if (s == "edit_ptt_hold") out = {ConfigActionKind::VoiceEdit, 0x03, 0x08};
+    else if (s == "select_all") out = {ConfigActionKind::SelectAll, 1, 0x04};
+    else if (s == "copy") out = {ConfigActionKind::Copy, 1, 0x06};
+    else if (s == "paste") out = {ConfigActionKind::Paste, 1, 0x19};
+    else if (s == "undo") out = {ConfigActionKind::Undo, 1, 0x1d};
+    else if (s == "scroll_axis_toggle") out.kind = ConfigActionKind::EncoderAxisToggle;
+    else if (s == "text_caret_select") out.kind = ConfigActionKind::TextCaretSelect;
+    else if (s.rfind("host_action:", 0) == 0) {
+      const std::string_view uuid{s.data() + 12, s.size() - 12};
+      if (!is_canonical_host_action_uuid(uuid)) return false;
+      out.kind = ConfigActionKind::HostAction;
+      out.value.assign(uuid);
+    } else out.kind = ConfigActionKind::Unsupported;
+    return true;
+  }
+  if (value->kind != JsonValue::Kind::Object) return false;
+  if (const JsonValue* text = value->member("text")) {
+    if (value->object.size() != 1 || text->kind != JsonValue::Kind::String ||
+        !is_valid_fixed_text(text->string)) return false;
+    out.kind = ConfigActionKind::FixedText;
+    out.value = text->string;
+    return true;
+  }
+  std::string hotkey;
+  if (value->object.size() != 1 ||
+      !string_value(value->member("hotkey"), {}, &hotkey)) return false;
+  return parse_hotkey(hotkey, out);
+}
 bool projection_from_json(std::string_view raw, ConfigProjection& out) { if (raw.empty() || raw.size() > kConfigMaxJsonBytes) return false; JsonValue root; if (!JsonParser(raw).parse(root) || root.kind != JsonValue::Kind::Object || !string_value(root.member("schema"), "ai_keyboard.v1")) return false; const JsonValue* profiles = root.member("profiles"); if (!profiles || profiles->kind != JsonValue::Kind::Array || profiles->array.empty() || profiles->array[0].kind != JsonValue::Kind::Object) return false; const JsonValue& profile = profiles->array[0]; const JsonValue* keys = profile.member("keys"); const JsonValue* encoder = profile.member("encoder"); if (!keys || keys->kind != JsonValue::Kind::Object || !encoder || encoder->kind != JsonValue::Kind::Object) return false; ConfigProjection p{}; for (size_t i = 0; i < p.keys.size(); ++i) { const JsonValue* binding = keys->member("KEY" + std::to_string(i + 1)); if (!binding || binding->kind != JsonValue::Kind::Object || !action(binding->member("press"), p.keys[i])) return false; } if (!action(encoder->member("press"), p.encoder_press)) return false; const JsonValue* scroll = encoder->member("scroll"); if (scroll) { if (scroll->kind != JsonValue::Kind::Object) return false; if (const auto* enabled = scroll->member("enabled")) { if (enabled->kind != JsonValue::Kind::Boolean) return false; p.encoder_enabled = enabled->boolean; } if (const auto* mode = scroll->member("mode")) { if (mode->kind != JsonValue::Kind::String || (mode->string != "scroll" && mode->string != "cursor")) return false; p.encoder_cursor = mode->string == "cursor"; } if (const auto* axis = scroll->member("axis")) { if (axis->kind != JsonValue::Kind::String || (axis->string != "vertical" && axis->string != "horizontal")) return false; p.encoder_horizontal = axis->string == "horizontal"; } if (const auto* speed = scroll->member("speed")) { int n = 0; if (!integer(*speed, n) || n < 1 || n > 5) return false; p.encoder_speed = static_cast<uint8_t>(n); } for (const auto& item : {std::pair{"windows_reverse_vertical", &p.reverse_vertical}, std::pair{"windows_reverse_horizontal", &p.reverse_horizontal}}) { if (const auto* v = scroll->member(item.first)) { if (v->kind != JsonValue::Kind::Boolean) return false; *item.second = v->boolean; } } } if (p.encoder_press.kind == ConfigActionKind::TextCaretSelect && !p.encoder_cursor) return false; out = p; return true; }
 }
 
@@ -94,7 +129,7 @@ bool ConfigReadStream::replace(uint32_t id, const ConfigDocument& d, uint32_t ep
 bool ConfigReadStream::encode_next(std::array<uint8_t, kConfigFeaturePayloadBytes>& out) const { if (!pending_ || next_chunk_ >= total_chunks_) return false; out.fill(0); const auto offset = static_cast<size_t>(next_chunk_) * kConfigReadChunkBytes; const auto count = std::min(kConfigReadChunkBytes, static_cast<size_t>(document_.length) - offset); out[0] = 6; out[1] = next_chunk_; out[2] = total_chunks_; out[3] = static_cast<uint8_t>(10 + count); out[4] = 1; w32(out.data() + 5, request_id_); w16(out.data() + 9, document_.length); w16(out.data() + 11, document_.crc16); out[13] = static_cast<uint8_t>(document_.source); std::copy_n(document_.bytes.data() + offset, count, out.begin() + 14); return true; }
 bool ConfigReadStream::mark_sent() { if (!pending_) return false; if (++next_chunk_ >= total_chunks_) pending_ = false; return !pending_; }
 void ConfigReadStream::abort() { document_ = {}; request_id_ = epoch_ = 0; next_chunk_ = total_chunks_ = 0; pending_ = false; }
-namespace { constexpr char kConfigStatusJson[] = R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true}})"; }
+namespace { constexpr char kConfigStatusJson[] = R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true}})"; }
 bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch) { abort(); if (!id || !epoch) return false; request_id_=id; epoch_=epoch; length_=static_cast<uint16_t>(sizeof(kConfigStatusJson)-1); crc16_=config_crc16_ccitt(reinterpret_cast<const uint8_t*>(kConfigStatusJson),length_); total_chunks_=static_cast<uint8_t>((length_+49)/50); pending_=true; return true; }
 bool ConfigStatusStream::encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>& out) const { if(!pending_||next_chunk_>=total_chunks_)return false; out.fill(0); const size_t offset=static_cast<size_t>(next_chunk_)*50; const size_t count=std::min<size_t>(50,length_-offset); out[0]=0x04; out[1]=next_chunk_; out[2]=total_chunks_; out[3]=static_cast<uint8_t>(9+count); out[4]=1; w32(out.data()+5,request_id_); w16(out.data()+9,length_); w16(out.data()+11,crc16_); std::copy_n(reinterpret_cast<const uint8_t*>(kConfigStatusJson)+offset,count,out.begin()+13); return true; }
 bool ConfigStatusStream::mark_sent(){if(!pending_)return false;if(++next_chunk_>=total_chunks_)pending_=false;return !pending_;}

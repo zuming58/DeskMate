@@ -23,6 +23,7 @@ internal static class Program
             writer.Input("easyinput-hid", "F22", "down");
             writer.Input("easyinput-hid", "F22", "up");
             writer.HostAction("00000000-0000-0000-0000-000000000001");
+            writer.FixedTextReady("fixed-00000000000000000000000000000000", 12);
             writer.ConfigAck(true, true, 120, 0x1234, 2);
             writer.Status(false);
             return;
@@ -52,6 +53,15 @@ internal sealed class EventWriter
         1, "host-action", "easyinput-hid", "HostAction", "invoke",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, hostActionId: id));
 
+    public void FixedTextReady(string requestId, int bytes) => Write(new BridgeEvent(
+        1, "fixed-text", "easyinput-hid", "FixedText", "ready",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId, bytes: bytes));
+
+    public void FixedTextResult(string requestId, bool ok, string reason, int bytes) => Write(new BridgeEvent(
+        1, "fixed-text-result", "easyinput-hid", "FixedText", ok ? "injected" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason, bytes: bytes));
+
     public void ConfigWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
         1, "config-write", "easyinput-hid", "Config", ok ? "written" : "failed",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -72,10 +82,10 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, chunk: chunk, total: total));
 
-    public void ConfigCapabilities(string requestId, bool read, bool write) => Write(new BridgeEvent(
+    public void ConfigCapabilities(string requestId, bool read, bool write, bool hostAction, bool fixedText) => Write(new BridgeEvent(
         1, "config-capabilities", "easyinput-hid", "Config", "capabilities",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
-        requestId: requestId, configReadV1: read, configWriteV1: write));
+        requestId: requestId, configReadV1: read, configWriteV1: write, hostActionV1: hostAction, fixedTextV1: fixedText));
 
     private void Write(BridgeEvent value)
     {
@@ -109,7 +119,9 @@ internal sealed record BridgeEvent(
     int? chunk = null,
     int? total = null,
     bool? configReadV1 = null,
-    bool? configWriteV1 = null);
+    bool? configWriteV1 = null,
+    bool? hostActionV1 = null,
+    bool? fixedTextV1 = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -142,10 +154,26 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
+            if (type.GetString() == "inject-fixed-text")
+            {
+                if (!root.TryGetProperty("expiresUnixMs", out var expiryValue) || !expiryValue.TryGetInt64(out var expiry) ||
+                    !root.TryGetProperty("blockedProcessId", out var processValue) || !processValue.TryGetUInt32(out var blockedProcessId) ||
+                    !root.TryGetProperty("blockedWindowHandles", out var windowsValue) || windowsValue.ValueKind != JsonValueKind.Array || windowsValue.GetArrayLength() > 4)
+                    throw new InvalidOperationException("invalid-fixed-text-command");
+                var blockedWindows = new HashSet<IntPtr>();
+                foreach (var item in windowsValue.EnumerateArray())
+                {
+                    if (!ulong.TryParse(item.GetString(), out var handle)) throw new InvalidOperationException("invalid-fixed-text-command");
+                    blockedWindows.Add(new IntPtr(unchecked((long)handle)));
+                }
+                var injection = RawInputWindow.InjectFixedText(requestId, expiry, blockedProcessId, blockedWindows);
+                _writer.FixedTextResult(requestId, injection.ok, injection.reason, injection.bytes);
+                return Task.CompletedTask;
+            }
             if (type.GetString() == "read-config") {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
                 var report = Convert.FromBase64String(reportValue.GetString() ?? "");
@@ -331,6 +359,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private static RawInputWindow? Current;
     public static void BeginRead(string requestId, uint numericRequest, byte flag) => Current?.BeginReadInternal(requestId, numericRequest, flag);
     public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
+    public static (bool ok, string reason, int bytes) InjectFixedText(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows) =>
+        Current?.InjectFixedTextInternal(requestId, expiresUnixMs, blockedProcessId, blockedWindows) ?? (false, "input-window-unavailable", 0);
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -363,6 +393,9 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private bool _boardConnected;
     private bool _disposed;
     private readonly object _configSync = new();
+    private readonly object _fixedTextSync = new();
+    private readonly FixedTextAssembler _fixedTextAssembler = new();
+    private PendingFixedText? _pendingFixedText;
     private string? _pendingReadRequest;
     private uint _pendingReadNumericRequest;
     private byte _pendingReadFlag;
@@ -476,6 +509,17 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var id = Encoding.ASCII.GetString(report.Slice(5, 36));
             if (IsCanonicalUuid(id)) _writer.HostAction(id);
         }
+        else if (kind == 0x01)
+        {
+            lock (_fixedTextSync)
+            {
+                if (_pendingFixedText is not null && DateTimeOffset.UtcNow > _pendingFixedText.Expires) _pendingFixedText = null;
+                if (!_fixedTextAssembler.Accept(report, out var payload) || payload.Bytes == 0 || _pendingFixedText is not null) return;
+                var requestId = $"fixed-{Guid.NewGuid():N}";
+                _pendingFixedText = new PendingFixedText(requestId, payload.Text, payload.Bytes, DateTimeOffset.UtcNow.AddSeconds(3));
+                _writer.FixedTextReady(requestId, payload.Bytes);
+            }
+        }
         else if (kind == 0x03 && length == 7)
         {
             var bytes = report[7] | (report[8] << 8);
@@ -540,7 +584,11 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
                     using var json=JsonDocument.Parse(data);
                     if (json.RootElement.GetProperty("schema").GetString() != "ai_keyboard.config_status.v1") throw new JsonException("invalid-status-schema");
                     var capabilities=json.RootElement.GetProperty("capabilities");
-                    _writer.ConfigCapabilities(_pendingReadRequest, capabilities.TryGetProperty("config_read_v1",out var read)&&read.ValueKind==JsonValueKind.True, capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True);
+                    _writer.ConfigCapabilities(_pendingReadRequest,
+                        capabilities.TryGetProperty("config_read_v1",out var read)&&read.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("host_action_v1",out var hostAction)&&hostAction.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True);
                 }
                 catch (JsonException) { ResetConfigReadLocked(); return; }
             }
@@ -577,12 +625,49 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return true;
     }
 
+    private (bool ok, string reason, int bytes) InjectFixedTextInternal(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows)
+    {
+        PendingFixedText pending;
+        lock (_fixedTextSync)
+        {
+            if (_pendingFixedText is null || _pendingFixedText.RequestId != requestId)
+                return (false, "fixed-text-not-pending", 0);
+            pending = _pendingFixedText;
+            _pendingFixedText = null;
+        }
+        var now = DateTimeOffset.UtcNow;
+        if (now > pending.Expires || now.ToUnixTimeMilliseconds() > expiresUnixMs)
+            return (false, "fixed-text-command-expired", 0);
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || !IsWindowVisible(foreground))
+            return (false, "fixed-text-no-visible-target", 0);
+        GetWindowThreadProcessId(foreground, out var foregroundProcessId);
+        if (foregroundProcessId == 0 || foregroundProcessId == Environment.ProcessId || foregroundProcessId == blockedProcessId || blockedWindows.Contains(foreground))
+            return (false, "fixed-text-target-rejected", 0);
+        var inputs = new List<NativeInput>(pending.Text.Length * 2);
+        foreach (var character in pending.Text)
+        {
+            inputs.Add(NativeInput.Unicode(character, false));
+            inputs.Add(NativeInput.Unicode(character, true));
+        }
+        var sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<NativeInput>());
+        return sent == inputs.Count ? (true, "", pending.Bytes) : (false, "fixed-text-send-input-incomplete", 0);
+    }
+
     private void RefreshBoardStatus(bool force)
     {
         var connected = EnumerateDeviceNames().Any(name => name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase));
         if (!force && connected == _boardConnected) return;
         _boardConnected = connected;
-        if (!connected) ResetConfigRead();
+        if (!connected)
+        {
+            ResetConfigRead();
+            lock (_fixedTextSync)
+            {
+                _fixedTextAssembler.Reset();
+                _pendingFixedText = null;
+            }
+        }
         _writer.Status(connected);
     }
 
@@ -673,6 +758,40 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         public UIntPtr ExtraInfo;
     }
 
+    private sealed record PendingFixedText(string RequestId, string Text, int Bytes, DateTimeOffset Expires);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeInput
+    {
+        public uint Type;
+        public NativeInputUnion Value;
+
+        public static NativeInput Unicode(char character, bool keyUp) => new()
+        {
+            Type = 1,
+            Value = new NativeInputUnion
+            {
+                Keyboard = new NativeKeyboardInput { ScanCode = character, Flags = keyUp ? 0x0006u : 0x0004u }
+            }
+        };
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct NativeInputUnion
+    {
+        [FieldOffset(0)] public NativeKeyboardInput Keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeKeyboardInput
+    {
+        public ushort VirtualKey;
+        public ushort ScanCode;
+        public uint Flags;
+        public uint Time;
+        public UIntPtr ExtraInfo;
+    }
+
     private delegate IntPtr LowLevelKeyboardProc(int code, IntPtr message, IntPtr data);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -698,4 +817,16 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint inputCount, [In] NativeInput[] inputs, int inputSize);
 }

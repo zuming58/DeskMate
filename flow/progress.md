@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 host actions implementation handed off for independent audit
+
+- 分支与代码：`codex/easyinput-t06-host-actions`，实现基线 `3dc1f5b339f5508f054fde4797cbfab638298f7f`；本次文档收口提交后以新的完整 HEAD 为准。T03/T04 已锁定，T05 核心配置/语音触发已由原主电脑完成用户接受的真机确认。
+- 合同与来源：`HOST_ACTION_V1_FROZEN` 位于 `contracts/deskmate-host/easyinput-host-action-v1.md`。固定只读参考为 `F:\Codex\easyinput-wzm\easy-input-maker` 提交 `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`，许可证 PolyForm Noncommercial 1.0.0；逐文件采用、修改和目标路径见 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`，未复制参考脏工作树或 build 产物。
+- 实现范围：固件新增固定文字/Host Action `0x11` kind `0x01/0x05` 有界流、唯一 TinyUSB IN owner 生命周期、UUID/UTF-8 严格校验、USB epoch/断线/溢出失败关闭；原生桥只向主进程提供脱敏元数据；Electron 主进程负责固定文字前台注入和本机 `.exe`/`.lnk` UUID 白名单执行；renderer 仅提供固定文字编辑、应用选择与脱敏结果。T03 held PTT/atomic tap/断线释放、T04 GPIO12 灯效与 GPIO8 共享电源、T05 配置事务保持不变。
+- 验证：Visual Studio 2022/MSVC 19.44.35228.0、CMake 3.31.6、CTest 7/7；桌面 `npm test` 87/87（含 T02-T05 回归），`npm run build:desktop` 已通过；精确 `ESP-IDF v5.5.5`、target `esp32s3`、Minimal build 和固定 16 MB 分区已通过。提交后必须再次从干净 HEAD 运行这些命令并记录最终 app 大小、SHA-256 和 app-only 结束地址。
+- 产物边界：dirty 工作树 app `329,552` 字节、SHA-256 `7C2649352CEFDC5D4B4C13054C50D5254F27852BC4F23150B24AD27E76A7E27F` 仅为历史证据，不能烧录；最终文档提交会改变 Git revision，必须重建和重新计算。构建目录、release 输出、sdkconfig、managed_components、bin/elf/map 均忽略且不得提交。
+- 硬件与风险：未扫描端口、未识别设备、未读取/写入 Flash/NVS、未烧录、未 erase、未 monitor、未执行 HIL，未修改 EasyInput Maker 或小智参考目录。固定文字注入、UUID 应用启动和 T03-T05 组合回归仍需原主电脑独立审计与授权后的 HIL；已知 `window.confirm` 视觉债务保留。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / HIL_NOT_AUTHORIZED`。下一步：提交并推送本分支，接手方先 fetch、核对完整 HEAD、审计来源和范围，再重建；未经针对最终 HEAD、镜像哈希和精确 app-only 范围的新授权，不得烧录或进入 T07。
+
 ## 2026-08-28 · T05 app flashed and core configuration/voice HIL accepted
 
 - 分支与代码：`codex/easyinput-t05-config-read-fix`，源码 HEAD `14e46f8233ca49fa11d2d63922d5094797e114a5`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 325,760 字节（`0x4F880`），SHA-256 `66DBA78C025E53EFCEA35031FF2D436A85DA2EE98A49FA7CC11E276324CF0905`。
