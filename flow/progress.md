@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 active-window capture stabilized after monitored Windows focus gap
+
+- 做了什么：针对用户在未主动切窗时仍收到“目标窗口已变化”的回归，连续执行两轮脱敏前台监控，只记录相对时间、HWND 和 PID。两轮都观察到从 Codex 切入记事本时先出现 `GetForegroundWindow() == 0`，空窗分别约 92 ms 和 61 ms；进入记事本后 HWND 在整个语音操作期间保持不变。原生桥现在对录音开始目标执行最多 250 ms、每 10 ms 一次的有界采样，并要求同一可见窗口连续出现两次才接受；输出时仍要求当前前台 HWND 与该捕获值完全一致，没有放宽为任意当前窗口。界面同时区分“目标后来变化”和“未能稳定捕获输入目标”，不再把所有安全回退误报为用户切窗。
+- 为什么与怎么理解：旧实现只调用一次 `GetForegroundWindow()`；当用户刚切到目标编辑器就按语音键时，Windows 焦点交接会短暂返回零，DeskMate 因此没有保存本轮目标。转写完成后的剪贴板回退是 fail-closed 的正确后果，但旧提示错误地称为“目标窗口已变化”。监控还证明悬浮条没有抢焦点，记事本内部也没有 HWND 抖动。
+- 产出路径：`native/DeskMate.InputBridge/Program.cs`、`src/pages.jsx`、`tests/native-input-bridge-protocol.test.mjs`、`tests/desktop-reliability.test.mjs`；可复用结论同步到 `flow/lessons.md`。
+- 验证：定向桌面/原生回归 `46/46`；全量 `npm test` `101/101`；`npm run build:desktop` 通过（首次因旧 DeskMate 占用发布文件而失败，关闭旧进程后重跑通过）；`git diff --check` 通过。已关闭旧包并启动 `release/win-unpacked/DeskMate.exe`。未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：用户在新包中先切到记事本、等待焦点稳定后完成一次语音输入，确认文字直接写回；再主动切窗一次确认仍安全回退剪贴板。当前保持 `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`，T06 组合 HIL 完成前不开始 T07。
+
 ## 2026-08-29 · T06 voice target capture race removed and overlay compacted
 
 - 做了什么：修复用户在没有主动切换窗口时仍收到“目标窗口已变化”的新回归。录音开始时的目标捕获从约 1.35 秒冷启动的 PowerShell 改为常驻 `DeskMate.InputBridge` 即时命令；捕获与输出核对现在由同一个原生桥、同一种窗口句柄语义完成。桥事件只返回临时句柄，不含窗口标题、进程路径或转写正文。语音悬浮条按用户要求从 520px 缩为 320px，波形、间距、字号和状态区同步收紧，转写继续单行显示最新尾部。

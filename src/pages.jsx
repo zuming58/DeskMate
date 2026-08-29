@@ -321,8 +321,11 @@ export function VoicePage({ notify }) {
       } else if (processed.transcript.status === "success") {
         if (processed.output.ok) {
           const organizerFallback = processed.organized?.fallback;
-          dispatchSession({ type: "transition", state: "completed", detail: { message: processed.output.fallbackFrom ? "目标窗口已变化，文字已复制到剪贴板" : organizerFallback ? "智能整理不可用，已安全输出原文" : "转写、整理和文字输出均已完成" } });
-          notify(processed.output.fallbackFrom ? "目标窗口已变化，转写已保存并复制到剪贴板" : organizerFallback ? "智能整理不可用，已保留并输出原始转写" : `转写完成，已输出到${processed.output.mode === "history" ? "历史" : processed.output.mode === "clipboard" ? "剪贴板" : "当前窗口"}`);
+          const targetChanged = processed.output.reason === "target-window-changed";
+          const fallbackMessage = targetChanged ? "目标窗口已变化，文字已复制到剪贴板" : "未能稳定捕获输入目标，文字已复制到剪贴板";
+          const fallbackNotice = targetChanged ? "目标窗口已变化，转写已保存并复制到剪贴板" : "未能稳定捕获输入目标，转写已保存并复制到剪贴板";
+          dispatchSession({ type: "transition", state: "completed", detail: { message: processed.output.fallbackFrom ? fallbackMessage : organizerFallback ? "智能整理不可用，已安全输出原文" : "转写、整理和文字输出均已完成" } });
+          notify(processed.output.fallbackFrom ? fallbackNotice : organizerFallback ? "智能整理不可用，已保留并输出原始转写" : `转写完成，已输出到${processed.output.mode === "history" ? "历史" : processed.output.mode === "clipboard" ? "剪贴板" : "当前窗口"}`);
         } else {
           dispatchSession({ type: "transition", state: "error", detail: { message: "转写已保存，但文字输出失败" } });
           notify("转写已保存到历史，但文字输出失败");

@@ -134,10 +134,13 @@ test("desktop main uses the combined target-check-and-paste helper", async () =>
 
 test("voice target capture uses the resident bridge and the overlay stays compact", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const page = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /FOREGROUND_SCRIPT|runPowershell|powershell\.exe/);
   assert.match(source, /inputBridge\?\.captureActiveWindow/);
   assert.match(source, /width: 320/);
   assert.match(source, /\.wave\{width:48px/);
+  assert.match(page, /processed\.output\.reason === "target-window-changed"/);
+  assert.match(page, /未能稳定捕获输入目标，文字已复制到剪贴板/);
 });
 
 test("keyboard configuration UI separates board-read state from saved readback verification", async () => {

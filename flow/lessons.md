@@ -152,3 +152,9 @@
 
 - 直接把一台电脑的整个项目目录覆盖到另一台，会把过期 build、sdkconfig、未跟踪审计文档和远端状态混在一起，既拖慢审计，也无法证明哪个提交生成了镜像。
 - 处理方式是把生成物移入 Git 忽略的待删除目录，仅保留可追溯源码/文档；此后只用 Git 提交交换，并在干净 HEAD 后重新构建烧录镜像。
+
+# Windows foreground capture needs a bounded stabilization window
+
+- `GetForegroundWindow()` can briefly return zero while Windows transfers focus between two visible applications. Two monitored DeskMate runs measured gaps of roughly 60-90 ms even though the user did not change targets during the subsequent voice operation.
+- A single capture at shortcut dispatch can therefore lose the intended target. Capture should retry for a short fixed deadline and accept only the same visible HWND observed consecutively; output must still compare the captured HWND exactly and fail closed if it later changes.
+- Active-window fallback UI must preserve the original failure reason. `no-captured-target` and `target-window-changed` have different causes and should not both be described as user-driven target changes.
