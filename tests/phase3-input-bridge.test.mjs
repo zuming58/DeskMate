@@ -81,6 +81,24 @@ test("active-window paste uses the resident bridge without exposing clipboard te
   manager.stop();
 });
 
+test("voice target capture returns only a transient window handle", async () => {
+  const writes = [];
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+
+  const pending = manager.captureActiveWindow();
+  assert.deepEqual(Object.keys(writes[0]).sort(), ["requestId", "type", "version"].sort());
+  assert.equal(writes[0].type, "capture-active-window");
+  manager.handleLine(JSON.stringify({ version: 1, type: "desktop-window-result", source: "desktop-output", requestId: writes[0].requestId, ok: true, reason: "", targetWindow: "98765", windowTitle: "private", processPath: "private", time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.deepEqual(await pending, { ok: true, targetWindow: "98765" });
+  manager.stop();
+});
+
 test("config snapshots remain control events through the trigger filter", () => {
   const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
   const event = JSON.stringify({

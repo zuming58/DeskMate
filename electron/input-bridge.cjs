@@ -21,6 +21,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingRead = null;
     this.pendingFixedText = null;
     this.pendingPaste = null;
+    this.pendingCapture = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
   }
 
@@ -79,6 +80,9 @@ class InputBridgeManager extends EventEmitter {
     }
     if (result.kind === "desktop-output-result" && this.pendingPaste?.requestId === event.requestId) {
       this.finishPaste(event.ok ? { ok: true } : { ok: false, reason: event.reason || "active-window-output-failed" });
+    }
+    if (result.kind === "desktop-window-result" && this.pendingCapture?.requestId === event.requestId) {
+      this.finishCapture(event.ok ? { ok: true, targetWindow: event.targetWindow } : { ok: false, reason: event.reason || "foreground-window-unavailable" });
     }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
@@ -144,6 +148,17 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
+  captureActiveWindow() {
+    if (this.pendingCapture) return Promise.resolve({ ok: false, reason: "foreground-capture-busy" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    const requestId = `window-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishCapture({ ok: false, reason: "foreground-capture-timeout" }), 1000);
+      this.pendingCapture = { requestId, timeout, resolve };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "capture-active-window", requestId })}\n`, (error) => { if (error) this.finishCapture({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
   requestRead(flag, mode) {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
@@ -192,6 +207,14 @@ class InputBridgeManager extends EventEmitter {
     pending.resolve(result);
   }
 
+  finishCapture(result) {
+    const pending = this.pendingCapture;
+    if (!pending) return;
+    this.pendingCapture = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
   refreshReadTimeout() {
     const pending = this.pendingRead;
     if (!pending) return;
@@ -206,6 +229,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishRead({ ok: false, reason: "input-bridge-exited" });
     this.finishFixedText({ ok: false, reason: "input-bridge-exited", bytes: 0 });
     this.finishPaste({ ok: false, reason: "input-bridge-exited" });
+    this.finishCapture({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -226,6 +250,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishRead({ ok: false, reason: "input-bridge-stopped" });
     this.finishFixedText({ ok: false, reason: "input-bridge-stopped", bytes: 0 });
     this.finishPaste({ ok: false, reason: "input-bridge-stopped" });
+    this.finishCapture({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };

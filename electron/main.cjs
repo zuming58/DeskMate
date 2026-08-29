@@ -1,7 +1,6 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session, safeStorage, shell, Tray, Menu, nativeImage, screen } = require("electron");
 const path = require("path");
 const { fileURLToPath } = require("url");
-const { spawn } = require("child_process");
 const { randomUUID } = require("crypto");
 const fs = require("fs");
 const os = require("os");
@@ -21,7 +20,6 @@ const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -138,26 +136,6 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
-function runPowershell(script, timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true });
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const finish = (value) => { if (settled) return; settled = true; clearTimeout(timeout); resolve(value); };
-    const timeout = setTimeout(() => { child.kill(); finish({ ok: false, reason: "powershell-timeout" }); }, timeoutMs);
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.once("error", (error) => finish({ ok: false, reason: error.message }));
-    child.once("exit", (code) => finish(code === 0 ? { ok: true, value: stdout.trim() } : { ok: false, reason: stderr.trim() || `powershell-exit-${code}` }));
-  });
-}
-
-async function getForegroundWindowId() {
-  const result = await runPowershell(FOREGROUND_SCRIPT);
-  return result.ok && /^\d+$/.test(result.value) ? result.value : null;
-}
-
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
@@ -170,7 +148,8 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut) {
   if (phase === "start") {
     const captureToken = ++voiceTargetCaptureToken;
     voiceTargetWindow = null;
-    voiceTargetCapturePromise = getForegroundWindowId().then((windowId) => {
+    voiceTargetCapturePromise = (inputBridge?.captureActiveWindow?.() || Promise.resolve({ ok: false })).then((result) => {
+      const windowId = result?.ok ? result.targetWindow : null;
       if (captureToken === voiceTargetCaptureToken) voiceTargetWindow = windowId;
       return windowId;
     }).catch(() => null);
@@ -233,7 +212,7 @@ async function pasteIntoCapturedWindow(text) {
 
 function createOverlayWindow() {
   overlayWindow = new BrowserWindow({
-    width: 520,
+    width: 320,
     height: 58,
     frame: false,
     transparent: true,
@@ -247,7 +226,7 @@ function createOverlayWindow() {
   });
   overlayWindow.setAlwaysOnTop(true, "floating");
   overlayWindow.setIgnoreMouseEvents(true);
-  const html = "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent;font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#f7fbff;overflow:hidden}.shell{box-sizing:border-box;height:46px;margin:6px;padding:0 10px 0 12px;border:1px solid rgba(102,205,238,.38);border-radius:14px;background:rgba(22,31,44,.84);box-shadow:0 8px 22px rgba(8,20,36,.18);backdrop-filter:blur(16px);display:flex;align-items:center;gap:10px}.state-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:#44c7eb;box-shadow:0 0 0 3px rgba(68,199,235,.12)}.recording .state-dot{animation:pulse 1.2s ease-out infinite}.error .state-dot{background:#ff7b83}.completed .state-dot{background:#5bd5ae}.wave{width:62px;height:22px;display:flex;align-items:center;justify-content:center;gap:2px;flex:0 0 auto}.wave i{display:block;width:2px;height:var(--h);border-radius:2px;background:#58d4ee;opacity:.9;transition:height .12s ease}.copy{min-width:0;flex:1;color:#fff;font-size:12px;white-space:nowrap;overflow:hidden}.copy.placeholder{color:#9babbc}.copy .lead{color:#8ea1b5}.meter{width:42px;text-align:right;color:#65d7ef;font-size:11px;font-variant-numeric:tabular-nums}.escape{height:22px;padding-left:8px;border-left:1px solid rgba(255,255,255,.11);display:flex;align-items:center;color:#8fa1b3;font-size:9px;white-space:nowrap}@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(68,199,235,0)}100%{box-shadow:0 0 0 0 rgba(68,199,235,0)}}</style></head><body><div id='root'></div></body></html>";
+  const html = "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'\"><style>html,body{margin:0;background:transparent;font-family:'Segoe UI','Microsoft YaHei',sans-serif;color:#f7fbff;overflow:hidden}.shell{box-sizing:border-box;height:46px;margin:6px;padding:0 9px 0 11px;border:1px solid rgba(102,205,238,.38);border-radius:14px;background:rgba(22,31,44,.84);box-shadow:0 8px 22px rgba(8,20,36,.18);backdrop-filter:blur(16px);display:flex;align-items:center;gap:7px}.state-dot{width:7px;height:7px;flex:0 0 auto;border-radius:50%;background:#44c7eb;box-shadow:0 0 0 3px rgba(68,199,235,.12)}.recording .state-dot{animation:pulse 1.2s ease-out infinite}.error .state-dot{background:#ff7b83}.completed .state-dot{background:#5bd5ae}.wave{width:48px;height:22px;display:flex;align-items:center;justify-content:center;gap:1px;flex:0 0 auto}.wave i{display:block;width:2px;height:var(--h);border-radius:2px;background:#58d4ee;opacity:.9;transition:height .12s ease}.copy{min-width:0;flex:1;color:#fff;font-size:11px;white-space:nowrap;overflow:hidden}.copy.placeholder{color:#9babbc}.copy .lead{color:#8ea1b5}.meter{width:34px;text-align:right;color:#65d7ef;font-size:10px;font-variant-numeric:tabular-nums}.escape{height:22px;padding-left:7px;border-left:1px solid rgba(255,255,255,.11);display:flex;align-items:center;color:#8fa1b3;font-size:8px;white-space:nowrap}@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(68,199,235,0)}100%{box-shadow:0 0 0 0 rgba(68,199,235,0)}}</style></head><body><div id='root'></div></body></html>";
   overlayWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 

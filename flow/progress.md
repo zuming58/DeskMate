@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 voice target capture race removed and overlay compacted
+
+- 做了什么：修复用户在没有主动切换窗口时仍收到“目标窗口已变化”的新回归。录音开始时的目标捕获从约 1.35 秒冷启动的 PowerShell 改为常驻 `DeskMate.InputBridge` 即时命令；捕获与输出核对现在由同一个原生桥、同一种窗口句柄语义完成。桥事件只返回临时句柄，不含窗口标题、进程路径或转写正文。语音悬浮条按用户要求从 520px 缩为 320px，波形、间距、字号和状态区同步收紧，转写继续单行显示最新尾部。
+- 为什么与怎么理解：上一候选已经把输出核对改为即时原生桥，但捕获仍延迟启动 PowerShell；两个时点和执行路径不一致，延迟期间即使用户未主动切换，也可能捕获到不同前台窗口。统一到常驻桥既消除竞态，也移除录音开始阶段的 PowerShell 固定开销。
+- 产出路径：`electron/input-bridge-protocol.cjs`、`electron/input-bridge.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、`tests/desktop-reliability.test.mjs`、`tests/phase3-input-bridge.test.mjs`、`tests/native-input-bridge-protocol.test.mjs`。
+- 验证：定向回归 30/30；全量 `npm test` 101/101；`npm run build:desktop` 通过。新增覆盖常驻桥捕获命令、仅句柄结果、主进程无 PowerShell、320px 稳定宽度，以及既有目标变化/SendInput modifier 释放。未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：启动新打包 DeskMate，用户在同一目标窗口完成一次语音输入，确认直接写回且悬浮条尺寸合适；再主动切换窗口一次，确认仍安全回退剪贴板。T06 组合 HIL 完成前不开始 T07。
+
 ## 2026-08-29 · T06 ACK-timeout reconciliation and resident voice paste ready for HIL
 
 - 做了什么：根据新版真机截图确认配置完整读取正常，但保存结果因 `config-ack-timeout` 被判失败；现在写入 ACK 超时后会启动有界完整回读，只有板上指纹精确等于预期配置才判定保存成功，不一致或不可读仍失败关闭。移除保存页长期驻留的“待确认的脱敏路径”卡片，脱敏路径继续只出现在用户确认对话中。语音活动窗口输出不再启动 PowerShell，而是向常驻 `DeskMate.InputBridge` 发送仅含 request ID 和目标窗口句柄的粘贴命令；桥核对前台窗口后用 `SendInput` 发送 Ctrl+V，失败时补发 V/Ctrl release。

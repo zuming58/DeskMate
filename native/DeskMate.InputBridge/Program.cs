@@ -67,6 +67,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
         ok: ok, reason: reason));
 
+    public void DesktopWindowResult(string requestId, bool ok, string reason, string targetWindow) => Write(new BridgeEvent(
+        1, "desktop-window-result", "desktop-output", "ActiveWindow", ok ? "captured" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason, targetWindow: targetWindow));
+
     public void ConfigWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
         1, "config-write", "easyinput-hid", "Config", ok ? "written" : "failed",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -126,7 +131,8 @@ internal sealed record BridgeEvent(
     bool? configReadV1 = null,
     bool? configWriteV1 = null,
     bool? hostActionV1 = null,
-    bool? fixedTextV1 = null);
+    bool? fixedTextV1 = null,
+    string? targetWindow = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -159,10 +165,16 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
+            if (type.GetString() == "capture-active-window")
+            {
+                var capture = RawInputWindow.CaptureActiveWindow();
+                _writer.DesktopWindowResult(requestId, capture.ok, capture.reason, capture.targetWindow);
+                return Task.CompletedTask;
+            }
             if (type.GetString() == "paste-active-window")
             {
                 if (!root.TryGetProperty("targetWindow", out var targetValue) || !ulong.TryParse(targetValue.GetString(), out var target) || target == 0)
@@ -376,6 +388,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         Current?.InjectFixedTextInternal(requestId, expiresUnixMs, blockedProcessId, blockedWindows) ?? (false, "input-window-unavailable", 0);
     public static (bool ok, string reason) PasteActiveWindow(IntPtr expectedWindow) =>
         Current?.PasteActiveWindowInternal(expectedWindow) ?? (false, "input-window-unavailable");
+    public static (bool ok, string reason, string targetWindow) CaptureActiveWindow() =>
+        Current?.CaptureActiveWindowInternal() ?? (false, "input-window-unavailable", string.Empty);
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -686,6 +700,14 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         var releases = new[] { NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true) };
         SendInput((uint)releases.Length, releases, Marshal.SizeOf<NativeInput>());
         return (false, "desktop-output-send-input-incomplete");
+    }
+
+    private (bool ok, string reason, string targetWindow) CaptureActiveWindowInternal()
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || !IsWindowVisible(foreground))
+            return (false, "foreground-window-unavailable", string.Empty);
+        return (true, "", unchecked((ulong)foreground.ToInt64()).ToString());
     }
 
     private void RefreshBoardStatus(bool force)

@@ -9,7 +9,7 @@
 ## Repeated process startup must stay out of the voice output critical path
 
 - 现象：转写完成后长时间停留在“正在写入目标窗口”，实际输出阶段先启动一次 PowerShell 查询前台窗口，再启动一次 PowerShell 发送粘贴键。
-- 做法：本机实测空 PowerShell 冷启动平均约 1.35 秒，因此仅从两次减到一次仍不足。触发录音时继续异步捕获目标窗口；输出阶段改由已经常驻的原生输入桥核对精确窗口句柄并用 `SendInput` 发送 Ctrl+V，命令不携带剪贴板文字。目标变化、超时、部分发送或 helper 失败继续 fail closed，显式释放 modifier 并回退剪贴板。
+- 做法：本机实测空 PowerShell 冷启动平均约 1.35 秒，因此仅从两次减到一次仍不足。录音触发时和输出阶段都改用同一个常驻原生输入桥：即时捕获临时窗口句柄，输出时核对该精确句柄并用 `SendInput` 发送 Ctrl+V；命令不携带剪贴板文字、窗口标题或进程路径。目标变化、超时、部分发送或 helper 失败继续 fail closed，显式释放 modifier 并回退剪贴板。
 - 规则：用户可感知的语音输出关键路径应把外部进程启动次数当作明确性能预算；合并调用时不得删除原有目标身份核对或失败回退。
 
 ## Bounded firmware configuration parsing must avoid a whole-document dynamic DOM

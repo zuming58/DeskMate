@@ -51,3 +51,11 @@ test("native active-window paste validates the exact target and releases modifie
   assert.match(source, /desktop-output-send-input-incomplete/);
   assert.doesNotMatch(source, /PasteActiveWindow\([^)]*text/i);
 });
+
+test("native target capture returns a handle without window metadata", () => {
+  const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
+  assert.match(source, /type\.GetString\(\) == "capture-active-window"/);
+  assert.match(source, /CaptureActiveWindow\(\)/);
+  assert.match(source, /DesktopWindowResult\(string requestId, bool ok, string reason, string targetWindow\)/);
+  assert.doesNotMatch(source, /DesktopWindowResult\([^)]*(title|path)/i);
+});
