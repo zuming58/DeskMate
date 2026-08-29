@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-29 · T08 EasyInput DeskMate Link controller code and build gate complete
+
+- 做了什么：在隔离工作树 `F:\Codex\deskmate-t08-easyinput`、分支 `codex/easyinput-t08-link-controller` 完成 EasyInput 总控端；共享合同/黄金向量提交为 `c8b8a344a72a849640c8b19575768d6daf4d6667`，实现提交为 `697bffa0f372ef57e4b41fa3fa1d7b39bffbab0e`。新增纯 C++ codec/CRC/流式解析器/请求生命周期、GPIO43/44 的 UART0 唯一 owner、HELLO/能力/状态轮询、有限重试、对端重启和旧状态不重放，并把脱敏 Link 状态兼容加入既有 HID 状态响应。
+- 为什么/怎么理解：T08 只建立 EasyInput ↔ 小智的安全只读通信底座，不修改桌面、小智固件、OLED、舵机或音频。Maker 固定参考没有同类 J4 产品通信，只用于任务/日志结构核对；协议真相只来自已冻结合同。应用与 bootloader 日志已退出 UART0，ROM 启动噪声通过 magic/长度/CRC/100 ms 超时恢复，不写 eFuse。
+- 产出路径：`contracts/deskmate-link/`、`firmware/easyinput-controller/components/input_core/*deskmate_link*`、`firmware/easyinput-controller/main/deskmate_link_uart.*`、`docs/handoffs/t08-easyinput-link-controller-2026-08-29.md`、`docs/testing/t08-first-read-only-link-acceptance.md`。
+- 验证/问题解决：EasyInput Host CTest 8/8；ESP-IDF v5.5.5/esp32s3/固定 16 MB 分区构建通过；桌面 `npm ci --include=dev`、115/115 测试和 `npm run build:desktop` 通过。最终自审补齐了“合法错误响应也计入连续请求失败”的边界和精确 100 ms 字节间超时。板级辅助脚本确认 ESP-IDF 工程，但不能识别本仓 C++ pin 常量而给出 warning；因此引脚漂移继续由源码合同测试逐项锁定。未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse、未接线、未操作小智/OLED/舵机/音频。
+- 下一步：推送本分支并停止。小智窗口必须基于合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 完成 Host/构建；随后在当前电脑独立审计两端，再分别申请 app-only 烧录和首次接线授权。第一次双板 HIL 仅验证 HELLO、能力、状态、重启/断线恢复和既有功能回归。
+
 ## 2026-08-29 · T08 parallel firmware ownership opened from frozen T07 main
 
 - role/branch/base：本窗口在隔离工作树 `F:\Codex\deskmate-t08-easyinput` 创建 `codex/easyinput-t08-link-controller`，精确基线为 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`；原 `F:\Codex\deskmate` 的用户界面脏工作树完全未改动。另一窗口将从同一基线创建 `codex/xiaozhi-t08-link-endpoint`。

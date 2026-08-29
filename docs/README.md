@@ -4,6 +4,8 @@
 
 - [T08 parallel EasyInput/Xiaozhi firmware split](handoffs/t08-parallel-firmware-split-2026-08-29.md)
 - [T08 EasyInput Link controller task](../flow/tasks/T08-easyinput-link-controller.md)
+- [T08 EasyInput Link controller code handoff](handoffs/t08-easyinput-link-controller-2026-08-29.md)
+- [T08 first read-only two-board acceptance](testing/t08-first-read-only-link-acceptance.md)
 - [T08 Xiaozhi Link endpoint task](../flow/tasks/T08-xiaozhi-link-endpoint.md)
 - [DeskMate Link v1 frozen contract](../contracts/deskmate-link/v1.md)
 - [DeskMate Link v1 golden vectors](../contracts/deskmate-link/golden-vectors-v1.json)

@@ -1,6 +1,6 @@
 # T08 EasyInput Link controller
 
-Status: `DESKMATE_LINK_V1_FROZEN / IMPLEMENTATION_PENDING / HARDWARE_NOT_AUTHORIZED`
+Status: `DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`
 
 ## Objective and baseline
 
@@ -39,3 +39,12 @@ Implement the EasyInput side of the frozen DeskMate Link v1 without modifying th
 - Root desktop test/build regression because the status JSON crosses the existing host boundary.
 - Source-contract checks for one UART owner, fixed pins, disabled consoles/logging, provenance, privacy and unchanged partitions.
 - Push the branch and report exact contract/final HEAD, tests, image size and SHA-256, then stop without hardware access or `main` merge.
+
+## Delivered code evidence
+
+- Frozen contract commit: `c8b8a344a72a849640c8b19575768d6daf4d6667`.
+- EasyInput implementation commit: `697bffa0f372ef57e4b41fa3fa1d7b39bffbab0e`.
+- Host CTest: 8/8 passed, including codec, streaming parser, retry/disconnect, peer restart, stale-state suppression and source-contract checks.
+- Desktop regression: 115/115 tests and `npm run build:desktop` passed.
+- ESP-IDF: exact v5.5.5, `esp32s3`, fixed 16 MB partition build passed.
+- No port scan, device identification, Flash/NVS access, flash, erase, monitor, wiring, OLED, audio or servo operation was performed.

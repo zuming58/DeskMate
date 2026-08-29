@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A protocol UART must have one owner and no console bytes
+
+- 现象：EasyInput 的 J4 使用 UART0，而 ESP32-S3 的应用日志、bootloader 日志和 ROM 启动字符也可能占用同一线路；只把协议任务接到 GPIO43/44 并不能保证对端收到的都是协议帧。
+- 做法：通过 `sdkconfig.defaults` 关闭应用控制台、secondary console、bootloader 日志和默认日志，把 UART0 的初始化、收发、解析和请求生命周期集中到一个任务；不写 eFuse，因此仍把不可逆关闭 ROM 日志之外的启动字符视为噪声，由两端流式解析器按 magic、长度、CRC 和 100 ms 字节间超时恢复同步。UART 初始化失败只降级 Link，不影响输入等已锁定能力。
+- 规则：共享串口协议必须同时冻结“谁拥有端口”和“线上还可能出现什么字节”；关闭日志不能替代有界、可恢复的解析器，解析器绿测也不能冒充两块板已完成电气连接。
+
 ## A configuration save acknowledgement is not a read-status failure
 
 - 现象：固件已经返回保存 ACK，实体功能和重新进入页面后的读取都正常，但保存页因为紧接着的第一次回读超时，把“键盘系统”和“同步结果”一起显示成失败。
