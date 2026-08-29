@@ -10,15 +10,17 @@
 
 ## Development and safety
 
-- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `SCAFFOLD_ONLY`，正式实现要等 EasyInput 单板闭环和 DeskMate Link v1 冻结。
+- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `T08_PHASE_A_SCAFFOLD`，协议实现必须等待 `DESKMATE_LINK_V1_FROZEN` 的准确提交。
 - 无硬件电脑只能做 parser、场景、模拟舵机、host test 和 build，不得声称 OLED、音频或舵机真机通过。
 - 不扫描端口、不烧录、不读取 Flash、不驱动舵机；机械动作始终需要单独授权。
 - 外部参考 `F:\Codex\xiaozhi-yuntai` 只读使用；复制或派生必须记录来源清单/哈希、许可证、修改与目标路径。
 - 不在本模块建立第二套 `flow/`、`docs/`、hook 或嵌套 Git。
+- Phase A 不得配置真实 UART 控制器/引脚，也不得写 magic、framing、版本、消息 ID、CRC、超时、重试或错误语义；USB Serial/JTAG 仅作为应用日志迁移候选，不能冒充已完成真机恢复验收。
 
 ## Module entry points
 
 - 说明：`README.md`
 - 参考基线：`../../docs/provenance/reference-baselines-2026-08-24.md`
 - DeskMate Link：`../../contracts/deskmate-link/README.md`
-- 测试和构建入口：后续任务建立；当前不得伪造命令已可用。
+- Host tests：`cmake -S firmware/xiaozhi-yuntai/host_test -B firmware/xiaozhi-yuntai/host_test/build -DCMAKE_BUILD_TYPE=Debug`，随后 `cmake --build ... --config Debug` 与 `ctest --test-dir ... -C Debug --output-on-failure`。
+- 固件构建：在精确 ESP-IDF 5.5.3 环境执行 `idf.py -C firmware/xiaozhi-yuntai build`；不得追加 `flash` 或 `monitor`。
