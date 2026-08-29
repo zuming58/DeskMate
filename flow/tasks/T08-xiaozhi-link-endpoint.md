@@ -6,7 +6,9 @@ Status: `T08_PARALLEL_PREPARATION_OPEN / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_
 
 由独立窗口只负责小智执行端。共享合同冻结前只做 UART/控制台证据核对、ESP-IDF 工程与 Host 测试骨架；拿到本窗口提供的准确合同提交后，才实现同一套 DeskMate Link v1 parser、能力和状态响应。
 
-精确基线：`origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`。
+精确产品基线：`origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`。
+
+精确并行协调提交：`90585a6d23a448ad12433c112d451ddea8c737f5`。小智分支从该提交创建；它只比产品基线增加任务卡、分工和计划文档，不含 EasyInput 实现代码。
 
 开发分支：`codex/xiaozhi-t08-link-endpoint`。
 

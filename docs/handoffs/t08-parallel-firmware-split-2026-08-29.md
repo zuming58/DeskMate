@@ -3,6 +3,7 @@
 ## Shared baseline
 
 - Baseline: `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`
+- Coordination commit: `90585a6d23a448ad12433c112d451ddea8c737f5`
 - EasyInput branch: `codex/easyinput-t08-link-controller`
 - Xiaozhi branch: `codex/xiaozhi-t08-link-endpoint`
 - Desktop baseline: `T07_DESKTOP_UI_V1_FROZEN`; neither firmware stream modifies desktop navigation or VoiceWorkflow.
@@ -29,9 +30,12 @@ Physical connection is allowed only after both endpoint branches pass Host tests
 3. 确认 origin/main 精确为：
    3e2a046f49260ead422da4c295c3321de13dca5d
    不一致立即停止，不要猜测或覆盖工作树。
-4. 从该提交建立独立短分支：
+4. 确认本次协调提交存在：
+   90585a6d23a448ad12433c112d451ddea8c737f5
+   该提交只增加 T08 任务、分工和计划文档，不含 EasyInput 实现代码。
+5. 从该协调提交建立独立短分支：
    codex/xiaozhi-t08-link-endpoint
-5. 阅读 flow/tasks/T08-xiaozhi-link-endpoint.md、contracts/deskmate-link/README.md 和 T07_DESKTOP_UI_V1_FROZEN。
+6. 阅读 flow/tasks/T08-xiaozhi-link-endpoint.md、contracts/deskmate-link/README.md 和 T07_DESKTOP_UI_V1_FROZEN。
 
 二、代码所有权
 - 只允许修改 firmware/xiaozhi-yuntai/ 以及本任务对应的小智测试、来源和交接文档。
