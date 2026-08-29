@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 manual matrix passed, locked and ready for Git handoff
+
+- 做了什么：启动当前 `release/win-unpacked` DeskMate 供用户人工验收；用户按清单完成同一窗口语音写回、主动切窗剪贴板安全回退、固定文字、UUID 打开应用、DeskMate 重启后的配置读取，以及八键、旋钮旋转/按压、灯效和语音键回归，并明确报告“测试全部通过”。T06 状态更新为 `HIL_CONFIRMED / USER_ACCEPTED / T06_LOCKED`。
+- 证据归属：接受的桌面源码为本条文档提交前的 `1fb0dab99697209f70927442aa3aaf78fd45ecbc`；板上固件源码仍为已授权烧录的 `7907d6f8412e549fc312eed23deeb31ba5dcda53`，app 327,952 字节（`0x50110`），烧录 SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`。`7907d6f..1fb0dab` 的固件目录 diff 为空，因此本次桌面修复没有造成板端代码漂移；不能把后来未烧录的干净构建哈希冒充板上镜像。
+- 自动化与产出：继承桌面 101/101、固件 Host 7/7、`npm run build:desktop`、精确 ESP-IDF v5.5.5/esp32s3/固定 16 MB 分区构建和组合代码审计通过。正式验收记录为 `docs/testing/t06-host-actions-acceptance-2026-08-29.md`，跨电脑交接同步到 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`。
+- 上传边界：GitHub 只交换源码、合同、测试、审计和交接；`release/`、`build/`、`managed_components/`、SDKCONFIG、bin/elf/map 不提交。另一台电脑 fetch 最终分支后本地重建，不再用整目录覆盖。
+- 硬件与下一步：记录验收和推送期间未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未修改小智或外部参考。提交并推送当前分支后停止；另一台电脑先核对远端 HEAD 和本记录。T07、新固件写入或其他硬件操作必须另行开包和授权。
+
 ## 2026-08-29 · T02-T06 combined self-audit and stable voice-path restoration ready for handoff
 
 - 做了什么：完成 T02～T06 组合代码审计，并撤销被连续真机证据否决的常驻原生桥语音目标候选；恢复 `9e214d1` 已知成功的 PowerShell 边界，即录音开始捕获前台 HWND，输出时在同一 PowerShell 调用内精确核对 HWND 后发送 Ctrl+V。保留配置保存/回读修复、T06 固定文字与打开应用、固件、中文单键和 320 px 悬浮条。同步修正 T05 任务卡的旧 `T06_BLOCKED` 状态。

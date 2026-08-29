@@ -1,5 +1,12 @@
 # Second-computer handoff: T06 EasyInput host actions
 
+## 2026-08-29 final user acceptance
+
+- The user ran the packaged DeskMate application and completed the requested manual matrix: same-window voice writeback, intentional target-change clipboard fallback, fixed-text action, UUID application launch, configuration read after application restart, and regression of eight keys, encoder rotation/press, LED feedback and the voice key. The user explicitly reported that all tests passed.
+- Board firmware source remains `7907d6f8412e549fc312eed23deeb31ba5dcda53`, app size 327,952 bytes (`0x50110`), flashed SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`. There are no firmware source changes between that commit and the accepted desktop HEAD; later commits affect desktop code, tests and documentation only. Do not claim that the later clean-build hash was flashed.
+- Accepted desktop source before this closing documentation commit is `1fb0dab99697209f70927442aa3aaf78fd45ecbc`. T06 is now `HIL_CONFIRMED / USER_ACCEPTED / T06_LOCKED`. The receiving computer must fetch the final pushed branch tip and rebuild generated packages locally; `release/`, firmware `.bin/.elf/.map`, SDKCONFIG and managed components are intentionally not committed.
+- No hardware operation was performed while recording this result. This handoff closes T06 only; it does not authorize T07, a new flash, Flash/NVS reads, erase, monitor, Xiaozhi work or DeskMate Link work.
+
 ## 2026-08-29 combined audit follow-up
 
 - The resident-bridge voice target candidates `c6ead2a` and `8462e59` were rejected by user HIL. The branch restores the last known successful PowerShell capture plus atomic target-check/paste boundary from `9e214d1` without reverting configuration-save fixes, T06 Host Actions, firmware or the 320 px overlay.

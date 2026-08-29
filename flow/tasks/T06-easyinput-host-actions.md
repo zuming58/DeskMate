@@ -1,6 +1,6 @@
 # T06 · EasyInput Windows host actions
 
-- 状态：`SELF_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / HIL_PENDING`。固定文字、打开应用和 T02～T05 组合真机矩阵仍需用户在场时人工验收；本状态不表示 T06 已锁定。
+- 状态：`SELF_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / HIL_CONFIRMED / USER_ACCEPTED / T06_LOCKED`。2026-08-29 用户在当前打包版完成语音同窗写回、主动切窗安全回退、固定文字、打开应用、配置重启回读以及八键/旋钮/灯效/语音回归，并明确报告全部通过。验收详情见 `docs/testing/t06-host-actions-acceptance-2026-08-29.md`。
 - 前置：T03～T05 均锁定，T05 已提供事务配置和重启回读。
 - 计划分支：`codex/easyinput-t06-host-actions`，从 T05 锁定 HEAD 创建。
 - 目标：统一接入必须由 Windows 执行的按键动作：固定文字、打开应用，以及经产品确认的历史/设置/Profile 等 AppCommand；先把 DeskMate 已有“选择应用/本地 UUID 映射/测试打开”与 EasyInput 实体键打通，并完成确认、失败、断线和重启恢复。
