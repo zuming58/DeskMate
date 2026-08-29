@@ -9,7 +9,7 @@
 - 并行边界：T07A 经用户授权可与另一台电脑的 T06 并行，但只允许新增 `ForegroundSessionArbiter` 和测试；T06 仍独占 EasyInput Host Action、应用打开、输入桥、固件及相关 UI。T07B 的 MemoryStore/Outbox/提醒/embedding/Wiki 镜像仍为 `NOT_FROZEN`，不开始实现。
 - 产出：`contracts/deskmate-host/companion-foreground-session-v1.md`、`flow/tasks/T07-companion-foundation.md`、`docs/architecture/companion-memory-and-arbitration-preparation-2026-08-29.md`、`flow/decisions.md` D027、`flow/plan.md`、`src/domain/foregroundSessionArbiter.js`、`tests/foreground-session-arbiter.test.mjs` 和 Wiki 边界文件。
 - 验证和硬件操作：`node --test tests/foreground-session-arbiter.test.mjs` 为 5/5；`npm test` 为 83/83；`npm run build:desktop` 通过（Windows input bridge、Vite build、Electron Windows dir package）。未写入实际记忆、未读取其他 Agent 记忆、未使用云端密钥、未扫描/接触硬件、未读写 Flash/NVS、未烧录、接线或驱动 OLED/舵机。
-- 下一步：为 T07A 创建独立短分支并交接，后续只能在现有 VoiceWorkflow 上增加适配层而不复制录音状态机；T07B 先冻结本地事务 outbox、提醒确认、删除/保留、加密和 embedding/Wiki 镜像合同，再进入任何持久化代码。
+- 分支与交接：从 `3dc1f5b339f5508f054fde4797cbfab638298f7f` 创建并推送 `codex/companion-t07a-foreground-session`；实现包提交为 `a78c94d89217494cad9f737054abee766817d9f7`。后续只能在现有 VoiceWorkflow 上增加适配层而不复制录音状态机；T07B 先冻结本地事务 outbox、提醒确认、删除/保留、加密和 embedding/Wiki 镜像合同，再进入任何持久化代码。
 
 ## 2026-08-29 · Companion interruption and durable-memory preparation researched
 
