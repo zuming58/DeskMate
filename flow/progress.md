@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · Espressif MCP support and manual T06 pressure-test guide added
+
+- 做了什么：按用户提供的乐鑫官方入口，在项目级 `.codex/config.toml` 注册 `espressif-documentation`、`esp-component-registry` 和 `espressif-engineering` 三个可选远程 MCP；文档/组件查询只在写操作时提示，工程排障每次调用均提示确认且所有服务 `required = false`，服务不可用不会阻断 DeskMate 开发。OpenAI Docs 确认受信任项目可使用 `.codex/config.toml` 配置 Streamable HTTP MCP。
+- 为什么与怎么理解：MCP 适合查询精确 ESP-IDF API、组件兼容性和形成排障路径，但不能把第三方回答当成代码、合同或 HIL 证据。新增 `flow/guides/espressif-mcp-troubleshooting.md` 固定问题路由、脱敏清单、建议复核门和 T06 保存/重启五轮手动压力矩阵；用户明确选择自己操作配置界面，本轮 Agent 不代写 NVS。
+- 产出路径：`.codex/config.toml`、`flow/guides/espressif-mcp-troubleshooting.md`、根 `AGENTS.md`。本机仅追加 DeskMate 项目信任记录后，`codex-cli 0.147.0` 的 `codex mcp list/get` 已识别三个服务为 enabled；该结果证明配置被加载，不证明远端认证或实际查询已成功。新 MCP 需新 Codex 任务或客户端刷新后进入工具清单，当前已运行任务不能据配置变化声称服务可调用。
+- 当前硬件事实：新 app 启动后用户确认按键和灯效恢复，DeskMate 配置页显示已读取；这关闭了旧 NVS 配置导致的启动阻断，但 KEY8 保存、Host Action、完整重启回读和五轮压力测试仍为 `HIL_PENDING`。
+- 下一步：用户按指南手动执行 KEY8 保存、Host Action、完整重启和 T03/T04 回归；如失败立即停止重复保存/烧录，保留脱敏的首个失败边界，再由新任务调用对应乐鑫 MCP辅助形成问题清单并补失败测试。T06 HIL 关闭前不开始 T07。
+
 ## 2026-08-29 · T06 configuration-save recovery app flashed; HIL pending
 
 - 烧录身份：源码 HEAD `7907d6f8412e549fc312eed23deeb31ba5dcda53`；ESP-IDF `v5.5.5` / `esp32s3` app 为 327,952 字节（`0x50110`），SHA-256 `8CDAF8B2786D26DF1253E68E7A3EC1A1987199551CB8C7DFC454C090EF09BAE6`。
