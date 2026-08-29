@@ -2,6 +2,50 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07A Companion foreground-session arbiter implemented in parallel with T06
+
+- 做了什么：用户确认 `F:\wiki\99-会话记忆` 属于另一 Agent 后，创建独立边界 `F:\wiki\deskmate-memory\README.md` 与 `SCHEMA.md`，未写入运行时记忆；冻结 `FOREGROUND_SESSION_V1_FROZEN`，新增 T07 任务卡并实现纯领域模块 `src/domain/foregroundSessionArbiter.js` 与 `tests/foreground-session-arbiter.test.mjs`。
+- 怎么理解：听写和陪伴聊天是不同工作流，但只能有一个前台会话所有者。新前台请求会发出旧会话 `stopping/released` 并立即获取新 session；所有上游迟到事件必须同时匹配当前 `sessionId + generation`，否则丢弃。该模块只管理租约/事件，尚未接入录音、TTS、React、Electron、Host Action、硬件或云端。
+- 并行边界：T07A 经用户授权可与另一台电脑的 T06 并行，但只允许新增 `ForegroundSessionArbiter` 和测试；T06 仍独占 EasyInput Host Action、应用打开、输入桥、固件及相关 UI。T07B 的 MemoryStore/Outbox/提醒/embedding/Wiki 镜像仍为 `NOT_FROZEN`，不开始实现。
+- 产出：`contracts/deskmate-host/companion-foreground-session-v1.md`、`flow/tasks/T07-companion-foundation.md`、`docs/architecture/companion-memory-and-arbitration-preparation-2026-08-29.md`、`flow/decisions.md` D027、`flow/plan.md`、`src/domain/foregroundSessionArbiter.js`、`tests/foreground-session-arbiter.test.mjs` 和 Wiki 边界文件。
+- 验证和硬件操作：`node --test tests/foreground-session-arbiter.test.mjs` 为 5/5；`npm test` 为 83/83；`npm run build:desktop` 通过（Windows input bridge、Vite build、Electron Windows dir package）。未写入实际记忆、未读取其他 Agent 记忆、未使用云端密钥、未扫描/接触硬件、未读写 Flash/NVS、未烧录、接线或驱动 OLED/舵机。
+- 下一步：为 T07A 创建独立短分支并交接，后续只能在现有 VoiceWorkflow 上增加适配层而不复制录音状态机；T07B 先冻结本地事务 outbox、提醒确认、删除/保留、加密和 embedding/Wiki 镜像合同，再进入任何持久化代码。
+
+## 2026-08-29 · Companion interruption and durable-memory preparation researched
+
+- 做了什么：根据用户明确的“听写与陪伴可互相打断、不能并行抢占”要求，定义了单一前台会话所有者、取消顺序、session/generation 隔离和超时隔离的候选规则；只读检查 `F:\wiki`，确认其为 Obsidian Vault，已有 `99-会话记忆` 的小时快照/每日反思体系和脚本；检索并核对 LangChain、SQLite、sqlite-vec、Qdrant 的公开技术文档。
+- 怎么理解：桌宠不是把整段对话永久堆到 Markdown。应以“已完成回合/工具结果先进入本地事务 + MemoryOutbox，后台按安静窗口/会话结束抽取候选，每日只做精炼收口”的方式防止断电丢失；启动时重放未完成 outbox。结构化提醒独立于记忆，必须确认。长期召回应同时使用结构化过滤、全文检索和 embedding，再重排；向量不是权限或事实来源。
+- Wiki 边界：`F:\wiki\99-会话记忆` 已可作为人可读归档思想参考，但现有脚本没有事件 ID、幂等/事务 outbox 或 embedding 版本，DeskMate 不能直接接管。后续仅在用户授权后新建独立 ASCII 子目录 `F:\wiki\99-会话记忆\deskmate-companion\`，由 DeskMate 主库单向镜像已确认摘要；向量索引仍由 DeskMate 本地维护。
+- 产出：新增 `docs/architecture/companion-memory-and-arbitration-preparation-2026-08-29.md`，更新 `docs/README.md`。文档为 `NOT_FROZEN`，未增加实现、数据库、云端凭据、Wiki 写入、DeskMate Link 字段或硬件操作。
+- 验证和硬件操作：完成外部一手文档及本地现有记忆 README/脚本的只读审阅；`git diff --check` 待文档写入后统一运行。未读取敏感日志/对话内容、未写入 `F:\wiki`、未接触设备、未读写 Flash/NVS、未烧录、接线或驱动 OLED/舵机。
+- 下一步：在 T06 后为 `ForegroundSessionArbiter`、`MemoryOutbox`、提醒确认卡和 fake provider 单开任务并先做 host tests；embedding 供应商、向量实现、保留期限和 Wiki 写入需用户确认后再冻结。
+
+## 2026-08-29 · Suliniang realtime bridge study and Companion boundary prepared
+
+- 做了什么：只读审阅用户自有外部项目 `F:\Codex\suligent`（`codex/tencent-cloud-deployment@3e2744fcef780466e82d6803362573c6d8560cf0`）的实时语音 WebSocket 桥、上游事件归一化、ASR final 后串行意图分析、会话恢复、消息上限、心跳和 UI 回执路径；未读取 `.env`、未启动服务、未复制外部代码或素材。
+- 怎么理解：文字输入转译和陪伴聊天现在明确为两个独立产品工作流：前者保持稳定的文字输出，不进入人格/记忆/工具；后者提供实时对话、女声 TTS、回合后意图候选、提醒和记忆候选。两者只共享底层音频会话控制与设备适配，避免复制第二套录音状态机。苏丽娘的“记忆”是最多 100 个会话的内存缓存，重启丢失，不是 DeskMate 所需的长期记忆。
+- 产出：新增 `docs/architecture/companion-realtime-bridge-preparation-2026-08-29.md`，并更新 `docs/README.md`。文档标为 `NOT_FROZEN`，提出实时事件、工具确认、结构化提醒和分层记忆的候选边界；没有新增软件/固件实现、云端凭据、DeskMate Link 字段或角色定名。
+- 来源与风险：外部项目根目录未发现 `LICENSE`/`NOTICE` 或同等授权文件，当前记录为 `LICENSE_UNKNOWN`；因此仅学习架构，不允许复制或派生其代码。其导览分类/导航意图、角色提示词、云端二进制 codec 和网页 UI 均不适用 DeskMate。
+- 验证和硬件操作：完成定向源代码与现有桥接测试的只读检查；执行 `git diff --check` 待本轮文档写入后统一运行。未扫描端口、未读取/写入 Flash/NVS、未烧录、接线、上电或驱动 OLED/舵机。
+- 下一步：用户后续确定角色气质、女声音色偏好、陪伴聊天物理按键和 V1 工具范围后，先完成 T06；再单开 Companion 内部事件/fake provider/确认卡/记忆候选箱任务，真实云端 provider 与小智 OLED/DeskMate Link 各自后置并单独冻结。
+
+## 2026-08-29 · Xiaozhi original-firmware study and companion preparation completed
+
+- 做了什么：只读分析 `F:\Codex\xiaozhi-yuntai` 的云端消息入口、OLED/表情、双舵机、动作关键词和许可证；用 Chrome 检索 Open-LLM-VTuber 与 OpenClaw 的公开一手说明，整理为 DeskMate 的陪伴体验、工作工具与 Link 准备方案。
+- 怎么理解：原小智确有左/右/上/下、回中、点头、摇头、转圈和跳舞，但其当前实现会同步直接驱动 PWM，不能原样移植。DeskMate 应让 Windows 统一管理语音模式、Agent 和工具权限，EasyInput 转发高层状态，小智只经唯一仲裁器显示/安全执行。当前桌面 AI 联动与表情 UI 仍是模拟状态，不得冒充小智已受控。
+- 产出：`docs/architecture/xiaozhi-companion-preparation-2026-08-29.md`、`docs/README.md` 与本记录。新文档明确标为 `NOT_FROZEN`，没有新增正式通信字段或固件代码。
+- 验证和硬件操作：外部参考许可证为 MIT；固定参考与精确 ESP-IDF v5.5.3 基线沿用前一条审计证据。`git diff --check` 待本轮文档完成后执行。未扫描端口、未读取 Flash/NVS、未烧录、接线、上电、驱动 OLED 或舵机。
+- 下一步：用户确认角色名、陪伴对话按键和 V1 第一批工作工具范围后，先等待 T06 交接；再按独立任务冻结 `get_capabilities/get_status` Link 切片与黄金向量，之后才建立小智正式 parser/状态/host-test 骨架。
+
+## 2026-08-29 · Xiaozhi firmware parallel-development readiness audited
+
+- role / branch / HEAD / base：当前硬件验收电脑执行只读审计；本地分支 `codex/easyinput-t05-config-read-fix` 已仅以 fast-forward 同步到 GitHub 交接 HEAD `3dc1f5b339f5508f054fde4797cbfab638298f7f`，同一提交也是远端 `codex/easyinput-t06-host-actions` 起点；未创建、合并或推送小智实现分支。
+- scope / changed paths：读取最新远端 T05/T06 交接、三端计划、两电脑规范、小智模块规则、DeskMate Link 状态、硬件基线与固定外部参考；产品代码无改动，本条仅更新 `flow/progress.md`。
+- verification：外部只读参考 `F:\Codex\xiaozhi-yuntai` 存在，两份固定交接文件 SHA-256 与产品基线逐字一致；本机 EIM 登记并实际激活精确 ESP-IDF `v5.5.3`，`idf.py --version` 和 `esp32s3` target 通过。既有参考构建为 `BUILD_CONFIRMED`，但产品目录 `firmware/xiaozhi-yuntai/` 仍只有 `AGENTS.md`、`CLAUDE.md`、`README.md`，状态 `SCAFFOLD_ONLY`；`contracts/deskmate-link/README.md` 仍为 `NOT_FROZEN`。
+- hardware operations：未扫描或识别端口，未读取 Flash/NVS，未烧录、擦除、monitor、接线或驱动舵机。当前仍缺小智实板恢复备份、UART 焊点/连通性/3.3 V 空闲电平、独立供电与共地验收，以及舵机峰值电流、中心、方向和安全限位证据。
+- conclusion / open risks：两台电脑具备并行工作条件，但当前只适合“另一台继续 T06，本机做不产生猜测实现的 Link/小智准备审计”；还不具备直接编写正式小智业务固件的门槛。T06 任务卡明确禁止小智与 DeskMate Link，正式小智实现又依赖 `DESKMATE_LINK_V1_FROZEN`、黄金向量/模拟器和 EasyInput 侧 Link 切片；现在越过会同时违反任务包和未冻结合同边界。
+- next action：先由另一台笔记本完成并交接 T06；随后建立独立 DeskMate Link v1 合同/黄金向量/模拟器任务并冻结最小 `get_capabilities/get_status` 切片。只有该切片冻结且 EasyInput 假 UART 端通过后，才从准确 GitHub HEAD 建立小智首包，先实现严格 parser、只读能力/状态、host test 与 ESP-IDF 5.5.3 build；OLED、UART 实线和舵机分别后置并单独验收。
+
 ## 2026-08-28 · T05 app flashed and core configuration/voice HIL accepted
 
 - 分支与代码：`codex/easyinput-t05-config-read-fix`，源码 HEAD `14e46f8233ca49fa11d2d63922d5094797e114a5`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 325,760 字节（`0x4F880`），SHA-256 `66DBA78C025E53EFCEA35031FF2D436A85DA2EE98A49FA7CC11E276324CF0905`。

@@ -1,5 +1,12 @@
 # Decisions
 
+## D027 · DeskMate companion memory has an independent Wiki boundary
+
+- 日期：2026-08-29
+- 决策：DeskMate 的记忆绝不复用、读取、写入或索引 `F:\wiki\99-会话记忆`，该目录属于另一 Agent。经用户授权，DeskMate 的人可读导出边界固定为 `F:\wiki\deskmate-memory`；DeskMate Windows 本地事务库仍是主数据源，Wiki 仅作为可重建的摘要镜像。
+- 原因：避免跨 Agent 对话、待处理队列和归档混淆，也让删除、恢复、来源和向量索引能够由 DeskMate 独立审计。
+- 说明：当前只创建边界 README/SCHEMA，未写入运行时记忆。持久化 schema、embedding、保留和导出时机仍需单独冻结。
+
 ## D001 · One standalone product repository
 
 - 日期：2026-08-23
