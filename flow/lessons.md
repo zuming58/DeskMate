@@ -3,13 +3,13 @@
 ## A configuration save acknowledgement is not a read-status failure
 
 - 现象：固件已经返回保存 ACK，实体功能和重新进入页面后的读取都正常，但保存页因为紧接着的第一次回读超时，把“键盘系统”和“同步结果”一起显示成失败。
-- 做法：主进程在保存 ACK 后执行有界回读重试，指纹不一致仍立即失败关闭；renderer 分开维护板上配置读取状态与本次同步状态。ACK 后若重试仍不可读，只显示“已保存，回读待确认”，不得冒充完整验证成功，也不得把既有读取状态改写成读取失败。
+- 做法：主进程在保存 ACK 后执行有界回读重试，指纹不一致仍立即失败关闭；renderer 分开维护板上配置读取状态与本次同步状态。ACK 后若重试仍不可读，只显示“已保存，回读待确认”，不得冒充完整验证成功，也不得把既有读取状态改写成读取失败。若 ACK 本身超时，只有随后完整回读与写入前已确认不同的预期指纹精确一致时才转为成功，否则继续报告失败。
 - 规则：涉及持久化的 UI 必须区分“写入未发生”“写入已确认但回读未完成”“写入并回读一致”三种状态；不能用一个布尔值同时表示传输、持久化和读取健康。
 
 ## Repeated process startup must stay out of the voice output critical path
 
 - 现象：转写完成后长时间停留在“正在写入目标窗口”，实际输出阶段先启动一次 PowerShell 查询前台窗口，再启动一次 PowerShell 发送粘贴键。
-- 做法：触发录音时仍异步捕获目标窗口；输出阶段使用一次受控 helper，在同一 PowerShell 进程内核对当前窗口并发送粘贴。目标变化、超时或 helper 失败继续 fail closed 并回退剪贴板。
+- 做法：本机实测空 PowerShell 冷启动平均约 1.35 秒，因此仅从两次减到一次仍不足。触发录音时继续异步捕获目标窗口；输出阶段改由已经常驻的原生输入桥核对精确窗口句柄并用 `SendInput` 发送 Ctrl+V，命令不携带剪贴板文字。目标变化、超时、部分发送或 helper 失败继续 fail closed，显式释放 modifier 并回退剪贴板。
 - 规则：用户可感知的语音输出关键路径应把外部进程启动次数当作明确性能预算；合并调用时不得删除原有目标身份核对或失败回退。
 
 ## Bounded firmware configuration parsing must avoid a whole-document dynamic DOM

@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 
 const require = createRequire(import.meta.url);
-const { verifyConfigReadback } = require("../electron/config-readback.cjs");
+const { completeConfigWrite, verifyConfigReadback } = require("../electron/config-readback.cjs");
 const { pasteIntoCapturedWindow } = require("../electron/active-window-output.cjs");
 
 const expectedConfig = { schema: "ai_keyboard.v1", profiles: [{ keys: { KEY6: { press: "select_all" } } }] };
@@ -63,6 +63,38 @@ test("configuration commit reports saved-but-unverified after bounded readback f
   assert.equal(reads, 3);
 });
 
+test("configuration commit accepts an ACK timeout only after exact readback verification", async () => {
+  let reads = 0;
+  const result = await completeConfigWrite({
+    syncConfig: async () => ({ ok: false, reason: "config-ack-timeout" }),
+    readConfig: async () => { reads += 1; return { ok: true, json: JSON.stringify(expectedConfig), source: 0 }; },
+    expectedConfig,
+    fingerprint,
+    retryDelaysMs: [0],
+    wait: async () => {},
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.saved, true);
+  assert.equal(result.acknowledgement, "readback");
+  assert.equal(reads, 1);
+});
+
+test("configuration commit does not mask an ACK timeout when readback differs", async () => {
+  const result = await completeConfigWrite({
+    syncConfig: async () => ({ ok: false, reason: "config-ack-timeout" }),
+    readConfig: async () => ({ ok: true, json: JSON.stringify({ ...expectedConfig, changed: true }), source: 0 }),
+    expectedConfig,
+    fingerprint,
+    retryDelaysMs: [0],
+    wait: async () => {},
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.saved, false);
+  assert.equal(result.reason, "config-readback-mismatch");
+});
+
 test("active-window output validates the target and pastes through one OS helper call", async () => {
   const calls = [];
   let clipboardText = "";
@@ -94,16 +126,16 @@ test("active-window output preserves fail-closed target changes and helper failu
 
 test("desktop main uses the combined target-check-and-paste helper", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(source, /PASTE_CAPTURED_WINDOW_SCRIPT/);
   const body = source.match(/async function pasteIntoCapturedWindow\(text\) \{([\s\S]*?)\n\}/)?.[1] || "";
   assert.doesNotMatch(body, /getForegroundWindowId\(/);
-  assert.match(body, /runPowershell\(PASTE_CAPTURED_WINDOW_SCRIPT/);
+  assert.doesNotMatch(body, /runPowershell\(/);
+  assert.match(body, /pasteActiveWindow/);
 });
 
 test("keyboard configuration UI separates board-read state from saved readback verification", async () => {
   const main = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const page = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
-  assert.match(main, /verifyConfigReadback\(/);
+  assert.match(main, /completeConfigWrite\(/);
   assert.match(page, /readStatus/);
   assert.match(page, /result\?\.saved/);
   assert.match(page, /已保存，回读待确认/);

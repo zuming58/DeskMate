@@ -62,6 +62,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
         ok: ok, reason: reason, bytes: bytes));
 
+    public void DesktopOutputResult(string requestId, bool ok, string reason) => Write(new BridgeEvent(
+        1, "desktop-output-result", "desktop-output", "ActiveWindow", ok ? "pasted" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId,
+        ok: ok, reason: reason));
+
     public void ConfigWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
         1, "config-write", "easyinput-hid", "Config", ok ? "written" : "failed",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -154,10 +159,18 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
+            if (type.GetString() == "paste-active-window")
+            {
+                if (!root.TryGetProperty("targetWindow", out var targetValue) || !ulong.TryParse(targetValue.GetString(), out var target) || target == 0)
+                    throw new InvalidOperationException("invalid-active-window-command");
+                var output = RawInputWindow.PasteActiveWindow(new IntPtr(unchecked((long)target)));
+                _writer.DesktopOutputResult(requestId, output.ok, output.reason);
+                return Task.CompletedTask;
+            }
             if (type.GetString() == "inject-fixed-text")
             {
                 if (!root.TryGetProperty("expiresUnixMs", out var expiryValue) || !expiryValue.TryGetInt64(out var expiry) ||
@@ -361,6 +374,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
     public static (bool ok, string reason, int bytes) InjectFixedText(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows) =>
         Current?.InjectFixedTextInternal(requestId, expiresUnixMs, blockedProcessId, blockedWindows) ?? (false, "input-window-unavailable", 0);
+    public static (bool ok, string reason) PasteActiveWindow(IntPtr expectedWindow) =>
+        Current?.PasteActiveWindowInternal(expectedWindow) ?? (false, "input-window-unavailable");
     private const int WmInput = 0x00FF;
     private const int WmInputDeviceChange = 0x00FE;
     private const uint RidInput = 0x10000003;
@@ -378,6 +393,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort VkMenu = 0x12;
     private const ushort VkEscape = 0x1B;
     private const ushort VkRMenu = 0xA5;
+    private const ushort VkControl = 0x11;
+    private const ushort VkV = 0x56;
     private const ushort VkF22 = 0x85;
     private const int WhKeyboardLl = 13;
     private const int WmKeyDown = 0x0100;
@@ -654,6 +671,23 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return sent == inputs.Count ? (true, "", pending.Bytes) : (false, "fixed-text-send-input-incomplete", 0);
     }
 
+    private (bool ok, string reason) PasteActiveWindowInternal(IntPtr expectedWindow)
+    {
+        var foreground = GetForegroundWindow();
+        if (expectedWindow == IntPtr.Zero || foreground != expectedWindow || !IsWindowVisible(foreground))
+            return (false, "target-window-changed");
+        var inputs = new[]
+        {
+            NativeInput.Key(VkControl, false), NativeInput.Key(VkV, false),
+            NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true),
+        };
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>());
+        if (sent == inputs.Length) return (true, "");
+        var releases = new[] { NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true) };
+        SendInput((uint)releases.Length, releases, Marshal.SizeOf<NativeInput>());
+        return (false, "desktop-output-send-input-incomplete");
+    }
+
     private void RefreshBoardStatus(bool force)
     {
         var connected = EnumerateDeviceNames().Any(name => name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase));
@@ -772,6 +806,15 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             Value = new NativeInputUnion
             {
                 Keyboard = new NativeKeyboardInput { ScanCode = character, Flags = keyUp ? 0x0006u : 0x0004u }
+            }
+        };
+
+        public static NativeInput Key(ushort virtualKey, bool keyUp) => new()
+        {
+            Type = 1,
+            Value = new NativeInputUnion
+            {
+                Keyboard = new NativeKeyboardInput { VirtualKey = virtualKey, Flags = keyUp ? 0x0002u : 0u }
             }
         };
     }

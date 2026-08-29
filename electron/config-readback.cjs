@@ -39,4 +39,15 @@ async function verifyConfigReadback({
   return { ok: false, saved: true, reason: "config-readback-failed", readbackReason, attempts: retryDelaysMs.length };
 }
 
-module.exports = { DEFAULT_RETRY_DELAYS_MS, verifyConfigReadback };
+async function completeConfigWrite({ syncConfig, readConfig, expectedConfig, fingerprint, retryDelaysMs, wait } = {}) {
+  if (typeof syncConfig !== "function") throw new TypeError("configuration writer is not configured");
+  const written = await syncConfig(expectedConfig);
+  const acknowledgementTimedOut = !written?.ok && written?.reason === "config-ack-timeout";
+  if (!written?.ok && !acknowledgementTimedOut) return written;
+
+  const verified = await verifyConfigReadback({ readConfig, expectedConfig, fingerprint, retryDelaysMs, wait });
+  if (!verified.ok) return acknowledgementTimedOut ? { ...verified, saved: false } : verified;
+  return { ...verified, acknowledgement: acknowledgementTimedOut ? "readback" : "ack" };
+}
+
+module.exports = { DEFAULT_RETRY_DELAYS_MS, completeConfigWrite, verifyConfigReadback };

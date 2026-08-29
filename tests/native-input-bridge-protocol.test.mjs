@@ -42,3 +42,12 @@ test("native fixed-text path is bounded, private, and main-process authorized", 
   assert.match(protocol, /invalidUtf8\[5\] = 0xc3/);
   assert.match(protocol, /if \(_next != 0\).*?ResetActive\(\);.*?return false;/s);
 });
+
+test("native active-window paste validates the exact target and releases modifiers on failure", () => {
+  const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
+  assert.match(source, /type\.GetString\(\) == "paste-active-window"/);
+  assert.match(source, /foreground != expectedWindow/);
+  assert.match(source, /NativeInput\.Key\(VkControl, false\).*NativeInput\.Key\(VkV, false\).*NativeInput\.Key\(VkV, true\).*NativeInput\.Key\(VkControl, true\)/s);
+  assert.match(source, /desktop-output-send-input-incomplete/);
+  assert.doesNotMatch(source, /PasteActiveWindow\([^)]*text/i);
+});

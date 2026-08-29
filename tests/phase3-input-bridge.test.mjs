@@ -60,6 +60,27 @@ test("fixed text injection is single-flight, bounded, and fails on bridge exit",
   manager.stop();
 });
 
+test("active-window paste uses the resident bridge without exposing clipboard text", async () => {
+  const writes = [];
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+
+  const pending = manager.pasteActiveWindow("12345");
+  assert.equal(writes.length, 1);
+  assert.deepEqual(Object.keys(writes[0]).sort(), ["requestId", "targetWindow", "type", "version"].sort());
+  assert.equal(writes[0].type, "paste-active-window");
+  assert.equal(JSON.stringify(writes[0]).includes("private transcript"), false);
+  manager.handleLine(JSON.stringify({ version: 1, type: "desktop-output-result", source: "desktop-output", requestId: writes[0].requestId, ok: true, reason: "", time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.deepEqual(await pending, { ok: true });
+  assert.equal((await manager.pasteActiveWindow("0")).reason, "target-window-invalid");
+  manager.stop();
+});
+
 test("config snapshots remain control events through the trigger filter", () => {
   const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
   const event = JSON.stringify({

@@ -20,6 +20,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingConfig = null;
     this.pendingRead = null;
     this.pendingFixedText = null;
+    this.pendingPaste = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
   }
 
@@ -76,6 +77,9 @@ class InputBridgeManager extends EventEmitter {
     if (result.kind === "fixed-text-result" && this.pendingFixedText?.requestId === event.requestId) {
       this.finishFixedText(event.ok ? { ok: true, bytes: event.bytes } : { ok: false, reason: event.reason || "fixed-text-injection-failed", bytes: event.bytes });
     }
+    if (result.kind === "desktop-output-result" && this.pendingPaste?.requestId === event.requestId) {
+      this.finishPaste(event.ok ? { ok: true } : { ok: false, reason: event.reason || "active-window-output-failed" });
+    }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
 
@@ -127,6 +131,19 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
+  pasteActiveWindow(targetWindow) {
+    const target = String(targetWindow || "");
+    if (!/^[1-9]\d{0,19}$/.test(target)) return Promise.resolve({ ok: false, reason: "target-window-invalid" });
+    if (this.pendingPaste) return Promise.resolve({ ok: false, reason: "active-window-output-busy" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    const requestId = `paste-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishPaste({ ok: false, reason: "active-window-output-timeout" }), 3000);
+      this.pendingPaste = { requestId, timeout, resolve };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "paste-active-window", requestId, targetWindow: target })}\n`, (error) => { if (error) this.finishPaste({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
   requestRead(flag, mode) {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
@@ -167,6 +184,14 @@ class InputBridgeManager extends EventEmitter {
     pending.resolve(result);
   }
 
+  finishPaste(result) {
+    const pending = this.pendingPaste;
+    if (!pending) return;
+    this.pendingPaste = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
   refreshReadTimeout() {
     const pending = this.pendingRead;
     if (!pending) return;
@@ -180,6 +205,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishConfig({ ok: false, reason: "input-bridge-exited" });
     this.finishRead({ ok: false, reason: "input-bridge-exited" });
     this.finishFixedText({ ok: false, reason: "input-bridge-exited", bytes: 0 });
+    this.finishPaste({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -199,6 +225,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishConfig({ ok: false, reason: "input-bridge-stopped" });
     this.finishRead({ ok: false, reason: "input-bridge-stopped" });
     this.finishFixedText({ ok: false, reason: "input-bridge-stopped", bytes: 0 });
+    this.finishPaste({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };

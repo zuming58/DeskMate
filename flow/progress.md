@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 ACK-timeout reconciliation and resident voice paste ready for HIL
+
+- 做了什么：根据新版真机截图确认配置完整读取正常，但保存结果因 `config-ack-timeout` 被判失败；现在写入 ACK 超时后会启动有界完整回读，只有板上指纹精确等于预期配置才判定保存成功，不一致或不可读仍失败关闭。移除保存页长期驻留的“待确认的脱敏路径”卡片，脱敏路径继续只出现在用户确认对话中。语音活动窗口输出不再启动 PowerShell，而是向常驻 `DeskMate.InputBridge` 发送仅含 request ID 和目标窗口句柄的粘贴命令；桥核对前台窗口后用 `SendInput` 发送 Ctrl+V，失败时补发 V/Ctrl release。
+- 为什么与怎么理解：用户切页后能读到已修改值，证明本次真实边界是固件保存成功但 ACK 未被 Windows 链路消费；精确回读能够确认最终状态，不能仅凭超时或体感伪装成功。语音慢的本机测量显示空 PowerShell 冷启动五次平均约 1.35 秒，说明上一轮“两个进程减为一个”仍保留明显固定延迟，改用既有常驻桥才能移除该成本。
+- 产出路径：`electron/config-readback.cjs`、`electron/input-bridge-protocol.cjs`、`electron/input-bridge.cjs`、`electron/active-window-output.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、`src/pages.jsx`，以及 `tests/desktop-reliability.test.mjs`、`tests/phase3-input-bridge.test.mjs`、`tests/native-input-bridge-protocol.test.mjs`。
+- 验证：定向回归 27/27；全量 `npm test` 98/98；`npm run build:desktop` 通过。新增覆盖 ACK timeout + exact readback、mismatch fail-closed、常驻桥单飞/脱敏命令、精确目标校验和 SendInput modifier 释放。本轮未修改固件或冻结合同，未扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。
+- 下一步：启动新打包 DeskMate，真机验证 KEY6 单字段保存后当前页面直接显示“已保存并回读确认”，并验证一次语音输出耗时和目标变化剪贴板回退；T06 组合 HIL 完成前不开始 T07。
+
 ## 2026-08-29 · T06 desktop config status and voice output latency fixed
 
 - 做了什么：修复两个用户真机联调后确认的桌面问题。配置提交在固件保存 ACK 后增加三次有界回读验证，第一次瞬时失败可恢复；板上读取状态与同步状态拆开，成功后清除旧脱敏差异，保存已确认但回读仍失败时显示“已保存，回读待确认”，真实指纹不一致继续立即失败关闭。语音活动窗口输出把“核对当前前台窗口 + Ctrl+V”合并为一次 PowerShell 调用，保留录音触发时捕获的目标窗口、目标变化拒绝和剪贴板回退。

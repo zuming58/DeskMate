@@ -14,8 +14,8 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
-const { verifyConfigReadback } = require("./config-readback.cjs");
-const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
+const { completeConfigWrite } = require("./config-readback.cjs");
+const { pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
@@ -138,9 +138,9 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
-function runPowershell(script, timeoutMs = 3000, environment = {}) {
+function runPowershell(script, timeoutMs = 3000) {
   return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, env: { ...process.env, ...environment } });
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -225,7 +225,7 @@ async function pasteIntoCapturedWindow(text) {
     text,
     targetWindow,
     writeClipboard: (value) => clipboard.writeText(value),
-    runPaste: (expectedWindow) => runPowershell(PASTE_CAPTURED_WINDOW_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
+    runPaste: (expectedWindow) => inputBridge?.pasteActiveWindow?.(expectedWindow) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
   });
   if (result.ok) voiceTargetWindow = null;
   return result;
@@ -461,8 +461,7 @@ app.whenReady().then(async () => {
     if (configFingerprint(current) !== pending.fingerprint) return { ok: false, reason: "config-changed-concurrently" };
     const capabilityGate = checkHostCapabilities(pending.merged, inputBridge?.snapshot()?.configCapabilities);
     if (!capabilityGate.ok) return capabilityGate;
-    const written = await inputBridge.syncConfig(pending.merged); if (!written?.ok) return written;
-    const verified = await verifyConfigReadback({ readConfig: () => inputBridge.readConfig(), expectedConfig: pending.merged, fingerprint: configFingerprint });
+    const verified = await completeConfigWrite({ syncConfig: (value) => inputBridge.syncConfig(value), readConfig: () => inputBridge.readConfig(), expectedConfig: pending.merged, fingerprint: configFingerprint });
     if (!verified.ok) return verified;
     keyboardConfigState = { raw: verified.config, fingerprint: verified.fingerprint, source: verified.source, token: null };
     return { ok: true, saved: true, source: verified.source, fingerprint: verified.fingerprint, verificationAttempts: verified.attempts };
