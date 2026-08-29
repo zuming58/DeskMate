@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07 Desktop UI V1 frozen for mainline integration
+
+- role/branch/base：当前硬件验收电脑在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 完成桌面冻结；本轮进入时 HEAD `860e726ed5519a3afa8195e59c15994ad2717eb8`，冻结提交 `e3b2e605166a90d32c73d72d39e4f2e0f016a738`，共同历史基于已锁定 T06 `619d85347499545e9af11488bb5d141296ae1dd3`。
+- scope/changed paths：用户确认 KEY3 语音编辑已完成，且此前真实文字模型的智能整理测试通过。新增 `docs/contracts/t07-desktop-ui-v1.md` 并标记 `T07_DESKTOP_UI_V1_FROZEN`；D030 固定七个主导航入口、内部页面归属、共享七表情脸、单一 VoiceWorkflow 和完整 T06 能力基线；同步 `docs/README.md`、`flow/decisions.md`、`flow/plan.md`。
+- verification/hardware：冻结前最终候选已完成 `npm test` 115/115 和 `npm run build:desktop`，用户完成 KEY3 功能确认；智能整理与 KEY3 属用户可见 HIL，实时陪伴、自动记忆、DeskMate Link、小智 OLED/舵机仍未完成。本轮冻结记录没有扫描端口、读写 Flash/NVS、烧录或改变任一固件/硬件配置。
+- open risks/next action：`origin/main` 当前仍是较早的 `069c2a90da4f3ad436074c0cd35a566a2268f91e`，而冻结分支包含后续 T05/T06/T07；原 `F:\Codex\deskmate` 工作树仍在 `codex/companion-t07c-ui-shell@9e5e442` 且有用户未提交改动，必须保持原样。下一步在新隔离工作树从准确 `origin/main` 合并冻结分支，重新执行依赖安装、115 项全量测试和桌面打包，通过后推送远端 `main`，供 EasyInput 与小智后续短分支共同取基线。
+
 ## 2026-08-29 · T07D idle Escape and physical KEY3 voice-edit regression fixed
 
 - 用户证据：用户用已配置的真实文字模型确认“智能整理”可用，能够去除重复和口头语；同时复现两个桌面回归：没有语音会话时按 Escape 仍显示“已取消当前语音输入”，实体 KEY3/语音编辑没有可见响应。
