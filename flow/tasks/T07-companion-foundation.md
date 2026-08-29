@@ -1,6 +1,6 @@
 # T07 - Companion desktop foundation
 
-Status: `T07A_READY / T07B_NOT_FROZEN`
+Status: `T07A_IMPLEMENTED / T07B1_IMPLEMENTED / T07B2_NOT_FROZEN`
 
 ## Why this package can run in parallel with T06
 
@@ -24,11 +24,29 @@ Forbidden paths and behavior:
 
 Verification: direct host tests plus `npm test`; no hardware claim.
 
-## T07B: durable memory store
+## T07B1: memory outbox domain
+
+Contract: [`MEMORY_OUTBOX_V1_FROZEN`](../../contracts/deskmate-host/companion-memory-outbox-v1.md).
+
+Implementation: `src/domain/companionMemoryOutbox.js` with host coverage in `tests/companion-memory-outbox.test.mjs`. This slice is complete at the pure-domain boundary; it does not claim persistence, retrieval, reminders or UI integration.
+
+Implement a pure, immutable outbox domain for finalized Companion turns, completed tool results, explicit remember requests, idempotent enqueue, bounded FIFO claims, worker ownership, release, completion and startup recovery.
+
+Allowed paths:
+
+- `src/domain/companionMemoryOutbox.js`
+- `tests/companion-memory-outbox.test.mjs`
+- the T07B1 contract and tightly related documentation/progress records
+
+Forbidden paths and behavior:
+
+- Database dependencies or migrations, Electron/React integration, cloud calls, embeddings, Wiki runtime writes, reminders, existing VoiceWorkflow, T06 paths, firmware, HID/serial, DeskMate Link or hardware access.
+
+## T07B2: durable persistence and retrieval
 
 Status: `NOT_FROZEN`.
 
-Before code, separately freeze the `MemoryStore`, `MemoryOutbox`, reminder confirmation, deletion/retention, encryption, embedding-provider and optional Wiki-mirror contracts. No current task authorizes a database migration, embedding provider, cloud request, or a write beyond the boundary-reserving files in `F:\wiki\deskmate-memory`.
+Before code, separately freeze the persistence engine, reminder confirmation, deletion/retention, encryption, embedding-provider and optional Wiki-mirror contracts. No current task authorizes a database migration, embedding provider, cloud request, or a runtime write to `F:\wiki\deskmate-memory`.
 
 ## Handoff requirement
 

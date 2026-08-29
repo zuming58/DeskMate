@@ -8,6 +8,7 @@
 - [Companion realtime bridge preparation](architecture/companion-realtime-bridge-preparation-2026-08-29.md)
 - [Companion memory and arbitration preparation](architecture/companion-memory-and-arbitration-preparation-2026-08-29.md)
 - [Frozen Companion foreground-session contract](../contracts/deskmate-host/companion-foreground-session-v1.md)
+- [Frozen Companion memory-outbox contract](../contracts/deskmate-host/companion-memory-outbox-v1.md)
 - [T07 Companion desktop foundation](../flow/tasks/T07-companion-foundation.md)
 - [Integrated software and hardware project start](handoffs/integrated-project-start-2026-08-23.md)
 - [Earlier three-system source-analysis handoff (boundary superseded)](handoffs/development-start-handoff-2026-08-23.md)

@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07B1 Companion memory outbox implemented; navigation consolidation requested
+
+- 做了什么：冻结 `MEMORY_OUTBOX_V1_FROZEN`，实现纯领域 `CompanionMemoryOutbox`，覆盖最终用户/助手回合、已完成工具结果、明确“请记住”请求、稳定事件 ID、幂等入队、冲突拒绝、有界 FIFO claim、worker ownership、release/complete 和启动恢复。流式片段、音频载荷和未知事件均拒绝进入长期记忆候选链。
+- 产出：`contracts/deskmate-host/companion-memory-outbox-v1.md`、`src/domain/companionMemoryOutbox.js`、`tests/companion-memory-outbox.test.mjs`，并同步 `docs/README.md`、`flow/plan.md` 与 `flow/tasks/T07-companion-foundation.md`。该切片不含数据库、加密、embedding、Wiki 运行时写入、提醒、React/Electron 接入或硬件通信。
+- 验证：`node --test tests/companion-memory-outbox.test.mjs` 6/6；`npm test` 89/89；`npm run build:desktop` 通过（Windows input bridge、Vite、Electron Windows dir package）。未访问、扫描、接线或写入硬件，未读写 Flash/NVS，未调用云端，也未写入任何运行时记忆。
+- 新的产品方向：用户确认记忆、提醒等属于 Windows 软件，并要求精简左侧导航。现状 `src/App.jsx` 将设备连接、AI 联动、表情库、表情编辑、动作编排、环境感知等低频入口平铺；后续应保留 EasyInput 高频工作入口，并把设备/桌宠管理收敛为中心页面。该信息架构尚未冻结，本分支未改 UI，避免与 T07B1 领域包混合。
+- 分支与下一步：当前分支 `codex/companion-t07b-memory-outbox`，基于 T07A 交接提交 `06e9ba4f440140532996659cfad35cedea080699`。下一切片先选择并冻结精简导航与“陪伴/记忆/提醒/桌宠中心”的信息架构；持久化、提醒调度、向量检索和 Wiki 镜像仍分别冻结后再实现。
+
 ## 2026-08-29 · T07A Companion foreground-session arbiter implemented in parallel with T06
 
 - 做了什么：用户确认 `F:\wiki\99-会话记忆` 属于另一 Agent 后，创建独立边界 `F:\wiki\deskmate-memory\README.md` 与 `SCHEMA.md`，未写入运行时记忆；冻结 `FOREGROUND_SESSION_V1_FROZEN`，新增 T07 任务卡并实现纯领域模块 `src/domain/foregroundSessionArbiter.js` 与 `tests/foreground-session-arbiter.test.mjs`。
