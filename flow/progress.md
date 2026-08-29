@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 closure check completed and branch handed off
+
+- 做了什么：完成 T06 收工自检，复核根级 `AGENTS.md`、Project Flow、双电脑交接规范、分支状态和既有验证证据；T06 固定文字与安全打开应用实现、合同、来源记录、Host/桌面/ESP-IDF 验证及旧板 app-only 烧录事实均已提交。收工前远端分支为 `codex/easyinput-t06-host-actions`，HEAD `4d6fd81b8e8e3f03effe5727aba1dcf5e25fc57b`；本条为纯交接文档更新，最终推送 HEAD 在交付回复中报告。
+- 为什么与怎么理解：T06 代码和构建已经结束，但用户准备更换实体板，固定文字、UUID 打开应用及 T03-T05 组合真机矩阵尚未执行，因此当前只能保持 `TEST_CONFIRMED / BUILD_CONFIRMED / APP_FLASH_CONFIRMED / HIL_PAUSED_FOR_BOARD_REPLACEMENT`，不能把写入哈希通过等同于 T06 真机验收通过。
+- 产出路径：冻结合同 `contracts/deskmate-host/easyinput-host-action-v1.md`；实现来源与许可证 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`；跨电脑交接 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`；详细硬件边界与镜像证据见紧随其后的 T06 记录。
+- 问题解决：最终镜像、源码 HEAD、大小、SHA-256、app-only 数据范围和实际擦写扇区均已如实记录；构建产物未进入 Git，端口和私有设备身份未进入仓库。用户发出暂停后没有继续识别、读取、写入或 monitor。
+- 文档判断：本轮未改变仓库结构、架构、产品方向或视觉设计，无需更新 `AGENTS.md` / `DESIGN.md`；没有新增稳定决策或独立可复用故障模型，无需追加 `flow/decisions.md` / `flow/lessons.md`。
+- 下一步：等待用户换好新板。接手时先 fetch 并核对本分支最终远端 HEAD，独立审计和重建；如需写入新板，必须重新识别目标，并展示届时的精确 HEAD、app SHA-256 和 app-only 范围，取得新的明确授权后才烧录和执行 T06 HIL。T06 HIL 关闭前不开始 T07。
+
 ## 2026-08-29 · T06 final app flashed; HIL paused for board replacement
 
 - 分支与镜像：`codex/easyinput-t06-host-actions`，烧录源码 HEAD `b99f012c9faa5bdc65531df9237727b78a794a9b`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 329,552 字节（`0x50750`），SHA-256 `C20B37E056A1DF8D677C6EA48D88A1F3EE99991AC3B920AA15F9930F9159B0BA`。
