@@ -6,7 +6,7 @@ This integration starts from the accepted T06 desktop baseline at `619d853474995
 
 ## Primary navigation
 
-The left navigation has eight product-level destinations:
+The left navigation has seven product-level destinations:
 
 1. 工作台
 2. 语音输入
@@ -14,14 +14,14 @@ The left navigation has eight product-level destinations:
 4. 历史记录
 5. 词库
 6. 按键配置
-7. 设备连接
-8. 设备与诊断
+7. 设备与诊断
 
-The former standalone AI 联动、表情库、表情编辑、动作编排 and 环境感知 entries are no longer primary navigation. AI 联动、表情库 and 动作编排 are embedded in AI 陪伴. Legacy internal routes remain available in code for compatibility, but are not advertised as product destinations. Environment sensing remains out of the active product surface.
+The former standalone 设备连接、AI 联动、表情库、表情编辑、动作编排 and 环境感知 entries are no longer primary navigation. 设备连接 is embedded in 设备与诊断. AI 联动、表情库、动作编排 and 记忆管理 are embedded in AI 陪伴. Legacy internal routes remain available in code for compatibility, but are not advertised as product destinations. Environment sensing remains out of the active product surface.
 
 ## AI Companion sections
 
-- 陪伴与记忆: software-only interaction preview, reminder and memory examples, and honest service readiness.
+- 陪伴与记忆: software-only interaction preview, reminder examples, and honest service readiness.
+- 记忆管理: a real local SQLite WAL repository status, daily-summary/candidate/long-term-memory views and candidate approval controls. Conversation ingestion, automatic summarization and embeddings remain pending until the shared companion voice pipeline is connected.
 - 表情库: seven built-in raster expressions plus a temporary local import preview. Import does not persist and is not sent to Xiaozhi.
 - 动作编排: software-only previews for attentive, nod, search and dance. No servo command is emitted.
 - AI 联动: preserves the T06 adapter simulation, status mapping and per-agent expression mapping.
@@ -49,16 +49,16 @@ The selected visual source is `design/concepts/companion-expression-elastic-lang
 ## Truthful state boundary
 
 - EasyInput status comes from the existing input bridge.
-- Xiaozhi, real-time companion voice, memory, reminders, expression upload persistence and servo output remain `待接入` or `待开发`.
+- Xiaozhi, real-time companion voice, automatic memory summarization/embedding, reminders, expression upload persistence and servo output remain `待接入` or `待开发`.
+- The Windows memory database and review schema are real and local; an empty database is shown as empty rather than populated with demonstration memories.
 - No simulated state may be presented as a physical connection or hardware action.
 - This package performs no port scan, device identification, Flash/NVS read or write, burn, erase, monitor or eFuse operation.
 
 ## Verification
 
-- `npm test`: 105/105 passed.
+- `npm test`: 112/112 passed for this follow-up implementation.
 - `npm run build:desktop`: passed.
-- Browser navigation smoke: all eight primary destinations opened.
+- Browser navigation smoke: all seven primary destinations opened; 设备连接 opened inside 设备与诊断.
 - Companion interaction smoke: start/stop preview, seven expressions, search, motion preview and AI adapter section opened.
 - Responsive check: requested 900×800 override rendered at 1000×889 under the selected Edge scaling; document width stayed within the viewport.
 - Visual comparison: `design/qa/design-qa.md`.
-

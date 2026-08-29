@@ -29,6 +29,13 @@ test("desktop shortcuts are normalized and unsafe values are rejected", () => {
   assert.throws(() => normalizeShortcut("DefinitelyNotAnAccelerator"), /修饰键/);
 });
 
+test("the dedicated voice-edit shortcut cannot be reused by normal voice input", async () => {
+  const main = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  assert.match(main, /DEFAULT_EDIT_SHORTCUT = "Ctrl\+Shift\+E"/);
+  assert.match(main, /candidate === DEFAULT_EDIT_SHORTCUT/);
+  assert.match(main, /已保留给语音编辑/);
+});
+
 test("shortcut capture derives an accelerator from physical key presses", () => {
   assert.deepEqual(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: true, altKey: true, shiftKey: false, metaKey: false }), { shortcut: "Ctrl+Alt+K" });
   assert.equal(shortcutFromKeyboardEvent({ code: "KeyK", key: "k", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }).error.includes("修饰键"), true);

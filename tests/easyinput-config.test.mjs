@@ -171,7 +171,10 @@ test("the current-key save button uses the guarded preview and commit flow", asy
   const source = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(source, /onClick=\{syncKeyboard\}>保存当前按键/);
   assert.match(source, /previewKeyboardConfigPatch\(patch\)/);
-  assert.match(source, /commitKeyboardConfig\(preview\.token\)/);
+  assert.match(source, /setConfigConfirmation\(\{ token: preview\.token/);
+  assert.match(source, /commitKeyboardConfig\(pending\.token\)/);
+  assert.match(source, /<ConfirmationDialog/);
+  assert.doesNotMatch(source, /window\.confirm/);
   assert.doesNotMatch(source, /syncKeyboardConfig\(/);
 });
 

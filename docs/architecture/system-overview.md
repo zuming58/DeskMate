@@ -38,7 +38,7 @@ Speaker/consent ─> local profile + encrypted memory service ─> minimal retri
                                                      └───────> companion conversation
 ```
 
-这条本地长期记忆和说话人识别链是已冻结的产品方向，尚未实现；界面和设备不得提前显示为已连接或已有记忆。
+这条本地长期记忆和说话人识别链是已冻结的产品方向。当前只实现 Windows 本地 SQLite WAL 底座、摘要/候选/embedding schema、状态与候选审核入口；实时陪伴写入、自动摘要、向量生成、人物隔离和说话人识别尚未实现。界面和设备不得提前显示为已有记忆或已接通云端。
 
 ## Trust boundaries
 

@@ -66,6 +66,7 @@ import { mapAiStateToPetIntent } from "./domain/petIntent.js";
 import {
   Button,
   Card,
+  ConfirmationDialog,
   EmptyState,
   IconButton,
   Keycap,
@@ -227,6 +228,7 @@ export function CompanionPage({ notify }) {
         onChange={setSection}
         options={[
           { value: "overview", label: "陪伴与记忆" },
+          { value: "memory", label: "记忆管理" },
           { value: "expressions", label: "表情库" },
           { value: "motion", label: "动作编排" },
           { value: "agents", label: "AI 联动" },
@@ -262,9 +264,66 @@ export function CompanionPage({ notify }) {
           <Notice tone="info" title="语音互斥边界">陪伴对话与文字语音输入将共用同一个版本化语音状态机；当前页面不会启动第二套麦克风流程。</Notice>
         </div>
       </div>}
+      {section === "memory" && <MemoryManagementPage notify={notify} />}
       {section === "expressions" && <ExpressionsPage notify={notify} embedded />}
       {section === "motion" && <MotionPage notify={notify} embedded />}
       {section === "agents" && <AgentsPage notify={notify} embedded />}
+    </div>
+  );
+}
+
+function MemoryManagementPage({ notify }) {
+  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [memoryStatus, setMemoryStatus] = useState({ ready: false, storage: "unavailable", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0 });
+  const [memoryItems, setMemoryItems] = useState([]);
+  const refreshMemory = useCallback(async () => {
+    try {
+      const [status, items] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, query, limit: 100 })]);
+      if (status) setMemoryStatus(status);
+      setMemoryItems(Array.isArray(items) ? items : []);
+    } catch { setMemoryStatus((current) => ({ ...current, ready: false, storage: "unavailable" })); }
+  }, [filter, query]);
+  useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); return () => window.clearTimeout(timer); }, [refreshMemory]);
+  const reviewCandidate = async (id, state) => {
+    try {
+      const result = await globalThis.desktopBridge?.setMemoryCandidateState?.({ id, state });
+      if (!result?.ok) throw new Error("候选不存在或已变化");
+      notify(state === "accepted" ? "已加入长期记忆" : "已忽略这条记忆候选");
+      await refreshMemory();
+    } catch (error) { notify(`记忆审核失败：${error.message}`); }
+  };
+  return (
+    <div className="companion-embedded memory-management">
+      <div className="embedded-heading">
+        <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话接通后自动进入这条流水线。</p></div>
+        <StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge>
+      </div>
+      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆仓已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `已建立 SQLite WAL 事务库，现有 ${memoryStatus.turns} 条会话事件。陪伴实时对话尚未接入，因此不会伪造摘要或候选。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <div className="memory-metrics">
+        <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
+        <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />
+        <Metric label="长期记忆" value={String(memoryStatus.longTermMemories)} unit="条" trend="可检索" tone="cyan" />
+        <Metric label="向量索引" value={String(memoryStatus.embeddings)} unit="条" trend="Embedding 待接入" tone="violet" />
+      </div>
+      <Card className="memory-toolbar">
+        <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "全部" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
+        <SearchField value={query} onChange={setQuery} placeholder="搜索日期、主题或记忆内容" />
+      </Card>
+      <div className="memory-layout">
+        <Card className="memory-empty-card">
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的记忆" description="本地事务库已经就绪；实时陪伴对话尚未接入，因此不会生成虚构摘要或长期记忆候选。" action={<Button variant="soft" onClick={() => notify("记忆底座已完成；下一步由陪伴对话写入会话事件并触发摘要任务")}>查看当前边界</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : "记忆候选"}</span><time>{item.day}</time></div><p>{item.content}</p>{item.type === "candidate" && item.state === "pending" && <div className="button-row"><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></div>}</article>)}</div>}
+        </Card>
+        <Card>
+          <SectionTitle index="01" title="计划中的记忆流水线" description="先可靠落盘，再异步总结；异常退出后可从未整理候选恢复。" />
+          <div className="memory-pipeline">
+            <div><span><History size={18} /></span><strong>会话事件即时落盘</strong><small>每轮对话先进入本地 SQLite 事务日志，不等待每日总结。</small></div>
+            <div><span><Book2 size={18} /></span><strong>每日摘要与候选箱</strong><small>空闲时和每日收尾生成摘要；未审核候选不会静默变成长记忆。</small></div>
+            <div><span><Brain size={18} /></span><strong>关键词 + 向量检索</strong><small>原文、结构化事实和 embedding 分层保存，更换模型不丢来源。</small></div>
+            <div><span><Lock size={18} /></span><strong>可查看、纠正与忘记</strong><small>人物隔离、敏感信息默认排除，并提供导出、备份和彻底删除。</small></div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -347,7 +406,9 @@ export function VoicePage({ notify }) {
   const realtimeAttemptRef = useRef(0);
   const realtimeWantedRef = useRef(false);
   const pendingRealtimeAudioRef = useRef([]);
+  const workflowRef = useRef("input");
   const handleComplete = useCallback(async (item) => {
+    const workflow = workflowRef.current === "edit" ? "edit" : "input";
     dispatchSession({ type: "transition", state: "transcribing", detail: { message: "正在发送到千问语音识别" } });
     const id = globalThis.crypto?.randomUUID?.() || `recording-${Date.now()}`;
     let audioId;
@@ -362,13 +423,15 @@ export function VoicePage({ notify }) {
     const stt = state.settings.sttMode === "mock" ? new MockSttAdapter() : state.settings.sttMode === "bailian" ? new BailianSttAdapter() : state.settings.sttMode === "http" ? new HttpSttAdapter({ endpoint: state.settings.sttEndpoint }) : voiceAdapters.stt;
     setRecordingItem({ ...item, id, audioId });
     const controller = new AbortController(); sttAbortRef.current = controller; setProcessing(true);
-    const mode = state.settings.activeWindowOutputEnabled ? "active-window" : state.settings.outputMode;
+    const mode = workflow === "edit" ? "active-window" : state.settings.activeWindowOutputEnabled ? "active-window" : state.settings.outputMode;
     try {
       const processed = await processVoiceRecording({
         blob: item.blob,
         stt,
         organizer: new ConfigurableTextOrganizer({ smartOrganizer: new BailianTextOrganizer() }),
         organizerOptions: { mode: state.settings.formatting, rules: state.vocabulary.rules, hotwords: state.vocabulary.hotwords, customRule: state.settings.customOrganizerRule },
+        editor: { edit: (instruction, options) => voiceAdapters.desktop.editSelectedText(instruction, options) },
+        operation: workflow,
         signal: controller.signal,
         output: voiceAdapters.output,
         outputMode: mode,
@@ -379,12 +442,16 @@ export function VoicePage({ notify }) {
         saveHistory: async ({ text, transcript: result, organized, failure }) => {
           const organizer = organized ? { mode: organized.mode || "raw", model: organized.model || "unknown", durationMs: Number(organized.durationMs) || 0, status: organized.status || (organized.fallback ? "fallback" : "success"), fallback: Boolean(organized.fallback), errorType: organized.errorType || "" } : { mode: "raw", model: "none", durationMs: 0, status: "skipped", fallback: false };
           const transcription = { status: result.status, provider: result.provider || "unknown", durationMs: Number(result.durationMs) || 0, errorType: failure?.code || "", label: failure?.label || "转写成功" };
-          const entry = { id, audioId, time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
+          const entry = { id, audioId, operation: workflow === "edit" ? "voice-edit" : "voice-input", time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
           patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: transcription.provider, status: transcription.status, durationMs: transcription.durationMs, errorType: transcription.errorType }, organizer } });
           return entry;
         },
       });
       setTranscript(processed.text);
+      if (workflow === "edit" && processed.transcript.status === "success" && processed.organized?.status !== "success") {
+        dispatchSession({ type: "transition", state: processed.organized?.status === "cancelled" ? "idle" : "error", detail: { message: processed.organized?.message || "语音编辑失败，原文未被替换" } });
+        notify(processed.organized?.status === "cancelled" ? "语音编辑已取消，选中文字未改变" : `语音编辑失败，选中文字未改变：${processed.organized?.message || "请检查千问服务配置"}`);
+      } else
       if (processed.organized?.status === "cancelled") {
         dispatchSession({ type: "reset" });
         notify("文字整理已取消，原始转写仍保存在历史中");
@@ -394,8 +461,9 @@ export function VoicePage({ notify }) {
           const targetChanged = processed.output.reason === "target-window-changed";
           const fallbackMessage = targetChanged ? "目标窗口已变化，文字已复制到剪贴板" : "未能稳定捕获输入目标，文字已复制到剪贴板";
           const fallbackNotice = targetChanged ? "目标窗口已变化，转写已保存并复制到剪贴板" : "未能稳定捕获输入目标，转写已保存并复制到剪贴板";
-          dispatchSession({ type: "transition", state: "completed", detail: { message: processed.output.fallbackFrom ? fallbackMessage : organizerFallback ? "智能整理不可用，已安全输出原文" : "转写、整理和文字输出均已完成" } });
-          notify(processed.output.fallbackFrom ? fallbackNotice : organizerFallback ? "智能整理不可用，已保留并输出原始转写" : `转写完成，已输出到${processed.output.mode === "history" ? "历史" : processed.output.mode === "clipboard" ? "剪贴板" : "当前窗口"}`);
+          const editFallback = workflow === "edit" && processed.output.fallbackFrom;
+          dispatchSession({ type: "transition", state: "completed", detail: { message: editFallback ? "原窗口已变化，编辑结果已复制到剪贴板" : workflow === "edit" ? "语音编辑已完成并替换选中文字" : processed.output.fallbackFrom ? fallbackMessage : organizerFallback ? "智能整理不可用，已安全输出原文" : "转写、整理和文字输出均已完成" } });
+          notify(editFallback ? "原窗口已变化，未自动替换；编辑结果已复制到剪贴板" : workflow === "edit" ? "语音编辑完成，已替换原窗口中的选中文字" : processed.output.fallbackFrom ? fallbackNotice : organizerFallback ? "智能整理不可用，已保留并输出原始转写" : `转写完成，已输出到${processed.output.mode === "history" ? "历史" : processed.output.mode === "clipboard" ? "剪贴板" : "当前窗口"}`);
         } else {
           dispatchSession({ type: "transition", state: "error", detail: { message: "转写已保存，但文字输出失败" } });
           notify("转写已保存到历史，但文字输出失败");
@@ -456,15 +524,16 @@ export function VoicePage({ notify }) {
     realtimeAttemptRef.current += 1;
     pendingRealtimeAudioRef.current = [];
   };
-  toggleRef.current = async (requestedPhase) => {
+  toggleRef.current = async (requestedPhase, requestedWorkflow = "input") => {
     if (processingRef.current) return { ignored: true, reason: "processing" };
     const phase = typeof requestedPhase === "string" && ["start", "stop"].includes(requestedPhase) ? requestedPhase : null;
     if (phase === "start" && status === "recording") return { ignored: true, reason: "already-recording" };
     if (phase === "stop" && status !== "recording") return { ignored: true, reason: "not-recording" };
     const starting = phase ? phase === "start" : status !== "recording";
     if (starting) {
+      workflowRef.current = requestedWorkflow === "edit" ? "edit" : "input";
       setLiveTranscript("");
-      dispatchSession({ type: "transition", state: "recording", detail: { message: "正在使用电脑麦克风录音" } });
+      dispatchSession({ type: "transition", state: "recording", detail: { message: workflowRef.current === "edit" ? "正在聆听对选中文字的编辑要求" : "正在使用电脑麦克风录音" } });
       beginRealtimePreview();
     }
     const result = phase === "start" ? { ignored: false, action: "start", started: await start() } : phase === "stop" ? (stop(), { ignored: false, action: "stop" }) : await toggle();
@@ -503,7 +572,7 @@ export function VoicePage({ notify }) {
     else if (event.kind === "ready") setRealtimeStatus("ready");
     else if (["finished", "closed"].includes(event.kind)) setRealtimeStatus("finished");
   }), []);
-  useEffect(() => deviceEventBus.subscribe((event) => { setLastDeviceEvent(event); if (event.type === "voice-toggle") toggleRef.current(event.payload.phase); if (event.type === "voice-cancel") cancelRef.current(); if (event.type === "connection-change" && !event.payload.connected && recordingRef.current) { stop(); notify("EasyInput 已断线，当前录音已安全停止并保留"); } }), [notify, stop]);
+  useEffect(() => deviceEventBus.subscribe((event) => { setLastDeviceEvent(event); if (event.type === "voice-toggle") toggleRef.current(event.payload.phase, event.payload.workflow); if (event.type === "voice-cancel") cancelRef.current(); if (event.type === "connection-change" && !event.payload.connected && recordingRef.current) { stop(); notify("EasyInput 已断线，当前录音已安全停止并保留"); } }), [notify, stop]);
   useEffect(() => { voiceAdapters.desktop.setVoiceRecording(recording).catch(() => {}); }, [recording]);
   useEffect(() => {
     voiceAdapters.desktop.setVoiceState({ state: session.state, message: session.message, transcript: session.state === "recording" ? liveTranscript : "", seconds, level, floating: state.settings.floating }).catch(() => {});
@@ -522,7 +591,7 @@ export function VoicePage({ notify }) {
   }, []);
   useEffect(() => { if (source && devices.length && !devices.some((device) => device.deviceId === source)) { setSource(""); patch({ settings: { ...state.settings, microphoneId: "" } }); notify("所选麦克风已拔出，已切换为系统默认设备"); } }, [devices, source]);
   const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  const processingLabel = session.state === "organizing" ? "正在整理…" : session.state === "outputting" ? "正在输入…" : "正在转写…";
+  const processingLabel = session.state === "organizing" ? workflowRef.current === "edit" ? "正在语音编辑…" : "正在整理…" : session.state === "outputting" ? workflowRef.current === "edit" ? "正在替换…" : "正在输入…" : "正在转写…";
   return (
     <div className="page">
       <PageIntro title="语音输入" description="专注录音、实时转写与智能整理" actions={<StatusBadge tone={desktopCaps.shortcutRegistered ? "success" : "demo"}>{desktopCaps.shortcutRegistered ? `桌面快捷键 · ${desktopCaps.shortcut}` : "Web 模式 · 全局快捷键不可用"}</StatusBadge>} />
@@ -651,6 +720,7 @@ export function KeymapPage({ notify }) {
   const [selectedInput, setSelectedInput] = useState({ kind: "key", index: 0 });
   const [diagnostics, setDiagnostics] = useState([]);
   const [syncState, setSyncState] = useState({ status: "idle", readStatus: "idle", label: "本机配置 · 未同步" });
+  const [configConfirmation, setConfigConfirmation] = useState(null);
   const dirtyKeys = useRef(new Set());
   const dirtyEncoder = useRef(new Set());
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
@@ -689,21 +759,40 @@ export function KeymapPage({ notify }) {
       if (Object.keys(patch).length === 0) { setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "没有待同步修改" })); return; }
       const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
       if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
-      const summary = (preview.diff || []).map((item) => item.path).join("\n") || "无变化";
-      const approved = window.confirm(`将修改以下脱敏路径：\n${summary}\n\n确认应用按键与旋钮修改？`);
-      if (!approved) { setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "已取消同步" })); return; }
-      setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在保存并回读确认…" }));
-      const result = await voiceAdapters.desktop.commitKeyboardConfig(preview.token);
+      const paths = (preview.diff || []).map((item) => item.path).filter(Boolean);
+      setConfigConfirmation({ token: preview.token, paths: paths.length ? paths : ["无配置变化"], busy: false });
+      setSyncState((current) => ({ status: "review", readStatus: current.readStatus, label: "等待确认同步" }));
+    } catch (error) { setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" })); notify(`同步失败：${error.message}`); }
+  };
+  const cancelKeyboardSync = useCallback(() => {
+    if (configConfirmation?.busy) return;
+    setConfigConfirmation(null);
+    setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "已取消同步" }));
+  }, [configConfirmation?.busy]);
+  const confirmKeyboardSync = async () => {
+    const pending = configConfirmation;
+    if (!pending || pending.busy) return;
+    setConfigConfirmation({ ...pending, busy: true });
+    setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在保存并回读确认…" }));
+    try {
+      const result = await voiceAdapters.desktop.commitKeyboardConfig(pending.token);
       if (!result?.ok && result?.saved) {
         setSyncState({ status: "warning", readStatus: "pending", label: "已保存，回读待确认" });
         notify("配置已由键盘确认保存，但本次回读暂未完成；重新进入页面可再次核对");
+        setConfigConfirmation(null);
         return;
       }
       if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
       dirtyKeys.current.clear();
       dirtyEncoder.current.clear();
-      setSyncState({ status: "success", readStatus: "success", label: "已保存并回读确认" }); notify("按键与旋钮配置已同步到键盘并完成回读确认");
-    } catch (error) { setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" })); notify(`同步失败：${error.message}`); }
+      setConfigConfirmation(null);
+      setSyncState({ status: "success", readStatus: "success", label: "已保存并回读确认" });
+      notify("按键与旋钮配置已同步到键盘并完成回读确认");
+    } catch (error) {
+      setConfigConfirmation(null);
+      setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" }));
+      notify(`同步失败：${error.message}`);
+    }
   };
   useEffect(() => {
     return deviceEventBus.subscribe((event) => {
@@ -713,7 +802,7 @@ export function KeymapPage({ notify }) {
   }, [state.settings.keyDiagnosticsEnabled]);
   return (
     <div className="page">
-      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>同步到键盘</Button></>} />
+      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={["syncing", "review"].includes(syncState.status)} onClick={syncKeyboard}>同步到键盘</Button></>} />
       <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。同步前会重新读取板上配置，只提交按键与旋钮路径；网络、音频和未知字段保持原值。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
       <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
@@ -730,7 +819,7 @@ export function KeymapPage({ notify }) {
             <div className="key-editor__title"><span>KEY {selectedInput.index + 1}</span><strong>按键设置</strong></div>
             <BindingEditor binding={bindings[selectedInput.index]} onChange={updateKey} notify={notify} />
             <div className="mapping-preview"><span>当前映射</span><strong>{actionLabel(bindings[selectedInput.index])}</strong><small>修改后自动保存到本机</small></div>
-            <Button variant="primary" className="button--wide" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>保存当前按键</Button>
+            <Button variant="primary" className="button--wide" disabled={["syncing", "review"].includes(syncState.status)} onClick={syncKeyboard}>保存当前按键</Button>
           </> : <>
             <div className="key-editor__title"><span>ENCODER</span><strong>旋钮设置</strong></div>
             <label>旋转模式<Segmented compact value={encoder.mode} onChange={(mode) => updateEncoder({ mode })} options={[{ value: "scroll", label: "滚动页面" }, { value: "cursor", label: "移动光标" }]} /></label>
@@ -743,11 +832,20 @@ export function KeymapPage({ notify }) {
           </>}
         </Card>
       </div>
+      <ConfirmationDialog
+        open={Boolean(configConfirmation)}
+        title="确认同步到键盘"
+        description="请核对本次将写入 EasyInput 的按键与旋钮配置。"
+        paths={configConfirmation?.paths || []}
+        busy={Boolean(configConfirmation?.busy)}
+        onCancel={cancelKeyboardSync}
+        onConfirm={confirmKeyboardSync}
+      />
     </div>
   );
 }
 
-export function ConnectionsPage({ notify }) {
+export function ConnectionsPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
   const [tab, setTab] = useState("overview");
   const mic = state.settings.microphoneSource || "computer";
@@ -767,8 +865,9 @@ export function ConnectionsPage({ notify }) {
   const qwenReady = state.settings.sttMode === "bailian";
   const outputReady = state.settings.outputMode === "history" || desktopCaps.supported;
   return (
-    <div className="page">
-      <PageIntro title="设备与连接" description="检查板子触发、麦克风音频、转写和文字输出链路" actions={<Button icon={Refresh} onClick={() => notify("已刷新浏览器能力；系统设备检测需要桌面桥")}>刷新能力</Button>} />
+    <div className={embedded ? "connections-embedded" : "page"}>
+      {!embedded && <PageIntro title="设备与连接" description="检查板子触发、麦克风音频、转写和文字输出链路" actions={<Button icon={Refresh} onClick={() => notify("已刷新浏览器能力；系统设备检测需要桌面桥")}>刷新能力</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>DEVICE CONNECTIONS</span><h2>设备连接</h2><p>检查板子触发、麦克风音频、转写和文字输出链路。</p></div><Button icon={Refresh} onClick={() => notify("已刷新浏览器能力；系统设备检测需要桌面桥")}>刷新能力</Button></div>}
       <Segmented value={tab} onChange={setTab} options={[{ value: "overview", label: "连接概览" }, { value: "microphone", label: "麦克风" }, { value: "network", label: "Wi-Fi 与蓝牙" }, { value: "sound", label: "提示音" }]} />
       {tab === "overview" && <><Notice tone={bridge.boardConnected ? "success" : "warning"} title={bridge.boardConnected ? "EasyInput 真机语音桥已连接" : "等待 EasyInput USB 设备"}>{bridge.boardConnected ? "当前真机语音键发送 Ctrl+Shift+Space；F22 作为兼容路径。两者都会调用与页面按钮完全相同的录音控制器。回车、退格、全选、复制、粘贴和撤销继续由 Windows 标准 HID 直接执行。" : "连接开发板后，Raw Input 桥只读识别 VID 303A / PID 1006 的 F22 兼容路径；全局快捷键默认使用 Ctrl+Shift+Space，不会读取文字、序列号，也不会向板子写数据。"}</Notice><div className="connection-cards">
         <Card interactive><div className="connection-icon"><Link size={28} /></div><div><strong>EasyInput HID</strong><p>{lastTrigger ? `最后触发：${lastTrigger.key || "语音切换"} · ${lastTrigger.source}` : "语音键 Ctrl+Shift+Space；F22 为兼容路径；标准编辑键由 Windows 直接处理"}</p></div><StatusBadge tone={bridge.boardConnected ? "success" : "demo"}>{bridge.boardConnected ? "已连接" : bridge.process === "running" ? "监听中" : "桥未运行"}</StatusBadge></Card>
@@ -926,33 +1025,76 @@ export function SettingsPage({ notify }) {
   const [showBailianKey, setShowBailianKey] = useState(false);
   const [bailianWorkspace, setBailianWorkspace] = useState("");
   const [bailianStatus, setBailianStatus] = useState({ configured: false, storage: "unknown" });
+  const [showServiceSecrets, setShowServiceSecrets] = useState(false);
+  const [aiServiceStatus, setAiServiceStatus] = useState({ storage: "unknown", text: { configured: false, provider: "bailian", model: "qwen3.7-flash" }, realtime: { configured: false, provider: "doubao" } });
+  const [textService, setTextService] = useState({ provider: "deepseek", endpoint: "https://api.deepseek.com/chat/completions", model: "deepseek-v4-flash", apiKey: "" });
+  const [realtimeService, setRealtimeService] = useState({ provider: "doubao", endpoint: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", appId: "", accessKey: "", appKey: "", resourceId: "volc.speech.dialog", model: "1.2.1.1", voice: "zh_female_vv_jupiter_bigtts" });
+  const [settingsDesktopCaps, setSettingsDesktopCaps] = useState({ supported: false, editShortcutRegistered: false });
   const format = state.settings.formatting;
   const theme = state.settings.theme;
   const floating = state.settings.floating;
   const updateSettings = (value) => patch({ settings: { ...state.settings, ...value } });
   const refreshBailianStatus = useCallback(async () => { try { const value = await globalThis.desktopBridge?.getBailianStatus?.(); if (value) { setBailianStatus(value); setBailianWorkspace(value.workspaceId || ""); } } catch { setBailianStatus({ configured: false, storage: "unavailable" }); } }, []);
+  const refreshAiServiceStatus = useCallback(async () => { try { const value = await globalThis.desktopBridge?.getAiServiceStatus?.(); if (!value) return; setAiServiceStatus(value); if (value.text?.configured) setTextService((current) => ({ ...current, provider: value.text.provider, endpoint: value.text.endpoint, model: value.text.model, apiKey: "" })); if (value.realtime?.configured) setRealtimeService((current) => ({ ...current, provider: value.realtime.provider, endpoint: value.realtime.endpoint, resourceId: value.realtime.resourceId, model: value.realtime.model, voice: value.realtime.voice, accessKey: "", appKey: "" })); } catch { setAiServiceStatus((current) => ({ ...current, storage: "unavailable" })); } }, []);
   useEffect(() => { refreshBailianStatus(); }, [refreshBailianStatus]);
+  useEffect(() => { refreshAiServiceStatus(); }, [refreshAiServiceStatus]);
+  useEffect(() => { voiceAdapters.desktop.capabilities().then(setSettingsDesktopCaps).catch(() => setSettingsDesktopCaps({ supported: false, editShortcutRegistered: false })); }, [state.settings.voiceShortcut]);
   const saveBailian = async () => { try { const value = await globalThis.desktopBridge?.saveBailianCredentials?.({ apiKey: bailianKey, workspaceId: bailianWorkspace }); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setBailianKey(""); setBailianStatus(value); updateSettings({ sttMode: "bailian", sttEndpoint: "" }); notify("千问语音识别账号已使用 Windows 加密保存"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearBailian = async () => { try { const value = await globalThis.desktopBridge?.clearBailianCredentials?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setBailianStatus(value); updateSettings({ sttMode: "unconfigured" }); notify("本机千问 API Key 已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
+  const saveTextService = async () => { try { const value = await globalThis.desktopBridge?.saveTextModelService?.(textService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setTextService((current) => ({ ...current, apiKey: "" })); notify("文本大模型接口已加密保存，智能整理与语音编辑将使用该服务"); } catch (error) { notify(`保存失败：${error.message}`); } };
+  const clearTextService = async () => { try { const value = await globalThis.desktopBridge?.clearTextModelService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify(bailianStatus.configured ? "已移除自定义文本模型，将回退到百炼 qwen3.7-flash" : "文本大模型配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
+  const saveRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.saveRealtimeVoiceService?.(realtimeService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setRealtimeService((current) => ({ ...current, accessKey: "", appKey: "" })); notify("实时语音凭据已加密保存；陪伴会话适配器仍待接入，不会立即联网"); } catch (error) { notify(`保存失败：${error.message}`); } };
+  const clearRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.clearRealtimeVoiceService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify("实时语音配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", shortcut: { value: state.settings.voiceShortcut, registered: Boolean(caps.shortcutRegistered) }, microphone: { selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
   const downloadConfig = () => { const blob = new Blob([exportConfig()], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-config.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 0); notify("配置 JSON 已导出"); };
   const importConfig = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { replace(JSON.parse(reader.result)); notify("配置已导入"); } catch (error) { notify(`导入失败：${error.message}`); } }; reader.readAsText(file); event.target.value = ""; };
   const sttDiagnostic = state.settings.sttMode === "bailian" ? { label: "千问 ASR", value: bailianStatus.configured ? "已配置" : "缺少密钥", tone: bailianStatus.configured ? "success" : "demo" } : state.settings.sttMode === "mock" ? { label: "Mock STT", value: "模拟", tone: "demo" } : state.settings.sttMode === "http" ? { label: "HTTP STT 端点", value: "待验证", tone: "demo" } : { label: "语音转写服务", value: "未配置", tone: "demo" };
-  const organizerDiagnostic = state.settings.formatting === "raw" ? { label: "文字整理", value: "本地原样输出", tone: "success" } : { label: "千问文字整理", value: !bailianStatus.configured ? "缺少密钥" : state.diagnostics?.organizer?.fallback ? "上次已回退原文" : state.diagnostics?.organizer?.status === "success" ? `正常 · ${state.diagnostics.organizer.durationMs} ms` : "已配置", tone: bailianStatus.configured && !state.diagnostics?.organizer?.fallback ? "success" : "demo" };
+  const textModelReady = aiServiceStatus.text?.configured || bailianStatus.configured;
+  const activeTextModel = aiServiceStatus.text?.configured ? aiServiceStatus.text.model : bailianStatus.configured ? "qwen3.7-flash" : "未配置";
+  const organizerDiagnostic = state.settings.formatting === "raw" ? { label: "文字整理", value: "本地原样输出", tone: "success" } : { label: "文本模型整理", value: !textModelReady ? "缺少密钥" : state.diagnostics?.organizer?.fallback ? "上次已回退原文" : state.diagnostics?.organizer?.status === "success" ? `正常 · ${state.diagnostics.organizer.durationMs} ms` : activeTextModel, tone: textModelReady && !state.diagnostics?.organizer?.fallback ? "success" : "demo" };
   const inputBridge = state.runtime?.inputBridge || {};
   const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: inputBridge.boardConnected ? "已连接" : "未连接", tone: inputBridge.boardConnected ? "success" : "demo" }, { label: "电脑麦克风录音", value: "可用", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "板载局域网音频", value: "协议未确认", tone: "demo" }];
   return (
     <div className="page">
       <PageIntro title="设置与诊断" description="管理快捷键、输入方式、外观和系统诊断" actions={<><Button icon={Upload} onClick={() => document.getElementById("config-import").click()}>导入配置</Button><input id="config-import" type="file" accept="application/json" hidden onChange={importConfig} /><Button icon={Download} onClick={downloadConfig}>导出配置</Button><Button icon={Refresh} onClick={() => { reset(); notify("设置已恢复为默认值"); }}>恢复默认</Button></>} />
       <div className="settings-layout">
-        <Card className="settings-nav">{[{ id: "input", icon: Keyboard, label: "输入与快捷键" }, { id: "format", icon: Book2, label: "文字整理" }, { id: "appearance", icon: Sun, label: "外观与悬浮窗" }, { id: "account", icon: User, label: "账户" }, { id: "diagnostics", icon: Gauge, label: "系统诊断" }].map((item) => <button className={section === item.id ? "is-active" : ""} onClick={() => setSection(item.id)} key={item.id}><item.icon size={19} /><span>{item.label}</span><ArrowRight size={16} /></button>)}</Card>
-        <Card className="settings-panel">
-          {section === "input" && <><SectionTitle index="01" title="快捷键" /><SettingRow title="EasyInput 语音键（Ctrl+Shift+Space）" description="当前真机已确认发送 Ctrl+Shift+Space；F22 作为兼容路径，仅在按键释放时切换录音，不拦截其他标准按键"><Toggle checked={state.settings.boardF22Enabled} onChange={(value) => updateSettings({ boardF22Enabled: value })} /></SettingRow><SettingRow title="备用语音快捷键" description="点击后直接按下新的组合键，确认成功注册后才保存；默认 Ctrl+Shift+Space"><ShortcutRecorder global value={state.settings.voiceShortcut} onConfirm={async (candidate) => { const result = await voiceAdapters.desktop.registerShortcut(candidate); if (!result?.registered || result.shortcut !== candidate) throw new Error(result?.reason || "快捷键被其他应用占用"); updateSettings({ voiceShortcut: result.shortcut }); notify(`备用语音快捷键已保存为 ${result.shortcut}`); }} /></SettingRow><SettingRow title="右 Alt 触发" description="可兼容旧方案，但可能影响 AltGr 和正常输入，因此默认关闭"><Toggle checked={state.settings.rightAltEnabled} onChange={(value) => updateSettings({ rightAltEnabled: value })} /></SettingRow>{state.settings.rightAltEnabled && <Notice tone="warning" title="右 Alt 已启用">Raw Input 桥不会吞掉右 Alt；部分应用仍可能把它当作 AltGr。若输入异常，请关闭此选项。</Notice>}<SettingRow title="快捷键操作方式" description="按一下开始，再按一下结束；只在释放事件触发并带 350ms 防抖"><StatusBadge tone="success">切换模式</StatusBadge></SettingRow><SettingRow title="转写后文字输出" description="无论输出成功与否，都会先保存历史记录"><Segmented compact value={state.settings.outputMode} onChange={(value) => updateSettings({ outputMode: value })} options={[{ value: "history", label: "仅历史" }, { value: "clipboard", label: "复制" }]} /></SettingRow><SettingRow title="写入原输入窗口" description="默认写回触发语音时所在的输入窗口；目标变化或自动输入失败时回退到剪贴板"><Toggle checked={state.settings.activeWindowOutputEnabled} onChange={(value) => updateSettings({ activeWindowOutputEnabled: value })} /></SettingRow></>}
-          {section === "format" && <><SectionTitle index="02" title="文字整理" /><SettingRow title="整理方式" description="智能或自定义服务不可用时安全退回原样输出"><Segmented value={format} onChange={(value) => updateSettings({ formatting: value })} options={[{ value: "raw", label: "原样输出" }, { value: "smart", label: "智能整理" }, { value: "custom", label: "自定义" }]} /></SettingRow>{format === "custom" && <label className="field-label">自定义整理要求<input value={state.settings.customOrganizerRule} maxLength={4000} onChange={(event) => updateSettings({ customOrganizerRule: event.target.value })} placeholder="例如：整理成简洁的任务清单；不得增加原文没有的信息" /></label>}<SettingRow title="HTTP STT 端点" description="启用后录音会发送到该服务；仅允许 HTTPS，本机服务可使用 HTTP localhost；不要填写带 Token 的 URL"><input value={state.settings.sttEndpoint} onChange={(event) => updateSettings({ sttEndpoint: event.target.value, sttMode: event.target.value ? "http" : "unconfigured" })} placeholder="https://example.invalid/stt" /></SettingRow><Notice tone={format === "raw" || bailianStatus.configured ? "success" : "warning"} title="当前规则">{format === "raw" ? "保留识别结果，只应用词库替换规则，不调用文字模型。" : !bailianStatus.configured ? "尚未配置百炼 API Key，将自动保留原始转写。" : format === "smart" ? "使用 qwen3.7-flash 清理口头语、重复和标点；失败时保留原文。" : state.settings.customOrganizerRule ? "先完成基础清理，再按自定义要求整理；失败时保留原文。" : "尚未填写自定义整理要求，将退回原样输出。"}</Notice></>}
+        <Card className="settings-nav">{[{ id: "input", icon: Keyboard, label: "输入与快捷键" }, { id: "format", icon: Book2, label: "文字整理" }, { id: "appearance", icon: Sun, label: "外观与悬浮窗" }, { id: "account", icon: Sparkles, label: "AI 服务" }, { id: "connections", icon: Link, label: "设备连接" }, { id: "diagnostics", icon: Gauge, label: "系统诊断" }].map((item) => <button className={section === item.id ? "is-active" : ""} onClick={() => setSection(item.id)} key={item.id}><item.icon size={19} /><span>{item.label}</span><ArrowRight size={16} /></button>)}</Card>
+        {section === "connections" ? <div className="settings-panel settings-panel--connections"><ConnectionsPage notify={notify} embedded /></div> : <Card className="settings-panel">
+          {section === "input" && <><SectionTitle index="01" title="快捷键" /><SettingRow title="EasyInput 语音键（Ctrl+Shift+Space）" description="当前真机已确认发送 Ctrl+Shift+Space；F22 作为兼容路径，仅在按键释放时切换录音，不拦截其他标准按键"><Toggle checked={state.settings.boardF22Enabled} onChange={(value) => updateSettings({ boardF22Enabled: value })} /></SettingRow><SettingRow title="EasyInput 语音编辑键（Ctrl+Shift+E）" description="先在原窗口选择文字，再按第三键口述翻译、总结或改写要求；未捕获选区、窗口变化或模型失败时不会替换原文"><StatusBadge tone={settingsDesktopCaps.editShortcutRegistered ? "success" : "demo"}>{settingsDesktopCaps.editShortcutRegistered ? "已监听" : "桌面监听不可用"}</StatusBadge></SettingRow><SettingRow title="备用语音快捷键" description="点击后直接按下新的组合键，确认成功注册后才保存；默认 Ctrl+Shift+Space"><ShortcutRecorder global value={state.settings.voiceShortcut} onConfirm={async (candidate) => { const result = await voiceAdapters.desktop.registerShortcut(candidate); if (!result?.registered || result.shortcut !== candidate) throw new Error(result?.reason || "快捷键被其他应用占用"); updateSettings({ voiceShortcut: result.shortcut }); notify(`备用语音快捷键已保存为 ${result.shortcut}`); }} /></SettingRow><SettingRow title="右 Alt 触发" description="可兼容旧方案，但可能影响 AltGr 和正常输入，因此默认关闭"><Toggle checked={state.settings.rightAltEnabled} onChange={(value) => updateSettings({ rightAltEnabled: value })} /></SettingRow>{state.settings.rightAltEnabled && <Notice tone="warning" title="右 Alt 已启用">Raw Input 桥不会吞掉右 Alt；部分应用仍可能把它当作 AltGr。若输入异常，请关闭此选项。</Notice>}<SettingRow title="快捷键操作方式" description="按一下开始，再按一下结束；只在释放事件触发并带 350ms 防抖"><StatusBadge tone="success">切换模式</StatusBadge></SettingRow><SettingRow title="转写后文字输出" description="无论输出成功与否，都会先保存历史记录"><Segmented compact value={state.settings.outputMode} onChange={(value) => updateSettings({ outputMode: value })} options={[{ value: "history", label: "仅历史" }, { value: "clipboard", label: "复制" }]} /></SettingRow><SettingRow title="写入原输入窗口" description="默认写回触发语音时所在的输入窗口；目标变化或自动输入失败时回退到剪贴板"><Toggle checked={state.settings.activeWindowOutputEnabled} onChange={(value) => updateSettings({ activeWindowOutputEnabled: value })} /></SettingRow></>}
+          {section === "format" && <><SectionTitle index="02" title="文字整理" /><SettingRow title="整理方式" description="智能或自定义服务不可用时安全退回原样输出"><Segmented value={format} onChange={(value) => updateSettings({ formatting: value })} options={[{ value: "raw", label: "原样输出" }, { value: "smart", label: "智能整理" }, { value: "custom", label: "自定义" }]} /></SettingRow><SettingRow title="智能整理服务" description={`原样输出只做本地词库替换；智能整理与语音编辑共用文本模型，当前为 ${activeTextModel}`}><StatusBadge tone={textModelReady ? "success" : "demo"}>{textModelReady ? "API 已配置" : "需要文本模型 API"}</StatusBadge></SettingRow>{format === "custom" && <label className="field-label">自定义整理要求<input value={state.settings.customOrganizerRule} maxLength={4000} onChange={(event) => updateSettings({ customOrganizerRule: event.target.value })} placeholder="例如：整理成简洁的任务清单；不得增加原文没有的信息" /></label>}<SettingRow title="HTTP STT 端点" description="启用后录音会发送到该服务；仅允许 HTTPS，本机服务可使用 HTTP localhost；不要填写带 Token 的 URL"><input value={state.settings.sttEndpoint} onChange={(event) => updateSettings({ sttEndpoint: event.target.value, sttMode: event.target.value ? "http" : "unconfigured" })} placeholder="https://example.invalid/stt" /></SettingRow><Notice tone={format === "raw" || textModelReady ? "success" : "warning"} title="当前规则">{format === "raw" ? "保留识别结果，只应用词库替换规则，不调用文字模型。" : !textModelReady ? "尚未配置文本模型 API，将自动保留原始转写。" : format === "smart" ? `使用 ${activeTextModel} 清理口头语、重复和标点；失败时保留原文。` : state.settings.customOrganizerRule ? "先完成基础清理，再按自定义要求整理；失败时保留原文。" : "尚未填写自定义整理要求，将退回原样输出。"}</Notice></>}
           {section === "appearance" && <><SectionTitle index="03" title="外观与悬浮窗" /><SettingRow title="外观" description="跟随系统外观，或手动固定亮色 / 暗色"><Segmented value={theme} onChange={(value) => updateSettings({ theme: value })} options={[{ value: "system", label: "跟随系统" }, { value: "light", label: "亮色" }, { value: "dark", label: "暗色" }]} /></SettingRow><SettingRow title="悬浮窗显示" description="录音时显示状态和实时识别文字"><Toggle checked={floating} onChange={(value) => updateSettings({ floating: value })} /></SettingRow><SettingRow title="背景不透明度" description="数值越高，悬浮窗背景越实"><Slider label="背景不透明度" value={state.settings.backgroundOpacity} onChange={(value) => updateSettings({ backgroundOpacity: value })} /></SettingRow></>}
-          {section === "account" && <><SectionTitle index="04" title="千问服务" /><div className="account-card"><span className="avatar"><Lock size={28} /></span><div><strong>阿里云百炼 · ASR + 智能整理</strong><p>qwen3-asr-flash 负责转写，qwen3.7-flash 负责可选文字整理；共用同一份加密 API Key。</p></div><StatusBadge tone={bailianStatus.configured ? "success" : "demo"}>{bailianStatus.configured ? "已配置" : "未配置"}</StatusBadge></div><label className="field-label">百炼 API Key<span className="secret-field"><input type={showBailianKey ? "text" : "password"} autoComplete="off" value={bailianKey} onChange={(event) => setBailianKey(event.target.value)} placeholder={bailianStatus.configured ? "已加密保存；输入新 Key 可替换" : "sk-..."} /><button type="button" aria-label={showBailianKey ? "隐藏 API Key" : "显示 API Key"} title={showBailianKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowBailianKey((value) => !value)}>{showBailianKey ? <EyeOff size={20} /> : <Eye size={20} />}</button></span></label><label className="field-label">业务空间 ID（可选）<input value={bailianWorkspace} onChange={(event) => setBailianWorkspace(event.target.value)} placeholder="留空使用百炼兼容域名" /></label><Notice tone="info" title="账号安全">只需要百炼 API Key，不需要阿里云登录密码、AccessKey ID 或 AccessKey Secret。密钥只在 Electron 主进程中解密，不会进入配置导出或 Git。</Notice><div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!bailianKey.trim()} onClick={saveBailian}>加密保存并启用</Button>{bailianStatus.configured && <Button variant="ghost" icon={Trash} onClick={clearBailian}>删除本机 Key</Button>}</div></>}
+          {section === "account" && <>
+            <SectionTitle index="04" title="AI 服务" description="语音转写、文本理解与实时陪伴使用彼此隔离的接口和凭据" />
+            <div className="service-config-stack">
+              <section className="service-config-block">
+                <div className="account-card"><span className="avatar"><Lock size={28} /></span><div><strong>百炼语音转写</strong><p>qwen3-asr-flash 只负责普通语音输入和语音编辑指令的转写。</p></div><StatusBadge tone={bailianStatus.configured ? "success" : "demo"}>{bailianStatus.configured ? "已配置" : "未配置"}</StatusBadge></div>
+                <label className="field-label">百炼 API Key<span className="secret-field"><input type={showBailianKey ? "text" : "password"} autoComplete="off" value={bailianKey} onChange={(event) => setBailianKey(event.target.value)} placeholder={bailianStatus.configured ? "已加密保存；输入新 Key 可替换" : "sk-..."} /><button type="button" aria-label={showBailianKey ? "隐藏 API Key" : "显示 API Key"} title={showBailianKey ? "隐藏 API Key" : "显示 API Key"} onClick={() => setShowBailianKey((value) => !value)}>{showBailianKey ? <EyeOff size={20} /> : <Eye size={20} />}</button></span></label>
+                <label className="field-label">业务空间 ID（可选）<input value={bailianWorkspace} onChange={(event) => setBailianWorkspace(event.target.value)} placeholder="留空使用百炼兼容域名" /></label>
+                <div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!bailianKey.trim()} onClick={saveBailian}>加密保存转写接口</Button>{bailianStatus.configured && <Button variant="ghost" icon={Trash} onClick={clearBailian}>删除转写 Key</Button>}</div>
+              </section>
+
+              <section className="service-config-block">
+                <div className="account-card"><span className="avatar"><Brain size={28} /></span><div><strong>文本大模型 · Bridge</strong><p>共用于智能整理、语音编辑；后续复用到意图 Bridge、记忆候选与每日摘要。</p></div><StatusBadge tone={textModelReady ? "success" : "demo"}>{aiServiceStatus.text?.configured ? "独立接口" : bailianStatus.configured ? "沿用百炼" : "未配置"}</StatusBadge></div>
+                <SettingRow title="服务商" description="DeepSeek 使用 OpenAI 兼容 Chat Completions；也可填写其他兼容服务"><select value={textService.provider} onChange={(event) => setTextService((current) => ({ ...current, provider: event.target.value }))}><option value="deepseek">DeepSeek</option><option value="custom">自定义兼容接口</option></select></SettingRow>
+                <label className="field-label">Chat Completions 完整地址<input value={textService.endpoint} onChange={(event) => setTextService((current) => ({ ...current, endpoint: event.target.value }))} placeholder="https://api.example.com/v1/chat/completions" /></label>
+                <div className="service-config-grid"><label className="field-label">模型<input value={textService.model} onChange={(event) => setTextService((current) => ({ ...current, model: event.target.value }))} placeholder="模型名称" /></label><label className="field-label">API Key<span className="secret-field"><input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={textService.apiKey} onChange={(event) => setTextService((current) => ({ ...current, apiKey: event.target.value }))} placeholder={aiServiceStatus.text?.configured ? "已加密保存；输入新 Key 可替换" : "输入 API Key"} /><button type="button" aria-label={showServiceSecrets ? "隐藏服务密钥" : "显示服务密钥"} onClick={() => setShowServiceSecrets((value) => !value)}>{showServiceSecrets ? <EyeOff size={20} /> : <Eye size={20} />}</button></span></label></div>
+                <Notice tone="info" title="当前调用边界">保存后，智能整理和 KEY3 语音编辑立即改用该模型；聊天、意图 Bridge、记忆摘要仍待各自功能包接入。</Notice>
+                <div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!textService.apiKey.trim() || !textService.endpoint.trim() || !textService.model.trim()} onClick={saveTextService}>加密保存文本模型</Button>{aiServiceStatus.text?.configured && <Button variant="ghost" icon={Trash} onClick={clearTextService}>恢复百炼默认</Button>}</div>
+              </section>
+
+              <section className="service-config-block">
+                <div className="account-card"><span className="avatar"><Microphone2 size={28} /></span><div><strong>实时语音 · 陪伴对话</strong><p>参考苏丽娘的实时 WebSocket 链路，负责低延时 ASR、对话和 TTS，不直接执行 Windows 动作。</p></div><StatusBadge tone="demo">{aiServiceStatus.realtime?.configured ? "凭据已保存 · 待接入" : "待配置"}</StatusBadge></div>
+                <SettingRow title="服务商" description="首个适配目标为豆包实时语音；自定义服务需要另写协议适配器"><select value={realtimeService.provider} onChange={(event) => setRealtimeService((current) => ({ ...current, provider: event.target.value }))}><option value="doubao">豆包实时语音</option><option value="custom">自定义 WebSocket</option></select></SettingRow>
+                <label className="field-label">WebSocket 地址<input value={realtimeService.endpoint} onChange={(event) => setRealtimeService((current) => ({ ...current, endpoint: event.target.value }))} placeholder="wss://..." /></label>
+                <div className="service-config-grid"><label className="field-label">App ID<input value={realtimeService.appId} onChange={(event) => setRealtimeService((current) => ({ ...current, appId: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "重新保存时请填写" : "App ID"} /></label><label className="field-label">Access Key<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.accessKey} onChange={(event) => setRealtimeService((current) => ({ ...current, accessKey: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "已加密保存；重新保存时请填写" : "Access Key"} /></label><label className="field-label">App Key（可选）<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.appKey} onChange={(event) => setRealtimeService((current) => ({ ...current, appKey: event.target.value }))} placeholder="留空则由适配器使用服务默认值" /></label><label className="field-label">Resource ID<input value={realtimeService.resourceId} onChange={(event) => setRealtimeService((current) => ({ ...current, resourceId: event.target.value }))} /></label><label className="field-label">模型版本<input value={realtimeService.model} onChange={(event) => setRealtimeService((current) => ({ ...current, model: event.target.value }))} /></label><label className="field-label">女性音色<input value={realtimeService.voice} onChange={(event) => setRealtimeService((current) => ({ ...current, voice: event.target.value }))} /></label></div>
+                <Notice tone="warning" title="尚未启用">当前只加密保存接口参数，不会建立连接。待陪伴状态机、打断仲裁和 Bridge 合同完成后才启用实时会话。</Notice>
+                <div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!realtimeService.appId.trim() || !realtimeService.accessKey.trim() || !realtimeService.endpoint.trim()} onClick={saveRealtimeService}>加密保存实时语音</Button>{aiServiceStatus.realtime?.configured && <Button variant="ghost" icon={Trash} onClick={clearRealtimeService}>删除实时语音配置</Button>}</div>
+              </section>
+            </div>
+            <Notice tone="info" title="密钥安全">全部密钥仅在 Electron 主进程用 Windows 安全存储加密；不会进入 React、配置导出、诊断 JSON、日志或 Git。</Notice>
+          </>}
           {section === "diagnostics" && <><SectionTitle index="05" title="系统诊断" /><div className="diagnostic-list">{diagnosticItems.map((item) => <div key={item.label}><span>{item.tone === "success" ? <Check size={18} /> : <AlertCircle size={18} />}</span><strong>{item.label}</strong><StatusBadge tone={item.tone}>{item.value}</StatusBadge></div>)}</div><Button icon={CloudDownload} onClick={exportDiagnostics}>导出脱敏诊断 JSON</Button></>}
-        </Card>
+        </Card>}
       </div>
     </div>
   );

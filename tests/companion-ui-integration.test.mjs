@@ -17,13 +17,15 @@ test("keeps the primary navigation compact and moves companion tools into AI Com
   const navigationBlock = app.match(/const navigation = \[([\s\S]*?)\n\];/)?.[1] || "";
   const labels = [...navigationBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "按键配置", "设备连接", "设备与诊断"]);
+  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "按键配置", "设备与诊断"]);
   for (const hiddenLabel of ["表情库", "表情编辑", "动作编排", "环境感知", "AI 联动"]) {
     assert.equal(labels.includes(hiddenLabel), false);
   }
-  for (const section of ["陪伴与记忆", "表情库", "动作编排", "AI 联动"]) {
+  for (const section of ["陪伴与记忆", "记忆管理", "表情库", "动作编排", "AI 联动"]) {
     assert.match(pages, new RegExp(section));
   }
+  assert.match(pages, /id: "connections".*label: "设备连接"/);
+  assert.match(pages, /<ConnectionsPage notify=\{notify\} embedded/);
 });
 
 test("ships the complete seven-state raster expression library", async () => {

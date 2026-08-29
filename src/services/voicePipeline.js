@@ -9,22 +9,33 @@ export function describeTranscriptionFailure(transcript = {}) {
   return { code: "request-failed", label: "转写请求失败", historyText: "录音已保存，语音识别请求失败", message: "语音识别请求失败，请稍后重试或查看系统诊断" };
 }
 
-export async function processVoiceRecording({ blob, stt, organizer, organizerOptions, saveHistory, output, outputMode = "history", signal, onPhase }) {
+export async function processVoiceRecording({ blob, stt, organizer, organizerOptions, editor, operation = "input", saveHistory, output, outputMode = "history", signal, onPhase }) {
   onPhase?.("transcribing");
   let transcript;
   try { transcript = await stt.transcribe(blob, { signal }); } catch (error) { transcript = { status: "error", text: "", provider: "unknown", durationMs: 0, message: error.message }; }
   if (transcript.status === "success" && !String(transcript.text || "").trim()) transcript = { ...transcript, status: "error", text: "", message: "transcription-empty" };
   let organized = null;
   if (transcript.status === "success") {
-    if (organizerOptions?.mode && organizerOptions.mode !== "raw") onPhase?.("organizing");
-    try { organized = await organizer.organize(transcript.text, { ...organizerOptions, signal }); }
-    catch { organized = { text: transcript.text, mode: "raw", status: signal?.aborted ? "cancelled" : "error", fallback: true, message: signal?.aborted ? "整理已取消，保留原始转写" : "整理失败，已保留原始转写" }; }
+    if (operation === "edit") {
+      onPhase?.("organizing");
+      try {
+        const result = await editor.edit(transcript.text, { signal });
+        organized = { ...result, text: String(result?.text || "").trim(), mode: "voice-edit", fallback: false, status: result?.status || "success" };
+        if (!organized.text) throw new Error("语音编辑结果为空");
+      } catch (error) {
+        organized = { text: transcript.text, mode: "voice-edit", status: signal?.aborted ? "cancelled" : "error", fallback: false, message: signal?.aborted ? "语音编辑已取消" : error.message || "语音编辑失败", errorType: signal?.aborted ? "cancelled" : "request-failed" };
+      }
+    } else {
+      if (organizerOptions?.mode && organizerOptions.mode !== "raw") onPhase?.("organizing");
+      try { organized = await organizer.organize(transcript.text, { ...organizerOptions, signal }); }
+      catch { organized = { text: transcript.text, mode: "raw", status: signal?.aborted ? "cancelled" : "error", fallback: true, message: signal?.aborted ? "整理已取消，保留原始转写" : "整理失败，已保留原始转写" }; }
+    }
   }
   const failure = transcript.status === "success" ? null : describeTranscriptionFailure(transcript);
   const text = organized?.text || failure?.historyText || "录音已保存，语音识别请求失败";
   const history = await saveHistory({ text, transcript, organized, failure });
   let outputResult = { ok: true, mode: "history" };
-  if (transcript.status === "success" && organized?.status !== "cancelled") {
+  if (transcript.status === "success" && organized?.status !== "cancelled" && (operation !== "edit" || organized?.status === "success")) {
     onPhase?.("outputting");
     try { outputResult = await output.output(text, outputMode); } catch (error) { outputResult = { ok: false, reason: error.message }; }
     if (outputMode === "active-window" && !outputResult?.ok) {

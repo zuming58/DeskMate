@@ -11,7 +11,6 @@ import {
   IconMenu2 as Menu2,
   IconMessageCircle2 as MessageCircle,
   IconMicrophone2 as Microphone2,
-  IconPlugConnected as PlugConnected,
   IconSettings2 as Settings2,
   IconSparkles as Sparkles,
   IconX as X,
@@ -45,7 +44,6 @@ const navigation = [
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
   { id: "keymap", label: "按键配置", icon: Keyboard },
-  { id: "connections", label: "设备连接", icon: PlugConnected },
   { id: "settings", label: "设备与诊断", icon: Settings2 },
 ];
 
@@ -154,7 +152,17 @@ function AppContent() {
   }, [state.settings.boardF22Enabled, state.settings.rightAltEnabled]);
   useEffect(() => voiceAdapters.desktop.onVoiceToggle((detail) => {
     const source = detail.source || "global-shortcut";
-    deviceEventBus.publish(createDeviceEvent("voice-toggle", source, { phase: detail.phase || null, shortcut: detail.shortcut || "" }, { at: detail.at }));
+    deviceEventBus.publish(createDeviceEvent("voice-toggle", source, { phase: detail.phase || null, shortcut: detail.shortcut || "", workflow: detail.workflow === "edit" ? "edit" : "input", selectionCaptured: Boolean(detail.selectionCaptured) }, { at: detail.at }));
+  }), []);
+  useEffect(() => voiceAdapters.desktop.onVoiceEditError((detail) => {
+    const message = {
+      "selection-empty": "没有检测到选中文字，请先选择一段文字再按语音编辑键",
+      "selection-too-long": "选中文字过长，请缩小选择范围后重试",
+      "selection-copy-timeout": "未能读取选中文字，请回到原窗口重新选择后重试",
+      "target-window-changed": "输入窗口已变化，本次语音编辑已安全取消",
+      "no-captured-target": "未能锁定原输入窗口，本次语音编辑已安全取消",
+    }[detail?.reason] || "未能读取选中文字，本次语音编辑已安全取消";
+    setToast(message);
   }), []);
   useEffect(() => voiceAdapters.desktop.onVoiceCancel((detail) => {
     deviceEventBus.publish(createDeviceEvent("voice-cancel", detail.source || "keyboard", {}, { at: detail.at }));

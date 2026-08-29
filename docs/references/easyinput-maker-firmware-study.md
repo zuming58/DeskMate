@@ -61,6 +61,8 @@
 
 Windows 平台默认语音快捷键是 `Ctrl+Shift+Space`，语音编辑是 `Ctrl+Shift+E`。旧配置兼容 RightMeta、RightOption 和 AltGr 等名称。现有产品实测出现 F22，说明用户手上旧固件或既有配置可能与公开 Maker 当前默认配置不同；DeskMate 必须同时保留 F22 兼容入口，不能因为新源码存在就删除旧路径。
 
+DeskMate 2026-08-29 的只读复核进一步确认：Maker 固件的 KEY3 只负责发出 `Ctrl+Shift+E` 并准备/结束板载音频，不会读取 Windows 选区，也不会调用大模型。选中文字捕获、口述指令转写、模型改写和原窗口替换必须由 Windows host 完成。产品实现因此复用现有 VoiceWorkflow，在主进程捕获选区和目标窗口；模型或目标校验失败时不替换原文。
+
 ## 5. USB HID 协议
 
 固件除了标准键盘/鼠标报告，还定义厂商自定义 HID 报告：

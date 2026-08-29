@@ -50,7 +50,18 @@ export class DesktopBridgeAdapter {
   async setVoiceRecording(recording) { return this.bridge?.setVoiceRecording ? this.bridge.setVoiceRecording(recording) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setVoiceState(value) { return this.bridge?.setVoiceState ? this.bridge.setVoiceState(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async editSelectedText(instruction, { signal } = {}) {
+    if (!this.bridge?.editSelectedText) throw new Error("语音编辑仅在 DeskMate 桌面版可用");
+    const requestId = globalThis.crypto?.randomUUID?.() || `voice-edit-${Date.now()}`;
+    const cancel = () => this.bridge?.cancelBailianOrganizer?.(requestId);
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      if (signal?.aborted) throw new Error("语音编辑已取消");
+      return await this.bridge.editSelectedText({ requestId, instruction });
+    } finally { signal?.removeEventListener("abort", cancel); }
+  }
   onVoiceToggle(listener) { return this.bridge?.onVoiceToggle ? this.bridge.onVoiceToggle(listener) : () => {}; }
+  onVoiceEditError(listener) { return this.bridge?.onVoiceEditError ? this.bridge.onVoiceEditError(listener) : () => {}; }
   onVoiceCancel(listener) { return this.bridge?.onVoiceCancel ? this.bridge.onVoiceCancel(listener) : () => {}; }
   onKeyDiagnostic(listener) { return this.bridge?.onKeyDiagnostic ? this.bridge.onKeyDiagnostic(listener) : () => {}; }
   onInputBridgeStatus(listener) { return this.bridge?.onInputBridgeStatus ? this.bridge.onInputBridgeStatus(listener) : () => {}; }

@@ -1,4 +1,5 @@
 const { endpointForWorkspace, validateApiKey } = require("./bailian.cjs");
+const { validateEndpoint, validateSecret } = require("./secure-ai-services.cjs");
 
 const DEFAULT_ORGANIZER_MODEL = "qwen3.7-flash";
 const MAX_TEXT_LENGTH = 20000;
@@ -72,10 +73,12 @@ function parseOrganizerResponse(data, sourceText) {
   return text;
 }
 
-async function organize({ apiKey, workspaceId = "", text, mode, hotwords = [], rules = [], customRule = "", model = DEFAULT_ORGANIZER_MODEL, fetchImpl = globalThis.fetch, timeoutMs = 15000, signal }) {
-  const key = validateApiKey(apiKey);
+async function organize({ apiKey, workspaceId = "", endpoint = "", provider = "bailian", text, mode, hotwords = [], rules = [], customRule = "", model = DEFAULT_ORGANIZER_MODEL, fetchImpl = globalThis.fetch, timeoutMs = 15000, signal }) {
+  const key = endpoint ? validateSecret(apiKey) : validateApiKey(apiKey);
+  const requestEndpoint = endpoint ? validateEndpoint(endpoint) : endpointForWorkspace(workspaceId);
   if (typeof fetchImpl !== "function") throw new Error("当前运行环境不支持千问文字整理请求");
   const body = buildOrganizerRequest({ text, mode, hotwords, rules, customRule }, { model });
+  if (provider !== "bailian") delete body.enable_thinking;
   const controller = new AbortController();
   const cancel = () => controller.abort("cancelled");
   if (signal?.aborted) cancel();
@@ -83,7 +86,7 @@ async function organize({ apiKey, workspaceId = "", text, mode, hotwords = [], r
   const timeout = setTimeout(() => controller.abort("timeout"), timeoutMs);
   const started = Date.now();
   try {
-    const response = await fetchImpl(endpointForWorkspace(workspaceId), {
+    const response = await fetchImpl(requestEndpoint, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),

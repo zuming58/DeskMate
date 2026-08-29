@@ -40,3 +40,11 @@ The page intentionally combines two references: the T06 screenshot is the shell 
 5. Compared the source board, T06 baseline and implementation in one visual review.
 6. Ran 105 automated tests and the packaged desktop build.
 
+## 2026-08-29 incremental UI follow-up
+
+- Primary navigation now has seven entries; 设备连接 moved into 设备与诊断.
+- AI 陪伴 gained 记忆管理 with real local database status and an honest empty state.
+- 设置与诊断 gained a three-plane AI 服务 page for Bailian ASR, an OpenAI-compatible text model and pending realtime voice credentials.
+- The native configuration confirmation was replaced with the shared DeskMate card, typography, blue/cyan action and shield treatment.
+- Source/build checks passed with 112 automated tests. The final Windows package was produced at `D:\CodexData\home\visualizations\2026\08\29\01a04af3-3b1b-7843-9dcd-d8d26ef52e4c\deskmate-package\win-unpacked` because a local process held the repository `release` staging rename.
+- Automated Edge capture stopped when the Windows helper could not confidently identify the current browser URL. No browser safety check was bypassed. The live preview is left open in the Codex browser panel for the user's visual pass; this incremental section does not claim a new automated visual-comparison pass.
