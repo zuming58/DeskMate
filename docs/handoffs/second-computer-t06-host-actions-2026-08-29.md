@@ -1,5 +1,11 @@
 # Second-computer handoff: T06 EasyInput host actions
 
+## 2026-08-29 combined audit follow-up
+
+- The resident-bridge voice target candidates `c6ead2a` and `8462e59` were rejected by user HIL. The branch restores the last known successful PowerShell capture plus atomic target-check/paste boundary from `9e214d1` without reverting configuration-save fixes, T06 Host Actions, firmware or the 320 px overlay.
+- Combined T02-T06 source review found no remaining automated blocker. Evidence: desktop 101/101, firmware CTest 7/7, `npm run build:desktop` exit 0, and exact ESP-IDF v5.5.5/esp32s3 isolated build at app size `0x50110`. Full findings and residual risks are in `docs/reviews/t06-host-actions-combined-self-audit-2026-08-29.md`.
+- This follow-up was completed without hardware access. Final status is `SELF_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`. The next computer must fetch the final branch HEAD, independently review/rebuild, then run the restored voice path and T06 physical matrix with the user present. No flash is authorized by this handoff.
+
 - `role`: development computer without hardware access
 - `branch`: `codex/easyinput-t06-host-actions`
 - `implementation HEAD`: `3b232f5ea3395991a15d14a18d4f1dfcabd58257`. The pushed handoff commit is the remote branch tip reported with delivery; the implementation tree is unchanged after this commit.

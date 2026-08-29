@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T02-T06 combined self-audit and stable voice-path restoration ready for handoff
+
+- 做了什么：完成 T02～T06 组合代码审计，并撤销被连续真机证据否决的常驻原生桥语音目标候选；恢复 `9e214d1` 已知成功的 PowerShell 边界，即录音开始捕获前台 HWND，输出时在同一 PowerShell 调用内精确核对 HWND 后发送 Ctrl+V。保留配置保存/回读修复、T06 固定文字与打开应用、固件、中文单键和 320 px 悬浮条。同步修正 T05 任务卡的旧 `T06_BLOCKED` 状态。
+- 为什么与怎么理解：`c6ead2a` 和 `8462e59` 虽通过自动化，用户现场仍持续出现目标变化回退；该证据已经否决候选，不能继续用采样参数猜测修复。审计确认性能优化替换了曾通过 HIL 的 Windows 焦点/粘贴边界，因此先恢复最后已知稳定实现，再把性能优化留给独立、可观测的新任务。
+- 产出路径：`electron/active-window-output.cjs`、`electron/main.cjs`、`native/DeskMate.InputBridge/Program.cs`、相关测试；组合审计 `docs/reviews/t06-host-actions-combined-self-audit-2026-08-29.md`；交接 `docs/handoffs/second-computer-t06-host-actions-2026-08-29.md`；经验写入 `flow/lessons.md`。
+- 验证：桌面 `npm test` 101/101；`npm run build:desktop` 通过；MSVC 19.44 固件 Host CTest 7/7；精确 ESP-IDF v5.5.5、Python 3.11.15、`esp32s3`、Minimal Build、绝对隔离 SDKCONFIG 和固定 16 MB 分区构建通过。dirty 审计 app 为 327,952 字节（`0x50110`），SHA-256 `8C2259C809046B4D9688A62B882173FAA2E576EDF28F2A6C07F16B27911C0D4A`；最终干净 HEAD 镜像在提交后重建并随交付报告。`git diff --check`、AGENTS/CLAUDE 逐字一致、来源/许可证、隐私/密钥、ASCII 路径和构建产物检查通过。
+- 审计结论：T02 输入基础、T03 atomic tap/held PTT/断线释放、T04 LED/GPIO8 单一所有权、T05 配置读改写/NVS/脱敏边界及 T06 Host Action/固定文字均未发现新的自动化阻断。语音恢复路径和 T06 实体动作仍需用户在场的人工 HIL，不能声明 T06 锁定。
+- 硬件操作与下一步：本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未修改小智或外部参考。状态为 `SELF_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`。提交并推送当前分支后停止；接手方先核对远端 HEAD 并独立重建，再由用户在场验证同窗语音写回、主动切窗回退、固定文字、UUID 打开应用、配置重启回读和 T03/T04 组合矩阵，不开始 T07。
+
 ## 2026-08-29 · T06 active-window capture stabilized after monitored Windows focus gap
 
 - 做了什么：针对用户在未主动切窗时仍收到“目标窗口已变化”的回归，连续执行两轮脱敏前台监控，只记录相对时间、HWND 和 PID。两轮都观察到从 Codex 切入记事本时先出现 `GetForegroundWindow() == 0`，空窗分别约 92 ms 和 61 ms；进入记事本后 HWND 在整个语音操作期间保持不变。原生桥现在对录音开始目标执行最多 250 ms、每 10 ms 一次的有界采样，并要求同一可见窗口连续出现两次才接受；输出时仍要求当前前台 HWND 与该捕获值完全一致，没有放宽为任意当前窗口。界面同时区分“目标后来变化”和“未能稳定捕获输入目标”，不再把所有安全回退误报为用户切窗。

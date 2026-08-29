@@ -124,19 +124,22 @@ test("active-window output preserves fail-closed target changes and helper failu
   }
 });
 
-test("desktop main uses the combined target-check-and-paste helper", async () => {
+test("desktop main restores the known PowerShell target capture and atomic target-check-and-paste path", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const output = await readFile(new URL("../electron/active-window-output.cjs", import.meta.url), "utf8");
   const body = source.match(/async function pasteIntoCapturedWindow\(text\) \{([\s\S]*?)\n\}/)?.[1] || "";
-  assert.doesNotMatch(body, /getForegroundWindowId\(/);
-  assert.doesNotMatch(body, /runPowershell\(/);
-  assert.match(body, /pasteActiveWindow/);
+  assert.match(source, /voiceTargetCapturePromise = getForegroundWindowId\(\)/);
+  assert.match(body, /runPowershell\(PASTE_CAPTURED_WINDOW_SCRIPT/);
+  assert.doesNotMatch(body, /pasteActiveWindow/);
+  assert.match(output, /if \(\$current -ne \$expected\).*?SendKeys\]::SendWait\('\^v'\)/s);
 });
 
-test("voice target capture uses the resident bridge and the overlay stays compact", async () => {
+test("voice target capture keeps the known PowerShell path and the overlay stays compact", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const page = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /FOREGROUND_SCRIPT|runPowershell|powershell\.exe/);
-  assert.match(source, /inputBridge\?\.captureActiveWindow/);
+  assert.match(source, /const FOREGROUND_SCRIPT/);
+  assert.match(source, /spawn\("powershell\.exe"/);
+  assert.doesNotMatch(source, /inputBridge\?\.captureActiveWindow/);
   assert.match(source, /width: 320/);
   assert.match(source, /\.wave\{width:48px/);
   assert.match(page, /processed\.output\.reason === "target-window-changed"/);

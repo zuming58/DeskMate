@@ -1,6 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session, safeStorage, shell, Tray, Menu, nativeImage, screen } = require("electron");
 const path = require("path");
 const { fileURLToPath } = require("url");
+const { spawn } = require("child_process");
 const { randomUUID } = require("crypto");
 const fs = require("fs");
 const os = require("os");
@@ -14,12 +15,13 @@ const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
-const { pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
+const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
+const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -136,6 +138,26 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
+function runPowershell(script, timeoutMs = 3000, environment = {}) {
+  return new Promise((resolve) => {
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, env: { ...process.env, ...environment } });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const finish = (value) => { if (settled) return; settled = true; clearTimeout(timeout); resolve(value); };
+    const timeout = setTimeout(() => { child.kill(); finish({ ok: false, reason: "powershell-timeout" }); }, timeoutMs);
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", (error) => finish({ ok: false, reason: error.message }));
+    child.once("exit", (code) => finish(code === 0 ? { ok: true, value: stdout.trim() } : { ok: false, reason: stderr.trim() || `powershell-exit-${code}` }));
+  });
+}
+
+async function getForegroundWindowId() {
+  const result = await runPowershell(FOREGROUND_SCRIPT);
+  return result.ok && /^\d+$/.test(result.value) ? result.value : null;
+}
+
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
@@ -148,8 +170,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut) {
   if (phase === "start") {
     const captureToken = ++voiceTargetCaptureToken;
     voiceTargetWindow = null;
-    voiceTargetCapturePromise = (inputBridge?.captureActiveWindow?.() || Promise.resolve({ ok: false })).then((result) => {
-      const windowId = result?.ok ? result.targetWindow : null;
+    voiceTargetCapturePromise = getForegroundWindowId().then((windowId) => {
       if (captureToken === voiceTargetCaptureToken) voiceTargetWindow = windowId;
       return windowId;
     }).catch(() => null);
@@ -204,7 +225,7 @@ async function pasteIntoCapturedWindow(text) {
     text,
     targetWindow,
     writeClipboard: (value) => clipboard.writeText(value),
-    runPaste: (expectedWindow) => inputBridge?.pasteActiveWindow?.(expectedWindow) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    runPaste: (expectedWindow) => runPowershell(PASTE_CAPTURED_WINDOW_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
   });
   if (result.ok) voiceTargetWindow = null;
   return result;

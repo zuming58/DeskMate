@@ -57,9 +57,5 @@ test("native target capture returns a handle without window metadata", () => {
   assert.match(source, /type\.GetString\(\) == "capture-active-window"/);
   assert.match(source, /CaptureActiveWindow\(\)/);
   assert.match(source, /DesktopWindowResult\(string requestId, bool ok, string reason, string targetWindow\)/);
-  assert.match(source, /const int captureWindowMs = 250/);
-  assert.match(source, /const int sampleDelayMs = 10/);
-  assert.match(source, /ForegroundWindowStabilizer/);
-  assert.match(source, /probe\.Observe\(IntPtr\.Zero, false\).*?probe\.Observe\(first, true\) == IntPtr\.Zero.*?probe\.Observe\(first, true\) == first/s);
   assert.doesNotMatch(source, /DesktopWindowResult\([^)]*(title|path)/i);
 });

@@ -1,7 +1,7 @@
 # T05 · EasyInput configuration and NVS
 
-- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / VOICE_AND_SINGLE_KEY_FIX_PENDING_APP_FLASH / T06_BLOCKED`
-- 恢复提交 `348b22828158b9c1ff5faf1ae8ac1bf93d1193ec` 在另一台电脑有代码审计与构建报告；当前电脑必须独立重跑验证后，才能更新为 `AUDIT_CONFIRMED`。
+- 状态：`CONFIG_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / CONFIG_READ_HIL_CONFIRMED / CORE_CONFIG_EDIT_HIL_CONFIRMED / VOICE_TRIGGER_HIL_CONFIRMED / USER_ACCEPTED_FOR_T06`。T05 核心读取、单键编辑和语音触发已在 2026-08-28 获得真机证据；损坏恢复与完整压力矩阵仍属于后续组合回归，不得据此扩展为未执行的 HIL 声明。
+- 当前 T06 分支已在同一冻结配置合同上继续开发；本任务卡保留 T05 的实现边界和历史风险，不再错误标记为 `T06_BLOCKED`。
 - 前置：T04 已在原主电脑完成独立审计、构建、烧录、完整真机矩阵并锁定；当前样机 S8 为既有单板硬件阻断，八键/GPIO48 产品合同不变。
 - 计划分支：`codex/easyinput-t05-config-nvs`，从本任务交接时用户收到的准确 `origin/main` 哈希创建。
 - 目标：建立“读取板上完整配置 → 校验 → 无损合并用户改动 → 明示差异 → 事务保存 → 重启恢复 → 回读确认”的 Windows↔EasyInput 闭环。

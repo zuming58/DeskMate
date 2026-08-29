@@ -14,7 +14,7 @@ internal static class Program
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
         {
-            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && ForegroundWindowStabilizer.RunSelfTest() ? 0 : 1;
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() ? 0 : 1;
             return;
         }
         var writer = new EventWriter();
@@ -104,44 +104,6 @@ internal sealed class EventWriter
             Console.Out.WriteLine(JsonSerializer.Serialize(value, BridgeJsonContext.Default.BridgeEvent));
             Console.Out.Flush();
         }
-    }
-}
-
-internal sealed class ForegroundWindowStabilizer
-{
-    private IntPtr _candidate;
-    private int _observations;
-
-    public IntPtr Observe(IntPtr window, bool visible)
-    {
-        if (window == IntPtr.Zero || !visible)
-        {
-            _candidate = IntPtr.Zero;
-            _observations = 0;
-            return IntPtr.Zero;
-        }
-        if (window != _candidate)
-        {
-            _candidate = window;
-            _observations = 1;
-            return IntPtr.Zero;
-        }
-        _observations += 1;
-        return _observations >= 2 ? _candidate : IntPtr.Zero;
-    }
-
-    public static bool RunSelfTest()
-    {
-        var probe = new ForegroundWindowStabilizer();
-        var first = new IntPtr(101);
-        var second = new IntPtr(202);
-        return probe.Observe(IntPtr.Zero, false) == IntPtr.Zero &&
-               probe.Observe(first, true) == IntPtr.Zero &&
-               probe.Observe(IntPtr.Zero, false) == IntPtr.Zero &&
-               probe.Observe(first, true) == IntPtr.Zero &&
-               probe.Observe(first, true) == first &&
-               probe.Observe(second, true) == IntPtr.Zero &&
-               probe.Observe(second, true) == second;
     }
 }
 
@@ -742,19 +704,10 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private (bool ok, string reason, string targetWindow) CaptureActiveWindowInternal()
     {
-        const int captureWindowMs = 250;
-        const int sampleDelayMs = 10;
-        var deadline = Environment.TickCount64 + captureWindowMs;
-        var stabilizer = new ForegroundWindowStabilizer();
-        do
-        {
-            var foreground = GetForegroundWindow();
-            var stable = stabilizer.Observe(foreground, foreground != IntPtr.Zero && IsWindowVisible(foreground));
-            if (stable != IntPtr.Zero)
-                return (true, "", unchecked((ulong)stable.ToInt64()).ToString());
-            Thread.Sleep(sampleDelayMs);
-        } while (Environment.TickCount64 < deadline);
-        return (false, "foreground-window-unavailable", string.Empty);
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero || !IsWindowVisible(foreground))
+            return (false, "foreground-window-unavailable", string.Empty);
+        return (true, "", unchecked((ulong)foreground.ToInt64()).ToString());
     }
 
     private void RefreshBoardStatus(bool force)
