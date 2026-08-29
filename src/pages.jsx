@@ -578,7 +578,7 @@ export function KeymapPage({ notify }) {
   const [selectedInput, setSelectedInput] = useState({ kind: "key", index: 0 });
   const [diagnostics, setDiagnostics] = useState([]);
   const [previewDiff, setPreviewDiff] = useState([]);
-  const [syncState, setSyncState] = useState({ status: "idle", label: "本机配置 · 未同步" });
+  const [syncState, setSyncState] = useState({ status: "idle", readStatus: "idle", label: "本机配置 · 未同步" });
   const dirtyKeys = useRef(new Set());
   const dirtyEncoder = useRef(new Set());
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
@@ -587,7 +587,7 @@ export function KeymapPage({ notify }) {
   const updateEncoder = (value) => { Object.keys(value).forEach((key) => dirtyEncoder.current.add(key)); patch({ encoder: normalizeEncoder({ ...encoder, ...value }) }); };
   useEffect(() => {
     let active = true;
-    setSyncState({ status: "syncing", label: "正在读取键盘配置…" });
+    setSyncState({ status: "syncing", readStatus: "syncing", label: "正在读取键盘配置…" });
     voiceAdapters.desktop.readKeyboardConfig().then((result) => {
       if (!active) return;
       if (!result?.ok || !result.config) throw new Error(result?.reason || "读取配置失败");
@@ -598,35 +598,42 @@ export function KeymapPage({ notify }) {
         encoder: normalizeEncoder(result.config.encoder),
       });
       const sourceLabel = ["DeskMate NVS", "Maker NVS", "编译默认值", "安全恢复值"][result.source] || "未知来源";
-      setSyncState({ status: "success", label: `${sourceLabel} · ${result.fingerprint || "已读取"}` });
+      setSyncState({ status: "success", readStatus: "success", label: `${sourceLabel} · ${result.fingerprint || "已读取"}` });
     }).catch((error) => {
       if (!active) return;
-      setSyncState({ status: "error", label: "键盘配置读取失败" });
+      setSyncState({ status: "error", readStatus: "error", label: "键盘配置读取失败" });
       notify(`读取键盘配置失败：${error.message}`);
     });
     return () => { active = false; };
   }, []);
   const syncKeyboard = async () => {
-    setSyncState({ status: "syncing", label: "正在读取…" });
+    setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在读取板上配置…" }));
     try {
       const selectedKeys = Object.fromEntries([...dirtyKeys.current].map((index) => [`KEY${index + 1}`, bindings[index]]));
       const selectedEncoder = Object.fromEntries([...dirtyEncoder.current].map((key) => [key, encoder[key]]));
       const patch = {};
       if (Object.keys(selectedKeys).length > 0) patch.keymap = selectedKeys;
       if (Object.keys(selectedEncoder).length > 0) patch.encoder = selectedEncoder;
-      if (Object.keys(patch).length === 0) { setSyncState({ status: "idle", label: "没有待同步修改" }); return; }
+      if (Object.keys(patch).length === 0) { setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "没有待同步修改" })); return; }
       const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
       if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
       setPreviewDiff(Array.isArray(preview.diff) ? preview.diff : []);
       const summary = (preview.diff || []).map((item) => item.path).join("\n") || "无变化";
       const approved = window.confirm(`将修改以下脱敏路径：\n${summary}\n\n确认应用按键与旋钮修改？`);
-      if (!approved) { setSyncState({ status: "idle", label: "等待确认" }); return; }
+      if (!approved) { setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "已取消同步" })); return; }
+      setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在保存并回读确认…" }));
       const result = await voiceAdapters.desktop.commitKeyboardConfig(preview.token);
+      if (!result?.ok && result?.saved) {
+        setSyncState({ status: "warning", readStatus: "pending", label: "已保存，回读待确认" });
+        notify("配置已由键盘确认保存，但本次回读暂未完成；重新进入页面可再次核对");
+        return;
+      }
       if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
       dirtyKeys.current.clear();
       dirtyEncoder.current.clear();
-      setSyncState({ status: "success", label: "键盘已确认" }); notify("按键与旋钮配置已同步到键盘并保存");
-    } catch (error) { setSyncState({ status: "error", label: "同步失败" }); notify(`同步失败：${error.message}`); }
+      setPreviewDiff([]);
+      setSyncState({ status: "success", readStatus: "success", label: "已保存并回读确认" }); notify("按键与旋钮配置已同步到键盘并完成回读确认");
+    } catch (error) { setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" })); notify(`同步失败：${error.message}`); }
   };
   useEffect(() => {
     return deviceEventBus.subscribe((event) => {
@@ -636,14 +643,14 @@ export function KeymapPage({ notify }) {
   }, [state.settings.keyDiagnosticsEnabled]);
   return (
     <div className="page">
-      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : syncState.status === "error" ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>同步到键盘</Button></>} />
+      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={syncState.status === "syncing"} onClick={syncKeyboard}>同步到键盘</Button></>} />
       <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。同步前会重新读取板上配置，只提交按键与旋钮路径；网络、音频和未知字段保持原值。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
       {previewDiff.length > 0 && <Card><SectionTitle index="差异" title="待确认的脱敏路径" description="仅显示按键与旋钮字段，不显示原始配置。" /><pre>{previewDiff.map((item) => `${item.path}: ${JSON.stringify(item.before)} -> ${JSON.stringify(item.after)}`).join("\n")}</pre></Card>}
       <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
       <div className="keymap-grid">
         <Card className="keymap-board">
-          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.status === "success" ? "已读取" : syncState.status === "syncing" ? "读取中" : "读取失败"}</strong></span><span>同步结果 <strong className="success-text">{syncState.label}</strong></span></div>
+          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.readStatus === "success" ? "已读取" : syncState.readStatus === "syncing" ? "读取中" : syncState.readStatus === "pending" ? "待核对" : syncState.readStatus === "error" ? "读取失败" : "未读取"}</strong></span><span>同步结果 <strong className={syncState.status === "success" ? "success-text" : ["error", "warning"].includes(syncState.status) ? "warning-text" : ""}>{syncState.label}</strong></span></div>
           <div className="keyboard-visual">
             <div className="key-grid">{bindings.map((binding, index) => <button key={index} className={`hardware-key ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{actionLabel(binding)}</strong></button>)}</div>
             <button className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER</small></button>

@@ -14,13 +14,14 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
+const { verifyConfigReadback } = require("./config-readback.cjs");
+const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
-const PASTE_SCRIPT = "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
@@ -137,9 +138,9 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
-function runPowershell(script, timeoutMs = 3000) {
+function runPowershell(script, timeoutMs = 3000, environment = {}) {
   return new Promise((resolve) => {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true });
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, env: { ...process.env, ...environment } });
     let stdout = "";
     let stderr = "";
     let settled = false;
@@ -218,16 +219,16 @@ function setShortcutCapture(active) {
 }
 
 async function pasteIntoCapturedWindow(text) {
-  const value = String(text || "");
-  if (!value || value.length > 100000) return { ok: false, reason: "invalid-text" };
   if (!voiceTargetWindow) await voiceTargetCapturePromise;
-  if (!voiceTargetWindow) return { ok: false, reason: "no-captured-target" };
-  const currentWindow = await getForegroundWindowId();
-  if (!currentWindow || currentWindow !== voiceTargetWindow) return { ok: false, reason: "target-window-changed" };
-  clipboard.writeText(value);
-  const result = await runPowershell(PASTE_SCRIPT);
+  const targetWindow = voiceTargetWindow;
+  const result = await pasteToCapturedWindow({
+    text,
+    targetWindow,
+    writeClipboard: (value) => clipboard.writeText(value),
+    runPaste: (expectedWindow) => runPowershell(PASTE_CAPTURED_WINDOW_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
+  });
   if (result.ok) voiceTargetWindow = null;
-  return result.ok ? { ok: true, mode: "active-window" } : result;
+  return result;
 }
 
 function createOverlayWindow() {
@@ -461,11 +462,10 @@ app.whenReady().then(async () => {
     const capabilityGate = checkHostCapabilities(pending.merged, inputBridge?.snapshot()?.configCapabilities);
     if (!capabilityGate.ok) return capabilityGate;
     const written = await inputBridge.syncConfig(pending.merged); if (!written?.ok) return written;
-    const readback = await inputBridge.readConfig(); if (!readback?.ok) return { ok: false, reason: "config-readback-failed" };
-    let readbackJson; try { readbackJson = JSON.parse(readback.json); } catch { return { ok: false, reason: "config-readback-invalid" }; }
-    if (configFingerprint(readbackJson) !== configFingerprint(pending.merged)) return { ok: false, reason: "config-readback-mismatch" };
-    keyboardConfigState = { raw: readbackJson, fingerprint: configFingerprint(readbackJson), source: readback.source, token: null };
-    return { ok: true, source: readback.source, fingerprint: keyboardConfigState.fingerprint };
+    const verified = await verifyConfigReadback({ readConfig: () => inputBridge.readConfig(), expectedConfig: pending.merged, fingerprint: configFingerprint });
+    if (!verified.ok) return verified;
+    keyboardConfigState = { raw: verified.config, fingerprint: verified.fingerprint, source: verified.source, token: null };
+    return { ok: true, saved: true, source: verified.source, fingerprint: verified.fingerprint, verificationAttempts: verified.attempts };
   });
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
   handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });

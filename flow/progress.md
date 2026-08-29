@@ -2,6 +2,14 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 desktop config status and voice output latency fixed
+
+- 做了什么：修复两个用户真机联调后确认的桌面问题。配置提交在固件保存 ACK 后增加三次有界回读验证，第一次瞬时失败可恢复；板上读取状态与同步状态拆开，成功后清除旧脱敏差异，保存已确认但回读仍失败时显示“已保存，回读待确认”，真实指纹不一致继续立即失败关闭。语音活动窗口输出把“核对当前前台窗口 + Ctrl+V”合并为一次 PowerShell 调用，保留录音触发时捕获的目标窗口、目标变化拒绝和剪贴板回退。
+- 为什么与怎么理解：截图和真机结果证明配置实际已保存、离开页面再进入即可读取，因此旧“读取失败/同步失败”是保存后瞬时回读与 UI 状态混用，不是 NVS 保存失败。语音慢点位于转写完成后的输出阶段，旧路径连续启动两个 PowerShell 进程；本轮没有改 STT、整理模型或固件。
+- 产出路径：`electron/config-readback.cjs`、`electron/active-window-output.cjs`、`electron/main.cjs`、`src/pages.jsx`、`src/styles.css`、`tests/desktop-reliability.test.mjs`；可复用边界补入 `flow/lessons.md`。
+- 验证：新增 7 个桌面可靠性回归；全量 `npm test` 94/94、`npm run build:desktop` 和 `git diff --check` 通过。没有修改 EasyInput 固件、冻结合同、外部参考、小智、BLE/Wi-Fi、音频或 DeskMate Link；没有扫描端口、读取/写入 Flash/NVS、烧录、erase 或 monitor。构建输出保持忽略且不提交。
+- 下一步：使用本次新打包的 DeskMate 验证一次按键保存和一次语音活动窗口输出；桌面修复不需要重新烧录当前 `7907d6f` 固件。T06 组合 HIL 关闭前不开始 T07。
+
 ## 2026-08-29 · Espressif MCP support and manual T06 pressure-test guide added
 
 - 做了什么：按用户提供的乐鑫官方入口，在项目级 `.codex/config.toml` 注册 `espressif-documentation`、`esp-component-registry` 和 `espressif-engineering` 三个可选远程 MCP；文档/组件查询只在写操作时提示，工程排障每次调用均提示确认且所有服务 `required = false`，服务不可用不会阻断 DeskMate 开发。OpenAI Docs 确认受信任项目可使用 `.codex/config.toml` 配置 Streamable HTTP MCP。
