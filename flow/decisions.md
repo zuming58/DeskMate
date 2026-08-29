@@ -210,3 +210,10 @@
 - 决策：T08 允许 EasyInput 与小智固件在两个窗口并行开发，但代码所有权严格分离：本窗口只改 `firmware/easyinput-controller/`，另一窗口只改 `firmware/xiaozhi-yuntai/`。跨端 `contracts/deskmate-link/` 在冻结前由 EasyInput 窗口单点拥有，并生成语言无关黄金向量；小智端只能消费准确合同提交，不得独立设计第二套协议。
 - 原因：两端并行可以缩短到首次硬件握手的路径，但若两边同时编辑 framing、消息 ID、重试和错误语义，会形成表面各自通过、实际字节不兼容的两套实现。单一合同加同一黄金向量保留并行速度，同时消除协议漂移。
 - 边界：两个窗口都不得修改 T07 桌面冻结基线或对方固件。合同冻结前小智只做 UART/控制台核对、工程和 Host 骨架；首次接线仍需两端构建通过、电气/恢复门和独立授权，且只做无 OLED、无音频、无舵机的只读握手。
+
+## D032 · DeskMate Link v1 freezes a bounded controller-initiated UART slice
+
+- 日期：2026-08-29
+- 决策：首版 Link 固定为 115200 8N1 的三线 3.3 V TTL UART；EasyInput 是唯一请求发起者，同时只允许一个在途请求。帧使用 `DMLK` magic、版本、方向、消息 ID、非零序列、最大 128 字节 payload 和 CRC16-CCITT-FALSE。T08 只开放 HELLO、能力、状态和无硬件副作用的 Agent 状态存储/确认。
+- 原因：先冻结最小、可逐字节测试且没有机械风险的切片，可以让两个窗口真正并行，同时把启动噪声、断线、重复、超时、对端重启和旧动作不重放一次定义清楚。
+- 边界：UART0 转为 Link 后关闭应用与 bootloader 日志，不写 eFuse；ROM 启动噪声由流式解析器重同步。DISPLAY、MOTION、AUDIO 能力在后续切片验收前保持未启用；首次接线只读，不执行 OLED、舵机或音频。
