@@ -4,7 +4,7 @@
 
 ## 2026-08-29 · T07D companion UI integrated on the locked T06 baseline
 
-- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上工作；精确基线为已锁定 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3`。原 `F:\Codex\deskmate` 的 T07C dirty 工作树保持原样，没有整目录覆盖或回写。
+- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上工作；精确基线为已锁定 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3`，已验证实现提交为 `ac5bf6df5b1199892967d11fa9cde231696af6ec`。原 `F:\Codex\deskmate` 的 T07C dirty 工作树保持原样，没有整目录覆盖或回写。
 - 做了什么：主导航收敛为工作台、语音输入、AI 陪伴、历史记录、词库、按键配置、设备连接、设备与诊断；AI 联动、表情库和动作编排嵌入 AI 陪伴，表情编辑和环境感知不再作为主入口。新增共享 `CompanionFace`，把默认、眨眼、开心、难过、生气、思考、聆听七张真实图片用于品牌、侧栏设备脸、工作台、陪伴页、表情库和动作预览；自然眨眼为 4.2～7.8 秒间隔、150 ms 持续并尊重 reduced-motion。
 - 功能边界：T06 的 VoiceWorkflow、活动窗口写回、固定文字、UUID 打开应用、配置 ACK/回读、按键映射、连接和诊断实现未被替换。陪伴对话、记忆、提醒、图片导入持久化、小智屏幕和舵机均明确标为软件预览、待开发或待接入；“开始陪伴对话”不打开麦克风，动作按钮不发送硬件命令。
 - 产出：实现见 `src/CompanionFace.jsx`、`src/App.jsx`、`src/pages.jsx`、`src/appData.js`、`src/styles.css` 和 `public/assets/expressions/`；设计说明见 `docs/design/companion-ui-integration-after-t06.md`，视觉 QA 见 `design/qa/design-qa.md`，选定表情系统见 `design/concepts/companion-expression-elastic-language.png`。
