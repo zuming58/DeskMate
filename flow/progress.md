@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 final app flashed; HIL paused for board replacement
+
+- 分支与镜像：`codex/easyinput-t06-host-actions`，烧录源码 HEAD `b99f012c9faa5bdc65531df9237727b78a794a9b`。最终 ESP-IDF v5.5.5 / esp32s3 app 为 329,552 字节（`0x50750`），SHA-256 `C20B37E056A1DF8D677C6EA48D88A1F3EE99991AC3B920AA15F9930F9159B0BA`。
+- 硬件操作：用户明确确认后，先只读核对目标为 ESP32-S3，再仅将上述 app 写入 `0x010000..0x06074F`；esptool 报告 329,552 字节写入完成并通过 `Hash of data verified`。实际擦写扇区边界为 `0x010000..0x060FFF`。未擦除整片，未写 bootloader、分区表、NVS、PHY、声音区或 eFuse；设备端口和私有身份不进入 Git。
+- 当前门禁：用户随后说明准备更换一块板，要求暂停烧录。收到该消息后未再识别、读取、烧录或 monitor；本次尚未执行固定文字、UUID 打开应用或 T03-T05 组合真机回归，不能声明 T06 HIL 通过。
+- 状态：`TEST_CONFIRMED / BUILD_CONFIRMED / HOST_ACTION_V1_FROZEN / APP_FLASH_CONFIRMED / HIL_PAUSED_FOR_BOARD_REPLACEMENT`。后续新板必须重新核对目标身份，并针对届时的精确 HEAD、app SHA-256 和 app-only 范围取得新的明确授权；不得沿用本次旧板授权，不开始 T07。
+
 ## 2026-08-29 · T06 host actions implementation handed off for independent audit
 
 - 分支与代码：`codex/easyinput-t06-host-actions`，T06 实现提交 `3b232f5ea3395991a15d14a18d4f1dfcabd58257`；本条纯文档收口提交后的完整交付 HEAD 以远端分支和交付报告为准，实现树不再变化。T03/T04 已锁定，T05 核心配置/语音触发已由原主电脑完成用户接受的真机确认。
