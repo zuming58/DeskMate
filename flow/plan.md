@@ -6,9 +6,10 @@
 
 ### Current execution point
 
+- T06 已按用户完整人工矩阵锁定。当前开放 T07 桌面陪伴界面候选：从精确 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3` 保留功能基线，加入八入口导航、AI 陪伴统一页面和七状态图片表情库；只做软件与模拟能力，不接线、不写小智、不驱动 OLED/舵机、不实现未冻结 DeskMate Link。
 - T04 已由另一台笔记本实现、原主电脑独立审计并完成授权 app-only 烧录和完整压力矩阵；已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`，app SHA-256 为 `578A73E8E5FEB675096DAC88F4A512D3EF5CAFE2604D4ED869F457648E45813C`。S1～S7、旋钮灯效、长按、50 次输入、五轮断线、20 次语音键及 DeskMate 回归通过；当前样机 S8 保持既有单板硬件阻断，健康替换板到货后补测。T04 状态为 `T04_LOCKED`。
 - T05 [`CONFIG_V1_FROZEN`](../contracts/deskmate-host/easyinput-config-v1.md) 的代码、Host、桌面和 ESP-IDF 构建通过；最终 app-only 镜像已按精确授权烧录并完成配置读取、核心配置编辑、中文/单键界面和 K1 语音触发真机确认。语音识别服务因本机 API 未配置未做端到端转写，重启回读/恢复与完整压力矩阵仍须如实保留为回归项。用户已接受核心功能并明确允许进入下一阶段。
-- 当前开放 T06：从 T05 最终交接提交创建 `codex/easyinput-t06-host-actions`，先读取任务卡、冻结/核对 Host Action 合同，再实现固定文字和安全打开应用闭环；不得提前开发 BLE、音频、DeskMate Link 或小智。
+- T06 Host Action 已锁定：固定文字、安全打开应用、配置回读和既有按键/语音能力保持为后续桌面包的回归基线；后续 UI 合并不得改写其 Electron/固件合同。
 - T03 已完成五次真机断线矩阵并由原主电脑完成独立代码、Host、IDF 和桌面组合审计：最终 atomic tap 镜像在正常断电重启后均得到 `123abc`，未出现全选或残留 Ctrl。S1～S7、旋钮纵向/横向、DeskMate 语音输入、历史复制和快捷键捕获继续保留通过证据；当前测试实板的 S8 在烧录前即不亮、无输入，记录为单板硬件阻断而不修改全局八键/GPIO48 合同。T03 状态为 `T03_LOCKED`。
 - T03 的历史失败候选和验证过程保留在 `flow/progress.md` 与 `docs/handoffs/`；最终 atomic tap 提交已推送并完成授权 app-only 烧录及五次断线 HIL。旧候选只作为审计历史，不代表当前状态。
 
@@ -39,7 +40,7 @@
 
 - 以 EasyInput V2.0 板级合同为硬边界，参考 Maker 的 `components/keyboard`、`main/platform` 和 `host_test`，建立 DeskMate 自己的总控固件模块。
 - 保留语音键、标准键盘、F22 兼容、板载麦克风、灯光、音效、设备状态和用户需要的 EasyInput 能力。
-- 当前小包顺序为：T04 实体输入灯效与共享电源底座（已锁定）→ T05 完整配置/NVS 与纯 HID 映射（当前）→ T06 Windows 主机动作/打开应用；后续 BLE、音频、电源深化和总控冻结按同样门禁逐包编号。
+- 当前小包顺序为：T04 实体输入灯效与共享电源底座（已锁定）→ T05 完整配置/NVS 与纯 HID 映射（已锁定）→ T06 Windows 主机动作/打开应用（已锁定）→ T07 软件陪伴界面候选；后续 BLE、音频、电源深化和总控冻结按同样门禁逐包编号。
 - 实现桌面 host contract 与板间 DeskMate Link 路由；不复用 Host Action `0x05` 传送云台动作。
 - 现有 Phase 3E 的 `EIHB/EICC/EICA/EIAU` 与厂商 HID codec/模拟板工作并入本阶段的软件—总控链路。
 

@@ -6,27 +6,25 @@ import {
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
   IconCircleCheck as CircleCheck,
-  IconCode as Code,
   IconKeyboard as Keyboard,
   IconLayoutDashboard as LayoutDashboard,
   IconMenu2 as Menu2,
+  IconMessageCircle2 as MessageCircle,
   IconMicrophone2 as Microphone2,
-  IconMoodSmile as MoodSmile,
-  IconPalette as Palette,
   IconPlugConnected as PlugConnected,
-  IconRotate3d as Rotate3d,
   IconSettings2 as Settings2,
   IconSparkles as Sparkles,
-  IconTemperature as Temperature,
   IconX as X,
 } from "@tabler/icons-react";
 import { pageMeta } from "./appData.js";
+import { CompanionFace } from "./CompanionFace.jsx";
 import { AppStoreProvider, useAppStore } from "./store/appStore.js";
 import { mockAdapters } from "./adapters/index.js";
 import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
 import {
   AgentsPage,
+  CompanionPage,
   ConnectionsPage,
   DashboardPage,
   ExpressionEditorPage,
@@ -40,28 +38,22 @@ import {
   VoicePage,
 } from "./pages.jsx";
 
-const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-focus-face.png`;
-
 const navigation = [
   { id: "dashboard", label: "工作台", icon: LayoutDashboard },
   { id: "voice", label: "语音输入", icon: Microphone2 },
+  { id: "companion", label: "AI 陪伴", icon: MessageCircle },
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
   { id: "keymap", label: "按键配置", icon: Keyboard },
   { id: "connections", label: "设备连接", icon: PlugConnected },
-  { id: "agents", label: "AI 联动", icon: Code },
-  { id: "expressions", label: "表情库", icon: MoodSmile },
-  { id: "editor", label: "表情编辑", icon: Palette },
-  { id: "motion", label: "动作编排", icon: Rotate3d },
-  { id: "sensors", label: "环境感知", icon: Temperature },
-  { id: "settings", label: "设置诊断", icon: Settings2 },
+  { id: "settings", label: "设备与诊断", icon: Settings2 },
 ];
 
 function BrandMark() {
-  return <span className="brand-mark"><MoodSmile size={23} stroke={1.8} /></span>;
+  return <span className="brand-mark"><CompanionFace allowBlink={false} alt="DeskMate" /></span>;
 }
 
-function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, boardConnected }) {
+function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, boardConnected, expressionId }) {
   return (
     <aside className={`sidebar ${collapsed ? "is-collapsed" : ""} ${mobileOpen ? "is-mobile-open" : ""}`}>
       <div className="sidebar__brand">
@@ -88,7 +80,7 @@ function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMo
       </nav>
       <button className="sidebar__collapse" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "展开侧栏" : "收起侧栏"}>{collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}<span>收起导航</span></button>
       <div className="device-card">
-        <div className="device-card__screen"><img src={DEVICE_FACE_URL} alt="DeskMate 设备" /></div>
+        <div className="device-card__screen"><CompanionFace expressionId={expressionId} alt="DeskMate 设备表情" /></div>
         <div className={`device-card__status ${boardConnected ? "" : "device-card__status--pending"}`}><span />{boardConnected ? "EasyInput 已连接" : "等待 EasyInput 板子"}</div>
         <small>{boardConnected ? "USB HID · Ctrl+Shift+Space / F22 监听就绪" : "请通过 USB 连接开发板"}</small>
       </div>
@@ -114,6 +106,7 @@ function AppHeader({ current, setMobileOpen }) {
 const pages = {
   dashboard: DashboardPage,
   voice: VoicePage,
+  companion: CompanionPage,
   history: HistoryPage,
   vocabulary: VocabularyPage,
   keymap: KeymapPage,
@@ -210,7 +203,7 @@ function AppContent() {
   const CurrentPage = pages[current] || DashboardPage;
   return (
     <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""}`}>
-      <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} />
+      <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} expressionId={state.currentExpression} />
       {mobileOpen && <button className="mobile-scrim" aria-label="关闭菜单" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">
         <AppHeader current={current} setMobileOpen={setMobileOpen} />

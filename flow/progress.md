@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07D companion UI integrated on the locked T06 baseline
+
+- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上工作；精确基线为已锁定 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3`。原 `F:\Codex\deskmate` 的 T07C dirty 工作树保持原样，没有整目录覆盖或回写。
+- 做了什么：主导航收敛为工作台、语音输入、AI 陪伴、历史记录、词库、按键配置、设备连接、设备与诊断；AI 联动、表情库和动作编排嵌入 AI 陪伴，表情编辑和环境感知不再作为主入口。新增共享 `CompanionFace`，把默认、眨眼、开心、难过、生气、思考、聆听七张真实图片用于品牌、侧栏设备脸、工作台、陪伴页、表情库和动作预览；自然眨眼为 4.2～7.8 秒间隔、150 ms 持续并尊重 reduced-motion。
+- 功能边界：T06 的 VoiceWorkflow、活动窗口写回、固定文字、UUID 打开应用、配置 ACK/回读、按键映射、连接和诊断实现未被替换。陪伴对话、记忆、提醒、图片导入持久化、小智屏幕和舵机均明确标为软件预览、待开发或待接入；“开始陪伴对话”不打开麦克风，动作按钮不发送硬件命令。
+- 产出：实现见 `src/CompanionFace.jsx`、`src/App.jsx`、`src/pages.jsx`、`src/appData.js`、`src/styles.css` 和 `public/assets/expressions/`；设计说明见 `docs/design/companion-ui-integration-after-t06.md`，视觉 QA 见 `design/qa/design-qa.md`，选定表情系统见 `design/concepts/companion-expression-elastic-language.png`。
+- 验证：精确 T06 基线在改动前 101/101；集成后 `npm test` 105/105，`npm run build:desktop` 通过。所选 Edge 中八个主入口逐页打开，陪伴预览、七表情、表情搜索、动作软件预览和 AI 联动均完成交互检查；小窗口无横向文档溢出。自动验证只证明软件候选，不替代用户对原有功能的人工回归。
+- 硬件与下一步：本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，未接线、未操作小智 OLED/舵机。下一步由用户运行 `release/win-unpacked/DeskMate.exe`，优先人工回归 T06 固定文字、打开应用、配置回读、语音写回和八键/旋钮，再检查 AI 陪伴七表情与内部分页；任何原功能回归立即停在本候选修复，不开始小智通信或固件实现。
+
 ## 2026-08-29 · T06 manual matrix passed, locked and ready for Git handoff
 
 - 做了什么：启动当前 `release/win-unpacked` DeskMate 供用户人工验收；用户按清单完成同一窗口语音写回、主动切窗剪贴板安全回退、固定文字、UUID 打开应用、DeskMate 重启后的配置读取，以及八键、旋钮旋转/按压、灯效和语音键回归，并明确报告“测试全部通过”。T06 状态更新为 `HIL_CONFIRMED / USER_ACCEPTED / T06_LOCKED`。

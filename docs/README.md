@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T07D companion UI integration after T06](design/companion-ui-integration-after-t06.md)
+- [T07D companion UI visual QA](../design/qa/design-qa.md)
 - [Latest three-end development guide](guides/deskmate-three-end-development-guide-2026-08-24.md)
 - [DeskMate V1 hardware baseline](architecture/deskmate-v1-hardware-baseline.md)
 - [Integrated software and hardware project start](handoffs/integrated-project-start-2026-08-23.md)

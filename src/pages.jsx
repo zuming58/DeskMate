@@ -8,6 +8,7 @@ import {
   IconArrowRight as ArrowRight,
   IconArrowUp as ArrowUp,
   IconBluetooth as Bluetooth,
+  IconBellRinging as BellRinging,
   IconBook2 as Book2,
   IconBrain as Brain,
   IconCheck as Check,
@@ -25,6 +26,7 @@ import {
   IconKeyboard as Keyboard,
   IconLink as Link,
   IconLock as Lock,
+  IconMessageCircle2 as MessageCircle,
   IconMicrophone2 as Microphone2,
   IconMoodHappy as MoodHappy,
   IconMoodNerd as MoodNerd,
@@ -35,6 +37,7 @@ import {
   IconPlayerPlay as PlayerPlay,
   IconPlus as Plus,
   IconRefresh as Refresh,
+  IconRobot as Robot,
   IconSend as Send,
   IconSettings2 as Settings2,
   IconSparkles as Sparkles,
@@ -45,6 +48,7 @@ import {
   IconUser as User,
 } from "@tabler/icons-react";
 import { agents, expressionPresets, historyItems } from "./appData.js";
+import { CompanionFace, expressionAssetUrl } from "./CompanionFace.jsx";
 import { useAppStore } from "./store/appStore.js";
 import { useRecorder } from "./hooks/useRecorder.js";
 import { clearRecordingBlobs, deleteRecordingBlob, getRecordingBlob, saveRecordingBlob } from "./store/recordingStore.js";
@@ -189,13 +193,79 @@ function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
 const DEVICE_FACE_URL = `${import.meta.env.BASE_URL}assets/deskmate-focus-face.png`;
 
 function ExpressionTile({ preset, selected, onClick, compact = false }) {
-  const Icon = moodIcons[preset.mood] || MoodSmile;
+  const source = preset.assetUrl || expressionAssetUrl(preset.id);
   return (
     <button className={`expression-tile expression-tile--${preset.color} ${selected ? "is-selected" : ""} ${compact ? "is-compact" : ""}`} onClick={onClick}>
-      <span className="expression-screen"><Icon size={compact ? 28 : 38} stroke={1.6} /></span>
+      <span className="expression-screen"><img src={source} alt={`${preset.name}表情`} /></span>
       <span><strong>{preset.name}</strong>{!compact && <small>{preset.description}</small>}</span>
       {selected && <span className="expression-check"><Check size={14} /></span>}
     </button>
+  );
+}
+
+export function CompanionPage({ notify }) {
+  const { state, patch } = useAppStore();
+  const [section, setSection] = useState("overview");
+  const [sessionActive, setSessionActive] = useState(false);
+  const expression = sessionActive ? "listen" : state.currentExpression;
+  const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
+  const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
+  const toggleSession = () => {
+    const next = !sessionActive;
+    setSessionActive(next);
+    notify(next ? "陪伴对话进入软件聆听预览；实时语音桥待接入" : "已结束陪伴对话预览");
+  };
+  return (
+    <div className="page page--companion">
+      <PageIntro
+        title="AI 陪伴"
+        description="陪伴对话、记忆提醒、AI 联动、表情与动作的统一入口"
+        actions={<StatusBadge tone="demo">软件预览 · 小智待接入</StatusBadge>}
+      />
+      <Segmented
+        value={section}
+        onChange={setSection}
+        options={[
+          { value: "overview", label: "陪伴与记忆" },
+          { value: "expressions", label: "表情库" },
+          { value: "motion", label: "动作编排" },
+          { value: "agents", label: "AI 联动" },
+        ]}
+      />
+      {section === "overview" && <div className="companion-overview">
+        <Card className="companion-stage">
+          <div className="card-heading"><div><strong>DeskMate 陪伴预览</strong><small>WINDOWS · SOFTWARE PREVIEW</small></div><StatusBadge tone={sessionActive ? "success" : "neutral"}>{sessionActive ? "聆听中" : selectedPreset.name}</StatusBadge></div>
+          <div className={`companion-stage__face ${sessionActive ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
+          <div className="companion-stage__copy"><h2>{sessionActive ? "我在聆听…" : "你好，我在这里"}</h2><p>{sessionActive ? "当前只是软件交互预览，不会占用语音输入流程。" : "随时陪伴，记住你的偏好与重要事项。"}</p></div>
+          <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴预览" : "开始陪伴对话"}</Button>
+          <div className="companion-expression-strip" aria-label="快捷表情">
+            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => { setSessionActive(false); patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}
+          </div>
+        </Card>
+        <div className="companion-side-stack">
+          <Card>
+            <SectionTitle index="01" title="陪伴与记忆" description="以下是界面样例；正式记忆服务尚未接入。" />
+            <div className="companion-info-list">
+              <button onClick={() => notify("提醒功能待接入本地调度器")}><span className="companion-info-icon"><BellRinging size={20} /></span><span><small>下一个提醒 · 演示</small><strong>14:30 准备产品周会材料</strong></span><StatusBadge tone="demo">今天</StatusBadge></button>
+              <button onClick={() => notify("长期记忆检索待接入 DeskMate memory 目录")}><span className="companion-info-icon"><Book2 size={20} /></span><span><small>记忆片段 · 演示</small><strong>你偏好简洁直达的方案与深色主题</strong></span><StatusBadge tone="neutral">8月26日</StatusBadge></button>
+            </div>
+          </Card>
+          <Card>
+            <SectionTitle index="02" title="设备与服务" description="真实状态与待接入状态分开显示。" />
+            <div className="companion-status-list">
+              <div><span><Keyboard size={18} />EasyInput</span><StatusBadge tone={boardConnected ? "success" : "demo"}>{boardConnected ? "已连接" : "等待设备"}</StatusBadge></div>
+              <div><span><Robot size={18} />小智云台</span><StatusBadge tone="warning">待接入</StatusBadge></div>
+              <div><span><Microphone2 size={18} />陪伴实时语音</span><StatusBadge tone="demo">待开发</StatusBadge></div>
+              <div><span><Link size={18} />记忆与提醒</span><StatusBadge tone="demo">待开发</StatusBadge></div>
+            </div>
+          </Card>
+          <Notice tone="info" title="语音互斥边界">陪伴对话与文字语音输入将共用同一个版本化语音状态机；当前页面不会启动第二套麦克风流程。</Notice>
+        </div>
+      </div>}
+      {section === "expressions" && <ExpressionsPage notify={notify} embedded />}
+      {section === "motion" && <MotionPage notify={notify} embedded />}
+      {section === "agents" && <AgentsPage notify={notify} embedded />}
+    </div>
   );
 }
 
@@ -228,7 +298,7 @@ export function DashboardPage({ navigate, notify }) {
             <StatusBadge tone="success">{selectedPreset.name}中</StatusBadge>
           </div>
           <div className="pet-visual">
-            <img src={DEVICE_FACE_URL} alt="DeskMate 桌宠专注表情" />
+            <CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} />
             <span className="pet-mode"><span />{expression.toUpperCase()} · {selectedPreset.name}模式</span>
           </div>
           <div className="pet-footer">
@@ -243,9 +313,9 @@ export function DashboardPage({ navigate, notify }) {
             <div className="progress-ring" style={{ "--value": progress }}><strong>{progress}<span>%</span></strong><small>任务进度</small></div>
             <div><span className="blue-kicker">当前状态</span><h3>{stateCopy.heading}</h3><p>{task.detail || "尚未收到任务详情"}</p></div>
           </div>
-          <Button variant="primary" className="button--wide" onClick={() => navigate("agents")}>查看当前任务 <ArrowRight size={18} /></Button>
+          <Button variant="primary" className="button--wide" onClick={() => navigate("companion")}>查看陪伴与联动 <ArrowRight size={18} /></Button>
           <div className="task-divider" />
-          <div className="card-heading"><strong>工作表情</strong><button className="text-link" onClick={() => navigate("expressions")}>管理表情 <ArrowRight size={14} /></button></div>
+          <div className="card-heading"><strong>工作表情</strong><button className="text-link" onClick={() => navigate("companion")}>管理表情 <ArrowRight size={14} /></button></div>
           <div className="expression-row">
             {expressionPresets.slice(0, 3).map((item) => <ExpressionTile key={item.id} compact preset={item} selected={expression === item.id} onClick={() => event({ type: item.id === "focus" ? "working" : item.id === "listen" ? "listening" : "thinking", agent: "Codex", progress: state.aiEvent.progress, detail: state.aiEvent.detail })} />)}
           </div>
@@ -713,7 +783,7 @@ export function ConnectionsPage({ notify }) {
   );
 }
 
-export function AgentsPage({ notify }) {
+export function AgentsPage({ notify, embedded = false }) {
   const { state, patch, event } = useAppStore();
   const mapping = state.agentExpressionMapping;
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
@@ -729,8 +799,9 @@ export function AgentsPage({ notify }) {
     notify(`Codex 已切换为“${eventLabel[next]}”`);
   };
   return (
-    <div className="page">
-      <PageIntro title="AI 联动" description="把编程助手的运行状态映射到桌宠灯效和表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("自定义适配器将在开发阶段开放")}>添加适配器</Button>} />
+    <div className={embedded ? "companion-embedded" : "page"}>
+      {!embedded && <PageIntro title="AI 联动" description="把编程助手的运行状态映射到桌宠灯效和表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("自定义适配器将在开发阶段开放")}>添加适配器</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>保留原来的适配器、状态映射和模拟调试能力。</p></div><Button icon={Plus} onClick={() => notify("自定义适配器将在开发阶段开放")}>添加适配器</Button></div>}
       <Notice tone="demo" title="适配器模拟数据">Codex、Claude Code、Hermes 和 Workbody 当前仅使用模拟状态；未连接真实 provider，也不会控制硬件。</Notice>
       <Card><SectionTitle index="01" title="桌宠意图（模拟）" description="状态只转换为意图，不调用屏幕、灯、舵机或传感器。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <div className="agent-grid">{agents.map((agent) => {
@@ -750,21 +821,39 @@ export function AgentsPage({ notify }) {
   );
 }
 
-export function ExpressionsPage({ navigate, notify }) {
+export function ExpressionsPage({ notify, embedded = false }) {
   const { state, patch, event } = useAppStore();
   const selected = state.currentExpression;
   const [category, setCategory] = useState("all");
-  const filtered = category === "all" ? expressionPresets : expressionPresets.filter((item) => category === "work" ? ["focus", "listen", "think"].includes(item.id) : ["happy", "sleep", "alert"].includes(item.id));
+  const [query, setQuery] = useState("");
+  const [customPreset, setCustomPreset] = useState(null);
+  useEffect(() => () => { if (customPreset?.assetUrl) URL.revokeObjectURL(customPreset.assetUrl); }, [customPreset]);
+  const filtered = expressionPresets.filter((item) => {
+    const inCategory = category === "all" || (category === "work" ? ["focus", "listen", "think"].includes(item.id) : ["happy", "sleep", "sad", "alert"].includes(item.id));
+    return inCategory && (!query.trim() || `${item.name}${item.description}`.toLowerCase().includes(query.trim().toLowerCase()));
+  });
+  const displayPresets = customPreset && category === "all" && !query.trim() ? [...filtered, customPreset] : filtered;
   const assignments = [{ key: "working", label: "AI 工作中" }, { key: "waiting_user", label: "等待用户输入" }, { key: "thinking", label: "复杂推理" }, { key: "completed", label: "任务已完成" }];
   const updateStatusMapping = (key, value) => {
     patch({ expressionMapping: { ...state.expressionMapping, [key]: value } });
     if (state.aiEvent.type === key) event({ ...state.aiEvent });
   };
+  const importExpression = (uploadEvent) => {
+    const file = uploadEvent.target.files?.[0];
+    uploadEvent.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) { notify("请选择 2 MB 以内的图片文件"); return; }
+    if (customPreset?.assetUrl) URL.revokeObjectURL(customPreset.assetUrl);
+    setCustomPreset({ id: "custom-preview", name: file.name.replace(/\.[^.]+$/, ""), description: "本次运行的本地预览，未同步小智", color: "cyan", assetUrl: URL.createObjectURL(file) });
+    notify("自定义表情已载入本次软件预览；未写入小智设备");
+  };
   return (
-    <div className="page">
-      <PageIntro title="表情库" description="管理内置表情、收藏与工作状态映射" actions={<Button icon={Plus} variant="primary" onClick={() => navigate("editor")}>新建表情</Button>} />
-      <div className="library-toolbar"><Segmented value={category} onChange={setCategory} options={[{ value: "all", label: "全部" }, { value: "work", label: "工作状态" }, { value: "life", label: "生活状态" }]} /><SearchField value="" placeholder="搜索表情" /></div>
-      <div className="expression-library">{filtered.map((preset) => <ExpressionTile key={preset.id} preset={preset} selected={selected === preset.id} onClick={() => { patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}</div>
+    <div className={embedded ? "companion-embedded" : "page"}>
+      {!embedded && <PageIntro title="表情库" description="管理内置表情、导入预览与工作状态映射" actions={<label className="button button--primary expression-upload"><Upload size={17} /><span>导入表情</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label>} />}
+      {embedded && <div className="embedded-heading"><div><span>ELASTIC EYES</span><h2>表情库</h2><p>默认、眨眼、开心、难过、生气、思考和聆听使用同一套真实图片资源。</p></div><label className="button expression-upload"><Upload size={17} /><span>导入预览</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label></div>}
+      <Notice tone="demo" title="软件表情预览">所有切换只更新 Windows 软件画面；小智 OLED 表情协议与固件尚未接入。</Notice>
+      <div className="library-toolbar"><Segmented value={category} onChange={setCategory} options={[{ value: "all", label: "全部" }, { value: "work", label: "工作状态" }, { value: "life", label: "情绪状态" }]} /><SearchField value={query} onChange={setQuery} placeholder="搜索表情" /></div>
+      <div className="expression-library">{displayPresets.map((preset) => <ExpressionTile key={preset.id} preset={preset} selected={preset.id === "custom-preview" ? false : selected === preset.id} onClick={() => { if (preset.id !== "custom-preview") patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}</div>
       <Card className="assignment-card"><SectionTitle index="02" title="当前状态映射" description="选择一个工作状态，再指定桌宠显示的表情。" /><div className="assignment-grid">{assignments.map((assignment) => <div key={assignment.key}><span>{assignment.label}</span><Select value={state.expressionMapping[assignment.key]} onChange={(value) => updateStatusMapping(assignment.key, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></div>)}</div></Card>
     </div>
   );
@@ -793,19 +882,20 @@ export function ExpressionEditorPage({ notify }) {
   );
 }
 
-export function MotionPage({ notify }) {
+export function MotionPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
   const { preset, speed, range } = state.motion;
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
   const [testing, setTesting] = useState(false);
-  const play = () => { setTesting(true); notify("正在播放虚拟动作预览"); window.setTimeout(() => setTesting(false), 1800); };
+  const play = (nextPreset = preset) => { updateMotion({ preset: nextPreset }); setTesting(true); notify("正在播放软件动作预览；未发送到小智舵机"); window.setTimeout(() => setTesting(false), 1800); };
   return (
-    <div className="page">
-      <PageIntro title="动作编排" description="设计左右摇头、上下点头与组合动作" actions={<Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={play}>{testing ? "预览中…" : "测试动作"}</Button>} />
+    <div className={embedded ? "companion-embedded" : "page"}>
+      {!embedded && <PageIntro title="动作编排" description="设计左右摇头、上下点头与组合动作" actions={<Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>MOTION PREVIEW</span><h2>动作编排</h2><p>保留幅度、速度、预设和时间线，当前只驱动软件画面。</p></div><Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button></div>}
       <Notice tone="demo" title="虚拟动作预览">双轴舵机型号、角度零点和安全限位尚未确定，当前只展示动作编排体验。</Notice>
       <div className="motion-grid">
-        <Card className="motion-stage"><div className={`motion-avatar ${testing ? `is-playing is-${preset}` : ""}`}><img src={DEVICE_FACE_URL} alt="桌宠动作预览" /></div><div className="axis-controls"><Button icon={ArrowLeft}>左转</Button><Button icon={ArrowUp}>抬头</Button><Button icon={ArrowDown}>点头</Button><Button icon={ArrowRight}>右转</Button></div></Card>
-        <Card><SectionTitle index="01" title="动作参数" /><label className="field-label">动作预设<Segmented value={preset} onChange={(value) => updateMotion({ preset: value })} options={[{ value: "attentive", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }]} /></label><SettingRow title="动作速度" description="速度越高，运动越利落"><Slider label="动作速度" value={speed} onChange={(value) => updateMotion({ speed: value })} /></SettingRow><SettingRow title="运动范围" description="限制头部最大转动角度"><Slider label="运动范围" value={range} onChange={(value) => updateMotion({ range: value })} min={10} max={80} suffix="°" /></SettingRow><SettingRow title="柔性起停" description="减少舵机突然启动带来的晃动"><Toggle checked onChange={() => notify("柔性起停已保持开启")} /></SettingRow></Card>
+        <Card className="motion-stage"><div className={`motion-avatar ${testing ? `is-playing is-${preset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="桌宠动作预览" /></div><div className="axis-controls"><Button icon={ArrowLeft} onClick={() => play("search")}>左转</Button><Button icon={ArrowUp} onClick={() => play("attentive")}>抬头</Button><Button icon={ArrowDown} onClick={() => play("nod")}>点头</Button><Button icon={ArrowRight} onClick={() => play("search")}>右转</Button></div></Card>
+        <Card><SectionTitle index="01" title="动作参数" /><label className="field-label">动作预设<Segmented value={preset} onChange={(value) => updateMotion({ preset: value })} options={[{ value: "attentive", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><SettingRow title="动作速度" description="速度越高，运动越利落"><Slider label="动作速度" value={speed} onChange={(value) => updateMotion({ speed: value })} /></SettingRow><SettingRow title="运动范围" description="限制头部最大转动角度"><Slider label="运动范围" value={range} onChange={(value) => updateMotion({ range: value })} min={10} max={80} suffix="°" /></SettingRow><SettingRow title="柔性起停" description="减少舵机突然启动带来的晃动"><Toggle checked onChange={() => notify("柔性起停已保持开启")} /></SettingRow></Card>
       </div>
       <Card><SectionTitle index="02" title="动作时间线" description="把表情和动作组合为一段可复用行为。" /><div className="timeline"><span className="timeline-label">0s</span><div className="timeline-track"><i style={{ left: "4%", width: "22%" }}>看向用户</i><i style={{ left: "32%", width: "18%" }}>眨眼</i><i style={{ left: "56%", width: "32%" }}>轻点头 × 2</i></div><span className="timeline-label">4s</span></div></Card>
     </div>
