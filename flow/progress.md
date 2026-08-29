@@ -2,6 +2,16 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07D voice edit, AI services and local memory foundation ready for manual regression
+
+- 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上继续工作；本轮起点 HEAD 为 `82d582c91007ffc27549397d71d8cdc658e38178`，功能实现提交为 `78a95726db4ac7e5f33c11fd400eab064c38f4ac`。主工作树 `F:\Codex\deskmate` 未修改。
+- 做了什么：用 DeskMate 自定义确认框替换按键保存时的原生 Windows `confirm`；把“设备连接”从主导航迁入“设备与诊断”内页；新增独立 `Ctrl+Shift+E` / KEY3 语音编辑链路，先精确捕获前台窗口选区，再录制编辑指令、调用文字大模型，且仅在目标窗口和原选区仍一致时替换；原样输出仍走本地确定性规则，智能整理和自定义整理改为真实文字模型调用，并与 KEY3、后续 Bridge/记忆摘要共用一套版本化文字模型配置。
+- AI 服务与安全：设置页新增“AI 服务”，分别配置百炼 ASR、OpenAI-compatible 文字模型，以及豆包/自定义 WSS 实时语音；API Key、App ID、Access Key、App Key 通过 Electron `safeStorage` 加密，React 不读取密钥、Node API 或设备路径。实时语音配置目前只保存并显示待接入，尚未启用第二套语音状态机或陪伴 Bridge；未伪装成已经联通。
+- 记忆基础：新增 `%APPDATA%\deskmate\companion-memory.sqlite3`，使用内置 `node:sqlite`、WAL 和 FULL synchronous，落地对话轮次、每日摘要、记忆候选、审核状态和 embedding 表；AI 陪伴的“记忆管理”已显示真实数据库状态、候选列表与审核入口。数据库和管理面是真实实现，但陪伴对话写入、自动小时/每日摘要、向量生成与检索仍待后续切片，当前空库会如实显示。
+- 来源与边界：对照 Maker 固定参考确认 KEY3/`Ctrl+Shift+E` 只负责热键和音频生命周期，Windows 选区捕获、模型处理与安全替换应由 Host 实现；只参考 `F:\Codex\suligent` 的“实时语音 WebSocket + 独立 OpenAI-compatible 意图/状态模型 + 输入打断播放”架构，没有复制人物、凭据或代码。本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未驱动小智 OLED/舵机。
+- 验证：`npm ci --include=dev` 成功；`npm test` 112/112 通过。最终源码与原生桥构建通过；仓库内 `npm run build:desktop` 在 electron-builder 重命名 `release\win-unpacked.tmp` 时受 Windows 文件锁 `EPERM` 阻断，但对同一最终源码执行等价打包到隔离输出目录成功，成品为 `D:\CodexData\home\visualizations\2026\08\29\01a04af3-3b1b-7843-9dcd-d8d26ef52e4c\deskmate-package\win-unpacked\DeskMate.exe`，`app.asar` SHA-256 为 `4E4157950939B8BACC4A27A08F10827BCFFD29155CF0671FB0E984ED1F737BE4`，应用已启动且创建本地记忆库。Edge 自动视觉采集因无法可靠确认浏览器当前 URL 而安全停止，未把未完成的自动截图冒充 QA。
+- 下一步：用户在已启动的最终包中人工回归原 T06 按键保存/回读与新确认框、KEY1 原样/智能整理、KEY3 选中文本语音编辑、AI 服务保存状态和记忆空库状态；新 KEY3 尚未取得本轮真机验收，不标记为 HIL 通过。实时陪伴语音、Bridge、自动记忆摘要和 embedding 检索另开冻结切片后实现。
+
 ## 2026-08-29 · T07D companion UI integrated on the locked T06 baseline
 
 - 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上工作；精确基线为已锁定 T06 HEAD `619d85347499545e9af11488bb5d141296ae1dd3`，已验证实现提交为 `ac5bf6d86661fc1260bb8a3301e684778c829a9b`。原 `F:\Codex\deskmate` 的 T07C dirty 工作树保持原样，没有整目录覆盖或回写。
