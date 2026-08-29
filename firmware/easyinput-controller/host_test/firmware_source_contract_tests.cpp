@@ -208,6 +208,10 @@ int main() {
     CHECK(!contains(config_core_source, "result = {}; const bool va"));
     CHECK(!contains(config_core_source, "workspace.record = {}"));
     CHECK(!contains(config_core_source, "workspace.readback = {}"));
+    CHECK(!contains(config_core_source, "struct JsonValue"));
+    CHECK(!contains(config_core_source, "std::vector<JsonValue>"));
+    CHECK(contains(config_core_source, "bool valid_json(std::string_view json)"));
+    CHECK(contains(config_core_source, "bool field_value(std::string_view object"));
 
     // T04 remains a fail-soft consumer of confirmed T03 events.
     CHECK(contains(main_source,

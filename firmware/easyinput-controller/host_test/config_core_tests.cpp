@@ -23,6 +23,18 @@ static const char* kJson=R"({"schema":"ai_keyboard.v1","target_platform":"window
 
 static ConfigDocument doc(){ConfigDocument d{};d.length=std::strlen(kJson);std::memcpy(d.bytes.data(),kJson,d.length);d.crc16=config_crc16_ccitt(d.bytes.data(),d.length);return d;}
 
+static ConfigDocument document_from(const std::string& json){ConfigDocument d{};CHECK(!json.empty()&&json.size()<=kConfigMaxJsonBytes);d.length=static_cast<uint16_t>(json.size());std::memcpy(d.bytes.data(),json.data(),d.length);d.crc16=config_crc16_ccitt(d.bytes.data(),d.length);return d;}
+
+static std::string large_host_action_config(){
+  std::string json=R"({"schema":"ai_keyboard.v1","target_platform":"windows","profiles":[{"id":"default","keys":{"KEY1":{"press":"voice_ptt_hold"},"KEY2":{"press":{"hotkey":"Return"}},"KEY3":{"press":"edit_ptt_hold"},"KEY4":{"press":{"hotkey":"Backspace"}},"KEY5":{"press":"select_all"},"KEY6":{"press":"copy"},"KEY7":{"press":"paste"},"KEY8":{"press":"host_action:12345678-1234-1234-1234-123456789abc"}},"encoder":{"press":"scroll_axis_toggle","scroll":{"enabled":true,"mode":"scroll","axis":"vertical","speed":3,"windows_reverse_vertical":false,"windows_reverse_horizontal":false}}},{"id":"preserved-profile","keys":{},"encoder":{}}],"network":{"ssid":"preserve-me","secret":"not-a-real-secret"},"audio":{"source":"computer","gain":7},"unknown":{"padding":")";
+  const std::string suffix=R"(","nested":{"keep":true,"list":[1,2,3]}}})";
+  CHECK(json.size()+suffix.size()<kConfigMaxJsonBytes-32);
+  json.append(kConfigMaxJsonBytes-16-json.size()-suffix.size(),'x');
+  json+=suffix;
+  CHECK(json.size()==kConfigMaxJsonBytes-16);
+  return json;
+}
+
 static std::vector<uint8_t> write_chunk(const ConfigDocument& d,uint8_t index,uint8_t total){
   std::vector<uint8_t> p(kConfigWriteFeaturePayloadBytes,0);const size_t off=static_cast<size_t>(index)*kConfigWriteChunkBytes;const auto n=std::min(kConfigWriteChunkBytes,static_cast<size_t>(d.length)-off);
   p[0]='S';p[1]='3';p[2]='C';p[3]=1;p[4]=index;p[5]=total;p[6]=d.length;p[7]=d.length>>8;p[8]=static_cast<uint8_t>(n);p[9]=d.crc16;p[10]=d.crc16>>8;std::memcpy(p.data()+11,d.bytes.data()+off,n);return p;
@@ -53,6 +65,32 @@ void storage(){
   newer.bytes[0]='x';select_config_record(&a,&newer,ConfigSlot::B,r);CHECK(r.slot==ConfigSlot::A&&r.recovered_marker&&r.document.source==ConfigSource::Recovery);
   for(int failure=1;failure<=5;++failure){B f;if(failure==1)f.fail_write=true;if(failure==2)f.fail_commit_at=1;if(failure==3)f.fail_read=true;if(failure==4)f.fail_marker=true;if(failure==5)f.fail_commit_at=2;CHECK(save_config_transaction(f,d,ConfigSlot::A,3,workspace)!=ConfigSaveStatus::Saved);}
   B overflow;CHECK(save_config_transaction(overflow,d,ConfigSlot::A,std::numeric_limits<uint32_t>::max(),workspace)==ConfigSaveStatus::WriteFailed);
+}
+
+void large_config_save_read_and_restart_roundtrip(){
+  const std::string raw=large_host_action_config();
+  const ConfigDocument incoming=document_from(raw);
+  ConfigWriteAssembler assembler;
+  const uint8_t total=static_cast<uint8_t>((incoming.length+kConfigWriteChunkBytes-1)/kConfigWriteChunkBytes);
+  for(uint8_t index=0;index<total;++index){const auto chunk=write_chunk(incoming,index,total);const auto status=assembler.accept(chunk.data(),chunk.size(),19);CHECK(status==(index+1==total?ConfigReceiveStatus::Complete:ConfigReceiveStatus::Accepted));}
+  CHECK(assembler.document().view()==raw);
+
+  B storage; ConfigTransactionWorkspace workspace{};
+  CHECK(save_config_transaction(storage,assembler.document(),ConfigSlot::A,9,workspace)==ConfigSaveStatus::Saved);
+  ConfigLoadResult loaded{}; select_config_record(&storage.a,&storage.b,storage.marker,loaded);
+  CHECK(loaded.slot==ConfigSlot::B&&loaded.generation==10&&loaded.document.view()==raw);
+  ConfigProjection projection{}; CHECK(parse_config_projection(loaded.document.view(),projection));
+  CHECK(projection.keys[7].kind==ConfigActionKind::HostAction);
+  CHECK(projection.keys[7].value=="12345678-1234-1234-1234-123456789abc");
+
+  ConfigReadStream stream; CHECK(stream.replace(0x10203040,loaded.document,19));
+  std::string readback; std::array<uint8_t,kConfigFeaturePayloadBytes> payload{};
+  while(stream.pending()){CHECK(stream.encode_next(payload));const size_t count=payload[3]-10;readback.append(reinterpret_cast<const char*>(payload.data()+14),count);CHECK(stream.mark_sent()||stream.pending());}
+  CHECK(readback==raw);
+
+  ConfigLoadResult after_restart{}; select_config_record(&storage.a,&storage.b,storage.marker,after_restart);
+  ConfigProjection restarted{}; CHECK(after_restart.document.view()==raw);CHECK(parse_config_projection(after_restart.document.view(),restarted));
+  CHECK(restarted.keys[7].kind==ConfigActionKind::HostAction&&restarted.keys[7].value==projection.keys[7].value);
 }
 
 void rejects_malformed_projection_without_throwing(){
@@ -90,4 +128,4 @@ void normalizes_windows_feature_report_shapes(){
   CHECK(!normalize_config_feature_report(0x12,wire.data()+1,kConfigWriteFeaturePayloadBytes,view));
 }
 
-int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));CHECK(p.keys[0].kind==ConfigActionKind::VoiceInput&&p.keys[0].modifiers==3&&p.keys[0].usage==0x2c);CHECK(p.keys[2].kind==ConfigActionKind::VoiceEdit&&p.keys[2].modifiers==3&&p.keys[2].usage==0x08);CHECK(p.keys[1].kind==ConfigActionKind::Hotkey&&p.keys[1].modifiers==0&&p.keys[1].usage==0x28);CHECK(p.keys[3].kind==ConfigActionKind::Hotkey&&p.keys[3].modifiers==0&&p.keys[3].usage==0x2a);write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();storage();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();normalizes_windows_feature_report_shapes();return 0;}
+int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));CHECK(p.keys[0].kind==ConfigActionKind::VoiceInput&&p.keys[0].modifiers==3&&p.keys[0].usage==0x2c);CHECK(p.keys[2].kind==ConfigActionKind::VoiceEdit&&p.keys[2].modifiers==3&&p.keys[2].usage==0x08);CHECK(p.keys[1].kind==ConfigActionKind::Hotkey&&p.keys[1].modifiers==0&&p.keys[1].usage==0x28);CHECK(p.keys[3].kind==ConfigActionKind::Hotkey&&p.keys[3].modifiers==0&&p.keys[3].usage==0x2a);write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();storage();large_config_save_read_and_restart_roundtrip();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();normalizes_windows_feature_report_shapes();return 0;}

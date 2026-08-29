@@ -1,5 +1,12 @@
 # Lessons learned
 
+## Bounded firmware configuration parsing must avoid a whole-document dynamic DOM
+
+- 现象：普通按键配置可运行，但加入 Host Action 后保存会让按键和灯效停止；配置已经写入 NVS，完整重启又会在启动加载时重复触发。
+- 根因：最多 2048 字节的配置在 ESP-IDF `-fno-exceptions` 环境中被递归解析成含 `std::string`、`std::vector` 的完整动态对象树，并在保存、回读、应用和启动恢复阶段连续重建。Host 上通过的小配置无法覆盖目标机的递归栈和动态分配压力。
+- 做法：保留完整原始 JSON 作为无损存储真相，先做严格 UTF-8/JSON/深度验证，再以有界扫描器只提取冻结路径的运行时投影；未知字段、多 Profile、网络和音频字段继续原字节保存。Host 回归必须使用接近 2048 字节的真实配置，贯穿分块写入、双槽保存、回读、完整读取和模拟重启，并从 ESP32 ELF核对关键解析函数栈帧。
+- 规则：固件中的有界输入不等于可以安全构造完整动态 DOM；涉及保存后重启恢复的配置功能，测试数据必须接近协议上限并覆盖完整生命周期，不能只测短样例的单次解析。
+
 ## A passing HID model test does not prove the real callback boundary
 
 - 现象：Feature Report 两种 ID 形态和 `0x04` 多分块 completion 的 Host 测试均通过，两个 app 镜像真机仍在能力读取阶段超时；独立原生桥只看到设备连接，看不到第一条进度事件。

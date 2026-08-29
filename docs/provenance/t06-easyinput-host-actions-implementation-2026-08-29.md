@@ -29,6 +29,12 @@
 | `tests/phase3-input-bridge.test.mjs`, `tests/native-input-bridge-protocol.test.mjs`, `tests/easyinput-config.test.mjs` | Maker Host tests and frozen contracts | Metadata privacy, capability gates, fixed-text busy/timeout/exit, UTF-8 boundaries and T02-T05 regressions | Product-side Node tests; no hardware dependency. |
 | `.gitignore` | DeskMate build hygiene | Keep generated output outside Git | Added `release-*/` and retained firmware/native/build artifact exclusions. |
 
+## Configuration-save recovery follow-up
+
+The 2026-08-29 hardware failure after saving a Host Action was addressed by rechecking the fixed Maker commit's configuration projection behavior. Maker preserves the complete JSON document and extracts only required runtime paths instead of constructing a persistent whole-document dynamic DOM. DeskMate adopted that behavior as a clean, bounded reimplementation in `firmware/easyinput-controller/components/input_core/src/config_core.cpp`: strict UTF-8/JSON validation, depth limits, path scanning, and unchanged raw-byte storage. No Maker runtime source or build output was copied.
+
+Regression targets are `firmware/easyinput-controller/host_test/config_core_tests.cpp` and `firmware/easyinput-controller/host_test/firmware_source_contract_tests.cpp`. They add a near-2048-byte document containing a Host Action UUID, unknown fields, another profile, network and audio fields, then exercise write chunks, dual-slot persistence, readback, runtime projection, complete read streaming, and simulated reboot loading. The source contract prevents reintroduction of the removed `JsonValue`/`std::vector<JsonValue>` whole-document tree.
+
 ## Verification boundary
 
 Host and desktop tests and the ESP-IDF build are development evidence only. No port scan, device identification, Flash/NVS read or write, erase, flash, monitor, eFuse operation, HIL, Xiaozhi modification, or external-reference modification was performed.

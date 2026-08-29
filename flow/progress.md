@@ -2,6 +2,15 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T06 configuration-save board failure fixed in code
+
+- 做了什么：针对用户真机将 KEY8 配置为 Host Action 并保存后，按键与灯效全部停止且完整重启仍不能恢复的问题，替换 `config_core.cpp` 的完整递归动态 JSON DOM；新实现先严格验证最多 2048 字节的 UTF-8/JSON，再仅按冻结配置路径流式提取运行时投影，继续原字节保存完整 JSON。新增接近上限的 Host Action 配置回归，覆盖 `0x10` 分块组装、双槽 NVS 保存/回读、运行时投影、`0x11` 完整读取和模拟重启恢复。
+- 为什么与怎么理解：旧实现会为整份配置递归构造含 `std::string`/`std::vector` 的对象树，并在保存、回读、应用和启动加载阶段重复解析；ESP-IDF 又以 `-fno-exceptions` 构建。普通配置未必触发故障，但加入 Host Action 后配置增大，动态分配与递归栈风险足以解释“保存即失效、重启仍失效”。固定 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的同类路径保留原 JSON并按路径解析，本轮按此行为清晰重实现，没有复制 Maker runtime 或使用其 build 产物。该根因是代码和目标 ELF支持的高可信结论，仍须新镜像真机复测后才能标为 HIL 确认。
+- 产出路径：`firmware/easyinput-controller/components/input_core/src/config_core.cpp`、`firmware/easyinput-controller/host_test/config_core_tests.cpp`、`firmware/easyinput-controller/host_test/firmware_source_contract_tests.cpp`；来源补充见 `docs/provenance/t06-easyinput-host-actions-implementation-2026-08-29.md`，可复用经验见 `flow/lessons.md`。
+- 验证：Visual Studio Build Tools 2022 / MSVC 19.44 Host CTest `7/7`；桌面 `npm test` `87/87`、`npm run build:desktop`；精确 ESP-IDF `v5.5.5` / `esp32s3` / Minimal build / 固定 16 MB 分区的 dirty 候选构建均通过。`git diff --check`、AGENTS/CLAUDE 一致性和密钥初筛通过。最终提交后的干净镜像仍须重建并在交付回复中报告 HEAD、大小、SHA-256 与 app-only 范围。
+- 硬件边界：本轮没有扫描端口、识别设备、读取 Flash/NVS、烧录、erase、monitor 或执行 HIL；旧 `af2263f` 镜像不得重复烧录。新候选必须先提交推送并从干净 HEAD 重建，再取得针对精确 HEAD、SHA-256 和 app-only 范围的新授权。
+- 下一步：授权后只 app-only 写入新候选并验证启动、配置读取、KEY8 选择 Chrome 后保存、按键/灯效继续工作、重启后配置仍可读且 Host Action 生效，再回归 T03/T04。语音“正在写入目标窗口”延迟作为独立桌面问题记录，不把它与本次板端保存失效混为同一根因；T06 HIL 关闭前不开始 T07。
+
 ## 2026-08-29 · T06 closure check completed and branch handed off
 
 - 做了什么：完成 T06 收工自检，复核根级 `AGENTS.md`、Project Flow、双电脑交接规范、分支状态和既有验证证据；T06 固定文字与安全打开应用实现、合同、来源记录、Host/桌面/ESP-IDF 验证及旧板 app-only 烧录事实均已提交。收工前远端分支为 `codex/easyinput-t06-host-actions`，HEAD `4d6fd81b8e8e3f03effe5727aba1dcf5e25fc57b`；本条为纯交接文档更新，最终推送 HEAD 在交付回复中报告。
