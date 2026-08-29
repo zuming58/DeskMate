@@ -8,10 +8,19 @@ import { shortcutDisplay, shortcutFromKeyboardEvent } from "../src/domain/shortc
 
 const require = createRequire(import.meta.url);
 const { normalizeShortcut } = require("../electron/shortcut.cjs");
+const { isVoiceActivityActive } = require("../electron/voice-trigger-state.cjs");
 
 test("the recorder debounce used by the real VoicePage ignores repeated toggles", () => {
   assert.equal(shouldIgnoreToggle(1000, 1050, 100), true);
   assert.equal(shouldIgnoreToggle(1000, 1200, 100), false);
+});
+
+test("Escape cancellation is ignored while voice is idle", () => {
+  assert.equal(isVoiceActivityActive({ recording: false, state: "idle" }), false);
+  assert.equal(isVoiceActivityActive({ recording: false, state: "completed" }), false);
+  assert.equal(isVoiceActivityActive({ recording: false, state: "error" }), false);
+  assert.equal(isVoiceActivityActive({ recording: true, state: "idle" }), true);
+  for (const state of ["recording", "transcribing", "organizing", "outputting"]) assert.equal(isVoiceActivityActive({ state }), true);
 });
 
 test("microphone samples are converted to 16 kHz PCM without clipping", () => {

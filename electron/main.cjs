@@ -20,6 +20,7 @@ const { completeConfigWrite } = require("./config-readback.cjs");
 const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
 const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capture.cjs");
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
+const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -53,6 +54,7 @@ let keyboardConfigState = { raw: null, fingerprint: "", source: 2, token: null }
 let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
+let pendingEditShortcutTimer = null;
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
@@ -220,14 +222,18 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
     voiceTargetWindow = null;
     voiceEditContext = null;
     if (workflow === "edit") {
+      updateVoiceState({ state: "organizing", message: "正在读取选中文字…", floating: lastVoiceState.floating });
       const windowId = await getForegroundWindowId().catch(() => null);
       if (!windowId || captureToken !== voiceTargetCaptureToken) {
         sendToMain("voice-edit-error", { source, reason: "no-captured-target", at: new Date().toISOString() });
+        updateVoiceState({ state: "error", message: "未能锁定原输入窗口", floating: lastVoiceState.floating });
         return { ignored: true, reason: "no-captured-target" };
       }
       const selection = await captureVoiceEditSelection(windowId);
       if (!selection.ok || captureToken !== voiceTargetCaptureToken) {
         sendToMain("voice-edit-error", { source, reason: selection.reason || "selection-capture-failed", at: new Date().toISOString() });
+        const message = selection.reason === "selection-empty" ? "没有检测到选中文字" : selection.reason === "selection-too-long" ? "选中文字过长" : selection.reason === "target-window-changed" ? "原输入窗口已经变化" : "未能读取选中文字";
+        updateVoiceState({ state: "error", message, floating: lastVoiceState.floating });
         return { ignored: true, reason: selection.reason || "selection-capture-failed" };
       }
       voiceTargetWindow = windowId;
@@ -250,6 +256,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
 }
 
 function emitVoiceCancel(source = "keyboard") {
+  if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ignored: true, reason: "voice-idle" };
   voiceSessionRecording = false;
   voiceTargetCaptureToken += 1;
   voiceTargetWindow = null;
@@ -257,11 +264,27 @@ function emitVoiceCancel(source = "keyboard") {
   activeVoiceWorkflow = "input";
   voiceTargetCapturePromise = Promise.resolve(null);
   sendToMain("voice-cancel", { source, at: new Date().toISOString() });
+  return { cancelled: true };
+}
+
+function cancelPendingEditShortcut() {
+  if (!pendingEditShortcutTimer) return;
+  clearTimeout(pendingEditShortcutTimer);
+  pendingEditShortcutTimer = null;
+}
+
+function scheduleEditShortcutFallback() {
+  cancelPendingEditShortcut();
+  const bridgeAvailable = Boolean(inputBridge?.snapshot?.().available);
+  pendingEditShortcutTimer = setTimeout(() => {
+    pendingEditShortcutTimer = null;
+    void emitVoiceToggle("voice-edit-shortcut", DEFAULT_EDIT_SHORTCUT, "edit");
+  }, bridgeAvailable ? 1200 : 180);
 }
 
 function registerEditShortcut() {
   if (globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT)) { editShortcutRegistered = true; return { registered: true, shortcut: DEFAULT_EDIT_SHORTCUT }; }
-  try { editShortcutRegistered = globalShortcut.register(DEFAULT_EDIT_SHORTCUT, () => { void emitVoiceToggle("voice-edit-shortcut", DEFAULT_EDIT_SHORTCUT, "edit"); }); }
+  try { editShortcutRegistered = globalShortcut.register(DEFAULT_EDIT_SHORTCUT, scheduleEditShortcutFallback); }
   catch (error) { editShortcutRegistered = false; return { registered: false, shortcut: DEFAULT_EDIT_SHORTCUT, reason: error.message }; }
   return { registered: editShortcutRegistered, shortcut: DEFAULT_EDIT_SHORTCUT, reason: editShortcutRegistered ? undefined : "shortcut-unavailable" };
 }
@@ -419,7 +442,11 @@ function startInputBridge() {
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => sendToMain("input-bridge-status", value));
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
-  inputBridge.on("trigger", (event) => { sendToMain("key-diagnostic", event); void emitVoiceToggle(event.source, event.key); });
+  inputBridge.on("trigger", (event) => {
+    sendToMain("key-diagnostic", event);
+    if (event.key === "VoiceEdit") cancelPendingEditShortcut();
+    void emitVoiceToggle(event.source, event.key, event.key === "VoiceEdit" ? "edit" : "input");
+  });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
     const result = await hostActionExecutor.execute(event.hostActionId);
@@ -636,6 +663,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; inputBridge?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

@@ -59,3 +59,12 @@ test("native target capture returns a handle without window metadata", () => {
   assert.match(source, /DesktopWindowResult\(string requestId, bool ok, string reason, string targetWindow\)/);
   assert.doesNotMatch(source, /DesktopWindowResult\([^)]*(title|path)/i);
 });
+
+test("native keyboard hook reports Ctrl+Shift+E only after the chord is released", () => {
+  const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
+  assert.match(source, /value\.VirtualKey is VkControl or VkLControl or VkRControl/);
+  assert.match(source, /value\.VirtualKey is VkShift or VkLShift or VkRShift/);
+  assert.match(source, /_writer\.Input\("keyboard", "VoiceEdit", "down"\)/);
+  assert.match(source, /isUp && _hookVoiceEditDown[\s\S]*?_writer\.Input\("keyboard", "VoiceEdit", "up"\)/);
+  assert.doesNotMatch(source, /return new IntPtr\(1\)/);
+});

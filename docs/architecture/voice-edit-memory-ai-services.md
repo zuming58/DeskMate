@@ -3,9 +3,10 @@
 ## Current implemented slice
 
 - `KEY1 / Ctrl+Shift+Space` continues to use the accepted text voice-input workflow.
-- `KEY3 / Ctrl+Shift+E` starts the same recorder/state machine in `edit` mode. Electron main captures the selected text and exact foreground-window handle before recording. The renderer receives only workflow metadata and the spoken editing instruction; selected text never crosses into React.
+- `KEY3 / Ctrl+Shift+E` starts the same recorder/state machine in `edit` mode. The resident Windows input bridge observes the read-only keyboard chord and emits the semantic trigger only after the complete chord is released; this prevents the still-held Ctrl/Shift keys from corrupting the subsequent selection-copy operation. Electron's global shortcut remains a bounded fallback when the bridge is unavailable. Electron main then captures the selected text and exact foreground-window handle before recording. The renderer receives only workflow metadata and the spoken editing instruction; selected text never crosses into React.
 - After ASR, the selected text and spoken instruction are sent by Electron main to the configured text model. Success writes the edited text back only when the original window is still foreground. Selection capture, model, or target failures leave the original selection unchanged.
 - Raw organizer mode is local deterministic replacement only. Smart/custom organizer mode uses the configured text model and retains the original transcript on failure.
+- Escape is a cancellation command only while the shared voice state is recording, transcribing, organizing or outputting. An idle, completed or failed session ignores Escape and never raises the floating cancellation state.
 - `companion-memory.sqlite3` is created in Electron `userData` with WAL and full synchronous commits. Every future conversation turn can be committed before any summary job. Daily summaries, reviewable candidates, accepted memories and embedding records have separate tables.
 
 ## Service separation

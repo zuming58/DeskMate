@@ -408,6 +408,12 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort VkEscape = 0x1B;
     private const ushort VkRMenu = 0xA5;
     private const ushort VkControl = 0x11;
+    private const ushort VkLControl = 0xA2;
+    private const ushort VkRControl = 0xA3;
+    private const ushort VkShift = 0x10;
+    private const ushort VkLShift = 0xA0;
+    private const ushort VkRShift = 0xA1;
+    private const ushort VkE = 0x45;
     private const ushort VkV = 0x56;
     private const ushort VkF22 = 0x85;
     private const int WhKeyboardLl = 13;
@@ -422,6 +428,9 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private readonly LowLevelKeyboardProc _keyboardProc;
     private IntPtr _keyboardHook;
     private bool _boardConnected;
+    private bool _hookControlDown;
+    private bool _hookShiftDown;
+    private bool _hookVoiceEditDown;
     private bool _disposed;
     private readonly object _configSync = new();
     private readonly object _fixedTextSync = new();
@@ -732,9 +741,28 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         if (code >= 0)
         {
             var value = Marshal.PtrToStructure<LowLevelKeyboardInput>(data);
+            var messageId = message.ToInt32();
+            var isDown = messageId is WmKeyDown or WmSysKeyDown;
+            var isUp = messageId is WmKeyUp or WmSysKeyUp;
+            if (value.VirtualKey is VkControl or VkLControl or VkRControl)
+                _hookControlDown = isDown || (!isUp && _hookControlDown);
+            else if (value.VirtualKey is VkShift or VkLShift or VkRShift)
+                _hookShiftDown = isDown || (!isUp && _hookShiftDown);
+            else if (value.VirtualKey == VkE)
+            {
+                if (isDown && _hookControlDown && _hookShiftDown && !_hookVoiceEditDown)
+                {
+                    _hookVoiceEditDown = true;
+                    _writer.Input("keyboard", "VoiceEdit", "down");
+                }
+                else if (isUp && _hookVoiceEditDown)
+                {
+                    _hookVoiceEditDown = false;
+                    _writer.Input("keyboard", "VoiceEdit", "up");
+                }
+            }
             if (value.VirtualKey == VkF22)
             {
-                var messageId = message.ToInt32();
                 if (messageId is WmKeyDown or WmSysKeyDown) _writer.Input("f22-fallback", "F22", "down");
                 else if (messageId is WmKeyUp or WmSysKeyUp) _writer.Input("f22-fallback", "F22", "up");
             }

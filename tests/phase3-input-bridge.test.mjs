@@ -187,6 +187,13 @@ test("Right Alt is opt-in and Escape produces cancellation", () => {
   assert.equal(filter.accept(bridgeEvent({ source: "keyboard", key: "Escape" })).kind, "cancel");
 });
 
+test("voice edit triggers on Ctrl+Shift+E release without requiring the global shortcut", () => {
+  const filter = new InputTriggerFilter({ now: () => 1000 });
+  const down = bridgeEvent({ source: "keyboard", key: "VoiceEdit" });
+  assert.equal(filter.accept(down).kind, "diagnostic");
+  assert.equal(filter.accept({ ...down, action: "up", sequence: 2 }).kind, "trigger");
+});
+
 test("injected F22 fallback uses the same release-only trigger policy", () => {
   const filter = new InputTriggerFilter({ now: () => 1000 });
   assert.equal(filter.accept(bridgeEvent({ source: "f22-fallback" })).kind, "diagnostic");
