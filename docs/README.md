@@ -2,6 +2,9 @@
 
 ## Current handoff
 
+- [T08 parallel EasyInput/Xiaozhi firmware split](handoffs/t08-parallel-firmware-split-2026-08-29.md)
+- [T08 EasyInput Link controller task](../flow/tasks/T08-easyinput-link-controller.md)
+- [T08 Xiaozhi Link endpoint task](../flow/tasks/T08-xiaozhi-link-endpoint.md)
 - [T07D companion UI integration after T06](design/companion-ui-integration-after-t06.md)
 - [T07D companion UI visual QA](../design/qa/design-qa.md)
 - [Voice edit, memory and AI service boundaries](architecture/voice-edit-memory-ai-services.md)

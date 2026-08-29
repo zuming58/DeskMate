@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-29 · T08 parallel firmware ownership opened from frozen T07 main
+
+- role/branch/base：本窗口在隔离工作树 `F:\Codex\deskmate-t08-easyinput` 创建 `codex/easyinput-t08-link-controller`，精确基线为 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`；原 `F:\Codex\deskmate` 的用户界面脏工作树完全未改动。另一窗口将从同一基线创建 `codex/xiaozhi-t08-link-endpoint`。
+- scope/understanding：用户确认两条固件线并行，但本窗口只开发 EasyInput，另一窗口只开发小智。为避免两边分别猜协议，`contracts/deskmate-link/` 在冻结前由本窗口单点拥有；小智窗口在取得准确合同提交前只做 UART/控制台证据核对、工程/transport/Host 骨架。
+- outputs：任务卡 `flow/tasks/T08-easyinput-link-controller.md`、`flow/tasks/T08-xiaozhi-link-endpoint.md`；并行交接 `docs/handoffs/t08-parallel-firmware-split-2026-08-29.md`；D031 固定所有权与单合同原则。当前合同仍是 `NOT_FROZEN`，尚未实现协议或固件代码。
+- verification/hardware：仅检查 Git 基线、规则和文档；未扫描端口、识别设备、读写 Flash/NVS、烧录、擦除、monitor、接线、初始化 OLED/音频或驱动舵机。GitHub fetch 因网络连接失败，本地 `origin/main` 对象与用户截图的准确 HEAD 一致。
+- next action：本窗口先单独提交 `DESKMATE_LINK_V1_FROZEN` 和黄金向量，再实现 EasyInput endpoint；另一窗口立即执行小智任务 Phase A，收到本窗口合同提交后再进入 Phase B。两端 Host/build 通过和电气恢复门完成前不接线。
+
 ## 2026-08-29 · T07 desktop baseline integrated and verified for mainline
 
 - role/base/source：在隔离工作树 `F:\Codex\deskmate-t07-main-merge` 中，以 `origin/main@069c2a90da4f3ad436074c0cd35a566a2268f91e` 为第一父提交，合并已冻结的 T07 分支 `codex/companion-t07d-t06-integration@a0ade9c6fc1b25d8786471b2f53babe3219fb5f3`。原工作树 `F:\Codex\deskmate` 的用户未提交修改保持原样，没有使用整目录覆盖。

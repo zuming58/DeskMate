@@ -22,7 +22,7 @@
 - 目标工具链由项目冻结为 ESP-IDF 5.5.5；若本机版本不匹配，停止并报告，不静默换版本。
 - 所有构建必须通过仓内 `partitions.csv` 和根 CMake 的精确布局保护；新 build 目录也必须使用由当前 `sdkconfig.defaults` 生成的隔离 sdkconfig，不得复用布局不明的生成配置。
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
-- T03 与 T04 已完成代码、构建、原主电脑独立审计和真机锁定；T05 核心配置读取、编辑和语音触发已完成获授权真机确认。当前只允许按 `../../flow/tasks/T06-easyinput-host-actions.md` 实现冻结的 `HOST_ACTION_V1_FROZEN`；不得提前开发 BLE、音频、DeskMate Link 或小智。
+- T03～T06 已锁定，T07 桌面基线已冻结。当前只允许按 `../../flow/tasks/T08-easyinput-link-controller.md` 开发 EasyInput DeskMate Link 总控端；共享 Link 合同冻结前不得写猜测性 framing。不得开发 BLE、音频或小智固件，不得修改 T07 桌面。
 - T03 冷启动、mount 全释放、transfer identity、GPIO40 生命周期和 DCD 重连候选均被真实 Ctrl 粘连证据否决。最终 `5c09880` 参考固定 Maker synthetic tap 结构清晰重实现：S1/S3 保持 held PTT，S2/S4/S5～S8 使用原子 press→restore tap；连续五次 Ctrl 断线矩阵、Host、ESP-IDF 构建和桌面组合回归均通过，原主电脑独立审计已确认，状态为 `T03_LOCKED`。当前实板 S8 仍为烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
 - T04 已锁定：5 颗 WS2812 使用 GPIO12，GPIO8 继续由唯一共享电源控制器写入，配置读写不得阻塞或重置输入灯效。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`；当前样机 S8 仍是既有硬件阻断，健康板补测前不改 GPIO48/八键合同。
 - T06 必须固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 Host Action、固定文字和唯一 USB endpoint owner 实现及 Host tests，并逐项核对 T06 reference audit。固件只发送规范 UUID 或有界固定文字；应用路径和文字注入只归 Windows 主进程/原生桥所有，renderer 不得获得路径或固定文字原文。
@@ -33,7 +33,9 @@
 ## Module entry points
 
 - 说明：`README.md`
-- 当前任务卡：`../../flow/tasks/T06-easyinput-host-actions.md`
+- 当前任务卡：`../../flow/tasks/T08-easyinput-link-controller.md`
+- T08 并行分工：`../../docs/handoffs/t08-parallel-firmware-split-2026-08-29.md`
+- DeskMate Link 入口：`../../contracts/deskmate-link/README.md`
 - 冻结输入合同：`../../contracts/deskmate-host/easyinput-input-v1.md`
 - 冻结输入灯效合同：`../../docs/contracts/easyinput-input-led-feedback-v1.md`
 - 冻结配置合同：`../../contracts/deskmate-host/easyinput-config-v1.md`
