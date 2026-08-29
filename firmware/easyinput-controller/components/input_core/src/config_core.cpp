@@ -2,6 +2,7 @@
 #include "host_action_core.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -224,11 +225,73 @@ bool ConfigReadStream::replace(uint32_t id, const ConfigDocument& d, uint32_t ep
 bool ConfigReadStream::encode_next(std::array<uint8_t, kConfigFeaturePayloadBytes>& out) const { if (!pending_ || next_chunk_ >= total_chunks_) return false; out.fill(0); const auto offset = static_cast<size_t>(next_chunk_) * kConfigReadChunkBytes; const auto count = std::min(kConfigReadChunkBytes, static_cast<size_t>(document_.length) - offset); out[0] = 6; out[1] = next_chunk_; out[2] = total_chunks_; out[3] = static_cast<uint8_t>(10 + count); out[4] = 1; w32(out.data() + 5, request_id_); w16(out.data() + 9, document_.length); w16(out.data() + 11, document_.crc16); out[13] = static_cast<uint8_t>(document_.source); std::copy_n(document_.bytes.data() + offset, count, out.begin() + 14); return true; }
 bool ConfigReadStream::mark_sent() { if (!pending_) return false; if (++next_chunk_ >= total_chunks_) pending_ = false; return !pending_; }
 void ConfigReadStream::abort() { document_ = {}; request_id_ = epoch_ = 0; next_chunk_ = total_chunks_ = 0; pending_ = false; }
-namespace { constexpr char kConfigStatusJson[] = R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true}})"; }
-bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch) { abort(); if (!id || !epoch) return false; request_id_=id; epoch_=epoch; length_=static_cast<uint16_t>(sizeof(kConfigStatusJson)-1); crc16_=config_crc16_ccitt(reinterpret_cast<const uint8_t*>(kConfigStatusJson),length_); total_chunks_=static_cast<uint8_t>((length_+49)/50); pending_=true; return true; }
-bool ConfigStatusStream::encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>& out) const { if(!pending_||next_chunk_>=total_chunks_)return false; out.fill(0); const size_t offset=static_cast<size_t>(next_chunk_)*50; const size_t count=std::min<size_t>(50,length_-offset); out[0]=0x04; out[1]=next_chunk_; out[2]=total_chunks_; out[3]=static_cast<uint8_t>(9+count); out[4]=1; w32(out.data()+5,request_id_); w16(out.data()+9,length_); w16(out.data()+11,crc16_); std::copy_n(reinterpret_cast<const uint8_t*>(kConfigStatusJson)+offset,count,out.begin()+13); return true; }
-bool ConfigStatusStream::mark_sent(){if(!pending_)return false;if(++next_chunk_>=total_chunks_)pending_=false;return !pending_;}
-void ConfigStatusStream::abort(){request_id_=epoch_=0;next_chunk_=total_chunks_=0;length_=crc16_=0;pending_=false;}
+bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
+                                 const LinkStatusSnapshot& link) {
+  abort();
+  if (!id || !epoch) return false;
+  const int written = std::snprintf(
+      json_.data(), json_.size(),
+      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu}})",
+      link_controller_state_name(link.state),
+      static_cast<unsigned long>(link.rx_frames),
+      static_cast<unsigned long>(link.tx_frames),
+      static_cast<unsigned long>(link.framing_errors),
+      static_cast<unsigned long>(link.crc_errors),
+      static_cast<unsigned long>(link.version_errors),
+      static_cast<unsigned long>(link.length_errors),
+      static_cast<unsigned long>(link.request_timeouts),
+      static_cast<unsigned long>(link.retries),
+      static_cast<unsigned long>(link.queue_drops),
+      static_cast<unsigned long>(link.peer_restarts),
+      static_cast<unsigned long>(link.unexpected_frames),
+      static_cast<unsigned long>(link.semantic_errors));
+  if (written <= 0 || static_cast<size_t>(written) >= json_.size()) {
+    abort();
+    return false;
+  }
+  request_id_ = id;
+  epoch_ = epoch;
+  length_ = static_cast<uint16_t>(written);
+  crc16_ = config_crc16_ccitt(
+      reinterpret_cast<const uint8_t*>(json_.data()), length_);
+  constexpr size_t kStatusChunkBytes = 50;
+  total_chunks_ = static_cast<uint8_t>(
+      (length_ + kStatusChunkBytes - 1) / kStatusChunkBytes);
+  pending_ = true;
+  return true;
+}
+bool ConfigStatusStream::encode_next(
+    std::array<uint8_t, kConfigFeaturePayloadBytes>& out) const {
+  if (!pending_ || next_chunk_ >= total_chunks_) return false;
+  constexpr size_t kStatusChunkBytes = 50;
+  out.fill(0);
+  const size_t offset = static_cast<size_t>(next_chunk_) * kStatusChunkBytes;
+  const size_t count =
+      std::min(kStatusChunkBytes, static_cast<size_t>(length_) - offset);
+  out[0] = 0x04;
+  out[1] = next_chunk_;
+  out[2] = total_chunks_;
+  out[3] = static_cast<uint8_t>(9 + count);
+  out[4] = 1;
+  w32(out.data() + 5, request_id_);
+  w16(out.data() + 9, length_);
+  w16(out.data() + 11, crc16_);
+  std::copy_n(reinterpret_cast<const uint8_t*>(json_.data()) + offset,
+              count, out.begin() + 13);
+  return true;
+}
+bool ConfigStatusStream::mark_sent() {
+  if (!pending_) return false;
+  if (++next_chunk_ >= total_chunks_) pending_ = false;
+  return !pending_;
+}
+void ConfigStatusStream::abort() {
+  json_.fill(0);
+  request_id_ = epoch_ = 0;
+  next_chunk_ = total_chunks_ = 0;
+  length_ = crc16_ = 0;
+  pending_ = false;
+}
 bool parse_config_projection(std::string_view raw, ConfigProjection& out) { return projection_from_json(raw, out); }
 const char* compiled_safe_config_json() { return R"({"schema":"ai_keyboard.v1","target_platform":"windows","profiles":[{"id":"default","keys":{"KEY1":{"press":"voice_ptt_hold"},"KEY2":{"press":{"hotkey":"Return"}},"KEY3":{"press":"edit_ptt_hold"},"KEY4":{"press":{"hotkey":"Backspace"}},"KEY5":{"press":"select_all"},"KEY6":{"press":"copy"},"KEY7":{"press":"paste"},"KEY8":{"press":"undo"}},"encoder":{"left":"disabled","right":"disabled","press":"scroll_axis_toggle","scroll":{"enabled":true,"mode":"scroll","axis":"vertical","speed":3,"windows_reverse_vertical":false,"windows_reverse_horizontal":false}}}]})"; }
 bool validate_config_record(const ConfigSlotRecord& r) { ConfigProjection p{}; return r.magic == kConfigRecordMagic && r.version == kConfigRecordVersion && r.length && r.length <= kConfigMaxJsonBytes && config_crc16_ccitt(r.bytes.data(), r.length) == r.crc16 && parse_config_projection({reinterpret_cast<const char*>(r.bytes.data()), r.length}, p); }

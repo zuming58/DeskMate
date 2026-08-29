@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include "deskmate_link_core.h"
 namespace deskmate::easyinput {
 inline constexpr size_t kConfigMaxJsonBytes = 2048;
 inline constexpr size_t kConfigWriteChunkBytes = 52;
@@ -11,6 +12,7 @@ inline constexpr size_t kConfigReadChunkBytes = 49;
 inline constexpr size_t kConfigFeaturePayloadBytes = 63;
 inline constexpr size_t kConfigWriteFeaturePayloadBytes = 63;
 inline constexpr size_t kConfigReadRequestPayloadBytes = 16;
+inline constexpr size_t kConfigStatusMaxJsonBytes = 768;
 uint16_t config_crc16_ccitt(const uint8_t*, size_t);
 enum class ConfigSource : uint8_t { DeskMate=0, Legacy=1, Default=2, Recovery=3 };
 enum class ConfigReceiveStatus : uint8_t { Accepted, Complete, Rejected };
@@ -29,8 +31,8 @@ class ConfigReadStream {
  private: ConfigDocument document_{}; uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; bool pending_{};
 };
 class ConfigStatusStream {
- public: bool replace(uint32_t,uint32_t); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
- private: uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; uint16_t length_{},crc16_{}; bool pending_{};
+ public: bool replace(uint32_t,uint32_t,const LinkStatusSnapshot&); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
+ private: std::array<char,kConfigStatusMaxJsonBytes> json_{}; uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; uint16_t length_{},crc16_{}; bool pending_{};
 };
 enum class ConfigActionKind:uint8_t { Disabled,VoiceInput,VoiceEdit,Enter,Backspace,SelectAll,Copy,Paste,Undo,Hotkey,EncoderAxisToggle,TextCaretSelect,FixedText,HostAction,Unsupported };
 struct ConfigAction { ConfigActionKind kind{ConfigActionKind::Disabled}; uint8_t modifiers{},usage{}; std::string value{}; };

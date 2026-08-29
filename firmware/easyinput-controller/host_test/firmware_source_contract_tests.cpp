@@ -83,6 +83,11 @@ int main() {
     const std::string config_store_header = read_all(CONFIG_STORE_HEADER_PATH);
     const std::string config_core_header = read_all(CONFIG_CORE_HEADER_PATH);
     const std::string config_core_source = read_all(CONFIG_CORE_SOURCE_PATH);
+    const std::string link_core_header = read_all(LINK_CORE_HEADER_PATH);
+    const std::string link_core_source = read_all(LINK_CORE_SOURCE_PATH);
+    const std::string link_uart_source = read_all(LINK_UART_SOURCE_PATH);
+    const std::string link_contract = read_all(LINK_CONTRACT_PATH);
+    const std::string link_vectors = read_all(LINK_VECTORS_PATH);
 
     CHECK(contains(main_source, "esp_timer_get_time()"));
     CHECK(contains(main_source, "monotonic_milliseconds"));
@@ -158,6 +163,8 @@ int main() {
     CHECK(contains(board_pins, "kPeripheralPowerGpio = 8"));
     CHECK(contains(board_pins, "kLedDataGpio = 12"));
     CHECK(contains(board_pins, "kLedPixelCount = 5"));
+    CHECK(contains(board_pins, "kDeskMateLinkRxGpio = 44"));
+    CHECK(contains(board_pins, "kDeskMateLinkTxGpio = 43"));
     CHECK(contains(runtime_header, "UsbLifecycleEventQueue"));
     CHECK(contains(runtime_header, "kUsbInterfaceStringIndex = 0"));
     CHECK(contains(runtime_header, "kUsbDeviceDescriptor"));
@@ -297,6 +304,36 @@ int main() {
     CHECK(contains(sdkconfig_defaults,
                    "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions.csv\""));
     CHECK(contains(sdkconfig_defaults, "CONFIG_PARTITION_TABLE_OFFSET=0x8000"));
+
+    // T08 assigns UART0 to exactly one bounded DeskMate Link owner. Console and
+    // log bytes must not share the protocol transport.
+    CHECK(contains(main_source, "xTaskCreate(deskmate_link_task"));
+    CHECK(contains(main_source,
+                   "\"deskmate_link\", 4096, nullptr, 7"));
+    CHECK(contains(main_source, "deskmate_link_uart.snapshot()"));
+    CHECK(contains(main_cmake, "deskmate_link_uart.cpp"));
+    CHECK(contains(main_cmake, "esp_driver_uart"));
+    CHECK(contains(link_uart_source,
+                   "constexpr uart_port_t kDeskMateLinkUart = UART_NUM_0"));
+    CHECK(contains(link_uart_source, "kDeskMateLinkTxGpio"));
+    CHECK(contains(link_uart_source, "kDeskMateLinkRxGpio"));
+    CHECK(contains(link_uart_source, "kDeskMateLinkRxBufferBytes = 512"));
+    CHECK(occurrences(link_uart_source, "uart_write_bytes(") == 1);
+    CHECK(!contains(link_uart_source, "ESP_LOG"));
+    CHECK(contains(link_core_header, "kDeskMateLinkMaxPayloadBytes = 128"));
+    CHECK(contains(link_core_header, "kDeskMateLinkRequestTimeoutMs = 250"));
+    CHECK(contains(link_core_source, "deskmate_link_crc16"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_NONE=y"));
+    CHECK(contains(sdkconfig_defaults,
+                   "CONFIG_ESP_CONSOLE_SECONDARY_NONE=y"));
+    CHECK(contains(sdkconfig_defaults,
+                   "CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_LOG_DEFAULT_LEVEL_NONE=y"));
+    CHECK(contains(sdkconfig_defaults,
+                   "CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y"));
+    CHECK(contains(link_contract, "DESKMATE_LINK_V1_FROZEN"));
+    CHECK(contains(link_vectors,
+                   "444D4C4B01010100010000000700010101443322118228"));
     CHECK(contains(root_cmake, "deskmate_expected_partition_entries"));
     CHECK(contains(root_cmake, "DeskMate EasyInput partitions.csv drifted"));
     CHECK(normalize_partition_entries(partitions) ==

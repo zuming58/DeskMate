@@ -5,6 +5,7 @@
 #include "led_strip.h"
 #include "peripheral_power.h"
 #include "config_store.h"
+#include "deskmate_link_uart.h"
 
 #include "class/hid/hid_device.h"
 #include "driver/gpio.h"
@@ -54,6 +55,7 @@ std::array<uint8_t, sizeof(ConfigSaveCommand) * 2> config_save_queue_storage{};
 std::array<uint8_t, sizeof(ConfigSaveResult) * 2> config_result_queue_storage{};
 TaskHandle_t owner_task = nullptr;
 TaskHandle_t led_task_handle = nullptr;
+TaskHandle_t deskmate_link_task_handle = nullptr;
 std::atomic<uint32_t> raw_edge_drops{0};
 UsbLifecycleEventQueue lifecycle_events;
 UsbCallbackLifecycleState callback_lifecycle;
@@ -76,6 +78,7 @@ ConfigSaveCommand input_owner_save_command{};
 ConfigWriteAssembler config_write_assembler;
 ConfigReadStream config_read_stream;
 ConfigStatusStream config_status_stream;
+DeskMateLinkUart deskmate_link_uart;
 bool config_save_in_flight = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
@@ -223,6 +226,10 @@ void config_owner_task(void*) {
         }
         (void)xQueueSend(config_result_queue, &config_owner_result, portMAX_DELAY);
     }
+}
+
+void deskmate_link_task(void*) {
+    deskmate_link_uart.run();
 }
 
 void input_owner_task(void*) {
@@ -380,7 +387,8 @@ void input_owner_task(void*) {
                             request.request_id, active_config, input_owner_config_command.epoch);
                     } else {
                         (void)config_status_stream.replace(
-                            request.request_id, input_owner_config_command.epoch);
+                            request.request_id, input_owner_config_command.epoch,
+                            deskmate_link_uart.snapshot());
                     }
                 }
             }
@@ -508,6 +516,12 @@ extern "C" void app_main(void) {
     config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
     ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
     ESP_ERROR_CHECK(xTaskCreate(config_owner_task, "config_owner", 4096, nullptr, 8, nullptr) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    if (xTaskCreate(deskmate_link_task, "deskmate_link", 4096, nullptr, 7,
+                    &deskmate_link_task_handle) != pdPASS) {
+        deskmate_link_task_handle = nullptr;
+        deskmate_link_uart.mark_task_create_failure();
+    }
 
     if (xTaskCreate(led_feedback_task, "led_feedback", 4096, nullptr, 5,
                     &led_task_handle) != pdPASS) {

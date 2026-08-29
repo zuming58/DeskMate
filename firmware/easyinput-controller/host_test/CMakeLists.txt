@@ -10,6 +10,13 @@ add_executable(host_action_core_tests
 target_include_directories(host_action_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME host_action_core_tests COMMAND host_action_core_tests)
 
+add_executable(deskmate_link_core_tests
+    deskmate_link_core_tests.cpp
+    ../components/input_core/src/deskmate_link_core.cpp
+)
+target_include_directories(deskmate_link_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME deskmate_link_core_tests COMMAND deskmate_link_core_tests)
+
 add_executable(input_core_tests input_core_tests.cpp ../components/input_core/src/input_core.cpp ../components/input_core/src/hid_report.cpp)
 target_include_directories(input_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_core_tests COMMAND input_core_tests)
@@ -21,6 +28,7 @@ add_executable(input_runtime_tests
     ../components/input_core/src/hid_report.cpp
     ../components/input_core/src/config_core.cpp
     ../components/input_core/src/host_action_core.cpp
+    ../components/input_core/src/deskmate_link_core.cpp
 )
 target_include_directories(input_runtime_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_runtime_tests COMMAND input_runtime_tests)
@@ -43,7 +51,7 @@ add_executable(peripheral_power_lease_tests
 target_include_directories(peripheral_power_lease_tests PRIVATE ../components/input_core/include)
 add_test(NAME peripheral_power_lease_tests COMMAND peripheral_power_lease_tests)
 
-add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp ../components/input_core/src/host_action_core.cpp)
+add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp ../components/input_core/src/host_action_core.cpp ../components/input_core/src/deskmate_link_core.cpp)
 target_include_directories(config_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME config_core_tests COMMAND config_core_tests)
 
@@ -71,5 +79,10 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     CONFIG_STORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/config_store.h"
     CONFIG_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/config_core.h"
     CONFIG_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/config_core.cpp"
+    LINK_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/deskmate_link_core.h"
+    LINK_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/deskmate_link_core.cpp"
+    LINK_UART_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_link_uart.cpp"
+    LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/v1.md"
+    LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-v1.json"
 )
 add_test(NAME firmware_source_contract_tests COMMAND firmware_source_contract_tests)

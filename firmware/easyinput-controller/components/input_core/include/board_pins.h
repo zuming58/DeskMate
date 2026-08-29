@@ -12,6 +12,8 @@ inline constexpr int kEncoderBGpio = 16;
 inline constexpr int kEncoderPressGpio = 18;
 inline constexpr int kUsbDmGpio = 19;
 inline constexpr int kUsbDpGpio = 20;
+inline constexpr int kDeskMateLinkRxGpio = 44;
+inline constexpr int kDeskMateLinkTxGpio = 43;
 // V2 USB physical presence sense: active-low SEN_VIN. This is a read-only
 // board signal; it is not a substitute for a TinyUSB mount callback.
 inline constexpr int kUsbPhysicalPresenceGpio = 40;
