@@ -2,6 +2,13 @@
 
 > 最新记录置顶。这里是跨电脑、跨 Agent 的事实交接入口。
 
+## 2026-08-29 · T07D idle Escape and physical KEY3 voice-edit regression fixed
+
+- 用户证据：用户用已配置的真实文字模型确认“智能整理”可用，能够去除重复和口头语；同时复现两个桌面回归：没有语音会话时按 Escape 仍显示“已取消当前语音输入”，实体 KEY3/语音编辑没有可见响应。
+- 根因与修复：实现提交 `0f59ff598d46046ea1f55e9badb50d1a05a3dfbd`。Escape 原先从只读输入桥无条件进入取消事件；现在只有共享语音状态处于 recording/transcribing/organizing/outputting 时才允许取消，idle/completed/error 均忽略。KEY3 的 `Ctrl+Shift+E` 原先在全局快捷键 key-down 时立即复制选区，可能与仍按住的 Ctrl/Shift/E 冲突；常驻原生桥现在只在完整组合键释放后发出脱敏 `VoiceEdit` 语义事件，主进程取消延迟后备触发、再读取选区并显示明确进度/错误。输入钩子继续只读，不吞键，不输出选区、窗口标题或设备路径。
+- 验证与候选：定向 native/protocol/voice 回归 38/38；全量 `npm test` 115/115；`npm run build:desktop` 完整通过。最终候选为 `F:\Codex\deskmate-t07-integration\release\win-unpacked\DeskMate.exe`，`app.asar` SHA-256 `273942ADFF301D2AA36096DB9FE2C90F2578C17108CF8A86DC6D1C755AEC354E`，旧 D 盘候选已关闭，新候选已启动。详细矩阵见 `docs/testing/t07d-voice-edit-escape-regression-2026-08-29.md`。
+- 边界与下一步：本轮没有改 EasyInput 固件或配置，没有扫描端口、读取/写入 Flash/NVS、烧录或操作小智。用户需在新候选中确认空闲 Escape 无提示、KEY3 第一次释放开始编辑录音、第二次释放结束并替换所选文字，以及活动会话内 Escape 仍能取消；完成前 KEY3 保持 `HIL_PENDING`。
+
 ## 2026-08-29 · T07D voice edit, AI services and local memory foundation ready for manual regression
 
 - 身份与分支：在隔离工作树 `F:\Codex\deskmate-t07-integration`、分支 `codex/companion-t07d-t06-integration` 上继续工作；本轮起点 HEAD 为 `82d582c91007ffc27549397d71d8cdc658e38178`，功能实现提交为 `78a95726db4ac7e5f33c11fd400eab064c38f4ac`。主工作树 `F:\Codex\deskmate` 未修改。
