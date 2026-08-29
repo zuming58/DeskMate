@@ -1,0 +1,22 @@
+{
+  "schema": "deskmate.link.golden-vectors.v1",
+  "contract": "DESKMATE_LINK_V1_FROZEN",
+  "encoding": "uppercase hexadecimal without separators",
+  "vectors": [
+    {"name":"hello_request","expect":"frame","hex":"444D4C4B01010100010000000700010101443322118228"},
+    {"name":"hello_response","expect":"frame","hex":"444D4C4B010201000100000008000201DDCCBBAA8000F8E6"},
+    {"name":"capabilities_request","expect":"frame","hex":"444D4C4B01010200020000000000B961"},
+    {"name":"capabilities_response","expect":"frame","hex":"444D4C4B01020200020000000A0003000000030000008000CBA6"},
+    {"name":"status_request","expect":"frame","hex":"444D4C4B01010300030000000000CA63"},
+    {"name":"status_response","expect":"frame","hex":"444D4C4B01020300030000000B00DDCCBBAA04030201030100ECC3"},
+    {"name":"set_agent_state_request","expect":"frame","hex":"444D4C4B010104000400000005004030201002652E"},
+    {"name":"set_agent_state_response","expect":"frame","hex":"444D4C4B010204000400000005004030201002C6A3"},
+    {"name":"busy_error","expect":"frame","hex":"444D4C4B01040400050000000100048F33"},
+    {"name":"unknown_type_request","expect":"semantic_error_unknown_type","hex":"444D4C4B01017E00060000000000A3C6"},
+    {"name":"bad_version","expect":"drop_version","hex":"444D4C4B0201010007000000070001010144332211CF96"},
+    {"name":"bad_flags","expect":"drop_flags","hex":"444D4C4B0103010008000000070001010144332211D226"},
+    {"name":"bad_reserved","expect":"drop_reserved","hex":"444D4C4B0101010109000000070001010144332211B958"},
+    {"name":"bad_crc","expect":"drop_crc","hex":"444D4C4B01010300030000000000CA62"},
+    {"name":"oversized_length_prefix","expect":"drop_length_and_resync","hex":"444D4C4B010103000A0000008100"}
+  ]
+}
