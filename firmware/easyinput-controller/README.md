@@ -2,11 +2,11 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / EASYINPUT_APP_FLASH_CONFIRMED / EASYINPUT_NORMAL_BOOT_PENDING`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。
+当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / EASYINPUT_APP_FLASH_CONFIRMED / EASYINPUT_NORMAL_BOOT_CONFIRMED / EIGHT_KEY_ENCODER_LED_REGRESSION_CONFIRMED`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前更换后的新开发板 S1～S8、旋钮旋转/按压和灯效均已通过；S8 无响应只属于已换下旧板的历史硬件问题，不改八键/GPIO48 产品合同。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
-T08 EasyInput Link 总控已经完成双板握手、双向信号断开、重连和对端重启真机验收：UART0 使用 GPIO43/44，只有一个 owner 任务；UART 初始化失败只将 Link 标为 faulted，不影响既有输入、灯效、配置或 Host Action。T09 在该基线上增加冻结的 HID `0x12` 状态接收与 `SET_AGENT_STATE` 转发桥；代码和构建已进入三端整合候选，尚未取得 T09 app-only 烧录和 OLED 真机证据。
+T08 EasyInput Link 总控已经完成双板握手、双向信号断开、重连和对端重启真机验收：UART0 使用 GPIO43/44，只有一个 owner 任务；UART 初始化失败只将 Link 标为 faulted，不影响既有输入、灯效、配置或 Host Action。T09 在该基线上增加冻结的 HID `0x12` 状态接收与 `SET_AGENT_STATE` 转发桥；EasyInput T09 app 已完成 app-only 烧录、精确回读、正常 HID 启动和八键/旋钮/灯效回归，小智 T09 OLED app 与完整三端状态链仍待单独烧录和真机验收。
 
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 

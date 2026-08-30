@@ -1,5 +1,19 @@
 # Progress log
 
+## 2026-08-30 · T09 EasyInput eight-key, encoder and LED regression confirmed on replacement board
+
+- 做了什么：在 T09 EasyInput 正常应用启动和 `VID_303A/PID_1006` 双 HID 枚举确认后，用户对当前更换后的新 EasyInput 开发板执行实体输入回归。
+- 真机结果：S1～S8 八个按键均可用；旋钮旋转、按压和对应灯效均正常。此前 S8 无响应只属于已经换下的旧测试板，不再是当前硬件阻断，也不得继续写成当前样机状态。
+- 怎么理解：八键/GPIO48 产品合同始终未变；本次补齐健康替换板的 S8 证据，并确认 T09 app 没有破坏 T03 输入和 T04 灯效。此结果不等于小智 OLED 或完整三端状态链已通过。
+- 下一步：状态推进为 `EASYINPUT_APP_FLASH_CONFIRMED / NORMAL_BOOT_CONFIRMED / HID_ENUMERATION_CONFIRMED / EIGHT_KEY_ENCODER_LED_REGRESSION_CONFIRMED / XIAOZHI_T09_FLASH_PENDING`。下一步对小智单独完成身份、恢复备份和 app-only 烧录授权，再恢复三线 Link 验证 OLED idle 与七种真实状态。
+
+## 2026-08-30 · T09 EasyInput normal application boot and HID enumeration confirmed
+
+- 做了什么：用户完成断电重开且未再次按 BOOT 后，仅通过 Windows PnP/HID 做正常应用态只读检查；没有再次调用 esptool、进入下载模式或发送厂商配置写入。
+- 验证：Windows 同时枚举到 `VID_303A/PID_1006` 的 USB 输入设备与供应商定义 HID 接口，二者状态均为 `OK`。这证明已写入的 `d96179725fb9bd0724e6c92429f090e4bd3a6a7a` T09 EasyInput app 已正常启动，不再只是“烧录和回读成功”。
+- 安全边界：本次未读取或写入 Flash/NVS，未烧录、擦除、改分区或写 eFuse，也未操作小智、OLED、舵机和音频；没有记录完整设备路径、MAC 或序列号。
+- 下一步：状态推进为 `EASYINPUT_APP_FLASH_CONFIRMED / NORMAL_BOOT_CONFIRMED / HID_ENUMERATION_CONFIRMED / PHYSICAL_REGRESSION_PENDING`。用户短测 S1～S7、旋钮左右与按压及灯效；通过后再单独准备和授权小智 T09 app-only 烧录。
+
 ## 2026-08-30 · T09 EasyInput app flash and exact readback confirmed; normal boot pending
 
 - 做了什么：在恢复备份、身份和固定分区校验通过后，按用户精确授权把 `d96179725fb9bd0724e6c92429f090e4bd3a6a7a` 的 EasyInput T09 app 单段写入 `0x010000..0x05DD2F`，自动擦除仅覆盖到 `0x05DFFF`；写后重新枚举并 fresh 验身，再只读回同一 app 数据范围。
