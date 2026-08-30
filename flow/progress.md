@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 EasyInput agent-state bridge code and build gate complete
+
+- scope/implementation：在隔离工作树 `F:\Codex\deskmate-t09-easyinput`、分支 `codex/easyinput-t09-agent-state-bridge`，基于冻结合同提交 `5e2541fa082c1014948731fd91897d71ac509d5f` 完成 EasyInput 端，产品实现提交为 `e50bc75e974695c1a79cd887e88836222296565e`。新增 HID Feature `0x12` v1/v2 严格解码、单槽最新状态邮箱、七状态映射、TTL、USB/Link epoch 与对端重启清理，并只经既有 `SET_AGENT_STATE` 转发；未修改桌面 UI、小智固件、Link framing、输入、灯效、NVS、音频、BLE、Wi-Fi 或分区。
+- audit/fix：最终自审发现首版候选错误复用配置 FIFO，且 idle 去重记录可能跨断线/对端重启残留；提交前改为独立 `xQueueOverwrite` 单槽邮箱，并补齐 idle 断线与 restart 回归。能力门要求 CORE+AGENT_STATE+DISPLAY，MOTION/AUDIO 保持禁用；诊断只暴露计数，不记录 payload、source hash 或用户数据。
+- verification：EasyInput Host CTest 9/9；ESP-IDF v5.5.5、target `esp32s3`、固定 16 MB 分区构建通过。app 318,576 字节（`0x4DC70`），SHA-256 `013A7697AF498C4072DB4996AF095F7412F6C4778AD73C627BA96261E778954D`；分区表 SHA-256 保持 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。`npm ci --include=dev`、桌面 115/115 和 `npm run build:desktop` 通过，`git diff --check` 通过。
+- hardware/next：未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，也未操作接线、OLED、舵机或音频。下一步等待小智 T09 分支并行完成后交叉审计；仍须补 T08 的逐根 TX/RX 断线和 T03～T06 组合回归，并另做桌面主进程 `0x12` 发送器，之后才申请 T09 两端 app-only 烧录和 OLED 真机验收。
+
 ## 2026-08-30 · T08 positive Link and Xiaozhi restart recovery passed; two manual checks remain
 
 - role/base：在硬件电脑使用已烧录的 EasyInput `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d` 与小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637`，两端继续消费 `DESKMATE_LINK_V1_FROZEN@c8b8a344a72a849640c8b19575768d6daf4d6667`。本记录只补真机事实，不改冻结协议。

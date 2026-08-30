@@ -9,5 +9,6 @@ DeskMate Link v1 是 EasyInput 总控板到小智执行板的三线 3.3 V TTL UA
 - [EasyInput controller task](../../flow/tasks/T08-easyinput-link-controller.md)
 - [Xiaozhi endpoint task](../../flow/tasks/T08-xiaozhi-link-endpoint.md)
 - [Parallel ownership handoff](../../docs/handoffs/t08-parallel-firmware-split-2026-08-29.md)
+- [T09 agent-state display execution profile](../../docs/contracts/t09-agent-state-display-v1.md)
 
 首次接线仍需两端 Host/build 通过、电气恢复门和用户单独授权。第一次 HIL 只允许 `HELLO`、`GET_CAPABILITIES` 和 `GET_STATUS`，不初始化 OLED、音频或舵机。
