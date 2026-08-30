@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_THREE_END_INTEGRATED / CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`。
+当前状态：`T09_THREE_END_INTEGRATED / CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / FINAL_APP_CANDIDATE_REBUILT / RECOVERY_AUTH_PENDING / HIL_NOT_AUTHORIZED`。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## An app-only candidate must not hide a failed bootloader rebuild
+
+- 现象：最终小智 T09 全量构建在 ESP-IDF 自带 bootloader 源码中触发 GCC 内部编译器错误，而产品源码、既有同源全量构建和独立 `app` 目标均正常。
+- 做法：先明确失败发生在是否计划写入的对象。只有在同一固件源码已经通过完整构建、固定分区/bootloader 不变且本次授权明确为 app-only 时，才允许独立重建并验证 `app` 目标；必须把完整构建失败和 app-only 成功同时记录，不能把后者改写为全量构建通过。若 app 自身失败或 bootloader/分区也在写入范围内，立即阻断烧录。
+- 规则：构建证据必须与实际写入范围一一对应；“app 候选可写”不等于“bootloader/整套镜像重新构建通过”。
+
 ## Compare partition-table semantics before hashing different read windows
 
 - 现象：ESP-IDF 生成的 `partition-table.bin` 为 3072 字节，但从 Flash 分区表扇区读取 `0x1000` 字节会得到 4096 字节；即使有效表完全相同，整文件 SHA-256 也会因末尾 1024 字节擦除态 `0xFF` 而不同。

@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 Xiaozhi final app candidate rebuilt; identity and recovery authorization pending
+
+- 做了什么：在最终整合分支 `codex/t09-three-end-integration@b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` 上使用冻结的 ESP-IDF v5.5.3、target `esp32s3` 和独立构建目录重新生成小智 T09 app；`d961797..b26e99e` 之间没有任何 `firmware/xiaozhi-yuntai/` 源码变化。
+- 候选证据：app 为 202,816 字节（`0x31840`），SHA-256 `9BF9183376FEF427E0549EFCA942B193979C11BF563EBA989F7E487F956A9786`；冻结写入地址为 `0x100000`，数据终点 `0x13183F`，若获授权写入工具最多覆盖扇区至 `0x131FFF`。生成分区表 SHA-256 保持 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`。
+- 构建说明：最终全量构建在未计划写入的 bootloader `rtc_init.c` 遇到一次 GCC `try_forward_edges` 内部编译器错误；没有源码编译错误。既有同源 T09 全量构建门已通过，本轮随后只执行 `idf.py app`，app 链接、bin 生成和 6 MiB `ota_0` 大小检查通过。该证据只支持 app-only 候选，不冒充新的 bootloader 全量构建通过。
+- 硬件边界：Windows 目前仅观察到一个 USB 串行候选口，但尚未用 esptool fresh 验明芯片/MAC，也未读取或写入 Flash/NVS、未烧录、擦除、改分区、写 eFuse、monitor 或操作 OLED/舵机/音频。下一步先取得“只识别当前小智并备份校验现有 app、分区表和 NVS”的单独授权，展示结果后再次等待精确 app-only 写入确认。
+
 ## 2026-08-30 · T09 EasyInput eight-key, encoder and LED regression confirmed on replacement board
 
 - 做了什么：在 T09 EasyInput 正常应用启动和 `VID_303A/PID_1006` 双 HID 枚举确认后，用户对当前更换后的新 EasyInput 开发板执行实体输入回归。
