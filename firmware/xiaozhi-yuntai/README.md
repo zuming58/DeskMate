@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_AGENT_STATE_DISPLAY_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / PENDING_EASYINPUT_CROSS_AUDIT`。
+当前状态：`T09_THREE_END_INTEGRATED / CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -65,4 +65,4 @@ idf.py --version
 idf.py -C firmware/xiaozhi-yuntai build
 ```
 
-干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。任何接线、设备识别、Flash 操作或真机 HIL 仍必须等待 electrical/recovery 门和用户新的明确授权。
+干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。三端候选已在 `codex/t09-three-end-integration` 汇合；任何接线变更、设备识别、Flash 操作或真机 HIL 仍必须等待最终镜像、恢复资料和用户新的明确授权。

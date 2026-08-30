@@ -1,6 +1,6 @@
 # T09C desktop agent-state sender
 
-Status: `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`
+Status: `THREE_END_INTEGRATED / AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`
 
 Independent audit: `codex/desktop-t09-agent-state-audit` fixes the zero-length
 Feature Report boundary and adds the previously missing timeout/stale-ACK

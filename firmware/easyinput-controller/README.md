@@ -2,11 +2,11 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_BUILD_CONFIRMED`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。
+当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / HIL_NOT_AUTHORIZED`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
-当前 T08 EasyInput Link 总控实现已达到 `DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`：UART0 使用 GPIO43/44，只有一个 owner 任务；协议核心可在 Host 独立测试，UART 初始化失败只将 Link 标为 faulted，不影响既有输入、灯效、配置或 Host Action。T08 尚未烧录、接线或取得双板真机证据。
+T08 EasyInput Link 总控已经完成双板握手、双向信号断开、重连和对端重启真机验收：UART0 使用 GPIO43/44，只有一个 owner 任务；UART 初始化失败只将 Link 标为 faulted，不影响既有输入、灯效、配置或 Host Action。T09 在该基线上增加冻结的 HID `0x12` 状态接收与 `SET_AGENT_STATE` 转发桥；代码和构建已进入三端整合候选，尚未取得 T09 app-only 烧录和 OLED 真机证据。
 
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 
@@ -43,4 +43,4 @@ firmware/easyinput-controller/tools/write-release-manifest.ps1 `
   -OutputPath firmware/easyinput-controller/build/release-manifest.json
 ```
 
-T08 代码阶段完成后必须停在独立分支。只有小智端基于同一冻结合同通过 Host/构建门、两端分别完成代码审计，并重新取得明确的烧录与接线授权后，才可执行只读双板 HIL；首次连接不得亮 OLED、驱动舵机或初始化小智音频。
+T09 三端候选必须在最终 HEAD 干净重建并列出两块板各自的 app 地址、大小、SHA-256、写入与扇区范围后，逐板取得明确授权。T09 只允许点亮 OLED 和传递七种状态；不得驱动舵机或初始化小智音频。

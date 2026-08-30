@@ -10,7 +10,7 @@
 
 ## Development and safety
 
-- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `T09_AGENT_STATE_DISPLAY_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / PENDING_EASYINPUT_CROSS_AUDIT`。冻结 Link 合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 必须保持为祖先，Link 合同、黄金向量和 T09 合同只读消费。
+- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `T09_THREE_END_INTEGRATED / CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`。冻结 Link 合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 必须保持为祖先，Link 合同、黄金向量和 T09 合同只读消费。
 - 无硬件电脑只能做 parser、场景、模拟舵机、host test 和 build，不得声称 OLED、音频或舵机真机通过。
 - 不扫描端口、不烧录、不读取 Flash、不驱动舵机；机械动作始终需要单独授权。
 - 外部参考 `F:\Codex\xiaozhi-yuntai` 只读使用；复制或派生必须记录来源清单/哈希、许可证、修改与目标路径。

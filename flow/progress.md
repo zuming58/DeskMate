@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-08-30 · T09 three-end integration and code gates complete; final images and HIL authorization pending
+
+- 做了什么：从已通过 T08 双向断线验收的 `b38c8c21afa2b5b8164c084953faa28996b5ea65` 建立隔离分支 `codex/t09-three-end-integration`，合入小智 OLED 实现 `d014af453dd95fab9ad6af24b25d54b6c3c8561e`；保留桌面 HID `0x12` 发送器、EasyInput 状态桥和冻结 DeskMate Link，未改写冻结协议。整合 merge 为 `86ca15c763351c7141d2337dad39f246ab41e21a`。
+- 为什么与怎么理解：T09 三端代码已经各自通过审计，统一整合能消除双窗口分叉并形成唯一烧录候选。小智在冷启动时独立初始化 OLED、先显示 idle 大眼睛；显示失败只降级 DISPLAY，不能拖垮 Link、EasyInput 输入或 Host Action。
+- 产出路径：`docs/handoffs/t09-three-end-integration-2026-08-30.md`、三张 T09 任务卡、两套固件 README/局部规则和本条进展记录。
+- 验证：桌面 `126/126`、EasyInput Host `9/9`、小智 Host `8/8`；Windows 原生桥、Vite 和独立 Electron unpacked package 通过；EasyInput ESP-IDF v5.5.5 固定 16 MiB 分区构建通过；小智 ESP-IDF v5.5.3 固定产品分区构建通过。未安装或升级工具链。
+- 问题解决：小智首次构建失败来自本机 ESP-IDF 工具根目录配置，不是源码；复用既有 `C:\Espressif\tools` 后完成构建。桌面第一次打包因两个构建进程重叠出现 rename 竞态，改用隔离输出 `release/verify` 后完整通过。
+- 下一步：提交文档后从最终 HEAD 干净重建两块板 app，生成大小、SHA-256、分区哈希和精确 app-only 授权卡；本轮未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，也未实际操作 OLED、舵机或音频。获得逐板新授权后按 EasyInput→小智顺序烧录并执行 T09 可见状态与 T03～T06 联合回归。
+
 ## 2026-08-30 · T08 two-board Link and both signal-direction HIL confirmed; software regression deferred
 
 - 做了什么：在已烧录的 EasyInput `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d` 与小智 `132117e8cf8aeae07319cc647d2634326ec14637` 上，按冻结三线合同逐根断开信号线，保留 GND 共地且始终不连接 3V3；仅通过 EasyInput 已冻结 HID 状态通道读取脱敏 Link 状态与计数。
