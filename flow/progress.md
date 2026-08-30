@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T09C desktop agent-state sender code and build gate complete
+
+- 做了什么：在隔离工作树 `F:\Codex\deskmate-t09-desktop`、分支 `codex/desktop-t09-agent-state-sender` 完成桌面 T09C，基线为 `d9f91e30e6f52325df70d0665f900de1164bfd96`，实现提交为 `b93de789fd17b86f3022baa85abd52d2dff9dd29`。Electron 主进程把既有 VoiceWorkflow 映射为七状态并编码 HID Feature `0x12` v2；原生桥再次严格校验后调用 Windows HID 写入；队列只保留一个在途和一个最新候选，断线或进程重启后不重放旧状态。模拟器、mock STT 和 demo 来源明确隔离，不能写硬件。
+- 为什么与怎么理解：Windows `HidD_SetFeature` 必须按顶层 HID collection 的 `FeatureReportByteLength` 发送，当前集合长度为 64 字节；前 17 字节是 Report ID 加 16 字节冻结语义，余下 47 字节只能为零填充。该填充只是 Windows 传输形态，不是 DeskMate `0x12` 业务 payload；EasyInput 只在 TinyUSB 边界归一化并拒绝非零尾部，冻结语义和 DeskMate Link framing 均未改变。
+- 产出路径：`electron/agent-state-hid.cjs`、`electron/input-bridge.cjs`、`native/DeskMate.InputBridge/Program.cs`、`src/pages.jsx`、`tests/agent-state-hid.test.mjs`、`docs/contracts/t09-agent-state-display-v1.md`、`flow/tasks/T09C-desktop-agent-state-sender.md` 和 `docs/handoffs/t09c-desktop-agent-state-sender-2026-08-30.md`。稳定决策与复用经验已分别写入 `flow/decisions.md`、`flow/lessons.md`。
+- 验证：桌面 `npm test` `125/125`、`npm run build:desktop`、原生协议自检通过；EasyInput Host CTest `9/9`；ESP-IDF `v5.5.5`、target `esp32s3`、固定 16 MB 分区构建通过。app 318,768 字节（`0x4DD30`），SHA-256 `B275C31CBC681FF07A1AA79614AD39C397DB4045C9F2A7F040A46F95590C746D`；分区表 SHA-256 保持 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。`git diff --check`、ASCII 路径、密钥/隐私、构建产物忽略和局部规则一致性检查通过；板级基线脚本只有“无法解析 C++ 引脚声明”的既有警告，本包没有修改 GPIO 或引脚。
+- 问题解决与下一步：本轮关闭了桌面缺少真实 `0x12` 发送器以及 Windows 64 字节 Feature Report 形态不兼容两个代码阻断。状态为 `TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`；未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，也未操作 OLED、舵机或音频。下一步先独立审计，再补 T08 逐根 TX/RX 断线和 T03～T06 组合回归；取得单独授权后才进行桌面真实语音状态→EasyInput→小智 OLED 的 T09 真机验收。
+
 ## 2026-08-30 · T09 two-end firmware cross-audit passed after display-degradation fix
 
 - scope/baseline：交叉审计 EasyInput `codex/easyinput-t09-agent-state-bridge@9c97edd557c9b2ad54b7b6338acc70793ce37522` 与小智 `codex/xiaozhi-t09-agent-display@d014af453dd95fab9ad6af24b25d54b6c3c8561e`；T09 状态合同、DeskMate Link v1 和黄金向量在两分支逐文件一致，未重写 framing 或共享合同。

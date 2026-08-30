@@ -4,6 +4,7 @@
 
 - Branch: `codex/desktop-t09-agent-state-sender`.
 - Base: `d9f91e30e6f52325df70d0665f900de1164bfd96`.
+- Implementation commit: `b93de789fd17b86f3022baa85abd52d2dff9dd29`.
 - Contract: `T09_AGENT_STATE_DISPLAY_V1_FROZEN`.
 - Status: `TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`.
 
