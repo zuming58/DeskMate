@@ -1,5 +1,12 @@
 # Decisions
 
+## D035 - Link health crosses the native boundary only as enumerated diagnostics
+
+- Date: 2026-08-30
+- Decision: the Windows native bridge accepts `ai_keyboard.config_status.v1` status streams up to the EasyInput firmware's 1023 usable JSON bytes / 21 chunks. Full configuration remains independently bounded to 2048 bytes / 42 chunks.
+- Exposure: Electron main may receive only the frozen capability booleans, Link state (`disabled`, `waiting`, `connected`, `faulted`) and named uint32 Link/Agent counters. It must reject partial, invalid or out-of-range diagnostic shapes.
+- Privacy: raw status JSON, frame payloads, device paths, identifiers, network data and user content do not cross this boundary. A Link fault remains fail-soft for input, configuration and desktop voice behavior.
+
 ## D034 — Windows HID transport padding is not protocol payload
 
 - Date: 2026-08-30

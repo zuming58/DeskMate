@@ -3,6 +3,11 @@ const ALLOWED_KEYS = new Set(["F22", "RightAlt", "Escape", "VoiceEdit", "Device"
 const ALLOWED_ACTIONS = new Set(["down", "up", "connected", "disconnected"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
+const LINK_STATES = new Set(["disabled", "waiting", "connected", "faulted"]);
+
+function isUInt32(value) {
+  return Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
+}
 
 function parseBridgeLine(line) {
   if (typeof line !== "string" || !line.trim() || line.length > 4096) return null;
@@ -51,7 +56,19 @@ function parseBridgeLine(line) {
   }
   if (value.type === "config-capabilities") {
     if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.configReadV1 !== "boolean" || typeof value.configWriteV1 !== "boolean" || (value.hostActionV1 !== undefined && typeof value.hostActionV1 !== "boolean") || (value.fixedTextV1 !== undefined && typeof value.fixedTextV1 !== "boolean") || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
-    return Object.freeze({ version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: value.requestId, configReadV1: value.configReadV1, configWriteV1: value.configWriteV1, hostActionV1: value.hostActionV1 === true, fixedTextV1: value.fixedTextV1 === true, time: value.time, sequence: value.sequence });
+    const diagnosticsFields = ["deskMateLinkV1", "agentStateBridgeV1", "linkState", "linkRxFrames", "linkTxFrames", "linkRequestTimeouts", "linkRetries", "linkPeerRestarts", "agentAccepted", "agentMalformed", "agentDroppedDisconnected", "agentForwarded", "agentQueueDrops"];
+    const hasDiagnostics = diagnosticsFields.some((field) => value[field] !== undefined);
+    if (hasDiagnostics &&
+        (typeof value.deskMateLinkV1 !== "boolean" || typeof value.agentStateBridgeV1 !== "boolean" ||
+         !LINK_STATES.has(value.linkState) ||
+         !diagnosticsFields.slice(3).every((field) => isUInt32(value[field])))) return null;
+    return Object.freeze({
+      version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: value.requestId,
+      configReadV1: value.configReadV1, configWriteV1: value.configWriteV1,
+      hostActionV1: value.hostActionV1 === true, fixedTextV1: value.fixedTextV1 === true,
+      ...(hasDiagnostics ? Object.fromEntries(diagnosticsFields.map((field) => [field, value[field]])) : {}),
+      time: value.time, sequence: value.sequence,
+    });
   }
   if (!["input", "status"].includes(value.type)) return null;
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;

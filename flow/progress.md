@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 - T09 state-path diagnosis separated desktop status parsing from the physical Link failure
+
+- Observation: the user exercised the real VoiceWorkflow after restoring the three-wire connection, but the Xiaozhi OLED stayed on the cold-start idle eyes. No servo or audio action occurred.
+- Desktop/config root cause: EasyInput T09 expanded `ai_keyboard.config_status.v1` to about 561 bytes / 12 reports, while the Windows native bridge still rejected status streams above 512 bytes / 11 reports. The consumer now follows the firmware's bounded 1023-byte / 21-report status contract, keeps the 2048-byte / 42-report configuration contract, validates all counters, and has a regression vector for the expanded status.
+- Privacy-safe evidence: after the parser fix, a live status read succeeded. EasyInput reported Link `waiting`, `rx_frames=0`, increasing `tx_frames/request_timeouts/retries`, and Agent-state `accepted=6`, `dropped_disconnected=6`, `forwarded=0`. A second sample remained waiting and advanced TX/timeouts/retries while RX stayed zero. This proves the desktop reports reached EasyInput but were intentionally dropped because no Xiaozhi response was received.
+- Product output: the native bridge now exposes only enumerated Link state and bounded uint32 counters to Electron main; raw status JSON, payloads, paths and device identifiers remain unavailable. Desktop tests pass 127/127 and `npm run build:desktop` succeeds.
+- Safety/next: no Flash/NVS read or write, erase, partition/eFuse operation, servo or audio action was performed. The user should keep the known crossed logical wiring, reseat both signal paths and cold-start both boards; after that, re-read the counters before another visible-state attempt. T09 remains `THREE_END_STATE_HIL_BLOCKED_LINK_WAITING`.
+
 ## 2026-08-30 · T09 Xiaozhi normal boot and standalone OLED idle confirmed
 
 - 真机结果：用户在 app-only 写入与精确回读后仅执行正常 `RESET`，未按 `BOOT`；小智 OLED 随即点亮并显示两个默认 idle 大眼睛，确认 `b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` T09 app 已进入正常应用态且 DISPLAY 初始化成功。

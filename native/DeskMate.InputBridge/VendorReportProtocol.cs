@@ -8,6 +8,21 @@ internal static class VendorReportProtocol
     private const byte FixedTextKind = 0x01;
     private const byte StatusStreamKind = 0x04;
     private const byte ConfigStreamKind = 0x06;
+    internal const int StatusStreamMaxBytes = 1023;
+    internal const int StatusStreamMaxChunks = 21;
+    internal const int ConfigStreamMaxBytes = 2048;
+    internal const int ConfigStreamMaxChunks = 42;
+
+    internal static bool HasValidStreamBounds(byte kind, int total, int declared)
+    {
+        if (kind == StatusStreamKind)
+            return total is >= 1 and <= StatusStreamMaxChunks &&
+                   declared is >= 1 and <= StatusStreamMaxBytes;
+        if (kind == ConfigStreamKind)
+            return total is >= 1 and <= ConfigStreamMaxChunks &&
+                   declared is >= 1 and <= ConfigStreamMaxBytes;
+        return false;
+    }
 
     public static bool HasValidEnvelope(ReadOnlySpan<byte> report)
     {
@@ -33,6 +48,7 @@ internal static class VendorReportProtocol
         const string statusJson =
             "{\"schema\":\"ai_keyboard.config_status.v1\",\"capabilities\":{\"config_read_v1\":true,\"config_write_v1\":true}}";
         var statusReports = MakeStatusReports(0x78563412, statusJson);
+        var expandedStatusReports = MakeStatusReports(0x12345678, new string('x', 561));
         var configMiddle = MakeEnvelope(ConfigStreamKind, 3, 5, 59);
         var ackWithStreamShape = MakeEnvelope(0x03, 0, 2, 7);
         var outOfRangeChunk = MakeEnvelope(StatusStreamKind, 2, 2, 20);
@@ -57,6 +73,12 @@ internal static class VendorReportProtocol
 
         return statusReports.Length == 3 &&
                statusReports.All(report => HasValidEnvelope(report)) &&
+               expandedStatusReports.Length == 12 &&
+               expandedStatusReports.All(report => HasValidEnvelope(report)) &&
+               HasValidStreamBounds(StatusStreamKind, expandedStatusReports.Length, 561) &&
+               !HasValidStreamBounds(StatusStreamKind, StatusStreamMaxChunks + 1, 561) &&
+               !HasValidStreamBounds(StatusStreamKind, StatusStreamMaxChunks, StatusStreamMaxBytes + 1) &&
+               HasValidStreamBounds(ConfigStreamKind, ConfigStreamMaxChunks, ConfigStreamMaxBytes) &&
                statusReports[0][1] == StatusStreamKind &&
                statusReports[0][2] == 0 &&
                statusReports[0][3] == statusReports.Length &&

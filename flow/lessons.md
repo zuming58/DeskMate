@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A growing bounded status payload requires consumer-boundary regression vectors
+
+- Symptom: firmware added privacy-safe T09 Link and Agent counters to an existing status JSON. The producer stayed below its 1024-byte buffer, but the Windows consumer silently retained the older 512-byte / 11-chunk limit and discarded the first 561-byte / 12-chunk response.
+- Practice: define the producer's usable byte limit, derived maximum chunk count and per-kind limits once in the consumer protocol module. Test both the newly observed expanded payload and the exact reject boundary. Do not treat a successful full-config stream as evidence that the independent status stream is accepted.
+- Rule: whenever fields are added to a bounded cross-end diagnostic payload, rerun a near-current-size golden vector through the actual native consumer. Sanitized counters must remain explicitly enumerated; raw JSON, user content and device identifiers must not be forwarded merely to simplify diagnosis.
+
 ## An app-only candidate must not hide a failed bootloader rebuild
 
 - 现象：最终小智 T09 全量构建在 ESP-IDF 自带 bootloader 源码中触发 GCC 内部编译器错误，而产品源码、既有同源全量构建和独立 `app` 目标均正常。

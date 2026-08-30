@@ -97,10 +97,24 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, chunk: chunk, total: total));
 
-    public void ConfigCapabilities(string requestId, bool read, bool write, bool hostAction, bool fixedText) => Write(new BridgeEvent(
+    public void ConfigCapabilities(
+        string requestId, bool read, bool write, bool hostAction, bool fixedText,
+        bool deskMateLink, bool agentStateBridge, string linkState,
+        uint linkRxFrames, uint linkTxFrames, uint linkRequestTimeouts,
+        uint linkRetries, uint linkPeerRestarts,
+        uint agentAccepted, uint agentMalformed, uint agentDroppedDisconnected,
+        uint agentForwarded, uint agentQueueDrops) => Write(new BridgeEvent(
         1, "config-capabilities", "easyinput-hid", "Config", "capabilities",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
-        requestId: requestId, configReadV1: read, configWriteV1: write, hostActionV1: hostAction, fixedTextV1: fixedText));
+        requestId: requestId, configReadV1: read, configWriteV1: write,
+        hostActionV1: hostAction, fixedTextV1: fixedText,
+        deskMateLinkV1: deskMateLink, agentStateBridgeV1: agentStateBridge,
+        linkState: linkState, linkRxFrames: linkRxFrames,
+        linkTxFrames: linkTxFrames, linkRequestTimeouts: linkRequestTimeouts,
+        linkRetries: linkRetries, linkPeerRestarts: linkPeerRestarts,
+        agentAccepted: agentAccepted, agentMalformed: agentMalformed,
+        agentDroppedDisconnected: agentDroppedDisconnected,
+        agentForwarded: agentForwarded, agentQueueDrops: agentQueueDrops));
 
     private void Write(BridgeEvent value)
     {
@@ -137,6 +151,19 @@ internal sealed record BridgeEvent(
     bool? configWriteV1 = null,
     bool? hostActionV1 = null,
     bool? fixedTextV1 = null,
+    bool? deskMateLinkV1 = null,
+    bool? agentStateBridgeV1 = null,
+    string? linkState = null,
+    uint? linkRxFrames = null,
+    uint? linkTxFrames = null,
+    uint? linkRequestTimeouts = null,
+    uint? linkRetries = null,
+    uint? linkPeerRestarts = null,
+    uint? agentAccepted = null,
+    uint? agentMalformed = null,
+    uint? agentDroppedDisconnected = null,
+    uint? agentForwarded = null,
+    uint? agentQueueDrops = null,
     string? targetWindow = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
@@ -629,11 +656,9 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             if (length < headerBytes) { ResetConfigReadLocked(); return; }
             var count = length - headerBytes;
             var numericRequest = BitConverter.ToUInt32(report.Slice(6, 4));
-            var maxTotal = kind == 0x06 ? 42 : 11;
-            var maxBytes = kind == 0x06 ? 2048 : 512;
             var maxChunk = kind == 0x06 ? 49 : 50;
             if (numericRequest == 0 || numericRequest != _pendingReadNumericRequest) return;
-            if (total is < 1 || total > maxTotal || declared is < 1 || declared > maxBytes || count > maxChunk || dataOffset + count > report.Length || (kind == 0x06 && source > 3) || report.Slice(dataOffset + count).ToArray().Any(value => value != 0)) { ResetConfigReadLocked(); return; }
+            if (!VendorReportProtocol.HasValidStreamBounds(kind, total, declared) || count > maxChunk || dataOffset + count > report.Length || (kind == 0x06 && source > 3) || report.Slice(dataOffset + count).ToArray().Any(value => value != 0)) { ResetConfigReadLocked(); return; }
             if (chunk == 0) { _configChunks.Clear(); _configTotal=total; _configLength=declared; _configCrc16=crc; _configSource=source; _configNextChunk=0; _configNumericRequest=numericRequest; _configLastChunk=null; }
             if (total!=_configTotal || declared!=_configLength || crc!=_configCrc16 || source!=_configSource || numericRequest!=_configNumericRequest) { ResetConfigReadLocked(); return; }
             var chunkBytes=report.Slice(dataOffset,count).ToArray();
@@ -652,11 +677,26 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
                     using var json=JsonDocument.Parse(data);
                     if (json.RootElement.GetProperty("schema").GetString() != "ai_keyboard.config_status.v1") throw new JsonException("invalid-status-schema");
                     var capabilities=json.RootElement.GetProperty("capabilities");
+                    var link=json.RootElement.GetProperty("link");
+                    var agent=json.RootElement.GetProperty("agent_state");
                     _writer.ConfigCapabilities(_pendingReadRequest,
                         capabilities.TryGetProperty("config_read_v1",out var read)&&read.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("host_action_v1",out var hostAction)&&hostAction.ValueKind==JsonValueKind.True,
-                        capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True);
+                        capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("deskmate_link_v1",out var deskMateLink)&&deskMateLink.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("agent_state_bridge_v1",out var agentStateBridge)&&agentStateBridge.ValueKind==JsonValueKind.True,
+                        link.GetProperty("state").GetString() ?? "faulted",
+                        ReadCounter(link, "rx_frames"),
+                        ReadCounter(link, "tx_frames"),
+                        ReadCounter(link, "request_timeouts"),
+                        ReadCounter(link, "retries"),
+                        ReadCounter(link, "peer_restarts"),
+                        ReadCounter(agent, "accepted"),
+                        ReadCounter(agent, "malformed"),
+                        ReadCounter(agent, "dropped_disconnected"),
+                        ReadCounter(agent, "forwarded"),
+                        ReadCounter(agent, "queue_drops"));
                 }
                 catch (JsonException) { ResetConfigReadLocked(); return; }
             }
@@ -680,6 +720,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         var crc = 0xffff;
         foreach (var value in data) { crc ^= value << 8; for (var bit = 0; bit < 8; bit++) crc = (crc & 0x8000) != 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff; }
         return crc;
+    }
+
+    private static uint ReadCounter(JsonElement parent, string name)
+    {
+        if (!parent.TryGetProperty(name, out var value) || !value.TryGetUInt32(out var result))
+            throw new JsonException($"invalid-status-counter:{name}");
+        return result;
     }
 
     private static bool IsCanonicalUuid(string value)

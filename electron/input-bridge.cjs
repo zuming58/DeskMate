@@ -24,7 +24,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingCapture = null;
     this.pendingAgentState = null;
     this.queuedAgentState = null;
-    this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
+    this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
   configure(value) { return this.filter.configure(value); }
@@ -55,7 +55,7 @@ class InputBridgeManager extends EventEmitter {
     const result = this.filter.accept(event);
     if (result.kind === "status") {
       this.restartAttempts = 0;
-      this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null }) };
+      this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null, linkDiagnostics: null }) };
       this.emit("status", this.snapshot());
       if (!event.boardConnected) {
         this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
@@ -73,9 +73,22 @@ class InputBridgeManager extends EventEmitter {
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
     }
     if (result.kind === "config-capabilities" && this.pendingRead?.requestId === event.requestId) {
-      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1 };
-      this.status = { ...this.status, configCapabilities: capabilities };
-      this.finishRead({ ok: true, capabilities });
+      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1, ...(event.deskMateLinkV1 === undefined ? {} : { deskmate_link_v1: event.deskMateLinkV1, agent_state_bridge_v1: event.agentStateBridgeV1 }) };
+      const linkDiagnostics = event.linkState === undefined ? null : {
+        state: event.linkState,
+        rxFrames: event.linkRxFrames,
+        txFrames: event.linkTxFrames,
+        requestTimeouts: event.linkRequestTimeouts,
+        retries: event.linkRetries,
+        peerRestarts: event.linkPeerRestarts,
+        agentAccepted: event.agentAccepted,
+        agentMalformed: event.agentMalformed,
+        agentDroppedDisconnected: event.agentDroppedDisconnected,
+        agentForwarded: event.agentForwarded,
+        agentQueueDrops: event.agentQueueDrops,
+      };
+      this.status = { ...this.status, configCapabilities: capabilities, linkDiagnostics };
+      this.finishRead({ ok: true, capabilities, ...(linkDiagnostics ? { linkDiagnostics } : {}) });
       this.emit("status", this.snapshot());
     }
     if (result.kind === "host-action") this.emit("host-action", event);
@@ -295,7 +308,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishCapture({ ok: false, reason: "input-bridge-exited" });
     this.failAllAgentStates("input-bridge-exited");
     this.filter.reset();
-    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
+    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
     if (this.stopping || this.restartTimer) return;
     const delay = Math.min(30000, 1000 * (2 ** Math.min(this.restartAttempts, 5)));
@@ -318,7 +331,7 @@ class InputBridgeManager extends EventEmitter {
     this.failAllAgentStates("input-bridge-stopped");
     child?.kill?.();
     this.filter.reset();
-    this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };
+    this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null, linkDiagnostics: null };
     this.emit("status", this.snapshot());
   }
 }

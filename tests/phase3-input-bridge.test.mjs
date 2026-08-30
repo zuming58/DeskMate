@@ -200,6 +200,26 @@ test("T06 capabilities are explicit and fail closed when absent", () => {
   assert.deepEqual(parseBridgeLine(JSON.stringify(({ ...base, fixedTextV1: undefined }))), { ...base, fixedTextV1: false });
 });
 
+test("T09 Link diagnostics are privacy-safe, bounded and fail closed", () => {
+  const base = {
+    version: 1, type: "config-capabilities", source: "easyinput-hid",
+    requestId: "read-t09-link", configReadV1: true, configWriteV1: true,
+    hostActionV1: true, fixedTextV1: true, deskMateLinkV1: true,
+    agentStateBridgeV1: true, linkState: "waiting", linkRxFrames: 0,
+    linkTxFrames: 2304, linkRequestTimeouts: 768, linkRetries: 1536,
+    linkPeerRestarts: 0, agentAccepted: 6, agentMalformed: 0,
+    agentDroppedDisconnected: 6, agentForwarded: 0, agentQueueDrops: 0,
+    time: "2026-08-30T14:00:00.000Z", sequence: 8,
+  };
+  assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, devicePath: "private", payload: "private" })), base);
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, linkState: "private" })), null);
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, linkRxFrames: -1 })), null);
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, agentQueueDrops: 0x100000000 })), null);
+  const missing = { ...base };
+  delete missing.agentForwarded;
+  assert.equal(parseBridgeLine(JSON.stringify(missing)), null);
+});
+
 test("config progress is validated and refreshes a matching read deadline", () => {
   const base = { version: 1, type: "config-progress", source: "easyinput-hid", requestId: "read-12345678", chunk: 2, total: 4, time: "2026-08-21T10:00:00.000Z", sequence: 3 };
   const parsed = parseBridgeLine(JSON.stringify(base));
