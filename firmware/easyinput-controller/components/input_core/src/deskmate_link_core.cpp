@@ -425,8 +425,8 @@ bool LinkController::handle_response(const LinkFrame& incoming,
         const std::uint32_t enabled = read_u32(incoming.payload.data() + 4);
         const std::uint16_t max_payload = read_u16(incoming.payload.data() + 8);
         if ((enabled & ~implemented) != 0 ||
-            (enabled & kLinkT09RequiredCapabilities) !=
-                kLinkT09RequiredCapabilities ||
+            (enabled & kLinkT08RequiredCapabilities) !=
+                kLinkT08RequiredCapabilities ||
             ((implemented | enabled) & kLinkT09ForbiddenCapabilities) != 0 ||
             max_payload != kDeskMateLinkMaxPayloadBytes) {
             return false;
@@ -441,7 +441,7 @@ bool LinkController::handle_response(const LinkFrame& incoming,
         if (incoming.payload_length != 11 ||
             read_u32(incoming.payload.data()) != peer_boot_id_ ||
             !valid_agent_state(incoming.payload[8]) ||
-            (incoming.payload[9] & ~kLinkT08AllowedStatusFlags) != 0 ||
+            (incoming.payload[9] & ~kLinkT09AllowedStatusFlags) != 0 ||
             incoming.payload[10] >
                 static_cast<std::uint8_t>(LinkErrorCode::Internal)) {
             return false;

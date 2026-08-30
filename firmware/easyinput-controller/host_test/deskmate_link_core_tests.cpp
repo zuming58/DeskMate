@@ -176,10 +176,10 @@ void controller_handshake_status_and_state() {
     CHECK(same_wire(wire, "444D4C4B01010300030000000000CA63"));
 
     const std::array<std::uint8_t, 11> status = {
-        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 3, 1, 0};
+        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 3, 3, 0};
     controller.receive(response(LinkMessageType::GetStatus, 3, status.data(), status.size()), 3);
     CHECK(controller.snapshot().agent_state == LinkAgentState::Working);
-    CHECK(controller.snapshot().status_flags == 1);
+    CHECK(controller.snapshot().status_flags == 3);
     CHECK(controller.queue_agent_state(LinkAgentState::Thinking, 0x10203040));
     CHECK(controller.poll(3, wire));
     CHECK(same_wire(wire, "444D4C4B010104000400000005004030201002652E"));
@@ -261,6 +261,37 @@ void malformed_response_fails_closed() {
     CHECK(controller.snapshot().state == LinkControllerState::Waiting);
 }
 
+void display_failure_keeps_link_connected_but_blocks_state() {
+    LinkController controller;
+    controller.start(1, 0);
+    LinkWireFrame wire{};
+    CHECK(controller.poll(0, wire));
+    const std::array<std::uint8_t, 8> hello = {
+        2, 1, 0xdd, 0xcc, 0xbb, 0xaa, 0x80, 0};
+    controller.receive(
+        response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
+    CHECK(controller.poll(1, wire));
+
+    const std::array<std::uint8_t, 10> capabilities = {
+        7, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
+    controller.receive(
+        response(LinkMessageType::GetCapabilities, 2,
+                 capabilities.data(), capabilities.size()),
+        2);
+    CHECK(controller.poll(2, wire));
+    const std::array<std::uint8_t, 11> status = {
+        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 0, 0x81, 0};
+    controller.receive(
+        response(LinkMessageType::GetStatus, 3, status.data(), status.size()),
+        3);
+    const auto snapshot = controller.snapshot();
+    CHECK(snapshot.state == LinkControllerState::Connected);
+    CHECK(snapshot.implemented_capabilities == 7);
+    CHECK(snapshot.enabled_capabilities == 3);
+    CHECK(snapshot.status_flags == 0x81);
+    CHECK(!controller.queue_agent_state(LinkAgentState::Working, 9));
+}
+
 void forbidden_t09_capabilities_and_status_fail_closed() {
     LinkWireFrame wire{};
     const std::array<std::uint8_t, 8> hello = {
@@ -296,7 +327,7 @@ void forbidden_t09_capabilities_and_status_fail_closed() {
         2);
     CHECK(status_controller.poll(2, wire));
     const std::array<std::uint8_t, 11> deferred_status = {
-        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 0, 3, 0};
+        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 0, 7, 0};
     status_controller.receive(
         response(LinkMessageType::GetStatus, 3, deferred_status.data(),
                  deferred_status.size()),
@@ -348,6 +379,7 @@ int main() {
     controller_handshake_status_and_state();
     controller_retries_disconnect_and_does_not_replay();
     malformed_response_fails_closed();
+    display_failure_keeps_link_connected_but_blocks_state();
     forbidden_t09_capabilities_and_status_fail_closed();
     errors_and_unmatched_frames_fail_closed();
     if (failures != 0) {

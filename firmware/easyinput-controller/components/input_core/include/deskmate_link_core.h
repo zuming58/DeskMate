@@ -73,6 +73,8 @@ inline constexpr std::uint32_t kLinkT09ForbiddenCapabilities =
     kLinkCapabilityMotion | kLinkCapabilityAudio;
 inline constexpr std::uint8_t kLinkT08AllowedStatusFlags =
     (1u << 0) | (1u << 7);
+inline constexpr std::uint8_t kLinkT09AllowedStatusFlags =
+    kLinkT08AllowedStatusFlags | (1u << 1);
 
 struct LinkFrame {
     std::uint8_t version{kDeskMateLinkVersion};
