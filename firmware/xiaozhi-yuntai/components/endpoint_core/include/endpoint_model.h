@@ -8,14 +8,15 @@ enum class CapabilityGate : std::uint8_t {
     kDisabledByProduct,
     kPendingValidation,
     kLocked,
+    kHardwarePinoutBlocked,
 };
 
 enum class ContractState : std::uint8_t {
-    kNotFrozen,
+    kFrozen,
 };
 
 enum class RuntimeState : std::uint8_t {
-    kScaffoldOnly,
+    kProtocolReadyPinoutBlocked,
 };
 
 struct EndpointCapabilities {

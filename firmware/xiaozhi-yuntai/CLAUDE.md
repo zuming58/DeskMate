@@ -10,17 +10,18 @@
 
 ## Development and safety
 
-- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `T08_PHASE_A_SCAFFOLD`，协议实现必须等待 `DESKMATE_LINK_V1_FROZEN` 的准确提交。
+- 目标工具链由项目冻结为 ESP-IDF 5.5.3；当前状态为 `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_PINOUT_BLOCKED`。冻结合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 必须保持为祖先，合同和黄金向量只读消费。
 - 无硬件电脑只能做 parser、场景、模拟舵机、host test 和 build，不得声称 OLED、音频或舵机真机通过。
 - 不扫描端口、不烧录、不读取 Flash、不驱动舵机；机械动作始终需要单独授权。
 - 外部参考 `F:\Codex\xiaozhi-yuntai` 只读使用；复制或派生必须记录来源清单/哈希、许可证、修改与目标路径。
 - 不在本模块建立第二套 `flow/`、`docs/`、hook 或嵌套 Git。
-- Phase A 不得配置真实 UART 控制器/引脚，也不得写 magic、framing、版本、消息 ID、CRC、超时、重试或错误语义；USB Serial/JTAG 仅作为应用日志迁移候选，不能冒充已完成真机恢复验收。
+- Phase B 已实现冻结协议和唯一 UART owner，但 `board_link_pinout.h` 必须保持未验证、`-1/-1`，直到原理图网络或断电通断测量证明实体焊盘映射；阻断期间启动入口不得安装 UART driver、配置 GPIO 或创建 owner task。
+- 应用/bootloader 日志和所有控制台保持关闭，不写 eFuse；ROM 启动噪声只由 parser 丢弃。不得以 Host/build 证据冒充实体 UART、USB 恢复或两板连接通过。
 
 ## Module entry points
 
 - 说明：`README.md`
 - 参考基线：`../../docs/provenance/reference-baselines-2026-08-24.md`
-- DeskMate Link：`../../contracts/deskmate-link/README.md`
+- DeskMate Link：`../../contracts/deskmate-link/v1.md` 与 `../../contracts/deskmate-link/golden-vectors-v1.json`
 - Host tests：`cmake -S firmware/xiaozhi-yuntai/host_test -B firmware/xiaozhi-yuntai/host_test/build -DCMAKE_BUILD_TYPE=Debug`，随后 `cmake --build ... --config Debug` 与 `ctest --test-dir ... -C Debug --output-on-failure`。
 - 固件构建：在精确 ESP-IDF 5.5.3 环境执行 `idf.py -C firmware/xiaozhi-yuntai build`；不得追加 `flash` 或 `monitor`。

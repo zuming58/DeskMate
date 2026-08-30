@@ -1,6 +1,6 @@
 # T08 Xiaozhi Link endpoint
 
-Status: `T08_PARALLEL_PREPARATION_OPEN / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_NOT_AUTHORIZED`
+Status: `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_PINOUT_BLOCKED / HARDWARE_NOT_AUTHORIZED`
 
 ## Objective
 
@@ -36,3 +36,11 @@ Status: `T08_PARALLEL_PREPARATION_OPEN / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_
 ## Stop gate
 
 完成 Host tests、ESP-IDF v5.5.3 `esp32s3` 构建、来源/许可证/隐私/产物检查后提交推送并停止。不得合并 `main`，不得接线、扫描端口、识别设备、读写 Flash、烧录、monitor、初始化 OLED/音频或驱动舵机。
+
+## Phase B result
+
+- 冻结合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 已通过 merge 成为分支祖先；合同与黄金向量未重写。
+- framing、CRC、流式 parser、四类消息、语义错误、八项去重缓存、冲突拒绝、boot epoch、唯一 UART owner 和 fake UART 已实现。
+- `SET_AGENT_STATE` 只更新内存；DISPLAY/MOTION/AUDIO 能力为零，没有 OLED、舵机或音频初始化。
+- 实体 `GND/TX/RX` 焊盘到 ESP32-S3 GPIO 的映射没有原理图网络或通断证据，因此生产入口保持 `HARDWARE_PINOUT_BLOCKED`，不安装 UART driver、不配置 GPIO、不创建 owner task。
+- Phase B 只形成 Host/build 软件证据；不得申请烧录、接线或两板 HIL。下一步只能补齐 pinout、电平、供电、共地和恢复证据，且仍需用户独立授权。

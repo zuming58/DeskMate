@@ -6,16 +6,22 @@ idf_build_set_property(MINIMAL_BUILD ON)
 project(deskmate_xiaozhi_yuntai)
 
 if(NOT CONFIG_IDF_TARGET_ESP32S3)
-    message(FATAL_ERROR "DeskMate Xiaozhi Phase A must target esp32s3.")
+    message(FATAL_ERROR "DeskMate Xiaozhi Phase B must target esp32s3.")
 endif()
 
-if(NOT CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG OR CONFIG_ESP_CONSOLE_UART)
+if(NOT CONFIG_ESP_CONSOLE_NONE OR CONFIG_ESP_CONSOLE_UART OR
+   CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     message(FATAL_ERROR
-        "DeskMate Xiaozhi Phase A routes application logs only through USB Serial/JTAG. "
-        "Do not reserve a hardware UART for the console in this scaffold.")
+        "DeskMate Xiaozhi Phase B disables the application console so UART bytes "
+        "cannot contend with DeskMate Link.")
 endif()
 
 if(NOT CONFIG_ESP_CONSOLE_SECONDARY_NONE)
     message(FATAL_ERROR
-        "DeskMate Xiaozhi Phase A must not enable a secondary console.")
+        "DeskMate Xiaozhi Phase B must not enable a secondary console.")
+endif()
+
+if(NOT CONFIG_BOOTLOADER_LOG_LEVEL_NONE OR NOT CONFIG_LOG_DEFAULT_LEVEL_NONE)
+    message(FATAL_ERROR
+        "DeskMate Xiaozhi Phase B requires bootloader and application logging off.")
 endif()
