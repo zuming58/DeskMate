@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T08 Xiaozhi Link endpoint Phase B completed; hardware pinout remains blocked
+
+- baseline/contract：在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 从要求的 `503315e96dc7fbb23a01a308c0164c5bfe767e25` 开始；以 merge commit `a6547c31027141fd35c49690ff39ec6d1cb5f0ac` 合入冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667`，祖先检查返回 0，合同和共享黄金向量没有重写。Phase B 实现提交为 `915cd0a5c4aedc87a227564a4b09b3d478acf061`；EasyInput 固件、桌面软件、T07 UI、VoiceWorkflow 和 T09 均未修改。
+- implementation：严格实现 DMLK 编解码、CRC16-CCITT-FALSE、100 ms 流式 parser、分段/粘包/启动噪声/坏 CRC/超长/溢出重同步，完成 HELLO、GET_CAPABILITIES、GET_STATUS、SET_AGENT_STATE、一字节错误响应、最近八项精确缓存、重复幂等、冲突序列拒绝、controller boot epoch 失效和随机非零 Xiaozhi boot epoch。唯一 UART owner 固定 UART0 115200/8N1/无流控、512 字节有界 RX buffer 和单一写入口；SET_AGENT_STATE 只写 RAM，DISPLAY/MOTION/AUDIO 能力为零，未初始化 OLED、舵机、PWM/LEDC、麦克风、功放、扬声器或 I2S。
+- pinout/console：只读参考仍无 `.git`，准确提交为 `UNKNOWN`，许可证 MIT、版本 1.9.0。照片只证明实体焊盘有 GND/TX/RX 丝印；板型源码只证明当前功能未占 GPIO43/44，ESP-IDF 只证明 SoC 默认 UART0 IOMUX 为 TX43/RX44，缺少原理图网络、PCB 网表或断电通断证据，不能据此猜生产引脚。因此 `board_link_pinout.h` 保持 `verified=false/-1/-1`，启动在安装 driver、配置 GPIO 和创建 task 前返回 `HARDWARE_PINOUT_BLOCKED`。应用/次控制台、bootloader/application 日志关闭，不写 eFuse；ROM 启动字节由 parser 安全丢弃。
+- verification：Host CTest `6/6`；精确 `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`、target `esp32s3` 单线程干净构建通过。实现提交 app 为 150,432 字节（`0x24BA0`），SHA-256 `F53334BF7AC7AE49D359C142D03F7236A25866B86FED8038E717F7265FAFA285`；默认 1 MiB factory 余量 `0xDB460`（86%），仅为编译证据，不是获准烧录的最终布局。`git diff --check`、所有权、冻结合同、ASCII 路径、AGENTS/CLAUDE、来源/许可证、密钥/隐私和构建产物忽略检查通过。详细交接见 `docs/handoffs/t08-xiaozhi-link-endpoint-phase-b-2026-08-30.md`。
+- hardware/stop：本轮未扫描端口、识别设备、接线、读写或擦除 Flash、烧录、monitor、写 eFuse、操作 OLED/舵机/音频，也未启动 T09 或两板 HIL。当前状态为 `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_PINOUT_BLOCKED / HARDWARE_NOT_AUTHORIZED`；推送后停止，下一步只能先取得准确板级引脚证据并另行通过电气/恢复与用户授权门。
+
 ## 2026-08-29 · T08 Xiaozhi Link endpoint Phase A completed and stopped at contract gate
 
 - role/branch/base：本窗口只负责小智固件，在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 工作；起点为 T08 交接 HEAD `93a5f9c6f72c9eb5a02917d062bfff38da0c4258`，正式主基线已核对为 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d`，Phase A 实现提交为 `bfa1f46554a97636241d3a5f15c4d23e9391e05f`。原 `F:\Codex\deskmate` 工作树未切换、未覆盖；EasyInput 固件、桌面软件和 `contracts/deskmate-link/` 均未修改。
