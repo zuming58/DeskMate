@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T08 EasyInput controller app flashed; single-board and read-only Link HIL pending
+
+- authorization/identity：用户按精确实现提交 `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d`、镜像范围和禁止边界明确授权。本机只发现一个 Espressif 下载端口；私有设备身份在识别、备份和写入前均一致，端口、MAC 和序列号未进入 Git 或诊断文档。
+- recovery：写入前只读备份完整 3 MiB factory app（`0x010000..0x30FFFF`）；备份长度 3,145,728 字节，SHA-256 `6919099F6799EC65C515AB3A2DE2D7772F720322BC39402C51F28C0BEDAC7874`，保存在当前工作树 Git 忽略的 `diagnostics-private/` 恢复目录。未读取 NVS、PHY 或声音 bank。
+- flash result：写入前复验 app 为 316,672 字节（`0x4D500`），SHA-256 `76669AEBF214434532D25743E5B2A6BE6C291AA596466CBFA304BF17CD294987`。只从 `0x010000` 写入数据至 `0x05D4FF`，工具擦写扇区边界不超过 `0x05DFFF`；esptool 退出码 0 且报告数据哈希验证通过。未整片擦除，未写 bootloader、分区表、NVS、PHY、声音 bank 或 eFuse，未操作小智。
+- next：设备保持下载态且未启动新 app。用户需正常断电再开机（不再按 BOOT），先回归 EasyInput 按键、旋钮、灯效、语音和配置/Host Action，并确认小智未连接时 Link 安全停留 waiting。小智由独立窗口按其精确镜像、分区和恢复卡另行识别、备份与授权烧录；两块板均通过单板启动回归前不接 UART。
+
 ## 2026-08-30 · T08 two-end audit passed after EasyInput deferred-capability hardening
 
 - baseline：交叉审计 EasyInput `codex/easyinput-t08-link-controller@0a0c3efce140b38e8fa1e7ed020b51c9f4eb7cfa` 与小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637`；两端都以冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667` 为祖先，协议正文、README 和黄金向量逐文件一致且未重写。小智端 Host 7/7、分区/引脚/唯一 UART owner 与既有 ESP-IDF v5.5.3 干净构建证据通过审计，未初始化 OLED、舵机、LEDC、I2S 或音频。
