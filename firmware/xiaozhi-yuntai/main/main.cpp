@@ -1,4 +1,5 @@
 #include "deskmate_link_uart.h"
+#include "deskmate_oled.h"
 #include "link_endpoint.h"
 
 #include "esp_random.h"
@@ -23,7 +24,12 @@ std::uint32_t NewBootEpoch() noexcept {
 }  // namespace
 
 extern "C" void app_main() {
-    static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint;
+    auto& display_owner = deskmate::xiaozhi::GetDeskMateDisplayOwner();
+    const auto display_result =
+        deskmate::xiaozhi::StartDeskMateDisplayOwner();
+    (void)display_result;
+
+    static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(display_owner);
     endpoint.Start(NewBootEpoch(), MonotonicMilliseconds());
 
     const auto result = deskmate::xiaozhi::StartDeskMateLinkUart(endpoint);

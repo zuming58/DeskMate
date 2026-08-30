@@ -5,7 +5,7 @@ namespace {
 
 constexpr EndpointCapabilities kCapabilities{
     CapabilityGate::kReady,
-    CapabilityGate::kPendingValidation,
+    CapabilityGate::kReady,
     CapabilityGate::kLocked,
     CapabilityGate::kDisabledByProduct,
     CapabilityGate::kDisabledByProduct,

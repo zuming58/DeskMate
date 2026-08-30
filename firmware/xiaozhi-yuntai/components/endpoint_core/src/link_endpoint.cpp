@@ -34,6 +34,7 @@ void XiaozhiLinkEndpoint::Start(std::uint32_t peer_boot_id,
     link_ready_ = false;
     diagnostics_ = {};
     ClearCache();
+    display_owner_.ResetSession();
 }
 
 LinkEndpointSnapshot XiaozhiLinkEndpoint::snapshot() const noexcept {
@@ -44,6 +45,30 @@ LinkEndpointSnapshot XiaozhiLinkEndpoint::snapshot() const noexcept {
 void XiaozhiLinkEndpoint::ClearCache() noexcept {
     cache_ = {};
     cache_cursor_ = 0;
+}
+
+void XiaozhiLinkEndpoint::ResetControllerSession() noexcept {
+    link_ready_ = false;
+    controller_boot_id_ = 0;
+    agent_state_ = AgentState::kIdle;
+    ClearCache();
+    display_owner_.ResetSession();
+}
+
+void XiaozhiLinkEndpoint::OnLinkDisconnected() noexcept {
+    ResetControllerSession();
+    IncrementSaturated(diagnostics_.disconnects);
+}
+
+std::uint32_t XiaozhiLinkEndpoint::ImplementedCapabilities() const noexcept {
+    const auto display = display_owner_.snapshot();
+    return kBaseCapabilities |
+           (display.implemented ? kCapabilityDisplay : 0u);
+}
+
+std::uint32_t XiaozhiLinkEndpoint::EnabledCapabilities() const noexcept {
+    const auto display = display_owner_.snapshot();
+    return kBaseCapabilities | (display.enabled ? kCapabilityDisplay : 0u);
 }
 
 XiaozhiLinkEndpoint::CacheLookup XiaozhiLinkEndpoint::LookupCache(
@@ -146,8 +171,8 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
             std::array<std::uint8_t, 10> payload{};
-            WriteLe32(payload.data(), kT08Capabilities);
-            WriteLe32(payload.data() + 4, kT08Capabilities);
+            WriteLe32(payload.data(), ImplementedCapabilities());
+            WriteLe32(payload.data() + 4, EnabledCapabilities());
             WriteLe16(payload.data() + 8,
                       static_cast<std::uint16_t>(kLinkMaxPayloadBytes));
             return Respond(request, payload.data(), payload.size(), response);
@@ -164,7 +189,10 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
             WriteLe32(payload.data() + 4,
                       static_cast<std::uint32_t>(now_ms - boot_started_ms_));
             payload[8] = static_cast<std::uint8_t>(agent_state_);
-            payload[9] = 0x01;
+            const auto display = display_owner_.snapshot();
+            payload[9] = static_cast<std::uint8_t>(
+                0x01u | (display.enabled ? 0x02u : 0u) |
+                (display.implemented && !display.enabled ? 0x80u : 0u));
             payload[10] = static_cast<std::uint8_t>(last_error_);
             return Respond(request, payload.data(), payload.size(), response);
         }
@@ -176,7 +204,16 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 !IsValidAgentState(request.payload[4])) {
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
-            agent_state_ = static_cast<AgentState>(request.payload[4]);
+            const auto state = static_cast<AgentState>(request.payload[4]);
+            const auto accepted =
+                display_owner_.Accept(ReadLe32(request.payload.data()), state);
+            if (accepted == DisplayAcceptResult::kNotReady) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            if (accepted == DisplayAcceptResult::kBusy) {
+                return Error(request, LinkErrorCode::kBusy, response);
+            }
+            agent_state_ = state;
             return Respond(request, request.payload.data(),
                            request.payload_length, response);
         }
@@ -201,8 +238,7 @@ bool XiaozhiLinkEndpoint::Handle(const LinkFrame& request,
             request_boot_id = hello_boot_id;
             if (controller_boot_id_ != 0 &&
                 controller_boot_id_ != hello_boot_id) {
-                ClearCache();
-                link_ready_ = false;
+                ResetControllerSession();
                 IncrementSaturated(diagnostics_.controller_restarts);
             }
             controller_boot_id_ = hello_boot_id;

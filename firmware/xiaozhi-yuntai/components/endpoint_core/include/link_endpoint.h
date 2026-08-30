@@ -1,5 +1,6 @@
 #pragma once
 
+#include "display_owner.h"
 #include "link_protocol.h"
 
 #include <array>
@@ -10,7 +11,8 @@ namespace deskmate::xiaozhi {
 
 inline constexpr std::uint32_t kCapabilityLinkCore = 1u << 0;
 inline constexpr std::uint32_t kCapabilityAgentState = 1u << 1;
-inline constexpr std::uint32_t kT08Capabilities =
+inline constexpr std::uint32_t kCapabilityDisplay = 1u << 2;
+inline constexpr std::uint32_t kBaseCapabilities =
     kCapabilityLinkCore | kCapabilityAgentState;
 
 struct EndpointDiagnostics {
@@ -20,6 +22,7 @@ struct EndpointDiagnostics {
     std::uint32_t duplicate_requests{};
     std::uint32_t sequence_conflicts{};
     std::uint32_t controller_restarts{};
+    std::uint32_t disconnects{};
 };
 
 struct LinkEndpointSnapshot {
@@ -33,7 +36,11 @@ struct LinkEndpointSnapshot {
 
 class XiaozhiLinkEndpoint {
 public:
+    explicit XiaozhiLinkEndpoint(DisplayOwner& display_owner) noexcept
+        : display_owner_(display_owner) {}
+
     void Start(std::uint32_t peer_boot_id, std::uint32_t now_ms) noexcept;
+    void OnLinkDisconnected() noexcept;
     bool Handle(const LinkFrame& request, std::uint32_t now_ms,
                 LinkWireFrame& response) noexcept;
     LinkEndpointSnapshot snapshot() const noexcept;
@@ -70,9 +77,13 @@ private:
                     const LinkWireFrame& response,
                     std::uint32_t sequence, std::uint8_t type) noexcept;
     void ClearCache() noexcept;
+    void ResetControllerSession() noexcept;
+    std::uint32_t ImplementedCapabilities() const noexcept;
+    std::uint32_t EnabledCapabilities() const noexcept;
 
     static constexpr std::size_t kCacheEntries = 8;
     std::array<CacheEntry, kCacheEntries> cache_{};
+    DisplayOwner& display_owner_;
     std::size_t cache_cursor_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t controller_boot_id_{};

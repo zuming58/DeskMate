@@ -16,6 +16,7 @@ struct LinkUartOwnerDiagnostics {
     std::uint32_t rx_overflows{};
     std::uint32_t transport_errors{};
     std::uint32_t short_writes{};
+    std::uint32_t disconnects{};
 };
 
 class LinkUartOwner {
@@ -33,6 +34,7 @@ private:
     XiaozhiLinkEndpoint& endpoint_;
     LinkStreamParser parser_{};
     std::array<std::uint8_t, kReadChunkBytes> read_buffer_{};
+    bool transport_was_open_{};
     LinkUartOwnerDiagnostics diagnostics_{};
 };
 

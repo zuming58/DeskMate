@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T09 Xiaozhi agent-state OLED endpoint ready for cross-audit
+
+- baseline/contract：在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t09-agent-display` 从精确 T08 基线 `132117e8cf8aeae07319cc647d2634326ec14637` 开始；没有 cherry-pick 夹带双方记录的 `5e2541fa082c1014948731fd91897d71ac509d5f`，而是仅恢复三份 T09 新文件并逐项核对用户指定 blob，导入提交为 `dfe6d85dc0d37dd119cdf862d19e8cc28fe7da85`。合同状态为 `T09_AGENT_STATE_DISPLAY_V1_FROZEN`；共享 DeskMate Link framing、CRC、消息 ID、错误和黄金向量未修改，EasyInput 固件和桌面软件未修改。
+- implementation：新增七状态纯逻辑场景映射、唯一同步 display owner、四项有界队列和 fake OLED；Link 只入队，owner 接受后才 ACK。OLED 初始化成功后才启用 DISPLAY；初始化失败不声明实现/启用，运行期渲染或 task 失败保留 implemented、关闭 enabled 并设置既有 fault 位，Link 继续工作。重复状态、队列满、EasyInput TTL 发来的实时 idle、transport 断开、重连、controller boot epoch 改变和旧状态不重放均有 Host 覆盖。实体渲染端固定为已审计的 SSD1306 128×64、I2C0、GPIO41/42、`0x3c`、400 kHz 和 X/Y mirror；`angry` 不自动映射，音频、I2S、舵机、LEDC/PWM 和待机动作均未启用。
+- provenance：只读参考 `F:\Codex\xiaozhi-yuntai` 没有 `.git`，准确提交保持 `UNKNOWN`；项目版本 1.9.0、许可证 MIT。只采用板级映射、40×40 双眼/10 px 间距和唯一队列写屏等行为证据，产品侧为新写的确定性一位过程式场景，没有复制 LVGL、参考源码、图片、字体、模型、音频或构建产物。逐文件 SHA-256 和差异表见 `docs/provenance/t09-xiaozhi-agent-display-reference-audit.md`。
+- verification：Host CTest `8/8`。使用精确 `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`、target `esp32s3`、独立生成的 sdkconfig 和新 build 路径完成 16 MiB 构建；首轮并行编译在 IDF 自带 RGB LCD 源发生一次 GCC internal error，同源码/同参数立即重试后完整构建通过。提交交接前 app 为 202,816 字节（`0x31840`）、写入地址 `0x100000`、小于 6 MiB，SHA-256 `BD59E936F7AE1CF7CC3EBAE1CF07F992E880264F33C44EE8810A7E4EE490300B`；分区表 SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92FDD43036FDBFD1C762E0`。最终文档提交会改变内嵌 Git 版本，交付回复另报最终 HEAD 重建哈希。
+- safety/stop：本轮没有扫描或识别端口、接线、读写 Flash/NVS、烧录、erase、monitor、写 eFuse、操作真机 OLED、舵机或音频。当前为 `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / PENDING_EASYINPUT_CROSS_AUDIT`；推送后停止，等待 EasyInput 窗口先做交叉审计。T08 两根信号线分别断开的验收、旧状态真机不重放和 T09 OLED HIL 仍未执行。
+
 ## 2026-08-30 · T08 Xiaozhi 16 MiB partition and Board1_2 UART pinout blockers closed
 
 - baseline/scope：在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 从用户指定的 `db52e883156b5a4a6e63c0954eb7e3073d3b8aae` 开始，只修改 `firmware/xiaozhi-yuntai/` 和 T08 来源/任务/交接记录。冻结合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 仍为祖先，DeskMate Link 合同、黄金向量和已审计协议实现没有重写；EasyInput 固件、桌面软件、T07、VoiceWorkflow 和 T09 未修改。烧录阻断实现提交为 `7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5`。

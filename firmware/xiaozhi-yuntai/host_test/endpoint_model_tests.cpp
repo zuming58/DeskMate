@@ -8,7 +8,7 @@ int main() {
 
     const auto& capabilities = GetEndpointCapabilities();
     assert(capabilities.link_transport == CapabilityGate::kReady);
-    assert(capabilities.display == CapabilityGate::kPendingValidation);
+    assert(capabilities.display == CapabilityGate::kReady);
     assert(capabilities.motion == CapabilityGate::kLocked);
     assert(capabilities.microphone == CapabilityGate::kDisabledByProduct);
     assert(capabilities.amplifier == CapabilityGate::kDisabledByProduct);

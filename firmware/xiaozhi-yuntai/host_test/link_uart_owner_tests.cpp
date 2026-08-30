@@ -1,4 +1,5 @@
 #include "fake_uart.h"
+#include "fake_display.h"
 #include "link_endpoint.h"
 #include "link_protocol.h"
 #include "link_uart_owner.h"
@@ -65,7 +66,9 @@ void OneOwnerHandlesNoiseAndConcatenatedRequests() {
     using deskmate::xiaozhi::test::FakeUartTransport;
     FakeUartTransport transport;
     transport.SetOpen(true);
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
     LinkUartOwner owner(transport, endpoint);
 
@@ -89,7 +92,9 @@ void OverflowDropsPartialCandidateAndResynchronizes() {
     using deskmate::xiaozhi::test::FakeUartTransport;
     FakeUartTransport transport;
     transport.SetOpen(true);
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
     LinkUartOwner owner(transport, endpoint);
 
@@ -114,7 +119,9 @@ void WorkPerServiceIsBoundedAndTransportFaultsAreCounted() {
     using deskmate::xiaozhi::test::FakeUartTransport;
     FakeUartTransport transport;
     transport.SetOpen(true);
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
     LinkUartOwner owner(transport, endpoint);
 
@@ -135,7 +142,9 @@ void OnlyOwnerWritesAndShortWritesFailClosed() {
     FakeUartTransport transport;
     transport.SetOpen(true);
     transport.SetSendLimit(5);
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
     LinkUartOwner owner(transport, endpoint);
     transport.FeedReceive(Bytes(Hello(1)));
@@ -145,6 +154,49 @@ void OnlyOwnerWritesAndShortWritesFailClosed() {
     CHECK(transport.TakeSent().size() == 5);
 }
 
+void TransportDisconnectClearsDisplayStateBeforeReconnect() {
+    using namespace deskmate::xiaozhi;
+    using deskmate::xiaozhi::test::FakeUartTransport;
+    FakeUartTransport transport;
+    transport.SetOpen(true);
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    CHECK(display.Initialize());
+    XiaozhiLinkEndpoint endpoint(display);
+    endpoint.Start(0xaabbccdd, 0);
+    CHECK(display.ServiceOne());
+    LinkUartOwner owner(transport, endpoint);
+
+    transport.FeedReceive(Bytes(Hello(1)));
+    owner.Service(1);
+    CHECK(endpoint.snapshot().link_ready);
+    transport.TakeSent();
+
+    std::vector<std::uint8_t> state_payload(5);
+    WriteLe32(state_payload.data(), 7);
+    state_payload[4] = static_cast<std::uint8_t>(AgentState::kCompleted);
+    transport.FeedReceive(Bytes(Request(LinkMessageType::kSetAgentState, 2,
+                                        state_payload)));
+    owner.Service(2);
+    CHECK(display.snapshot().desired_state == AgentState::kCompleted);
+    transport.TakeSent();
+
+    transport.SetOpen(false);
+    owner.Service(3);
+    CHECK(owner.diagnostics().disconnects == 1);
+    CHECK(!endpoint.snapshot().link_ready);
+    CHECK(display.snapshot().desired_state == AgentState::kIdle);
+    CHECK(display.snapshot().queued == 1);
+
+    transport.SetOpen(true);
+    transport.FeedReceive(Bytes(Hello(3)));
+    owner.Service(4);
+    CHECK(endpoint.snapshot().link_ready);
+    CHECK(display.snapshot().desired_state == AgentState::kIdle);
+    CHECK(display.ServiceOne());
+    CHECK(display.snapshot().current_state == AgentState::kIdle);
+}
+
 }  // namespace
 
 int main() {
@@ -152,6 +204,7 @@ int main() {
     OverflowDropsPartialCandidateAndResynchronizes();
     WorkPerServiceIsBoundedAndTransportFaultsAreCounted();
     OnlyOwnerWritesAndShortWritesFailClosed();
+    TransportDisconnectClearsDisplayStateBeforeReconnect();
     if (failures != 0) {
         std::cerr << "link_uart_owner_tests: " << failures << " failure(s)\n";
         return 1;

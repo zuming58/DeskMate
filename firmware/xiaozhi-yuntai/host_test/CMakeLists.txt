@@ -7,11 +7,19 @@ enable_testing()
 
 set(CORE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/include")
 set(CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/endpoint_model.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_endpoint.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
 )
+
+add_executable(display_owner_tests
+    display_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
+)
+target_include_directories(display_owner_tests PRIVATE "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
+add_test(NAME display_owner_tests COMMAND display_owner_tests)
 
 add_executable(endpoint_model_tests endpoint_model_tests.cpp ${CORE_SOURCES})
 target_include_directories(endpoint_model_tests PRIVATE "${CORE_INCLUDE_DIR}")
@@ -61,6 +69,10 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     ENDPOINT_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_endpoint.cpp"
     OWNER_HEADER_PATH="${CORE_INCLUDE_DIR}/link_uart_owner.h"
     OWNER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
+    DISPLAY_HEADER_PATH="${CORE_INCLUDE_DIR}/display_owner.h"
+    DISPLAY_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
+    OLED_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.h"
+    OLED_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
     PARTITION_TABLE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../partitions/v1/16m.csv"

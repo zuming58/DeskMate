@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / PARTITION_CONTRACT_RESTORED / HARDWARE_PINOUT_VERIFIED / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_NOT_AUTHORIZED`。
+当前状态：`T09_AGENT_STATE_DISPLAY_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED / PENDING_EASYINPUT_CROSS_AUDIT`。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -13,7 +13,19 @@ Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中�
 - 固定 115200/8N1/无流控、512 字节 RX driver buffer 的唯一 UART owner；
 - Host-only fake UART 和共享黄金向量测试。
 
-`SET_AGENT_STATE` 只修改 RAM 中的状态。DISPLAY、MOTION、AUDIO 能力保持关闭；工程不初始化 OLED、麦克风、功放、扬声器、I2S、LEDC、PWM 或舵机。
+T08 的 Link framing、CRC、序列缓存、UART owner、引脚和分区合同保持不变。
+
+## T09 agent display
+
+T09 消费冻结的 [`t09-agent-state-display-v1.md`](../../docs/contracts/t09-agent-state-display-v1.md)，新增：
+
+- 七状态到 `neutral/listening/thinking/focused/attention/happy/sad_error` 的纯逻辑映射；
+- 唯一 display owner、四项有界队列和 Host fake OLED；
+- DISPLAY capability 的初始化门禁，以及初始化/渲染失败后的 fail-closed 降级；
+- 重复状态、队列满、TTL 产生的实时 idle、断线、重连和对端重启处理；
+- SSD1306 128×64、I2C0、SDA GPIO41、SCL GPIO42、地址 `0x3c` 的新过程式单色场景渲染。
+
+Link endpoint 只向 display owner 入队，只有 owner 接受后才 ACK `SET_AGENT_STATE`。`angry` 不参与自动映射。MOTION 和 AUDIO 仍关闭；工程不初始化麦克风、功放、扬声器、I2S、LEDC、PWM 或舵机。参考审计见 [`t09-xiaozhi-agent-display-reference-audit.md`](../../docs/provenance/t09-xiaozhi-agent-display-reference-audit.md)。
 
 ## Partition contract
 

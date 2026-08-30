@@ -58,6 +58,10 @@ int main() {
     const auto endpoint_source = ReadAll(ENDPOINT_SOURCE_PATH);
     const auto owner_header = ReadAll(OWNER_HEADER_PATH);
     const auto owner_source = ReadAll(OWNER_SOURCE_PATH);
+    const auto display_header = ReadAll(DISPLAY_HEADER_PATH);
+    const auto display_source = ReadAll(DISPLAY_SOURCE_PATH);
+    const auto oled_header = ReadAll(OLED_HEADER_PATH);
+    const auto oled_source = ReadAll(OLED_SOURCE_PATH);
     const auto transport_header = ReadAll(TRANSPORT_HEADER_PATH);
     const auto sdkconfig_defaults = ReadAll(SDKCONFIG_DEFAULTS_PATH);
     const auto partition_table = ReadAll(PARTITION_TABLE_PATH);
@@ -73,7 +77,10 @@ int main() {
     CHECK(Contains(root_cmake, "CONFIG_PARTITION_TABLE_CUSTOM"));
     CHECK(Contains(root_cmake, "partitions/v1/16m.csv"));
     CHECK(Contains(main_cmake, "deskmate_link_uart.cpp"));
+    CHECK(Contains(main_cmake, "deskmate_oled.cpp"));
+    CHECK(Contains(main_cmake, "esp_driver_i2c"));
     CHECK(Contains(main_cmake, "esp_driver_uart"));
+    CHECK(Contains(main_cmake, "esp_lcd"));
 
     CHECK(Contains(sdkconfig_defaults, "CONFIG_IDF_TARGET=\"esp32s3\""));
     CHECK(Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_NONE=y"));
@@ -111,7 +118,12 @@ int main() {
     CHECK(Contains(endpoint_header, "kCacheEntries = 8"));
     CHECK(Contains(endpoint_source, "LinkErrorCode::kSequenceConflict"));
     CHECK(Contains(endpoint_source, "controller_restarts"));
-    CHECK(Contains(endpoint_source, "kT08Capabilities"));
+    CHECK(Contains(endpoint_header, "kBaseCapabilities"));
+    CHECK(Contains(endpoint_header, "kCapabilityDisplay"));
+    CHECK(Contains(endpoint_source, "ImplementedCapabilities"));
+    CHECK(Contains(endpoint_source, "EnabledCapabilities"));
+    CHECK(Contains(endpoint_source, "DisplayAcceptResult::kBusy"));
+    CHECK(Contains(endpoint_source, "DisplayAcceptResult::kNotReady"));
     CHECK(Contains(owner_header, "kReadChunkBytes = 64"));
     CHECK(Contains(owner_header, "kMaxReadsPerService = 4"));
     CHECK(Occurrences(owner_source, "transport_.Send(") == 1);
@@ -137,15 +149,36 @@ int main() {
     CHECK(Contains(pinout_header, "44,"));
     CHECK(Contains(pinout_header, "install_allowed"));
     CHECK(Contains(uart_header, "kHardwarePinoutBlocked"));
+    CHECK(Contains(main_source, "StartDeskMateDisplayOwner()"));
+    CHECK(Contains(main_source, "XiaozhiLinkEndpoint endpoint(display_owner)"));
     CHECK(Contains(main_source, "StartDeskMateLinkUart(endpoint)"));
     CHECK(!Contains(main_source, "uart_"));
 
-    const auto production = main_source + uart_source + model_header +
+    CHECK(Contains(display_header, "kQueueCapacity = 4"));
+    CHECK(Contains(display_header, "DisplayAcceptResult"));
+    CHECK(Contains(display_source, "SelectAgentScene"));
+    CHECK(Contains(display_source, "AgentScene::kAngry"));
+    CHECK(!Contains(display_source,
+                    "return {AgentScene::kAngry"));
+    CHECK(Contains(display_source, "ResetSession"));
+    CHECK(Contains(oled_header, "StartDeskMateDisplayOwner"));
+    CHECK(Contains(oled_source, "I2C_NUM_0"));
+    CHECK(Contains(oled_source, "GPIO_NUM_41"));
+    CHECK(Contains(oled_source, "GPIO_NUM_42"));
+    CHECK(Contains(oled_source, "0x3c"));
+    CHECK(Contains(oled_source, "esp_lcd_new_panel_ssd1306"));
+    CHECK(Contains(oled_source, "esp_lcd_panel_mirror(panel_, true, true)"));
+    CHECK(Occurrences(oled_source, "esp_lcd_panel_draw_bitmap(") == 1);
+    CHECK(Occurrences(oled_source, "xTaskCreate(") == 1);
+
+    const auto link_production = main_source + uart_source + model_header +
                             model_source + protocol_header + protocol_source +
                             endpoint_header + endpoint_source + owner_header +
-                            owner_source + transport_header;
+                            owner_source + display_header + display_source +
+                            transport_header;
+    const auto production = link_production + oled_header + oled_source;
     CHECK(!Contains(production, "ESP_LOG"));
-    CHECK(!Contains(production, "esp_lcd"));
+    CHECK(!Contains(link_production, "esp_lcd"));
     CHECK(!Contains(production, "driver/ledc"));
     CHECK(!Contains(production, "ledc_"));
     CHECK(!Contains(production, "driver/i2s"));
@@ -154,7 +187,7 @@ int main() {
     CHECK(!Contains(production, "uart_write_bytes") ||
           Occurrences(production, "uart_write_bytes") == 1);
     CHECK(Contains(model_source, "CapabilityGate::kReady"));
-    CHECK(Contains(model_source, "CapabilityGate::kPendingValidation"));
+    CHECK(Occurrences(model_source, "CapabilityGate::kReady") >= 3);
     CHECK(Contains(model_source, "CapabilityGate::kDisabledByProduct"));
     CHECK(Contains(model_source, "ContractState::kFrozen"));
     CHECK(Contains(model_source, "RuntimeState::kProtocolReady"));

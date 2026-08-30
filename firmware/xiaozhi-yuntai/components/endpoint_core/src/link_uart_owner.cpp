@@ -23,8 +23,14 @@ LinkUartOwner::LinkUartOwner(Transport& transport,
 void LinkUartOwner::Service(std::uint32_t now_ms) noexcept {
     parser_.Expire(now_ms);
     if (!transport_.IsOpen()) {
+        if (transport_was_open_) {
+            endpoint_.OnLinkDisconnected();
+            IncrementSaturated(diagnostics_.disconnects);
+        }
+        transport_was_open_ = false;
         return;
     }
+    transport_was_open_ = true;
 
     for (std::size_t read_index = 0; read_index < kMaxReadsPerService;
          ++read_index) {
@@ -41,6 +47,7 @@ void LinkUartOwner::Service(std::uint32_t now_ms) noexcept {
         if (result.status == TransportReadStatus::kError ||
             result.size > read_buffer_.size()) {
             IncrementSaturated(diagnostics_.transport_errors);
+            endpoint_.OnLinkDisconnected();
             break;
         }
         if (result.status != TransportReadStatus::kData || result.size == 0) {
@@ -62,6 +69,7 @@ void LinkUartOwner::Service(std::uint32_t now_ms) noexcept {
             AddSaturated(diagnostics_.tx_bytes, written);
             if (written != response.length) {
                 IncrementSaturated(diagnostics_.short_writes);
+                endpoint_.OnLinkDisconnected();
             }
         }
     }

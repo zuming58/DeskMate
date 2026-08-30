@@ -1,3 +1,4 @@
+#include "fake_display.h"
 #include "link_endpoint.h"
 #include "link_protocol.h"
 
@@ -102,7 +103,9 @@ deskmate::xiaozhi::LinkFrame Hello(std::uint32_t sequence,
 
 void FourMessagesMatchTheFrozenPayloads() {
     using namespace deskmate::xiaozhi;
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
     LinkWireFrame response{};
 
@@ -114,13 +117,19 @@ void FourMessagesMatchTheFrozenPayloads() {
     CHECK(endpoint.Handle(capabilities, 2, response));
     CHECK(SameWire(response, FromHex(GoldenHex("capabilities_response"))));
 
+    CHECK(display.Initialize());
+
     auto set_working = Request(4, 10, {1, 0, 0, 0, 3});
     CHECK(endpoint.Handle(set_working, 3, response));
     CHECK(endpoint.snapshot().agent_state == AgentState::kWorking);
 
     const auto status = Parse(FromHex(GoldenHex("status_request")));
     CHECK(endpoint.Handle(status, 0x01020304, response));
-    CHECK(SameWire(response, FromHex(GoldenHex("status_response"))));
+    const auto decoded_status = Decode(response);
+    CHECK(decoded_status.payload_length == 11);
+    CHECK(decoded_status.payload[8] ==
+          static_cast<std::uint8_t>(AgentState::kWorking));
+    CHECK(decoded_status.payload[9] == 0x03);
 
     const auto set_state = Parse(FromHex(GoldenHex("set_agent_state_request")));
     CHECK(endpoint.Handle(set_state, 5, response));
@@ -130,7 +139,9 @@ void FourMessagesMatchTheFrozenPayloads() {
 
 void SemanticErrorsHaveOneBytePayloads() {
     using namespace deskmate::xiaozhi;
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0x11111111, 0);
     LinkWireFrame response{};
 
@@ -165,7 +176,10 @@ void SemanticErrorsHaveOneBytePayloads() {
 
 void DuplicateConflictAndControllerEpochAreDeterministic() {
     using namespace deskmate::xiaozhi;
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    CHECK(display.Initialize());
+    XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0x01020304, 0);
     LinkWireFrame response{};
     CHECK(endpoint.Handle(Hello(1, 0x11111111), 1, response));
@@ -197,7 +211,9 @@ void DuplicateConflictAndControllerEpochAreDeterministic() {
 
 void LocalBootEpochChangesAcrossRestart() {
     using namespace deskmate::xiaozhi;
-    XiaozhiLinkEndpoint endpoint;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    XiaozhiLinkEndpoint endpoint(display);
     LinkWireFrame response{};
     endpoint.Start(0x11111111, 0);
     CHECK(endpoint.Handle(Hello(1, 1), 0, response));
@@ -212,6 +228,102 @@ void LocalBootEpochChangesAcrossRestart() {
                       second.payload.begin()));
 }
 
+void DisplayCapabilityAndFailureAreDynamic() {
+    using namespace deskmate::xiaozhi;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    CHECK(display.Initialize());
+    XiaozhiLinkEndpoint endpoint(display);
+    endpoint.Start(0xaabbccdd, 0);
+    CHECK(display.ServiceOne());
+
+    LinkWireFrame response{};
+    CHECK(endpoint.Handle(Hello(1, 0x11223344), 1, response));
+    CHECK(endpoint.Handle(Request(2, 2), 2, response));
+    auto capabilities = Decode(response);
+    CHECK(ReadLe32(capabilities.payload.data()) == 0x07);
+    CHECK(ReadLe32(capabilities.payload.data() + 4) == 0x07);
+
+    const auto listening = Request(4, 3, {1, 0, 0, 0, 1});
+    CHECK(endpoint.Handle(listening, 3, response));
+    const auto queued_before_duplicate = display.snapshot().queued;
+    CHECK(endpoint.Handle(listening, 4, response));
+    CHECK(display.snapshot().queued == queued_before_duplicate);
+    CHECK(endpoint.snapshot().diagnostics.duplicate_requests == 1);
+
+    renderer.fail_next_render = true;
+    CHECK(display.ServiceOne());
+    CHECK(endpoint.snapshot().link_ready);
+    CHECK(endpoint.Handle(Request(2, 4), 5, response));
+    capabilities = Decode(response);
+    CHECK(ReadLe32(capabilities.payload.data()) == 0x07);
+    CHECK(ReadLe32(capabilities.payload.data() + 4) == 0x03);
+
+    CHECK(endpoint.Handle(Request(3, 5), 6, response));
+    const auto status = Decode(response);
+    CHECK(status.payload[9] == 0x81);
+
+    CHECK(endpoint.Handle(Request(4, 6, {2, 0, 0, 0, 2}), 7,
+                          response));
+    const auto error = Decode(response);
+    CHECK(error.flag == LinkFrameFlag::kError);
+    CHECK(error.payload[0] ==
+          static_cast<std::uint8_t>(LinkErrorCode::kNotReady));
+    CHECK(endpoint.snapshot().link_ready);
+}
+
+void QueueOverflowDisconnectAndRestartDoNotReplay() {
+    using namespace deskmate::xiaozhi;
+    test::FakeDisplayRenderer renderer;
+    DisplayOwner display(renderer);
+    CHECK(display.Initialize());
+    XiaozhiLinkEndpoint endpoint(display);
+    endpoint.Start(0xaabbccdd, 0);
+    CHECK(display.ServiceOne());
+    LinkWireFrame response{};
+    CHECK(endpoint.Handle(Hello(1, 0x11111111), 1, response));
+
+    constexpr std::array<AgentState, 5> states{
+        AgentState::kListening, AgentState::kThinking, AgentState::kWorking,
+        AgentState::kWaiting, AgentState::kCompleted,
+    };
+    for (std::size_t index = 0; index < states.size(); ++index) {
+        const std::uint32_t transition = static_cast<std::uint32_t>(index + 1);
+        std::vector<std::uint8_t> payload(5);
+        WriteLe32(payload.data(), transition);
+        payload[4] = static_cast<std::uint8_t>(states[index]);
+        CHECK(endpoint.Handle(Request(4, static_cast<std::uint32_t>(index + 2),
+                                      payload),
+                              static_cast<std::uint32_t>(index + 2), response));
+        if (index == states.size() - 1) {
+            const auto busy = Decode(response);
+            CHECK(busy.flag == LinkFrameFlag::kError);
+            CHECK(busy.payload[0] ==
+                  static_cast<std::uint8_t>(LinkErrorCode::kBusy));
+        }
+    }
+
+    endpoint.OnLinkDisconnected();
+    CHECK(!endpoint.snapshot().link_ready);
+    CHECK(endpoint.snapshot().agent_state == AgentState::kIdle);
+    CHECK(display.snapshot().desired_state == AgentState::kIdle);
+    CHECK(display.snapshot().queued == 1);
+    CHECK(display.ServiceOne());
+    CHECK(display.snapshot().current_state == AgentState::kIdle);
+
+    CHECK(endpoint.Handle(Hello(20, 0x22222222), 20, response));
+    CHECK(endpoint.snapshot().agent_state == AgentState::kIdle);
+    CHECK(display.snapshot().queued == 0);
+
+    CHECK(endpoint.Handle(Request(4, 21, {9, 0, 0, 0, 5}), 21,
+                          response));
+    CHECK(display.snapshot().desired_state == AgentState::kCompleted);
+    CHECK(endpoint.Handle(Hello(22, 0x33333333), 22, response));
+    CHECK(endpoint.snapshot().agent_state == AgentState::kIdle);
+    CHECK(display.snapshot().desired_state == AgentState::kIdle);
+    CHECK(display.snapshot().queued == 1);
+}
+
 }  // namespace
 
 int main() {
@@ -219,6 +331,8 @@ int main() {
     SemanticErrorsHaveOneBytePayloads();
     DuplicateConflictAndControllerEpochAreDeterministic();
     LocalBootEpochChangesAcrossRestart();
+    DisplayCapabilityAndFailureAreDynamic();
+    QueueOverflowDisconnectAndRestartDoNotReplay();
     if (failures != 0) {
         std::cerr << "link_endpoint_tests: " << failures << " failure(s)\n";
         return 1;
