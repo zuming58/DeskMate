@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 Xiaozhi normal boot and standalone OLED idle confirmed
+
+- 真机结果：用户在 app-only 写入与精确回读后仅执行正常 `RESET`，未按 `BOOT`；小智 OLED 随即点亮并显示两个默认 idle 大眼睛，确认 `b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` T09 app 已进入正常应用态且 DISPLAY 初始化成功。
+- 行为解释：当前 idle 场景是冻结合同中的静态画面，T09 未实现眨眼动画，因此“不眨眼”不是缺陷；舵机和小智音频仍按安全边界保持未初始化，用户观察到无舵机动作、无异常声音符合预期。
+- 安全边界：本轮只记录用户可见现象，没有再次调用 identify/esptool、读取或写入 Flash/NVS、烧录、擦除、改分区、写 eFuse，也没有发送状态、驱动舵机或初始化音频。
+- 下一步：状态推进为 `XIAOZHI_NORMAL_BOOT_CONFIRMED / OLED_INIT_CONFIRMED / IDLE_SCENE_CONFIRMED / THREE_END_STATE_HIL_PENDING`。恢复 GND 与交叉 TX/RX，3V3 保持悬空；启动最新 DeskMate 后验证七状态、latest-wins、TTL 回 idle、断线重连不重放旧状态，再回归 T03～T06。
+
 ## 2026-08-30 · T09 Xiaozhi app flash and exact readback confirmed; normal boot and OLED HIL pending
 
 - 做了什么：在现有 T08 app、固定分区表、NVS、otadata 和板级身份均已完成只读备份与校验后，按用户精确授权，将源码 `b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` 的小智 T09 app 单独写入 `0x100000..0x13183F`；写入工具自动擦除仅覆盖到 `0x131FFF`。写入前后均在同一受控流程中 fresh 验明为同一块 ESP32-S3/16 MB 小智板，身份数据未持久化。
