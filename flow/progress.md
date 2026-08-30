@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T09 EasyInput identity and recovery backup confirmed; flash still pending
+
+- 做了什么：按用户单独授权只识别当前 EasyInput，确认硬件为 ESP32-S3、8 MB PSRAM、16 MB Flash；只读备份分区表 `0x008000/0x001000`、NVS `0x009000/0x006000` 和完整 factory app 分区 `0x010000/0x300000`，生成 Git 外恢复清单。未解析 NVS 内容，也未显示或保存 MAC、序列号和完整设备路径。
+- 为什么与怎么理解：T09 app-only 写入前必须先证明目标板身份、固定分区布局和可恢复性。板上读取的分区窗口为 4 KiB，而 ESP-IDF 有效分区表文件为 3 KiB；前 3 KiB 逐字节一致，尾部 1 KiB 全为擦除态 `0xFF`，五个分区的名称、类型、地址和大小完全一致，因此不是布局不匹配。
+- 产出路径：Git 外目录 `F:\Codex\deskmate-device-backups\easyinput\t09-preflash-20260830T131317`；`manifest.json` SHA-256 为 `6F30C0557E34418555261C19D9D1CB03AD148CD78A6CFDF9E7C371C7CDEA7667`。分区、NVS 和 factory app 三个备份均通过精确长度与 SHA-256 校验。
+- 问题解决：首次直接拿 4 KiB 读取窗口与 3 KiB 生成文件做整文件 SHA-256，出现假不一致并立即触发停止；离线解析和逐字节比较确认差异只来自 1 KiB `0xFF` 填充后，才继续已授权的 NVS/app 只读备份。第一次 3 MiB 读取命中 120 秒上限且未产生 app 文件，改用 460800 波特率、300 秒有界超时重新完整读取并校验。
+- 下一步：本次仍未写 Flash/NVS、未烧录、未擦除、未改分区或 eFuse，也未操作小智、OLED、舵机和音频。文档提交后从新 HEAD 重建 EasyInput T09 app、重新给出 SHA-256 和精确 app-only 写入范围；只有用户再次确认后才允许烧录。
+
 ## 2026-08-30 · T09 three-end integration and code gates complete; final images and HIL authorization pending
 
 - 做了什么：从已通过 T08 双向断线验收的 `b38c8c21afa2b5b8164c084953faa28996b5ea65` 建立隔离分支 `codex/t09-three-end-integration`，合入小智 OLED 实现 `d014af453dd95fab9ad6af24b25d54b6c3c8561e`；保留桌面 HID `0x12` 发送器、EasyInput 状态桥和冻结 DeskMate Link，未改写冻结协议。整合 merge 为 `86ca15c763351c7141d2337dad39f246ab41e21a`。

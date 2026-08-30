@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Compare partition-table semantics before hashing different read windows
+
+- 现象：ESP-IDF 生成的 `partition-table.bin` 为 3072 字节，但从 Flash 分区表扇区读取 `0x1000` 字节会得到 4096 字节；即使有效表完全相同，整文件 SHA-256 也会因末尾 1024 字节擦除态 `0xFF` 而不同。
+- 做法：先按项目合同核对地址和读取窗口，再解析两份表并比较有效分区条目；比较二进制时锁定生成文件的有效长度，并单独验证读取窗口剩余字节是否全部为 `0xFF`。任何真实条目、有效字节或填充值异常仍须 fail closed。
+- 规则：不同长度的分区表文件不得只凭整文件哈希判定布局不一致；“有效表哈希 + 解析条目 + 尾部擦除态”必须作为一个完整校验门。
+
 ## Validate bounded input length before reading its discriminator
 
 - 现象：Feature Report 归一化函数已经拒绝空指针，但在判断 `length == 0` 前先读取了 `buffer[0]`；正常平台回调不会传该组合，Host 边界仍允许零长度非空缓冲暴露逻辑越界。
