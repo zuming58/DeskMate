@@ -58,6 +58,29 @@ void normalizes_both_tinyusb_shapes() {
         kAgentStateReportId, wire.data(), wire.size(), view));
     CHECK(!normalize_agent_state_feature_report(0x13, wire.data(), wire.size(), view));
     CHECK(!normalize_agent_state_feature_report(0, payload.data(), payload.size(), view));
+
+    std::array<std::uint8_t, 64> windows_wire{};
+    windows_wire[0] = kAgentStateReportId;
+    std::copy(payload.begin(), payload.end(), windows_wire.begin() + 1);
+    CHECK(normalize_agent_state_feature_report(
+        0, windows_wire.data(), windows_wire.size(), view));
+    CHECK(view.payload == windows_wire.data() + 1 &&
+          view.length == payload.size());
+    CHECK(normalize_agent_state_feature_report(
+        kAgentStateReportId, windows_wire.data(), windows_wire.size(), view));
+    windows_wire[63] = 1;
+    CHECK(!normalize_agent_state_feature_report(
+        0, windows_wire.data(), windows_wire.size(), view));
+
+    std::array<std::uint8_t, 63> tinyusb_padded{};
+    std::copy(payload.begin(), payload.end(), tinyusb_padded.begin());
+    CHECK(normalize_agent_state_feature_report(
+        kAgentStateReportId, tinyusb_padded.data(), tinyusb_padded.size(), view));
+    CHECK(view.payload == tinyusb_padded.data() &&
+          view.length == payload.size());
+    tinyusb_padded[62] = 1;
+    CHECK(!normalize_agent_state_feature_report(
+        kAgentStateReportId, tinyusb_padded.data(), tinyusb_padded.size(), view));
 }
 
 void decodes_maker_and_deskmate_versions() {

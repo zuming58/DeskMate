@@ -1,5 +1,17 @@
 # Lessons learned
 
+## HID Feature reports use the top-level collection length on Windows
+
+- 现象：冻结的 `0x12` 业务 payload 只有 16 字节，但同一 HID 顶层集合还包含
+  更大的 63 字节 Feature payload；如果 Windows 只向 `HidD_SetFeature` 传
+  `report ID + 16`，平台合同和设备实际 callback 形态会不一致。
+- 做法：从 `HIDP_CAPS.FeatureReportByteLength` 锁定 Windows 写入缓冲长度为
+  64，前 17 字节放 report ID 与业务字段，其余 47 字节全零。固件在 TinyUSB
+  边界同时接受独立/内嵌 report ID 的紧凑和补零形态，并严格拒绝非零 padding。
+- 规则：HID 业务 payload 长度与 Windows 顶层集合传输长度必须分开记录；
+  黄金向量既要锁语义字节，也要锁平台补零和 callback 归一化，不能让填充进入
+  业务协议或被宽松忽略。
+
 ## Optional capability failure must not tear down the transport baseline
 
 - 现象：小智显示端按冻结合同在 OLED 初始化或渲染失败时移除 DISPLAY enabled，但保留 CORE、AGENT_STATE 与 Link；EasyInput 首版却把 DISPLAY 当成能力握手的硬条件，并沿用不含显示状态位的旧掩码，导致合法显示降级会被误判成整条 Link 失败。

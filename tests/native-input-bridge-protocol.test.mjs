@@ -43,9 +43,20 @@ test("native fixed-text path is bounded, private, and main-process authorized", 
   assert.match(protocol, /if \(_next != 0\).*?ResetActive\(\);.*?return false;/s);
 });
 
+test("native agent-state writer validates the frozen report before HidD_SetFeature", () => {
+  const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
+  const protocol = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "VendorReportProtocol.cs"), "utf8");
+  assert.match(source, /commandType == "set-agent-state"/);
+  assert.match(source, /VendorReportProtocol\.IsValidAgentStateReport\(report\)/);
+  assert.match(source, /WriteAgentStateReport\(byte\[\] report\)/);
+  assert.match(source, /HidD_SetFeature\(handle, report, report\.Length\)/);
+  assert.match(protocol, /report\.Length != 64 \|\| report\[0\] != 0x12 \|\| report\[1\] != 2/);
+  assert.match(protocol, /report\.Slice\(17\)\.ContainsAnyExcept\(\(byte\)0\)/);
+});
+
 test("native active-window paste validates the exact target and releases modifiers on failure", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
-  assert.match(source, /type\.GetString\(\) == "paste-active-window"/);
+  assert.match(source, /commandType == "paste-active-window"/);
   assert.match(source, /foreground != expectedWindow/);
   assert.match(source, /NativeInput\.Key\(VkControl, false\).*NativeInput\.Key\(VkV, false\).*NativeInput\.Key\(VkV, true\).*NativeInput\.Key\(VkControl, true\)/s);
   assert.match(source, /desktop-output-send-input-incomplete/);
@@ -54,7 +65,7 @@ test("native active-window paste validates the exact target and releases modifie
 
 test("native target capture returns a handle without window metadata", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
-  assert.match(source, /type\.GetString\(\) == "capture-active-window"/);
+  assert.match(source, /commandType == "capture-active-window"/);
   assert.match(source, /CaptureActiveWindow\(\)/);
   assert.match(source, /DesktopWindowResult\(string requestId, bool ok, string reason, string targetWindow\)/);
   assert.doesNotMatch(source, /DesktopWindowResult\([^)]*(title|path)/i);

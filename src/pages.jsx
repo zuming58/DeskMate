@@ -407,6 +407,7 @@ export function VoicePage({ notify }) {
   const realtimeWantedRef = useRef(false);
   const pendingRealtimeAudioRef = useRef([]);
   const workflowRef = useRef("input");
+  const hardwareVoiceSourceRef = useRef("voice-workflow");
   const handleComplete = useCallback(async (item) => {
     const workflow = workflowRef.current === "edit" ? "edit" : "input";
     dispatchSession({ type: "transition", state: "transcribing", detail: { message: "正在发送到千问语音识别" } });
@@ -524,13 +525,14 @@ export function VoicePage({ notify }) {
     realtimeAttemptRef.current += 1;
     pendingRealtimeAudioRef.current = [];
   };
-  toggleRef.current = async (requestedPhase, requestedWorkflow = "input") => {
+  toggleRef.current = async (requestedPhase, requestedWorkflow = "input", requestedSource = "voice-workflow") => {
     if (processingRef.current) return { ignored: true, reason: "processing" };
     const phase = typeof requestedPhase === "string" && ["start", "stop"].includes(requestedPhase) ? requestedPhase : null;
     if (phase === "start" && status === "recording") return { ignored: true, reason: "already-recording" };
     if (phase === "stop" && status !== "recording") return { ignored: true, reason: "not-recording" };
     const starting = phase ? phase === "start" : status !== "recording";
     if (starting) {
+      hardwareVoiceSourceRef.current = requestedSource === "simulation" || state.settings.sttMode === "mock" ? "simulation" : "voice-workflow";
       workflowRef.current = requestedWorkflow === "edit" ? "edit" : "input";
       setLiveTranscript("");
       dispatchSession({ type: "transition", state: "recording", detail: { message: workflowRef.current === "edit" ? "正在聆听对选中文字的编辑要求" : "正在使用电脑麦克风录音" } });
@@ -560,7 +562,7 @@ export function VoicePage({ notify }) {
     cancel();
     setProcessing(false);
     dispatchSession({ type: "reset" });
-    voiceAdapters.desktop.setVoiceState({ state: "cancelled", message: "已取消当前语音输入", floating: state.settings.floating }).catch(() => {});
+    voiceAdapters.desktop.setVoiceState({ state: "cancelled", message: "已取消当前语音输入", floating: state.settings.floating, source: hardwareVoiceSourceRef.current }).catch(() => {});
   };
   const recordingRef = useRef(recording); recordingRef.current = recording;
   useEffect(() => globalThis.desktopBridge?.onBailianRealtimeEvent?.((event) => {
@@ -572,10 +574,10 @@ export function VoicePage({ notify }) {
     else if (event.kind === "ready") setRealtimeStatus("ready");
     else if (["finished", "closed"].includes(event.kind)) setRealtimeStatus("finished");
   }), []);
-  useEffect(() => deviceEventBus.subscribe((event) => { setLastDeviceEvent(event); if (event.type === "voice-toggle") toggleRef.current(event.payload.phase, event.payload.workflow); if (event.type === "voice-cancel") cancelRef.current(); if (event.type === "connection-change" && !event.payload.connected && recordingRef.current) { stop(); notify("EasyInput 已断线，当前录音已安全停止并保留"); } }), [notify, stop]);
+  useEffect(() => deviceEventBus.subscribe((event) => { setLastDeviceEvent(event); if (event.type === "voice-toggle") toggleRef.current(event.payload.phase, event.payload.workflow, event.source === "simulator" ? "simulation" : "voice-workflow"); if (event.type === "voice-cancel") cancelRef.current(); if (event.type === "connection-change" && !event.payload.connected && recordingRef.current) { stop(); notify("EasyInput 已断线，当前录音已安全停止并保留"); } }), [notify, stop]);
   useEffect(() => { voiceAdapters.desktop.setVoiceRecording(recording).catch(() => {}); }, [recording]);
   useEffect(() => {
-    voiceAdapters.desktop.setVoiceState({ state: session.state, message: session.message, transcript: session.state === "recording" ? liveTranscript : "", seconds, level, floating: state.settings.floating }).catch(() => {});
+    voiceAdapters.desktop.setVoiceState({ state: session.state, message: session.message, transcript: session.state === "recording" ? liveTranscript : "", seconds, level, floating: state.settings.floating, source: state.settings.sttMode === "mock" ? "simulation" : hardwareVoiceSourceRef.current }).catch(() => {});
   }, [level, liveTranscript, seconds, session.message, session.state, state.settings.floating]);
   useEffect(() => { voiceAdapters.desktop.capabilities().then(setDesktopCaps).catch(() => setDesktopCaps({ supported: false, shortcutRegistered: false })); }, [state.settings.voiceShortcut]);
   useEffect(() => {

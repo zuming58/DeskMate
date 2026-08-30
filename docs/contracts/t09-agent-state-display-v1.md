@@ -9,9 +9,22 @@ board-to-board protocol.
 
 ## Host to EasyInput
 
-Report `0x12` has exactly 16 payload bytes. TinyUSB may provide the report ID
-separately or as byte zero of a 17-byte buffer; both forms are accepted and all
-other lengths or IDs fail closed.
+Report `0x12` has exactly 16 semantic payload bytes. Windows
+`HidD_SetFeature` requires the caller buffer to match the top-level
+collection's `FeatureReportByteLength`; this collection is 64 bytes because
+another Feature report is larger. The Windows bridge therefore sends report ID
+`0x12`, the 16 semantic bytes and 47 trailing zero bytes.
+
+TinyUSB may deliver the report ID separately or inline. The receiver accepts
+only four shapes: 16 bytes with a separate ID, 17 bytes with an inline ID, 63
+bytes with a separate ID and zero padding, or 64 bytes with an inline ID and
+zero padding. Padding is transport-only and is never part of the business
+payload. A wrong ID, any other length or any non-zero padding fails closed.
+
+Platform basis:
+
+- [Microsoft `HidD_SetFeature`](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidsdi/nf-hidsdi-hidd_setfeature)
+- [Microsoft `HIDP_CAPS.FeatureReportByteLength`](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/ns-hidpi-_hidp_caps)
 
 | Byte | Meaning |
 | --- | --- |
@@ -76,8 +89,9 @@ Only counters and coarse states may be reported: accepted, malformed,
 duplicate, expired, dropped-disconnected, forwarded and acknowledged. Payload,
 source hash, window title, text, device path and user data are forbidden.
 
-Code-only acceptance requires golden vectors for both HID versions, both
-TinyUSB delivery shapes, malformed inputs, duplicate/restart behavior, TTL,
+Code-only acceptance requires golden vectors for both HID versions, all four
+TinyUSB/Windows delivery shapes, non-zero padding, malformed inputs,
+duplicate/restart behavior, TTL,
 disconnect/reconnect/no-replay, capability gating, OLED init failure and all
 T02-T08 regressions. Hardware acceptance remains a separate user-authorized
 step after the unfinished T08 signal-disconnect and combined regression checks.

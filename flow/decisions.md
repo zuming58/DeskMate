@@ -1,5 +1,19 @@
 # Decisions
 
+## D034 — Windows HID transport padding is not protocol payload
+
+- Date: 2026-08-30
+- Decision: T09 Agent-state semantics remain exactly 16 bytes. The Windows
+  native bridge sends a 64-byte Feature report because the HID top-level
+  collection advertises `FeatureReportByteLength=64`; bytes after report ID
+  plus the 16 semantic bytes must be zero.
+- Receiver rule: EasyInput accepts compact 16/17-byte TinyUSB forms and padded
+  63/64-byte forms only when every transport padding byte is zero. No other
+  length or padding is tolerated.
+- Ownership: renderer publishes only semantic VoiceWorkflow state; Electron
+  main owns encoding and the resident native bridge owns `HidD_SetFeature`.
+  Mock, simulator and demo sources cannot enter this path.
+
 ## D033 — T09 reuses existing Agent-state transports
 
 - Date: 2026-08-30

@@ -27,6 +27,48 @@ test("bridge protocol accepts sanitized Host Action and config acknowledgements"
   assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 })), { ...base, type: "config-ack", ok: true, saved: true, bytes: 512, crc16: 0xabcd, phase: 2 });
 });
 
+test("agent-state write acknowledgements expose metadata only", () => {
+  const event = { version: 1, type: "agent-state-write", source: "easyinput-hid", requestId: "agent-12345678", ok: true, reason: "", report: "private", time: "2026-08-21T10:00:00.000Z", sequence: 5 };
+  assert.deepEqual(parseBridgeLine(JSON.stringify(event)), {
+    version: 1, type: "agent-state-write", source: "easyinput-hid", requestId: "agent-12345678", ok: true, reason: "", time: event.time, sequence: 5,
+  });
+  assert.equal(parseBridgeLine(JSON.stringify({ ...event, requestId: "short" })), null);
+});
+
+test("agent-state bridge is latest-wins and never replays after disconnect", async () => {
+  const writes = [];
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: "2026-08-21T10:00:00.000Z", sequence: 1 }));
+
+  const firstReport = Buffer.alloc(64); firstReport[0] = 0x12; firstReport[1] = 2; firstReport[2] = 1;
+  const secondReport = Buffer.from(firstReport); secondReport[2] = 2;
+  const latestReport = Buffer.from(firstReport); latestReport[2] = 3;
+  const first = manager.sendAgentState(firstReport);
+  const superseded = manager.sendAgentState(secondReport);
+  const latest = manager.sendAgentState(latestReport);
+  assert.deepEqual(await superseded, { ok: false, reason: "agent-state-superseded" });
+  assert.equal(writes.length, 1);
+  assert.deepEqual(Object.keys(writes[0]).sort(), ["report", "requestId", "type", "version"].sort());
+  assert.equal(Buffer.from(writes[0].report, "base64").length, 64);
+
+  manager.handleLine(JSON.stringify({ version: 1, type: "agent-state-write", source: "easyinput-hid", requestId: writes[0].requestId, ok: true, reason: "", time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.deepEqual(await first, { ok: true });
+  assert.equal(writes.length, 2);
+  assert.equal(Buffer.from(writes[1].report, "base64")[2], 3);
+
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "disconnected", boardConnected: false, time: "2026-08-21T10:00:00.200Z", sequence: 3 }));
+  assert.deepEqual(await latest, { ok: false, reason: "easyinput-disconnected" });
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: "2026-08-21T10:00:00.300Z", sequence: 4 }));
+  assert.equal(writes.length, 2, "reconnect must not replay an old state");
+  manager.stop();
+});
+
 test("fixed text bridge events expose metadata only", () => {
   const base = { version: 1, source: "easyinput-hid", time: "2026-08-21T10:00:00.000Z", sequence: 9 };
   const ready = parseBridgeLine(JSON.stringify({ ...base, type: "fixed-text", requestId: "fixed-12345678", bytes: 12, text: "private", devicePath: "private" }));

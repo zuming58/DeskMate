@@ -50,6 +50,10 @@ internal static class VendorReportProtocol
         var invalidUtf8 = MakeEnvelope(FixedTextKind, 0, 1, 2);
         invalidUtf8[5] = 0xc3;
         invalidUtf8[6] = 0x28;
+        var agentState = MakeAgentStateReport(2, 0x10203040, 600000, 0x78563412);
+        var invalidAgentPadding = agentState.ToArray();
+        invalidAgentPadding[17] = 1;
+        var invalidAgentTtl = MakeAgentStateReport(0, 1, 1, 0);
 
         return statusReports.Length == 3 &&
                statusReports.All(report => HasValidEnvelope(report)) &&
@@ -71,7 +75,21 @@ internal static class VendorReportProtocol
                !new FixedTextAssembler().Accept(invalidUtf8, out _) &&
                !HasValidEnvelope(hostActionWithPadding) &&
                !HasValidEnvelope(ackWithStreamShape) &&
-               !HasValidEnvelope(outOfRangeChunk);
+               !HasValidEnvelope(outOfRangeChunk) &&
+               IsValidAgentStateReport(agentState) &&
+               !IsValidAgentStateReport(invalidAgentPadding) &&
+               !IsValidAgentStateReport(invalidAgentTtl);
+    }
+
+    public static bool IsValidAgentStateReport(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x12 || report[1] != 2 ||
+            report[2] > 6 || report[3] != 0 || report[4] != 0 ||
+            report.Slice(17).ContainsAnyExcept((byte)0)) return false;
+        var transitionId = BitConverter.ToUInt32(report.Slice(5, 4));
+        var ttlMs = BitConverter.ToUInt32(report.Slice(9, 4));
+        if (transitionId == 0) return false;
+        return report[2] == 0 ? ttlMs == 0 : ttlMs is >= 1 and <= 600000;
     }
 
     private static byte[][] MakeStatusReports(uint requestId, string json)
@@ -116,6 +134,18 @@ internal static class VendorReportProtocol
         report[2] = chunk;
         report[3] = total;
         report[4] = length;
+        return report;
+    }
+
+    private static byte[] MakeAgentStateReport(byte state, uint transitionId, uint ttlMs, uint sourceHash)
+    {
+        var report = new byte[64];
+        report[0] = 0x12;
+        report[1] = 2;
+        report[2] = state;
+        BitConverter.TryWriteBytes(report.AsSpan(5, 4), transitionId);
+        BitConverter.TryWriteBytes(report.AsSpan(9, 4), ttlMs);
+        BitConverter.TryWriteBytes(report.AsSpan(13, 4), sourceHash);
         return report;
     }
 }

@@ -33,6 +33,10 @@ function parseBridgeLine(line) {
     if (!REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     return Object.freeze({ version: 1, type: "config-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: typeof value.reason === "string" ? value.reason.slice(0, 80) : "", time: value.time, sequence: value.sequence });
   }
+  if (value.type === "agent-state-write") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "agent-state-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: typeof value.reason === "string" ? value.reason.slice(0, 80) : "", time: value.time, sequence: value.sequence });
+  }
   if (value.type === "config-ack") {
     if (value.source !== "easyinput-hid" || typeof value.ok !== "boolean" || typeof value.saved !== "boolean" || !Number.isInteger(value.bytes) || value.bytes < 0 || value.bytes > 2048 || !Number.isInteger(value.crc16) || value.crc16 < 0 || value.crc16 > 0xffff || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     return Object.freeze({ version: 1, type: "config-ack", source: "easyinput-hid", ok: value.ok, saved: value.saved, bytes: value.bytes, crc16: value.crc16, phase: Number(value.phase) || 0, time: value.time, sequence: value.sequence });
@@ -89,7 +93,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
-    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) {
         this.reset("easyinput-hid", "F22");

@@ -77,6 +77,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, ok: ok, reason: reason));
 
+    public void AgentStateWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
+        1, "agent-state-write", "easyinput-hid", "AgentState", ok ? "written" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, ok: ok, reason: reason));
+
     public void ConfigAck(bool ok, bool saved, int bytes, int crc16, int phase) => Write(new BridgeEvent(
         1, "config-ack", "easyinput-hid", "Config", ok ? "accepted" : "rejected",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -159,23 +164,34 @@ internal sealed class ConfigCommandListener : IDisposable
     private Task Handle(string line)
     {
         string requestId = "invalid-request";
+        string commandType = "";
         try
         {
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
-            if (type.GetString() == "capture-active-window")
+            commandType = type.GetString()!;
+            if (commandType == "set-agent-state")
+            {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-agent-state-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (!VendorReportProtocol.IsValidAgentStateReport(report)) throw new InvalidOperationException("invalid-agent-state-report");
+                var agentResult = HidFeatureDevice.WriteAgentStateReport(report);
+                _writer.AgentStateWrite(requestId, agentResult.ok, agentResult.reason);
+                return Task.CompletedTask;
+            }
+            if (commandType == "capture-active-window")
             {
                 var capture = RawInputWindow.CaptureActiveWindow();
                 _writer.DesktopWindowResult(requestId, capture.ok, capture.reason, capture.targetWindow);
                 return Task.CompletedTask;
             }
-            if (type.GetString() == "paste-active-window")
+            if (commandType == "paste-active-window")
             {
                 if (!root.TryGetProperty("targetWindow", out var targetValue) || !ulong.TryParse(targetValue.GetString(), out var target) || target == 0)
                     throw new InvalidOperationException("invalid-active-window-command");
@@ -183,7 +199,7 @@ internal sealed class ConfigCommandListener : IDisposable
                 _writer.DesktopOutputResult(requestId, output.ok, output.reason);
                 return Task.CompletedTask;
             }
-            if (type.GetString() == "inject-fixed-text")
+            if (commandType == "inject-fixed-text")
             {
                 if (!root.TryGetProperty("expiresUnixMs", out var expiryValue) || !expiryValue.TryGetInt64(out var expiry) ||
                     !root.TryGetProperty("blockedProcessId", out var processValue) || !processValue.TryGetUInt32(out var blockedProcessId) ||
@@ -199,7 +215,7 @@ internal sealed class ConfigCommandListener : IDisposable
                 _writer.FixedTextResult(requestId, injection.ok, injection.reason, injection.bytes);
                 return Task.CompletedTask;
             }
-            if (type.GetString() == "read-config") {
+            if (commandType == "read-config") {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-report");
                 var report = Convert.FromBase64String(reportValue.GetString() ?? "");
                 if (report.Length != 64 || report[0] != 0x13 || report[1] != (byte)'S' || report[2] != (byte)'3' || report[3] != (byte)'R' || report[4] != 1 || report[9] > 2 || report.AsSpan(10).ContainsAnyExcept((byte)0)) throw new InvalidOperationException("invalid-read-report");
@@ -210,7 +226,7 @@ internal sealed class ConfigCommandListener : IDisposable
                 if (!readAccepted) { RawInputWindow.CancelRead(requestId); _writer.ConfigWrite(requestId, false, "config-read-request-failed"); return Task.CompletedTask; }
                 return Task.CompletedTask;
             }
-            if (type.GetString() != "sync-config") throw new InvalidOperationException("invalid-command");
+            if (commandType != "sync-config") throw new InvalidOperationException("invalid-command");
             if (!root.TryGetProperty("reports", out var reportsValue) || reportsValue.ValueKind != JsonValueKind.Array || reportsValue.GetArrayLength() is < 1 or > 40)
                 throw new InvalidOperationException("invalid-reports");
             var reports = new List<byte[]>();
@@ -225,7 +241,9 @@ internal sealed class ConfigCommandListener : IDisposable
         }
         catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException)
         {
-            _writer.ConfigWrite(requestId, false, error.Message.Length <= 80 ? error.Message : "invalid-command");
+            var reason = error.Message.Length <= 80 ? error.Message : "invalid-command";
+            if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
+            else _writer.ConfigWrite(requestId, false, reason);
         }
         return Task.CompletedTask;
     }
@@ -272,6 +290,16 @@ internal static class HidFeatureDevice
     {
         using var handle = OpenConfigInterface();
         return handle is not null && !handle.IsInvalid && HidD_SetFeature(handle, report, report.Length);
+    }
+
+    public static (bool ok, string reason) WriteAgentStateReport(byte[] report)
+    {
+        if (!VendorReportProtocol.IsValidAgentStateReport(report)) return (false, "invalid-agent-state-report");
+        using var handle = OpenConfigInterface();
+        if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
+        return HidD_SetFeature(handle, report, report.Length)
+            ? (true, "")
+            : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
     }
 
     private static SafeFileHandle? OpenConfigInterface()

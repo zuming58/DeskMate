@@ -21,6 +21,7 @@ const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWi
 const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capture.cjs");
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
 const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
+const { AgentStatePublisher } = require("./agent-state-hid.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -58,6 +59,9 @@ let pendingEditShortcutTimer = null;
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
+const agentStatePublisher = new AgentStatePublisher({
+  send: (report) => inputBridge?.sendAgentState(report) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+});
 
 function loadTextModelSecret() {
   if (aiServiceStore?.status().text.configured) return aiServiceStore.loadTextSecret();
@@ -222,18 +226,18 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
     voiceTargetWindow = null;
     voiceEditContext = null;
     if (workflow === "edit") {
-      updateVoiceState({ state: "organizing", message: "正在读取选中文字…", floating: lastVoiceState.floating });
+      updateVoiceState({ state: "organizing", message: "正在读取选中文字…", floating: lastVoiceState.floating, source: "voice-workflow" });
       const windowId = await getForegroundWindowId().catch(() => null);
       if (!windowId || captureToken !== voiceTargetCaptureToken) {
         sendToMain("voice-edit-error", { source, reason: "no-captured-target", at: new Date().toISOString() });
-        updateVoiceState({ state: "error", message: "未能锁定原输入窗口", floating: lastVoiceState.floating });
+        updateVoiceState({ state: "error", message: "未能锁定原输入窗口", floating: lastVoiceState.floating, source: "voice-workflow" });
         return { ignored: true, reason: "no-captured-target" };
       }
       const selection = await captureVoiceEditSelection(windowId);
       if (!selection.ok || captureToken !== voiceTargetCaptureToken) {
         sendToMain("voice-edit-error", { source, reason: selection.reason || "selection-capture-failed", at: new Date().toISOString() });
         const message = selection.reason === "selection-empty" ? "没有检测到选中文字" : selection.reason === "selection-too-long" ? "选中文字过长" : selection.reason === "target-window-changed" ? "原输入窗口已经变化" : "未能读取选中文字";
-        updateVoiceState({ state: "error", message, floating: lastVoiceState.floating });
+        updateVoiceState({ state: "error", message, floating: lastVoiceState.floating, source: "voice-workflow" });
         return { ignored: true, reason: selection.reason || "selection-capture-failed" };
       }
       voiceTargetWindow = windowId;
@@ -362,6 +366,7 @@ function positionAndShowOverlay() {
 
 function updateVoiceState(value = {}) {
   const state = VOICE_STATES.has(value.state) ? value.state : "error";
+  void agentStatePublisher.publishVoiceState({ state, source: value.source });
   lastVoiceState = {
     state,
     message: String(value.message || "").slice(0, 240),

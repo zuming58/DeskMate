@@ -22,6 +22,8 @@ class InputBridgeManager extends EventEmitter {
     this.pendingFixedText = null;
     this.pendingPaste = null;
     this.pendingCapture = null;
+    this.pendingAgentState = null;
+    this.queuedAgentState = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null };
   }
 
@@ -55,7 +57,10 @@ class InputBridgeManager extends EventEmitter {
       this.restartAttempts = 0;
       this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null }) };
       this.emit("status", this.snapshot());
-      if (!event.boardConnected) this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
+      if (!event.boardConnected) {
+        this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
+        this.failAllAgentStates("easyinput-disconnected");
+      }
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
     if (result.kind === "config-ack" && this.pendingConfig) {
@@ -83,6 +88,9 @@ class InputBridgeManager extends EventEmitter {
     }
     if (result.kind === "desktop-window-result" && this.pendingCapture?.requestId === event.requestId) {
       this.finishCapture(event.ok ? { ok: true, targetWindow: event.targetWindow } : { ok: false, reason: event.reason || "foreground-window-unavailable" });
+    }
+    if (result.kind === "agent-state-write" && this.pendingAgentState?.requestId === event.requestId) {
+      this.finishAgentState(event.ok ? { ok: true } : { ok: false, reason: event.reason || "agent-state-write-failed" }, event.requestId);
     }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
@@ -159,6 +167,61 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
+  sendAgentState(value) {
+    const report = Buffer.isBuffer(value) ? Buffer.from(value) : value instanceof Uint8Array ? Buffer.from(value) : null;
+    if (!report || report.length !== 64 || report[0] !== 0x12) return Promise.resolve({ ok: false, reason: "agent-state-report-invalid" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+
+    return new Promise((resolve) => {
+      const entry = { requestId: `agent-${randomUUID()}`, report, resolve, timeout: null };
+      if (this.pendingAgentState) {
+        if (this.queuedAgentState) this.queuedAgentState.resolve({ ok: false, reason: "agent-state-superseded" });
+        this.queuedAgentState = entry;
+        return;
+      }
+      this.dispatchAgentState(entry);
+    });
+  }
+
+  dispatchAgentState(entry) {
+    if (!this.child?.stdin?.writable || !this.status.boardConnected) {
+      entry.resolve({ ok: false, reason: this.status.boardConnected ? "input-bridge-unavailable" : "easyinput-not-connected" });
+      return;
+    }
+    entry.timeout = this.setTimer(() => this.finishAgentState({ ok: false, reason: "agent-state-write-timeout" }, entry.requestId), 1500);
+    this.pendingAgentState = entry;
+    const command = { version: 1, type: "set-agent-state", requestId: entry.requestId, report: entry.report.toString("base64") };
+    this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => {
+      if (error) this.finishAgentState({ ok: false, reason: "input-bridge-write-failed" }, entry.requestId);
+    });
+  }
+
+  finishAgentState(result, requestId = null) {
+    const pending = this.pendingAgentState;
+    if (!pending || (requestId && pending.requestId !== requestId)) return;
+    this.pendingAgentState = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+    const queued = this.queuedAgentState;
+    this.queuedAgentState = null;
+    if (!queued) return;
+    if (!this.child?.stdin?.writable || !this.status.boardConnected) queued.resolve({ ok: false, reason: "easyinput-disconnected" });
+    else this.dispatchAgentState(queued);
+  }
+
+  failAllAgentStates(reason) {
+    const pending = this.pendingAgentState;
+    const queued = this.queuedAgentState;
+    this.pendingAgentState = null;
+    this.queuedAgentState = null;
+    if (pending) {
+      this.clearTimer(pending.timeout);
+      pending.resolve({ ok: false, reason });
+    }
+    if (queued) queued.resolve({ ok: false, reason });
+  }
+
   requestRead(flag, mode) {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
@@ -230,6 +293,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishFixedText({ ok: false, reason: "input-bridge-exited", bytes: 0 });
     this.finishPaste({ ok: false, reason: "input-bridge-exited" });
     this.finishCapture({ ok: false, reason: "input-bridge-exited" });
+    this.failAllAgentStates("input-bridge-exited");
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -251,6 +315,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishFixedText({ ok: false, reason: "input-bridge-stopped", bytes: 0 });
     this.finishPaste({ ok: false, reason: "input-bridge-stopped" });
     this.finishCapture({ ok: false, reason: "input-bridge-stopped" });
+    this.failAllAgentStates("input-bridge-stopped");
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null };

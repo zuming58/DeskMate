@@ -17,6 +17,11 @@ void increment_saturated(std::uint32_t& value) {
     if (value != std::numeric_limits<std::uint32_t>::max()) ++value;
 }
 
+bool padding_is_zero(const std::uint8_t* begin, const std::uint8_t* end) {
+    return std::all_of(begin, end,
+                       [](std::uint8_t value) { return value == 0; });
+}
+
 bool map_maker_state(std::uint8_t state, LinkAgentState& mapped) {
     switch (state) {
         case 0: mapped = LinkAgentState::Idle; return true;
@@ -35,17 +40,27 @@ bool normalize_agent_state_feature_report(
     AgentStateFeatureReportView& out) {
     out = {};
     if (buffer == nullptr) return false;
-    if (length == kAgentStatePayloadBytes + 1 &&
-        buffer[0] == kAgentStateReportId) {
+    const bool inline_report_id =
+        buffer[0] == kAgentStateReportId &&
+        (length == kAgentStatePayloadBytes + 1 ||
+         (length == 64 &&
+          padding_is_zero(buffer + kAgentStatePayloadBytes + 1,
+                          buffer + length)));
+    if (inline_report_id) {
         if (report_id != 0 && report_id != kAgentStateReportId) return false;
         out = {buffer + 1, kAgentStatePayloadBytes};
         return true;
     }
-    if (report_id != kAgentStateReportId ||
-        length != kAgentStatePayloadBytes) {
+    const bool separate_report_id =
+        report_id == kAgentStateReportId &&
+        (length == kAgentStatePayloadBytes ||
+         (length == 63 &&
+          padding_is_zero(buffer + kAgentStatePayloadBytes,
+                          buffer + length)));
+    if (!separate_report_id) {
         return false;
     }
-    out = {buffer, length};
+    out = {buffer, kAgentStatePayloadBytes};
     return true;
 }
 
