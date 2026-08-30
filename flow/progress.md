@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T09 three-end visible state path accepted; physical reconnect regression deferred
+
+- What was confirmed: the live Desktop -> EasyInput -> DeskMate Link -> Xiaozhi OLED path stayed `connected`, RX/TX counters advanced without new timeouts, and the user visibly accepted all seven frozen states. `thinking` automatically returned to neutral idle after TTL, and a rapid `listening -> thinking -> working -> completed` sequence ended at the latest happy scene without queue drops.
+- Evidence: the final matrix snapshot reached RX/TX `137/149` with agent `accepted=10`, `forwarded=12`, and zero malformed/disconnected/queue drops; latest-wins then reached RX/TX `151/163`, `accepted=14`, `forwarded=16`, and zero queue drops. Full evidence is in `docs/testing/t09-three-end-agent-state-acceptance-2026-08-31.md`.
+- Safety interpretation: this closes the visible state, TTL, and latest-wins HIL slices only. Servo PWM remains uninitialized and Xiaozhi audio remains disabled. The user is away and only has remote control, so no physical reset, wire disconnect, flash or mechanical action will be attempted.
+- Next: preserve the powered/wired hardware, defer T09.1 physical reset/reconnect/no-stale-replay regression until the user is present, and proceed only with T10A's host-testable motion safety core and calibration gates. T10A must not add PWM, board pins, motion messages, or a production call site.
+
 ## 2026-08-31 - T09.1 normal boot confirms Xiaozhi UART startup; Link read paused
 
 - User-visible HIL: after the exact-readback-confirmed T09.1 app was normally reset without BOOT, Xiaozhi displayed the neutral two-eye scene rather than the new startup error scene. Under this candidate's explicit startup diagnostic, that confirms OLED initialization, UART0 driver installation and the DeskMate Link task all returned successfully.
