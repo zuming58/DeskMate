@@ -1,52 +1,55 @@
 # T08 Xiaozhi Link endpoint Phase B handoff
 
-Status: `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_PINOUT_BLOCKED / HARDWARE_NOT_AUTHORIZED`
+Status: `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / PARTITION_CONTRACT_RESTORED / HARDWARE_PINOUT_VERIFIED / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_NOT_AUTHORIZED`
 
 ## Baseline and contract ancestry
 
 - Worktree: `F:\Codex\deskmate-t08-xiaozhi`.
 - Branch: `codex/xiaozhi-t08-link-endpoint`.
-- Required Phase B starting HEAD: `503315e96dc7fbb23a01a308c0164c5bfe767e25`.
-- Frozen contract commit: `c8b8a344a72a849640c8b19575768d6daf4d6667`.
-- Contract merge commit: `a6547c31027141fd35c49690ff39ec6d1cb5f0ac`.
-- Phase B implementation commit: `915cd0a5c4aedc87a227564a4b09b3d478acf061`.
-- `git merge-base --is-ancestor c8b8a344a72a849640c8b19575768d6daf4d6667 HEAD` returned `0`. The frozen `contracts/deskmate-link/v1.md` and shared `golden-vectors-v1.json` were consumed read-only and were not rewritten.
-- Changes are limited to `firmware/xiaozhi-yuntai/` and T08 Xiaozhi provenance, task, progress and handoff documents. EasyInput firmware, desktop software, T07 UI, VoiceWorkflow and T09 were not modified.
+- This blocker-closure package started exactly at `db52e883156b5a4a6e63c0954eb7e3073d3b8aae`.
+- Frozen contract commit: `c8b8a344a72a849640c8b19575768d6daf4d6667`; it remains an ancestor and the frozen contract/golden vectors were not rewritten.
+- Verified blocker-closure implementation commit: `7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5`.
+- Changes are limited to `firmware/xiaozhi-yuntai/` plus T08 Xiaozhi provenance, task, progress and handoff documents. EasyInput firmware, desktop software, T07 UI, VoiceWorkflow and T09 were not modified.
 
-## Delivered Phase B surface
+## Frozen protocol preservation
 
-- Exact `DMLK` frame encoding and streaming parsing, CRC16-CCITT-FALSE, 100 ms incomplete-candidate timeout, maximum 128-byte payload and 144-byte frame.
-- Recovery across fragmentation, concatenated frames, startup noise, invalid framing fields, bad CRC, oversized length and UART RX overflow.
-- `HELLO`, `GET_CAPABILITIES`, `GET_STATUS` and `SET_AGENT_STATE`, with one-byte semantic error responses.
-- Last-eight exact request/response cache keyed by controller boot ID and sequence, byte-identical duplicate replay, conflicting sequence rejection, controller epoch invalidation and random non-zero Xiaozhi boot epoch.
-- A pure C++ transport boundary, Host-only fake UART and one bounded UART owner. The ESP-IDF adapter is fixed to UART0, 115200 baud, 8N1, no flow control, a 512-byte RX driver buffer and one write site.
-- `SET_AGENT_STATE` only changes RAM. T08 advertises only `LINK_CORE | AGENT_STATE`; DISPLAY, MOTION and AUDIO remain clear.
+The audited Phase B implementation remains unchanged: strict `DMLK` encoding/stream parsing, CRC16-CCITT-FALSE, frozen framing/error semantics, `HELLO`, `GET_CAPABILITIES`, `GET_STATUS`, `SET_AGENT_STATE`, last-eight exact duplicate cache, conflicting-sequence rejection, boot epoch handling, bounded RX recovery and one UART owner. `SET_AGENT_STATE` still only changes RAM. DISPLAY, MOTION and AUDIO remain disabled; no OLED, servo, PWM/LEDC, microphone, amplifier, speaker or I2S initialization was added.
 
-The project does not initialize or access OLED, servos, PWM/LEDC, microphone, amplifier, speaker or I2S. If the owner task cannot be created after a future authorized pinout unlock, the UART driver is immediately deleted so the startup path fails closed.
+## Restored 16 MiB partition contract
+
+- Source: read-only `F:\Codex\xiaozhi-yuntai\partitions\v1\16m.csv`, 329 bytes, SHA-256 `5F9FA5E46E092D5571D19DA7B8956F6F9BFD5B7F603799B24D8DFCE769E30C14`.
+- Product copy: `firmware/xiaozhi-yuntai/partitions/v1/16m.csv`, byte-identical with the same SHA-256.
+- Layout: NVS `0x9000/0x4000`, OTA data `0xD000/0x2000`, PHY `0xF000/0x1000`, model `0x10000/0xF0000`, OTA_0 `0x100000/0x600000`, OTA_1 `0x700000/0x600000`.
+- `sdkconfig.defaults` selects the custom table, root CMake rejects a different table, and Host tests assert every row.
+- The clean build's `app-flash_args` contains `0x100000 deskmate_xiaozhi_yuntai.bin`. The generated partition table binary is 3,072 bytes with SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`.
+
+Source, license and adoption details are in `docs/provenance/t08-xiaozhi-partition-contract-audit.md`. No build artifact was copied or committed.
 
 ## UART pinout and console conclusion
 
-- Read-only reference `F:\Codex\xiaozhi-yuntai` still has no `.git`; the exact reference commit remains `UNKNOWN`. Its root license is MIT and project version is `1.9.0`.
-- The selected board source assigns OLED GPIO41/42, servos GPIO11/12, buttons GPIO0/40/39, microphone GPIO5/4/6, amplifier GPIO15/16/7 and LED GPIO48; it does not assign GPIO43/44.
-- The reviewed board close-up visibly labels adjacent `GND`, `TX` and `RX` pads. ESP-IDF v5.5.3 defines ESP32-S3 UART0 default IOMUX TX GPIO43/RX GPIO44, but neither negative source occupancy nor the SoC default proves the PCB net from the labeled pads.
-- No selected-board schematic, PCB net file or powered-off continuity record was found. `board_link_pinout.h` therefore remains `verified=false`, `tx_gpio=-1`, `rx_gpio=-1`; startup returns `HARDWARE_PINOUT_BLOCKED` before UART driver installation, GPIO configuration or owner task creation.
-- Application console, secondary console, bootloader logs and application logs are disabled. No eFuse is written. Unavoidable ROM startup bytes are treated as noise and covered by parser resynchronization tests.
+- The firmware reference still has no `.git`; exact reference commit remains `UNKNOWN`. Its root license is MIT and project version is `1.9.0`.
+- The reference README identifies the public OSHWHub project. Its recommended Board1_2 revision has PCB connector H2 pad 1/2/3 on `GND/TX/RX`; the same revision's schematic connects `TX/RX` to module `TXD0/RXD0`.
+- Espressif's ESP32-S3 definition maps U0TXD/U0RXD to GPIO43/GPIO44. This closes the board-level mapping as physical GND, TX GPIO43 and RX GPIO44.
+- `board_link_pinout.h` now records `verified=true`, TX43 and RX44. A pure compile-time install plan rejects unverified, negative and same-pin configurations before any ESP-IDF driver call; Host tests prove both the blocked and verified paths.
+- The only owner remains UART0 at 115200/8N1/no flow control with a 512-byte RX buffer and one write site. Application/secondary consoles, bootloader logs and application logs remain off. No eFuse is written; parser resynchronization still handles ROM startup bytes as noise.
 
-Detailed evidence and file hashes are in `docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md`.
+Exact public-project IDs, response hashes and the board net table are in `docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md`.
 
-## Verification at the implementation commit
+## Verification at implementation commit `7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5`
 
-- Host CTest: `6/6` passed: endpoint model, fake UART, frozen protocol/golden vectors, endpoint semantics, bounded UART owner and production-source safety contract.
-- Toolchain: `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`, target `esp32s3`, clean single-thread build completed.
-- Application image at `915cd0a5c4aedc87a227564a4b09b3d478acf061`: 150,432 bytes (`0x24BA0`).
-- SHA-256: `F53334BF7AC7AE49D359C142D03F7236A25866B86FED8038E717F7265FAFA285`.
-- Compile-only default factory partition: 1 MiB, `0xDB460` bytes (86%) free. It is not an approved final Flash/OTA/recovery layout and the image is not authorized for flashing.
-- `git diff --check`, ownership, frozen-contract immutability, ASCII paths, mirrored AGENTS/CLAUDE rules, source/license, secret/privacy scan and ignored build-output checks passed.
+- Host CTest: `7/7` passed: endpoint model, fake UART, frozen protocol/golden vectors, endpoint semantics, bounded UART owner, board pinout gate and production-source/partition safety contract.
+- Toolchain: `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`, target `esp32s3`, clean build in a newly absent build and SDKCONFIG path.
+- Application address: `0x100000`.
+- Application image: 171,424 bytes (`0x29DA0`), 2.72% of the 6 MiB OTA slot; 6,120,032 bytes (`0x5D6260`) remain.
+- Application SHA-256: `C6FF9CCE3704EED980781C83FCE92B6BFDAC853935A59C07C8F042284856C6D9`.
+- Partition table binary: 3,072 bytes (`0xC00`), SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`.
+- Config evidence: custom `partitions/v1/16m.csv`; bootloader log none; application log level none/max 0; primary and secondary console none.
+- `git diff --check`, contract ancestry/immutability, ownership, mirrored AGENTS/CLAUDE, source/license, secret/privacy, ASCII paths and ignored build-output checks passed.
 
 ## Hardware operations and remaining gates
 
-This phase did not scan ports, identify devices, wire boards, read/write/erase Flash, flash firmware, start monitor, write eFuse, initialize OLED/audio or drive a servo. It did not perform T09 or two-board HIL.
+This package did not scan ports, identify devices, connect boards, perform continuity measurement, read/write/erase Flash, flash firmware, start monitor, write eFuse, initialize OLED/audio or drive a servo. It did not start T09 or two-board HIL.
 
-`UNKNOWN` or blocked items remain: exact reference Git commit; selected PCB revision and pad-to-GPIO nets; USB data routing and recovery behavior; independent-power/common-ground/idle-voltage/no-short evidence; physical-header ROM noise; actual Flash/PSRAM devices and final Flash/OTA/recovery layout; servo supply, peak current, center, direction and mechanical limits.
+The pinout and partition source blockers are closed in code, but hardware remains unauthorized. `UNKNOWN` or unverified items include the exact local reference Git commit, USB data/recovery behavior, actual Flash/PSRAM identity, independent-power/common-ground/idle-voltage/no-short evidence, physical-header ROM noise, and servo supply/peak current/center/direction/mechanical limits.
 
-Stop after pushing this handoff. The next action is evidence gathering for the exact Xiaozhi board pinout and a separately authorized electrical/recovery gate. Do not request wiring or flashing while `HARDWARE_PINOUT_BLOCKED` remains.
+Stop after pushing this handoff. Any physical operation requires a new, explicit user authorization after a separate electrical/recovery review.

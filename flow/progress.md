@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T08 Xiaozhi 16 MiB partition and Board1_2 UART pinout blockers closed
+
+- baseline/scope：在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 从用户指定的 `db52e883156b5a4a6e63c0954eb7e3073d3b8aae` 开始，只修改 `firmware/xiaozhi-yuntai/` 和 T08 来源/任务/交接记录。冻结合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 仍为祖先，DeskMate Link 合同、黄金向量和已审计协议实现没有重写；EasyInput 固件、桌面软件、T07、VoiceWorkflow 和 T09 未修改。烧录阻断实现提交为 `7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5`。
+- partition：把只读参考 `F:\Codex\xiaozhi-yuntai\partitions\v1\16m.csv` 以逐字节一致的产品源文件落到 `firmware/xiaozhi-yuntai/partitions/v1/16m.csv`；两者均为 329 字节、SHA-256 `5F9FA5E46E092D5571D19DA7B8956F6F9BFD5B7F603799B24D8DFCE769E30C14`。恢复 NVS `0x9000/0x4000`、OTA data `0xD000/0x2000`、PHY `0xF000/0x1000`、model `0x10000/0xF0000`、OTA_0 `0x100000/0x600000`、OTA_1 `0x700000/0x600000`；sdkconfig、CMake 失败门与 Host 测试共同锁定该表，没有复制或提交构建产物。
+- pinout/console：只读参考 README 指向公开 OSHWHub 板卡。推荐的 Board1_2 PCB 将 H2 pad 1/2/3 分别置于 `GND/TX/RX` 网络，同版原理图把 `TX/RX` 接到模块 `TXD0/RXD0`；结合 Espressif ESP32-S3 的 U0TXD/U0RXD=GPIO43/GPIO44 定义，板级证据门已关闭。生产配置为 `verified=true`、TX43/RX44；纯 C++ 安装计划对未验证、负数或同脚配置 fail-closed，Host 测试锁定“未验证禁止安装”和“验证后只用 43/44”。应用/次控制台、bootloader/application 日志仍关闭，不写 eFuse，ROM 噪声仍由 parser 重同步丢弃。
+- verification：Host CTest `7/7`。在实现提交 `7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5` 上使用精确 `ESP-IDF v5.5.3@2c211b236707889e8400c4dc5644dd5c4ee071e0`、target `esp32s3` 和全新 build/SDKCONFIG 路径完成干净构建；`app-flash_args` 为 `0x100000 deskmate_xiaozhi_yuntai.bin`。app 171,424 字节（`0x29DA0`），仅占 6 MiB 的 2.72%，SHA-256 `C6FF9CCE3704EED980781C83FCE92B6BFDAC853935A59C07C8F042284856C6D9`；分区二进制 3,072 字节，SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`。`git diff --check`、合同祖先/不变性、所有权、AGENTS/CLAUDE 镜像、来源/许可证、密钥/隐私、ASCII 路径和构建产物忽略检查通过。
+- hardware/stop：本轮没有扫描端口、识别设备、接线、通断测量、读写或擦除 Flash、烧录、monitor、写 eFuse、操作 OLED/舵机/音频，也未启动 T09 或两板 HIL。分区和 pinout 的代码阻断已关闭，但电气/恢复与硬件授权仍关闭；独立供电、共地、空闲电压、无短路、USB 恢复、实片 Flash/PSRAM 和舵机电气/机械参数仍为 `UNKNOWN` 或未验收。推送后停止，任何物理操作都必须重新取得用户明确授权。
+
 ## 2026-08-30 · T08 Xiaozhi Link endpoint Phase B completed; hardware pinout remains blocked
 
 - baseline/contract：在隔离工作树 `F:\Codex\deskmate-t08-xiaozhi`、分支 `codex/xiaozhi-t08-link-endpoint` 从要求的 `503315e96dc7fbb23a01a308c0164c5bfe767e25` 开始；以 merge commit `a6547c31027141fd35c49690ff39ec6d1cb5f0ac` 合入冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667`，祖先检查返回 0，合同和共享黄金向量没有重写。Phase B 实现提交为 `915cd0a5c4aedc87a227564a4b09b3d478acf061`；EasyInput 固件、桌面软件、T07 UI、VoiceWorkflow 和 T09 均未修改。
