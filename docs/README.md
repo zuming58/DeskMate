@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T10A motion safety core frozen contract](contracts/t10-motion-safety-core-v1.md)
+- [T10A Xiaozhi motion safety core task](../flow/tasks/T10A-xiaozhi-motion-safety-core.md)
+- [T10 Xiaozhi servo reference audit](provenance/t10-xiaozhi-servo-reference-audit.md)
+- [T09 three-end agent-state HIL acceptance](testing/t09-three-end-agent-state-acceptance-2026-08-31.md)
 - [T09 agent-state display frozen contract](contracts/t09-agent-state-display-v1.md)
 - [T09C desktop agent-state sender task](../flow/tasks/T09C-desktop-agent-state-sender.md)
 - [T09C desktop agent-state sender handoff](handoffs/t09c-desktop-agent-state-sender-2026-08-30.md)

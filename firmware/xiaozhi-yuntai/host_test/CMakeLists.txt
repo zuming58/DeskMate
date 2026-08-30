@@ -12,7 +12,22 @@ set(CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_endpoint.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
 )
+
+add_executable(motion_safety_core_tests
+    motion_safety_core_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+)
+target_include_directories(motion_safety_core_tests PRIVATE "${CORE_INCLUDE_DIR}")
+if(MSVC)
+    target_compile_options(motion_safety_core_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(motion_safety_core_tests PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+    )
+endif()
+add_test(NAME motion_safety_core_tests COMMAND motion_safety_core_tests)
 
 add_executable(display_owner_tests
     display_owner_tests.cpp
@@ -71,6 +86,8 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     OWNER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
     DISPLAY_HEADER_PATH="${CORE_INCLUDE_DIR}/display_owner.h"
     DISPLAY_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
+    MOTION_HEADER_PATH="${CORE_INCLUDE_DIR}/motion_safety_core.h"
+    MOTION_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
     OLED_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.h"
     OLED_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"

@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_THREE_END_INTEGRATED / CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / FINAL_APP_CANDIDATE_REBUILT / IDENTITY_CONFIRMED / RECOVERY_BACKUP_CONFIRMED / APP_FLASH_CONFIRMED / EXACT_READBACK_CONFIRMED / NORMAL_BOOT_CONFIRMED / OLED_IDLE_CONFIRMED / THREE_END_HIL_PENDING`。
+当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10_MOTION_SAFETY_CORE_V1_FROZEN / MOTION_HARDWARE_LOCKED`。T09 的七状态、TTL 回 idle 和 latest-wins 已真机通过；需要用户在场的实体重启/断线不重放回归仍保留为延期项。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -26,6 +26,18 @@ T09 消费冻结的 [`t09-agent-state-display-v1.md`](../../docs/contracts/t09-a
 - SSD1306 128×64、I2C0、SDA GPIO41、SCL GPIO42、地址 `0x3c` 的新过程式单色场景渲染。
 
 Link endpoint 只向 display owner 入队，只有 owner 接受后才 ACK `SET_AGENT_STATE`。`angry` 不参与自动映射。MOTION 和 AUDIO 仍关闭；工程不初始化麦克风、功放、扬声器、I2S、LEDC、PWM 或舵机。参考审计见 [`t09-xiaozhi-agent-display-reference-audit.md`](../../docs/provenance/t09-xiaozhi-agent-display-reference-audit.md)。
+
+## T10A motion safety core
+
+T10A 消费冻结的 [`t10-motion-safety-core-v1.md`](../../docs/contracts/t10-motion-safety-core-v1.md)，只加入 Host 可测的内部运动安全模型：
+
+- 电源路径、共地、双轴中心/方向/限位全部显式验证后才接受校准；
+- 新会话必须回中，旧会话动作全部清空且不重放；
+- 急停/故障 > 回中 > 对话 > 人脸跟随 > 待机的唯一仲裁优先级；
+- 每来源一个有界合并槽、严格序列/过期检查、双轴独立限速和软限位；
+- 急停与故障锁存、只读快照和脱敏计数。
+
+这一核心只有不透明的校准单位，不包含 PWM、脉宽、LEDC、GPIO 或实体适配器，也没有接入 `app_main`。因此当前板上 T09 固件不会因 T10A 源码存在而产生任何机械动作。来源差异见 [`t10-xiaozhi-servo-reference-audit.md`](../../docs/provenance/t10-xiaozhi-servo-reference-audit.md)。
 
 ## Partition contract
 
@@ -65,4 +77,4 @@ idf.py --version
 idf.py -C firmware/xiaozhi-yuntai build
 ```
 
-干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。三端候选已在 `codex/t09-three-end-integration` 汇合；任何接线变更、设备识别、Flash 操作或真机 HIL 仍必须等待最终镜像、恢复资料和用户新的明确授权。
+干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T10A 是 code-only 包，不是烧录候选；任何接线变更、设备识别、Flash 操作或舵机校准仍必须等用户在场并取得新的明确授权。

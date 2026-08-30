@@ -60,6 +60,8 @@ int main() {
     const auto owner_source = ReadAll(OWNER_SOURCE_PATH);
     const auto display_header = ReadAll(DISPLAY_HEADER_PATH);
     const auto display_source = ReadAll(DISPLAY_SOURCE_PATH);
+    const auto motion_header = ReadAll(MOTION_HEADER_PATH);
+    const auto motion_source = ReadAll(MOTION_SOURCE_PATH);
     const auto oled_header = ReadAll(OLED_HEADER_PATH);
     const auto oled_source = ReadAll(OLED_SOURCE_PATH);
     const auto transport_header = ReadAll(TRANSPORT_HEADER_PATH);
@@ -192,10 +194,21 @@ int main() {
                             owner_source + display_header + display_source +
                             transport_header;
     const auto production = link_production + oled_header + oled_source;
+    const auto motion_production = motion_header + motion_source;
     CHECK(!Contains(production, "ESP_LOG"));
     CHECK(!Contains(link_production, "esp_lcd"));
     CHECK(!Contains(production, "driver/ledc"));
     CHECK(!Contains(production, "ledc_"));
+    CHECK(!Contains(motion_production, "driver/ledc"));
+    CHECK(!Contains(motion_production, "ledc_"));
+    CHECK(!Contains(motion_production, "GPIO_NUM_"));
+    CHECK(!Contains(main_source, "MotionSafetyCore"));
+    CHECK(Contains(motion_header, "kEmergencyStopped"));
+    CHECK(Contains(motion_header, "power_path_verified"));
+    CHECK(Contains(motion_header, "direction_verified"));
+    CHECK(Contains(motion_header, "limits_verified"));
+    CHECK(Contains(motion_source, "MotionSource::kRecovery"));
+    CHECK(Contains(motion_source, "ClearPending"));
     CHECK(!Contains(production, "driver/i2s"));
     CHECK(!Contains(production, "i2s_"));
     CHECK(!Contains(production, "esp_codec"));

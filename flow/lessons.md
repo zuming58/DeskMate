@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Reference motion code is behavior evidence, not calibration evidence
+
+- Symptom: the Xiaozhi reference contains nominal centers, ranges, GPIOs and direct LEDC initialization, so copying it would make a new product image move both servos immediately even though the real supply path, direction and mechanical limits remain unverified.
+- Practice: audit the fixed reference first and reuse only bounded behavior such as per-axis limits, small steps and recenter semantics. Put power, common ground, center, direction and limits behind explicit product gates; keep the first motion package pure and disconnected from PWM.
+- Rule: source-confirmed servo constants cannot become device-confirmed calibration. No production call site or actuator adapter is added until a user-present, recoverable electrical and mechanical calibration establishes the real values.
+
 ## Optional peripheral tasks must start after the transport baseline
 
 - Symptom: T08 UART Link passed on the real two-board wiring, but the integrated T09 image showed a healthy idle OLED while EasyInput transmitted requests and received zero frames. The new image had started OLED initialization and its background task before installing the previously proven UART transport, and discarded both startup results.
