@@ -160,19 +160,24 @@ class InputBridgeManager extends EventEmitter {
   }
 
   requestRead(flag, mode) {
-    if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
+    if (this.pendingRead) {
+      return this.pendingRead.mode === mode
+        ? this.pendingRead.promise
+        : Promise.resolve({ ok: false, reason: "config-read-in-progress" });
+    }
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
     const requestId = `read-${randomUUID()}`;
-    return new Promise((resolve) => {
-      this.pendingRead = { requestId, timeout: null, resolve, mode };
-      this.refreshReadTimeout();
-      const numericId = (Date.now() >>> 0) || 1;
-      this.pendingRead.numericId = numericId;
-      const report = encodeConfigReadRequest(numericId, flag);
-      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "read-config", requestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishRead({ ok: false, reason: "input-bridge-write-failed" }); });
-    });
+    let resolveRead;
+    const promise = new Promise((resolve) => { resolveRead = resolve; });
+    this.pendingRead = { requestId, timeout: null, resolve: resolveRead, promise, mode };
+    this.refreshReadTimeout();
+    const numericId = (Date.now() >>> 0) || 1;
+    this.pendingRead.numericId = numericId;
+    const report = encodeConfigReadRequest(numericId, flag);
+    this.child.stdin.write(`${JSON.stringify({ version: 1, type: "read-config", requestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishRead({ ok: false, reason: "input-bridge-write-failed" }); });
+    return promise;
   }
 
   finishConfig(result) {

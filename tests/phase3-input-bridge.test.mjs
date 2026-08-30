@@ -151,6 +151,39 @@ test("config progress is validated and refreshes a matching read deadline", () =
   return read.then((result) => { assert.deepEqual(result, { ok: false, reason: "config-read-timeout" }); manager.stop(); });
 });
 
+test("duplicate config reads share one capabilities and snapshot flight", async () => {
+  const writes = [];
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: "2026-08-21T10:00:00.000Z", sequence: 1 }));
+
+  const first = manager.readConfig();
+  const second = manager.readConfig();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].type, "read-config");
+  const capabilitiesRequestId = manager.pendingRead.requestId;
+  manager.handleLine(JSON.stringify({ version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: capabilitiesRequestId, configReadV1: true, configWriteV1: true, hostActionV1: true, fixedTextV1: true, time: "2026-08-21T10:00:00.050Z", sequence: 2 }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].type, "read-config");
+  const configRequestId = manager.pendingRead.requestId;
+  const data = Buffer.from('{"schema":"ai_keyboard.v1"}', "utf8");
+  const crc16 = require("../electron/easyinput-config.cjs").crc16Ccitt(data);
+  manager.handleLine(JSON.stringify({ version: 1, type: "config-snapshot", source: "easyinput-hid", requestId: configRequestId, bytes: data.length, crc16, sourceId: 0, jsonBase64: data.toString("base64"), time: "2026-08-21T10:00:00.100Z", sequence: 3 }));
+
+  const expected = { ok: true, bytes: data.length, crc16, source: 0, json: data.toString("utf8"), requestId: configRequestId };
+  assert.deepEqual(await first, expected);
+  assert.deepEqual(await second, expected);
+  manager.stop();
+});
+
 test("F22 triggers only on release and filters repeat, debounce, stuck release, and disconnect", () => {
   let now = 1000;
   const filter = new InputTriggerFilter({ now: () => now });

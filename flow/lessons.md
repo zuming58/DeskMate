@@ -1,5 +1,12 @@
 # Lessons learned
 
+## Device reads triggered by React effects must be shared single-flight operations
+
+- 现象：同一固件和同一配置在打包版人工验收中正常，但开发版进入按键配置页稳定显示读取失败；普通键盘 HID 功能同时保持正常。
+- 根因：React StrictMode 在开发模式会重复挂载页面。若设备读取由页面 effect 直接触发，而主进程把第二个等价请求当作 `in-progress` 错误，活动页面会显示第二个失败，首个成功却返回给已经卸载的页面。
+- 做法：先用独立原生桥验证真实 Vendor HID 能力和配置快照，再比较开发版与打包版生命周期。主进程对相同读取模式实行 single-flight：共享同一个有界设备请求和 Promise；不同读取模式、读取与写入冲突仍失败关闭。回归测试必须断言两个调用者收到同一成功结果且物理命令只发送一次。
+- 规则：React effect 可以重复执行，设备 I/O 不能依赖单次挂载假设。凡是幂等只读操作都应在进程边界去重并共享结果；不能通过关闭 StrictMode 掩盖竞态，也不能在键盘 Report 正常时推断 Vendor Report 一定正常或异常。
+
 ## A protocol UART must have one owner and no console bytes
 
 - 现象：EasyInput 的 J4 使用 UART0，而 ESP32-S3 的应用日志、bootloader 日志和 ROM 启动字符也可能占用同一线路；只把协议任务接到 GPIO43/44 并不能保证对端收到的都是协议帧。
