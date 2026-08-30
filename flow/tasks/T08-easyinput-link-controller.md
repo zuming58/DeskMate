@@ -44,6 +44,7 @@ Implement the EasyInput side of the frozen DeskMate Link v1 without modifying th
 
 - Frozen contract commit: `c8b8a344a72a849640c8b19575768d6daf4d6667`.
 - EasyInput implementation commit: `697bffa0f372ef57e4b41fa3fa1d7b39bffbab0e`.
+- Final pre-HIL hardening commit: `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d`; rejects the DISPLAY/MOTION/AUDIO capability and ready bits that remain deferred in T08.
 - Host CTest: 8/8 passed, including codec, streaming parser, retry/disconnect, peer restart, stale-state suppression and source-contract checks.
 - Desktop regression: 115/115 tests and `npm run build:desktop` passed.
 - ESP-IDF: exact v5.5.5, `esp32s3`, fixed 16 MB partition build passed.

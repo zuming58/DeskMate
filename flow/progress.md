@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T08 two-end audit passed after EasyInput deferred-capability hardening
+
+- baseline：交叉审计 EasyInput `codex/easyinput-t08-link-controller@0a0c3efce140b38e8fa1e7ed020b51c9f4eb7cfa` 与小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637`；两端都以冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667` 为祖先，协议正文、README 和黄金向量逐文件一致且未重写。小智端 Host 7/7、分区/引脚/唯一 UART owner 与既有 ESP-IDF v5.5.3 干净构建证据通过审计，未初始化 OLED、舵机、LEDC、I2S 或音频。
+- fix：EasyInput 审计发现总控会接受 T08 明确要求保持关闭的 DISPLAY/MOTION/AUDIO capability 和 status ready 位。实现提交 `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d` 增加冻结切片掩码校验，基础 Link/Agent State 仍按原合同工作，未知未开放能力不被误标为可用；补充两组失败关闭回归，没有修改共享合同、小智、桌面、输入、USB、配置、灯效或 Host Action。
+- verification/candidate：EasyInput Host CTest 8/8；ESP-IDF v5.5.5、target `esp32s3`、固定 16 MB 分区构建通过。app 为 316,672 字节（`0x4D500`），SHA-256 `76669AEBF214434532D25743E5B2A6BE6C291AA596466CBFA304BF17CD294987`，app-only 数据范围 `0x010000..0x05D4FF`，写入工具可能覆盖扇区至 `0x05DFFF`；分区表 SHA-256 保持 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。
+- hardware/next：本轮没有扫描端口、识别设备、读写 Flash/NVS、烧录、擦除、monitor、接线、写 eFuse 或操作 OLED/舵机/音频。下一步先推送 EasyInput 最终候选并展示精确 app-only 烧录卡；用户再次确认后只烧 EasyInput。小智随后由独立窗口按其精确 HEAD/哈希/分区和恢复门另行授权烧录；两板都完成单板启动回归前不接 UART。
+
 ## 2026-08-30 · T08 cross-end audit fixes stale controller status; Xiaozhi remains hardware-blocked
 
 - role/baseline：在 EasyInput 隔离工作树 `F:\Codex\deskmate-t08-easyinput` 复核 `codex/easyinput-t08-link-controller@a2e7072edaadffa60e9c5b9d77b3331f428015ed`，并交叉审计小智远端 `codex/xiaozhi-t08-link-endpoint@db52e883156b5a4a6e63c0954eb7e3073d3b8aae`。冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667` 是两端祖先，`v1.md`、黄金向量和 README 的 SHA-256 逐文件一致。
