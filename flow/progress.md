@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-08-30 · Both T08 apps are flashed; physical three-wire Link wiring identified but not connected
+
+- Xiaozhi evidence：用户提供另一窗口的烧录/校验记录：小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637` 只写 app `0x100000..0x129D9F`，镜像 171,424 字节，SHA-256 `C6FF9CCE3704EED980781C83FCE92B6BFDAC853935A59C07C8F042284856C6D9`；app、既有分区表和既有 NVS 独立校验通过，未整片擦除、未改分区/NVS/eFuse，完整 16 MiB Flash 备份已留在小智窗口的 Git 外恢复目录。
+- physical identification：用户新提供的小智实物近照清楚显示三个大焊盘 `RX / TX / GND`；它们与已审计的 H2 pad 3/2/1 和 GPIO44/43/GND 一致。首次链路只允许 `EasyInput TXD0 → 小智 RX`、`EasyInput RXD0 ← 小智 TX`、`GND ↔ GND`；EasyInput J4 `3V3` 必须留空并绝缘，两板独立供电。
+- current gate：本窗口未接线、未焊接、未做通断/电压测量，未操作 OLED、舵机或音频。焊接必须在两板 USB 与电池电源均断开时完成，通电前先检查焊桥、对地短路、三线对应和 `3V3` 悬空。首次上电只验收 HELLO/capabilities/status 与既有 EasyInput 回归，DISPLAY/MOTION/AUDIO 仍禁用。
+
 ## 2026-08-30 · T08 EasyInput controller app flashed; single-board and read-only Link HIL pending
 
 - authorization/identity：用户按精确实现提交 `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d`、镜像范围和禁止边界明确授权。本机只发现一个 Espressif 下载端口；私有设备身份在识别、备份和写入前均一致，端口、MAC 和序列号未进入 Git 或诊断文档。
