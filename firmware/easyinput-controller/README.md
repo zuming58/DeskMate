@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / HIL_NOT_AUTHORIZED`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。
+当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / EASYINPUT_APP_FLASH_CONFIRMED / EASYINPUT_NORMAL_BOOT_PENDING`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action 与桌面链路已完成人工验收。当前样机 S8 仍是烧录前已知硬件阻断，不改八键/GPIO48 产品合同。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 

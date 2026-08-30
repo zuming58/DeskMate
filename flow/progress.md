@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 EasyInput app flash and exact readback confirmed; normal boot pending
+
+- 做了什么：在恢复备份、身份和固定分区校验通过后，按用户精确授权把 `d96179725fb9bd0724e6c92429f090e4bd3a6a7a` 的 EasyInput T09 app 单段写入 `0x010000..0x05DD2F`，自动擦除仅覆盖到 `0x05DFFF`；写后重新枚举并 fresh 验身，再只读回同一 app 数据范围。
+- 验证：本地候选和板上回读均为 318,768 字节，SHA-256 均为 `80A3D1B02768FEEB2271F9978594BD3FFA5458F32BE87BDDA1F26CD8765C5489`；esptool 写入校验与独立回读校验均通过。回执保存在 Git 外恢复目录的 `t09-d961797-flash-receipt.json`。
+- 安全边界：未写分区表、NVS、bootloader、`sound_a`、`sound_b` 或 eFuse；未整片擦除、未改分区，也未操作小智、OLED、舵机和音频。
+- 下一步：当前只具备 `EASYINPUT_APP_FLASH_CONFIRMED`，不冒充应用已正常运行。用户需按当前 EasyInput 板级规则“关机一次→正常开机”，不要再次按 BOOT；随后先验证 USB/HID、按键、旋钮和灯效，再准备小智 T09 的独立备份与 app-only 烧录。
+
 ## 2026-08-30 · T09 EasyInput identity and recovery backup confirmed; flash still pending
 
 - 做了什么：按用户单独授权只识别当前 EasyInput，确认硬件为 ESP32-S3、8 MB PSRAM、16 MB Flash；只读备份分区表 `0x008000/0x001000`、NVS `0x009000/0x006000` 和完整 factory app 分区 `0x010000/0x300000`，生成 Git 外恢复清单。未解析 NVS 内容，也未显示或保存 MAC、序列号和完整设备路径。
