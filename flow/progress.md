@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 - T09 paused with a reproducible Xiaozhi response-path blocker
+
+- Latest HIL fact: after the user reseated the already-crossed three-wire Link and cold-started both independently powered boards, a fresh privacy-safe EasyInput status read still reported `waiting`, `rx_frames=0`, `tx_frames=28`, `request_timeouts=9`, and `retries=18`. Agent-state counters were reset to zero. The reseat therefore did not restore the T08-proven Link, and the result is not stale desktop state.
+- What remains healthy: the replacement EasyInput board still has all S1-S8 keys, encoder and LED feedback available; Xiaozhi T09 cold-starts into the neutral two-eye OLED scene; no servo or Xiaozhi audio path is initialized. Desktop-to-EasyInput `0x12` delivery was independently proven earlier in this diagnosis, while EasyInput correctly drops states when the Link is disconnected.
+- Code comparison: the Xiaozhi T08 and T09 builds use the same `deskmate_link_uart.cpp`, UART0, GPIO43/GPIO44, 115200/8N1, parser and frozen framing. The material T09 startup change is that OLED initialization and its task are started before `StartDeskMateLinkUart()`, and both startup return values are currently discarded. OLED visibility therefore does not prove that the UART driver and Link task started.
+- Paused candidate, not yet implemented: split OLED initialization from its display-task start, initialize the display first, install/start the UART transport before allocating the optional display task, and render a visible error scene when UART startup returns `kHardwarePinoutBlocked`, `kDriverError`, or `kTaskError`. Add a source-contract test for transport-before-optional-task ordering. This is a diagnostic/fail-soft candidate, not a confirmed root-cause fix, and must be rebuilt and separately authorized before any app-only flash.
+- Safety and resumption: no source change, Flash/NVS read or write, erase, partition/eFuse operation, servo or audio action was performed after the failed reseat sample. Do not ask the user to repeat wiring work tomorrow before the code-level candidate is implemented, Host/ESP-IDF gates pass, and a precise Xiaozhi app image is presented. T09 remains `THREE_END_STATE_HIL_BLOCKED_LINK_WAITING / PAUSED_BY_USER`.
+
 ## 2026-08-30 - T09 state-path diagnosis separated desktop status parsing from the physical Link failure
 
 - Observation: the user exercised the real VoiceWorkflow after restoring the three-wire connection, but the Xiaozhi OLED stayed on the cold-start idle eyes. No servo or audio action occurred.
