@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Optional capability failure must not tear down the transport baseline
+
+- 现象：小智显示端按冻结合同在 OLED 初始化或渲染失败时移除 DISPLAY enabled，但保留 CORE、AGENT_STATE 与 Link；EasyInput 首版却把 DISPLAY 当成能力握手的硬条件，并沿用不含显示状态位的旧掩码，导致合法显示降级会被误判成整条 Link 失败。
+- 做法：把“建立基础链路所需能力”和“执行当前命令所需能力”分开验证。握手只要求 CORE+AGENT_STATE；发送显示状态时再要求 DISPLAY；对端的显示 enabled/fault 状态位单独纳入当前切片的严格掩码。用 implemented `0x07`、enabled `0x03`、status `0x81` 的跨端向量证明链路保持 connected 且状态发送失败关闭。
+- 规则：新增可选下游能力时，不得把它自动提升为传输层生存条件。两端审计必须覆盖健康、未实现、暂时禁用和运行时故障四种能力矩阵，并分别验证“链路是否存活”与“动作是否允许”。
+
 ## UART signals are crossed by direction, not matched by label
 
 - 现象：两块板分别单独通过 UART/协议检查，但板间 Link 一直超时；物理线最初接成 RX→RX、TX→TX。

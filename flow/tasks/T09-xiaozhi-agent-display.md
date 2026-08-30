@@ -1,6 +1,6 @@
 # T09 Xiaozhi agent display
 
-Status: `OPEN_AFTER_CONTRACT_FETCH / HIL_NOT_AUTHORIZED`
+Status: `CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`
 
 ## Baseline and ownership
 

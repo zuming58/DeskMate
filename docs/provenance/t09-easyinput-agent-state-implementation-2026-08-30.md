@@ -1,6 +1,7 @@
 # T09 EasyInput agent-state implementation provenance
 
-- Product implementation commit: `e50bc75e974695c1a79cd887e88836222296565e`.
+- Product implementation commit after two-end cross-audit:
+  `9c97edd557c9b2ad54b7b6338acc70793ce37522`.
 - Frozen contract commit: `5e2541fa082c1014948731fd91897d71ac509d5f`.
 - Reference: `F:\Codex\easyinput-wzm\easy-input-maker` at
   `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01`.
@@ -15,12 +16,16 @@ already frozen DeskMate Link frame and `SET_AGENT_STATE`; it does not change
 framing, GPIO ownership, partitions, desktop UI, Xiaozhi firmware, OLED, servo,
 audio, BLE, Wi-Fi or NVS behavior.
 
+The final cross-audit aligns dynamic DISPLAY degradation with the Xiaozhi
+endpoint: CORE+AGENT_STATE keep Link established, while actual state delivery
+continues to require DISPLAY. No shared contract or wire byte was changed.
+
 Verification at the implementation commit:
 
 - EasyInput Host CTest: 9/9 passed.
 - ESP-IDF v5.5.5, target `esp32s3`, fixed 16 MB layout: passed.
 - App: 318,576 bytes (`0x4DC70`).
-- App SHA-256: `013A7697AF498C4072DB4996AF095F7412F6C4778AD73C627BA96261E778954D`.
+- App SHA-256: `DB152B01152C1D646B5F2B4D22CD827A0340ACC8CF7D3397A23118F57F831C5A`.
 - Partition table SHA-256:
   `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`.
 - Desktop tests: 115/115 passed; native bridge Release and desktop directory

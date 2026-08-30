@@ -6,6 +6,7 @@
 - [T09 EasyInput agent-state bridge task](../flow/tasks/T09-easyinput-agent-state-bridge.md)
 - [T09 EasyInput implementation provenance](provenance/t09-easyinput-agent-state-implementation-2026-08-30.md)
 - [T09 EasyInput code handoff](handoffs/t09-easyinput-agent-state-bridge-2026-08-30.md)
+- [T09 two-end cross-audit](reviews/t09-two-end-cross-audit-2026-08-30.md)
 - [T09 parallel firmware handoff](handoffs/t09-parallel-agent-state-display-2026-08-30.md)
 - [T08 parallel EasyInput/Xiaozhi firmware split](handoffs/t08-parallel-firmware-split-2026-08-29.md)
 - [T08 EasyInput Link controller task](../flow/tasks/T08-easyinput-link-controller.md)

@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 two-end firmware cross-audit passed after display-degradation fix
+
+- scope/baseline：交叉审计 EasyInput `codex/easyinput-t09-agent-state-bridge@9c97edd557c9b2ad54b7b6338acc70793ce37522` 与小智 `codex/xiaozhi-t09-agent-display@d014af453dd95fab9ad6af24b25d54b6c3c8561e`；T09 状态合同、DeskMate Link v1 和黄金向量在两分支逐文件一致，未重写 framing 或共享合同。
+- finding/fix：小智按合同在 OLED 初始化/渲染失败时移除 DISPLAY enabled、保留基础 Link，并用 status bit1/bit7 表示显示启用/故障；EasyInput 首版却把 DISPLAY 当作握手硬条件且仍使用 T08 status 掩码，会把合法降级误判为整链断开。已在 EasyInput 提交 `9c97edd557c9b2ad54b7b6338acc70793ce37522` 修正：CORE+AGENT_STATE 保持 Link，`SET_AGENT_STATE` 仍须 DISPLAY，MOTION/AUDIO 仍禁用，并补 implemented `0x07`/enabled `0x03`/fault `0x81` 回归。
+- verification：EasyInput Host 9/9、ESP-IDF v5.5.5 构建通过，app 318,576 字节（`0x4DC70`），SHA-256 `DB152B01152C1D646B5F2B4D22CD827A0340ACC8CF7D3397A23118F57F831C5A`；小智最终 HEAD 在独立审计工作树 Host 8/8、ESP-IDF v5.5.3 构建通过，app 202,816 字节（`0x31840`），SHA-256 `214793123280D53650C40633B46F65A0037EB23BDD16A3A5E50829030DB21D9A`。两边固定分区表哈希保持不变。
+- hardware/next：状态为 `CROSS_AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`。未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，也未操作 OLED、舵机或音频。下一步先实现独立桌面主进程 HID `0x12` 状态发送器；人工回来后仍需补 T08 两根信号线单独断线和 T03～T06 组合回归，再分别申请两板 app-only 烧录与 T09 OLED 真机验收。
+
 ## 2026-08-30 · T09 EasyInput agent-state bridge code and build gate complete
 
 - scope/implementation：在隔离工作树 `F:\Codex\deskmate-t09-easyinput`、分支 `codex/easyinput-t09-agent-state-bridge`，基于冻结合同提交 `5e2541fa082c1014948731fd91897d71ac509d5f` 完成 EasyInput 端，产品实现提交为 `e50bc75e974695c1a79cd887e88836222296565e`。新增 HID Feature `0x12` v1/v2 严格解码、单槽最新状态邮箱、七状态映射、TTL、USB/Link epoch 与对端重启清理，并只经既有 `SET_AGENT_STATE` 转发；未修改桌面 UI、小智固件、Link framing、输入、灯效、NVS、音频、BLE、Wi-Fi 或分区。
