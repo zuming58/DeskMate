@@ -1,0 +1,11 @@
+build/
+build-*/
+host_test/build/
+managed_components/
+*.bin
+*.elf
+*.map
+sdkconfig
+sdkconfig.old
+sdkconfig.*
+!sdkconfig.defaults

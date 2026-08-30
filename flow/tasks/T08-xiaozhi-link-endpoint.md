@@ -1,6 +1,6 @@
 # T08 Xiaozhi Link endpoint
 
-Status: `T08_PARALLEL_PREPARATION_OPEN / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_NOT_AUTHORIZED`
+Status: `T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / PARTITION_CONTRACT_RESTORED / HARDWARE_PINOUT_VERIFIED / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_NOT_AUTHORIZED`
 
 ## Objective
 
@@ -36,3 +36,12 @@ Status: `T08_PARALLEL_PREPARATION_OPEN / DESKMATE_LINK_V1_NOT_FROZEN / HARDWARE_
 ## Stop gate
 
 完成 Host tests、ESP-IDF v5.5.3 `esp32s3` 构建、来源/许可证/隐私/产物检查后提交推送并停止。不得合并 `main`，不得接线、扫描端口、识别设备、读写 Flash、烧录、monitor、初始化 OLED/音频或驱动舵机。
+
+## Phase B result
+
+- 冻结合同提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 已通过 merge 成为分支祖先；合同与黄金向量未重写。
+- framing、CRC、流式 parser、四类消息、语义错误、八项去重缓存、冲突拒绝、boot epoch、唯一 UART owner 和 fake UART 已实现。
+- `SET_AGENT_STATE` 只更新内存；DISPLAY/MOTION/AUDIO 能力为零，没有 OLED、舵机或音频初始化。
+- 产品分区表与只读参考 `partitions/v1/16m.csv` 逐字节一致，固定 OTA_0 为 `0x100000/0x600000`；ESP-IDF 配置和 CMake 门禁拒绝退回默认 factory 布局。
+- 公开 Board1_2 的原理图和 PCB 网络证明实体 `GND/TX/RX` 焊盘分别连接 GND、TXD0、RXD0，生产配置据此固定 TX GPIO43、RX GPIO44；Host 测试同时证明未验证配置不能安装 UART。
+- Host/build 软件证据已关闭分区与 pinout 两个烧录阻断，但仍未授权任何硬件操作。下一步只能在新的明确授权下补齐电平、供电、共地、无短路和恢复证据；不得自行申请烧录、接线或两板 HIL。
