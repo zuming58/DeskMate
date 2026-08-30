@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 Xiaozhi identity and recovery backup confirmed; app flash authorization pending
+
+- 做了什么：按用户单独授权，只对当前唯一 USB 串行候选执行 fresh 小智验身；前后身份在同一进程内匹配且未持久化 MAC/序列号。确认芯片为 ESP32-S3、Flash 为 16 MB 后，依次只读备份固定分区表、当前 T08 app、NVS 和 otadata。
+- 恢复证据：当前 T08 app `0x100000/0x29DA0` SHA-256 为 `C6FF9CCE3704EED980781C83FCE92B6BFDAC853935A59C07C8F042284856C6D9`；分区表有效 3 KiB SHA-256 为 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`，4 KiB 读取窗口尾部 1 KiB 全为 `0xFF`。二者均与预期完全一致。
+- 产出路径：Git 外恢复目录 `F:\Codex\deskmate-device-backups\xiaozhi\t09-preflash-20260830T215245`；NVS SHA-256 `8F9A6BACF4BB1175D1E293EB19D18EE984BBB172B8A453DAD8E7111B1EEB8A1B`，otadata SHA-256 `8BA3B110139F45443D4F268D1A3373EF99A1718B71D51664531B83EE2D4B91A3`，manifest SHA-256 `D46A26184A9C952193D626EB59E15E3B2928F925513E0F33CB9927C642F2DE69`。NVS/otadata 内容未解析、未显示，也不会进入 Git。
+- 安全与下一步：本轮未写 Flash/NVS、未烧录、擦除、改分区或写 eFuse，也未操作 OLED、舵机和音频。状态推进为 `XIAOZHI_IDENTITY_CONFIRMED / RECOVERY_BACKUP_CONFIRMED / APP_FLASH_AUTH_PENDING`；下一步只允许在用户再次确认精确源码、镜像哈希和 `0x100000..0x13183F` app-only 范围后写入。
+
 ## 2026-08-30 · T09 Xiaozhi final app candidate rebuilt; identity and recovery authorization pending
 
 - 做了什么：在最终整合分支 `codex/t09-three-end-integration@b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` 上使用冻结的 ESP-IDF v5.5.3、target `esp32s3` 和独立构建目录重新生成小智 T09 app；`d961797..b26e99e` 之间没有任何 `firmware/xiaozhi-yuntai/` 源码变化。
