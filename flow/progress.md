@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T09.1 normal boot confirms Xiaozhi UART startup; Link read paused
+
+- User-visible HIL: after the exact-readback-confirmed T09.1 app was normally reset without BOOT, Xiaozhi displayed the neutral two-eye scene rather than the new startup error scene. Under this candidate's explicit startup diagnostic, that confirms OLED initialization, UART0 driver installation and the DeskMate Link task all returned successfully.
+- Scope reduction: the previous `rx_frames=0` failure is no longer attributable to Xiaozhi UART/task startup. Full two-board communication is still unconfirmed because EasyInput was not powered/running when the follow-up privacy-safe status read began.
+- Pause and safety: the user asked to stop until tomorrow. The in-progress read-only helper was terminated; no Feature Report completed, no configuration or state was written, and no Flash/NVS/otadata/eFuse, erase, partition, servo or audio operation followed the reboot observation.
+- Resume point: power/start EasyInput while retaining common GND and the known crossed TX/RX wiring, then take two privacy-safe Link snapshots. Require `connected`, increasing `rx_frames/tx_frames`, and no growing protocol errors before sending a single real state and observing the OLED scene change.
+
 ## 2026-08-31 - T09.1 Xiaozhi app flash and exact readback confirmed; normal boot pending
 
 - What happened: after a fresh identity check confirmed the only USB serial candidate as the same ESP32-S3/16 MiB Xiaozhi board, the existing T09 app, fixed partition table, NVS and otadata were read and backed up to a Git-external recovery directory. The current app and all protected regions matched their expected hashes before writing.
