@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T08 positive Link and Xiaozhi restart recovery passed; two manual checks remain
+
+- role/base：在硬件电脑使用已烧录的 EasyInput `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d` 与小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637`，两端继续消费 `DESKMATE_LINK_V1_FROZEN@c8b8a344a72a849640c8b19575768d6daf4d6667`。本记录只补真机事实，不改冻结协议。
+- HIL：EasyInput UART0 本地回环收发均为 579；小智 COM 直连能够返回逐字节和 CRC 均有效的冻结 HELLO 响应。发现最初把 RX→RX、TX→TX 后，按合同改为 EasyInput TXD0→小智 RX、EasyInput RXD0←小智 TX、GND 共地且 3V3 悬空，两次状态采样保持 connected，收发从 `21/81` 增至 `23/83`，历史 timeout/retry 不再增长。
+- restart：用户重启小智后，EasyInput 记录 `peer_restarts=1`、自动恢复 connected，连续采样从 `rx=171/tx=231` 增至 `rx=173/tx=233`。小智 ROM 启动字符形成的 `framing_errors=116` 与三次 semantic reject 随后保持稳定；CRC/version/length/queue-drop 均为 0，证明有界重同步生效。
+- safety/status：未操作 OLED、舵机或小智音频；本段未新增 Flash/NVS 读写、烧录、擦除、分区或 eFuse 操作。T08 当前为 `PARTIAL_HIL_CONFIRMED`，尚缺逐根 TX/RX 断线恢复、旧状态不重放以及 connected/faulted 下的 T03-T06 组合回归，不得标记 `T08_LOCKED`。
+- output/next：证据写入 `docs/testing/t08-first-read-only-link-acceptance.md`。用户离开期间只允许继续合同、代码、Host test、构建和自审；人工回来后先完成两根信号线断线矩阵，再进行任何 T09 app 烧录或 OLED 真机动作。
+
 ## 2026-08-30 · Both T08 apps are flashed; physical three-wire Link wiring identified but not connected
 
 - Xiaozhi evidence：用户提供另一窗口的烧录/校验记录：小智 `codex/xiaozhi-t08-link-endpoint@132117e8cf8aeae07319cc647d2634326ec14637` 只写 app `0x100000..0x129D9F`，镜像 171,424 字节，SHA-256 `C6FF9CCE3704EED980781C83FCE92B6BFDAC853935A59C07C8F042284856C6D9`；app、既有分区表和既有 NVS 独立校验通过，未整片擦除、未改分区/NVS/eFuse，完整 16 MiB Flash 备份已留在小智窗口的 Git 外恢复目录。

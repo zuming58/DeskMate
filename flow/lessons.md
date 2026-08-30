@@ -1,5 +1,11 @@
 # Lessons learned
 
+## UART signals are crossed by direction, not matched by label
+
+- 现象：两块板分别单独通过 UART/协议检查，但板间 Link 一直超时；物理线最初接成 RX→RX、TX→TX。
+- 做法：始终按发送者与接收者写完整关系并交叉连接：EasyInput TXD0→小智 RX、EasyInput RXD0←小智 TX，同时保留 GND 共地和 3V3 悬空。纠正后 Link 立即进入 connected，收发计数持续增长，小智重启后也能自动重连。
+- 规则：UART 接线说明和验收记录不得只写“RX/TX 三根线”或“同名相接”；必须写明两端角色、方向和禁止连接的电源脚。两端单板自测通过不能代替方向正确的板间验收。
+
 ## A protocol UART must have one owner and no console bytes
 
 - 现象：EasyInput 的 J4 使用 UART0，而 ESP32-S3 的应用日志、bootloader 日志和 ROM 启动字符也可能占用同一线路；只把协议任务接到 GPIO43/44 并不能保证对端收到的都是协议帧。

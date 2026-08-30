@@ -1,5 +1,16 @@
 # Decisions
 
+## D033 — T09 reuses existing Agent-state transports
+
+- Date: 2026-08-30
+- Decision: T09 uses Maker-compatible HID Feature report `0x12` from Windows to
+  EasyInput and the frozen DeskMate Link v1 `SET_AGENT_STATE` message from
+  EasyInput to Xiaozhi. It does not add another Host Action or Link message.
+- Ownership: the EasyInput window owns the shared contract and bridge; the
+  Xiaozhi window consumes that contract and owns only the display scene model.
+- Safety: T09 has no servo, audio or physical action and cannot replay stale
+  state after disconnect or peer restart.
+
 ## D001 · One standalone product repository
 
 - 日期：2026-08-23
