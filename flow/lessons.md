@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Validate bounded input length before reading its discriminator
+
+- 现象：Feature Report 归一化函数已经拒绝空指针，但在判断 `length == 0` 前先读取了 `buffer[0]`；正常平台回调不会传该组合，Host 边界仍允许零长度非空缓冲暴露逻辑越界。
+- 做法：所有由 `buffer + length` 表示的协议输入都先统一验证空指针、零长度和最小头长度，再读取 Report ID、magic 或版本等判别字节；测试同时覆盖 null、zero-length、截断和正常最短帧。
+- 规则：有界协议解析的第一条语句不能依赖尚未验证的判别字节。任务卡声称的 timeout、stale ACK 等失败向量也必须在真实测试清单中逐项存在，不能只由相邻的 disconnect 用例代替。
+
 ## HID Feature reports use the top-level collection length on Windows
 
 - 现象：冻结的 `0x12` 业务 payload 只有 16 字节，但同一 HID 顶层集合还包含

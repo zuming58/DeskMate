@@ -1,6 +1,11 @@
 # T09C desktop agent-state sender
 
-Status: `TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`
+Status: `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`
+
+Independent audit: `codex/desktop-t09-agent-state-audit` fixes the zero-length
+Feature Report boundary and adds the previously missing timeout/stale-ACK
+regression. Full evidence is recorded in
+[`t09c-desktop-agent-state-sender-audit-2026-08-30.md`](../../docs/reviews/t09c-desktop-agent-state-sender-audit-2026-08-30.md).
 
 ## Baseline and ownership
 

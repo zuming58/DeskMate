@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T09C independent audit confirmed after boundary hardening
+
+- 做了什么：在隔离工作树 `F:\Codex\deskmate-t09-final-audit`、分支 `codex/desktop-t09-agent-state-audit` 独立审计远端 T09C `543a49a1ca47a2007edc76fed9ba8164994bc8d9`。审计提交 `86d54a70878dcfc2d6a07b6575279c914701b275` 在任何首字节访问前拒绝 null/zero-length Feature Report，并补齐固件边界向量与桌面 timeout、latest-wins、stale ACK、stop cleanup 回归；未改冻结合同、DeskMate Link、小智、界面导航或硬件引脚。
+- 为什么与怎么理解：正常 Windows/TinyUSB 路径不会主动制造零长度非空缓冲，但协议归一化层必须独立 fail closed；同理，任务卡声称的 timeout 不能由 disconnect 用例代替。修复保持既有 VoiceWorkflow 为唯一状态机，64 字节 Windows Feature Report 仍由 Electron 与原生桥双重校验，mock/simulator 仍不能写硬件，断线或原生桥重启后仍不重放旧状态。
+- 产出路径：`firmware/easyinput-controller/components/input_core/src/agent_state_core.cpp`、`firmware/easyinput-controller/host_test/agent_state_core_tests.cpp`、`tests/phase3-input-bridge.test.mjs`、`docs/reviews/t09c-desktop-agent-state-sender-audit-2026-08-30.md`、T09C 任务/交接、`flow/plan.md` 与 `flow/lessons.md`。
+- 验证：定向桌面/原生测试 33/33；桌面全量 126/126；原生桥协议自检、Windows Release 打包通过；EasyInput Host CTest 9/9；精确 ESP-IDF v5.5.5、target `esp32s3`、Minimal Build 和固定 16 MB 分区构建通过。代码门 app 318,768 字节（`0x4DD30`），SHA-256 `90BC17D90F7F713D5AEE4BA3C451E470D6A7D71E07CE7AD3D2D806EFCBAF9ECE`；分区表 SHA-256 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。静态检查通过；板级脚本为 1 PASS/1 个既有 C++ 声明解析 WARN/0 FAIL，本包没有修改 GPIO。
+- 问题解决与下一步：状态推进为 `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`。主目录用户界面改动保持不动；未扫描端口、未识别设备、未读写 Flash/NVS、未烧录、未 erase/monitor/eFuse，也未操作 OLED、舵机或音频。下一步先人工完成 T08 的逐根 TX/RX 断线与 T03～T06 组合回归，再针对最终远端 HEAD 干净重建并单独授权 T09 三端真机闭环。
+
 ## 2026-08-30 · T09C desktop agent-state sender code and build gate complete
 
 - 做了什么：在隔离工作树 `F:\Codex\deskmate-t09-desktop`、分支 `codex/desktop-t09-agent-state-sender` 完成桌面 T09C，基线为 `d9f91e30e6f52325df70d0665f900de1164bfd96`，实现提交为 `b93de789fd17b86f3022baa85abd52d2dff9dd29`。Electron 主进程把既有 VoiceWorkflow 映射为七状态并编码 HID Feature `0x12` v2；原生桥再次严格校验后调用 Windows HID 写入；队列只保留一个在途和一个最新候选，断线或进程重启后不重放旧状态。模拟器、mock STT 和 demo 来源明确隔离，不能写硬件。

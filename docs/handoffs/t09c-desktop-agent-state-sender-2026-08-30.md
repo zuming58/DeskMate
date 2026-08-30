@@ -1,5 +1,12 @@
 # T09C desktop agent-state sender handoff
 
+> Independent audit update: branch `codex/desktop-t09-agent-state-audit`, fix
+> commit `86d54a70878dcfc2d6a07b6575279c914701b275`, status
+> `AUDIT_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED /
+> T09_AGENT_STATE_DISPLAY_V1_FROZEN / HIL_NOT_AUTHORIZED`. This audit candidate
+> supersedes the sender branch for the next HIL gate; see the
+> [independent audit report](../reviews/t09c-desktop-agent-state-sender-audit-2026-08-30.md).
+
 ## Exact baseline
 
 - Branch: `codex/desktop-t09-agent-state-sender`.

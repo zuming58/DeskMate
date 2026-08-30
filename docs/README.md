@@ -5,6 +5,7 @@
 - [T09 agent-state display frozen contract](contracts/t09-agent-state-display-v1.md)
 - [T09C desktop agent-state sender task](../flow/tasks/T09C-desktop-agent-state-sender.md)
 - [T09C desktop agent-state sender handoff](handoffs/t09c-desktop-agent-state-sender-2026-08-30.md)
+- [T09C desktop agent-state sender independent audit](reviews/t09c-desktop-agent-state-sender-audit-2026-08-30.md)
 - [T09 EasyInput agent-state bridge task](../flow/tasks/T09-easyinput-agent-state-bridge.md)
 - [T09 EasyInput implementation provenance](provenance/t09-easyinput-agent-state-implementation-2026-08-30.md)
 - [T09 EasyInput code handoff](handoffs/t09-easyinput-agent-state-bridge-2026-08-30.md)
