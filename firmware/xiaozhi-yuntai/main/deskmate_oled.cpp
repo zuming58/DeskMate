@@ -241,6 +241,7 @@ private:
 
 EspIdfOledRenderer g_renderer;
 DisplayOwner g_display_owner(g_renderer);
+TaskHandle_t g_display_task_handle{};
 
 void DisplayTask(void*) {
     for (;;) {
@@ -256,12 +257,23 @@ void DisplayTask(void*) {
 
 DisplayOwner& GetDeskMateDisplayOwner() noexcept { return g_display_owner; }
 
-DisplayStartResult StartDeskMateDisplayOwner() noexcept {
+DisplayStartResult InitializeDeskMateDisplayOwner() noexcept {
     if (!g_display_owner.Initialize()) {
         return DisplayStartResult::kInitializationFailed;
     }
+    return DisplayStartResult::kStarted;
+}
+
+DisplayStartResult StartDeskMateDisplayOwnerTask() noexcept {
+    if (!g_display_owner.snapshot().enabled) {
+        return DisplayStartResult::kInitializationFailed;
+    }
+    if (g_display_task_handle != nullptr) {
+        return DisplayStartResult::kStarted;
+    }
     if (xTaskCreate(DisplayTask, "display_owner", kDisplayTaskStackBytes,
-                    nullptr, kDisplayTaskPriority, nullptr) != pdPASS) {
+                    nullptr, kDisplayTaskPriority,
+                    &g_display_task_handle) != pdPASS) {
         g_display_owner.Disable();
         return DisplayStartResult::kTaskFailed;
     }

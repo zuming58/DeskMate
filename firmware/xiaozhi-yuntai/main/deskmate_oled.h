@@ -13,6 +13,7 @@ enum class DisplayStartResult : std::uint8_t {
 };
 
 DisplayOwner& GetDeskMateDisplayOwner() noexcept;
-DisplayStartResult StartDeskMateDisplayOwner() noexcept;
+DisplayStartResult InitializeDeskMateDisplayOwner() noexcept;
+DisplayStartResult StartDeskMateDisplayOwnerTask() noexcept;
 
 }  // namespace deskmate::xiaozhi

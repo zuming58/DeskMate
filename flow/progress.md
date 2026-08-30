@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-31 - T09.1 Xiaozhi Link startup candidate built; HIL authorization pending
+
+- What changed: the optional OLED path is now split into synchronous display initialization and a separate display-task start. `app_main` initializes the OLED and endpoint, installs/starts the frozen T08 UART transport, and only then allocates the optional display task. DeskMate Link framing, GPIO43/GPIO44, 115200/8N1, OLED scenes, servo and audio boundaries are unchanged.
+- Why: the last fresh HIL sample proved Desktop-to-EasyInput delivery but showed EasyInput `tx_frames=28`, `rx_frames=0`, timeouts and retries. T09 had introduced OLED task creation ahead of the T08-proven UART startup and discarded both startup results. The new ordering removes that resource/startup regression candidate; if UART startup returns anything other than `kStarted`, a working OLED task now renders the error scene instead of leaving an indistinguishable neutral display.
+- Verification: Xiaozhi Host CTest passes 8/8, including a new source-contract check that display initialization precedes UART startup and UART startup precedes the optional display task. The exact ESP-IDF v5.5.3 `esp32s3` build passes against the fixed 16 MiB partition table; the pre-commit candidate app is `0x31880` bytes with 97% of the 6 MiB app partition free. `git diff --check` passes.
+- Status and limits: this is a bounded diagnostic/fail-soft candidate, not yet a confirmed root-cause fix. No device was scanned, identified, read, written, erased or monitored; no Flash/NVS/otadata/eFuse, OLED HIL, servo or audio operation occurred. After commit and final rebuild, present the exact source HEAD, app SHA-256 and `0x100000` app-only range for a new explicit authorization.
+- Acceptance after an authorized flash: a startup UART failure must produce the error/sad scene; neutral eyes mean UART installation completed. With the known crossed three-wire Link restored, EasyInput status must move from `waiting` to `connected`, `rx_frames` must increase, and a real DeskMate state must change the OLED before T09 can be locked.
+
 ## 2026-08-30 - T09 paused with a reproducible Xiaozhi response-path blocker
 
 - Latest HIL fact: after the user reseated the already-crossed three-wire Link and cold-started both independently powered boards, a fresh privacy-safe EasyInput status read still reported `waiting`, `rx_frames=0`, `tx_frames=28`, `request_timeouts=9`, and `retries=18`. Agent-state counters were reset to zero. The reseat therefore did not restore the T08-proven Link, and the result is not stale desktop state.

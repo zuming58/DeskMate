@@ -149,9 +149,23 @@ int main() {
     CHECK(Contains(pinout_header, "44,"));
     CHECK(Contains(pinout_header, "install_allowed"));
     CHECK(Contains(uart_header, "kHardwarePinoutBlocked"));
-    CHECK(Contains(main_source, "StartDeskMateDisplayOwner()"));
+    CHECK(Contains(main_source, "InitializeDeskMateDisplayOwner()"));
     CHECK(Contains(main_source, "XiaozhiLinkEndpoint endpoint(display_owner)"));
     CHECK(Contains(main_source, "StartDeskMateLinkUart(endpoint)"));
+    CHECK(Contains(main_source, "StartDeskMateDisplayOwnerTask()"));
+    const auto display_initialize_position =
+        main_source.find("InitializeDeskMateDisplayOwner()");
+    const auto link_start_position =
+        main_source.find("StartDeskMateLinkUart(endpoint)");
+    const auto display_task_position =
+        main_source.find("StartDeskMateDisplayOwnerTask()");
+    CHECK(display_initialize_position != std::string::npos);
+    CHECK(link_start_position != std::string::npos);
+    CHECK(display_task_position != std::string::npos);
+    CHECK(display_initialize_position < link_start_position);
+    CHECK(link_start_position < display_task_position);
+    CHECK(Contains(main_source, "LinkUartStartResult::kStarted"));
+    CHECK(Contains(main_source, "AgentState::kError"));
     CHECK(!Contains(main_source, "uart_"));
 
     CHECK(Contains(display_header, "kQueueCapacity = 4"));
@@ -161,7 +175,8 @@ int main() {
     CHECK(!Contains(display_source,
                     "return {AgentScene::kAngry"));
     CHECK(Contains(display_source, "ResetSession"));
-    CHECK(Contains(oled_header, "StartDeskMateDisplayOwner"));
+    CHECK(Contains(oled_header, "InitializeDeskMateDisplayOwner"));
+    CHECK(Contains(oled_header, "StartDeskMateDisplayOwnerTask"));
     CHECK(Contains(oled_source, "I2C_NUM_0"));
     CHECK(Contains(oled_source, "GPIO_NUM_41"));
     CHECK(Contains(oled_source, "GPIO_NUM_42"));

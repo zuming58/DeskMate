@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Optional peripheral tasks must start after the transport baseline
+
+- Symptom: T08 UART Link passed on the real two-board wiring, but the integrated T09 image showed a healthy idle OLED while EasyInput transmitted requests and received zero frames. The new image had started OLED initialization and its background task before installing the previously proven UART transport, and discarded both startup results.
+- Practice: separate an optional peripheral's synchronous capability initialization from its worker-task allocation. Establish the required transport before allocating optional worker tasks, keep the capability state available for negotiation, and turn startup return values into a privacy-safe visible or status diagnostic.
+- Rule: a visible optional peripheral is not evidence that the mandatory transport started. Integration tests must lock startup ordering, and optional display, animation or sensor tasks may not consume the transport baseline's resources or hide its initialization failure.
+
 ## A growing bounded status payload requires consumer-boundary regression vectors
 
 - Symptom: firmware added privacy-safe T09 Link and Agent counters to an existing status JSON. The producer stayed below its 1024-byte buffer, but the Windows consumer silently retained the older 512-byte / 11-chunk limit and discarded the first 561-byte / 12-chunk response.

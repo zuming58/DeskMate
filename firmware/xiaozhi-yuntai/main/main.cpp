@@ -25,13 +25,24 @@ std::uint32_t NewBootEpoch() noexcept {
 
 extern "C" void app_main() {
     auto& display_owner = deskmate::xiaozhi::GetDeskMateDisplayOwner();
-    const auto display_result =
-        deskmate::xiaozhi::StartDeskMateDisplayOwner();
-    (void)display_result;
+    const auto display_initialize_result =
+        deskmate::xiaozhi::InitializeDeskMateDisplayOwner();
 
     static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(display_owner);
     endpoint.Start(NewBootEpoch(), MonotonicMilliseconds());
 
-    const auto result = deskmate::xiaozhi::StartDeskMateLinkUart(endpoint);
-    (void)result;
+    const auto link_result =
+        deskmate::xiaozhi::StartDeskMateLinkUart(endpoint);
+    const auto display_task_result =
+        deskmate::xiaozhi::StartDeskMateDisplayOwnerTask();
+
+    if (display_initialize_result ==
+            deskmate::xiaozhi::DisplayStartResult::kStarted &&
+        display_task_result ==
+            deskmate::xiaozhi::DisplayStartResult::kStarted &&
+        link_result != deskmate::xiaozhi::LinkUartStartResult::kStarted) {
+        constexpr std::uint32_t kLinkStartupFaultTransition = 0xffffffffu;
+        (void)display_owner.Accept(kLinkStartupFaultTransition,
+                                   deskmate::xiaozhi::AgentState::kError);
+    }
 }
