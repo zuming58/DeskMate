@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T10A motion safety core complete without hardware activation
+
+- What changed: from the T09 HIL evidence commit `381cef3114c0219d2f760b112db0afdefe721d8d`, branch `codex/t10a-motion-safety-core` added a pure C++ single-owner motion safety core and froze `T10_MOTION_SAFETY_CORE_V1_FROZEN`. It enforces verified power/common-ground/center/direction/limit gates, explicit recenter, fixed source priority, per-axis rate limiting, session/expiry clearing, and latched emergency-stop/fault behavior.
+- Why and reference interpretation: the fixed Xiaozhi reference was audited first. Its range limits, small steps and recenter concept are useful behavior evidence, but its nominal centers and immediate LEDC initialization are not real-board calibration evidence. T10A therefore contains no copied reference code and no PWM, GPIO, driver or production startup path; detailed hashes/license/differences are in `docs/provenance/t10-xiaozhi-servo-reference-audit.md`.
+- Verification: implementation `848d2019ca8492723503f43c39e40fb1ee781a10`; Xiaozhi Host 9/9 including `/W4 /WX` motion tests; ESP-IDF v5.5.3 `esp32s3` fixed-partition build passed; code-gate app 202,880 bytes with SHA-256 `C1A6DF830B18589D737B09BC3365F63A31F535A9D61E4EF29F4097AAF8F9C7ED`; desktop regression 127/127; `git diff --check` and ASCII tracked-path checks passed. The app is not a flash candidate because the core is intentionally unreachable.
+- Safety and next: no port/device/Flash/NVS/otadata/eFuse/reset/monitor/OLED/audio/PWM/servo operation occurred; the user's powered and wired T09 hardware stayed untouched. State is `T10A_TEST_CONFIRMED / BUILD_CONFIRMED / MOTION_HARDWARE_LOCKED`. T10B waits for the user to be physically present to validate the servo supply, current capacity, center, direction and small-step limits before any adapter or mechanical action is authorized. Full handoff: `docs/handoffs/t10a-xiaozhi-motion-safety-core-2026-08-31.md`.
+
 ## 2026-08-31 - T09 three-end visible state path accepted; physical reconnect regression deferred
 
 - What was confirmed: the live Desktop -> EasyInput -> DeskMate Link -> Xiaozhi OLED path stayed `connected`, RX/TX counters advanced without new timeouts, and the user visibly accepted all seven frozen states. `thinking` automatically returned to neutral idle after TTL, and a rapid `listening -> thinking -> working -> completed` sequence ended at the latest happy scene without queue drops.
