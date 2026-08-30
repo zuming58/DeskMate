@@ -258,6 +258,9 @@ void LinkController::fault() {
     queued_agent_state_ = {};
     peer_boot_id_ = 0;
     capabilities_known_ = false;
+    status_.agent_state = LinkAgentState::Idle;
+    status_.status_flags = 0;
+    status_.last_error = LinkErrorCode::None;
     status_.implemented_capabilities = 0;
     status_.enabled_capabilities = 0;
     status_.state = LinkControllerState::Faulted;
@@ -364,6 +367,8 @@ void LinkController::disconnect(std::uint32_t now_ms) {
     pending_ = {};
     queued_agent_state_ = {};
     capabilities_known_ = false;
+    status_.agent_state = LinkAgentState::Idle;
+    status_.last_error = LinkErrorCode::None;
     status_.implemented_capabilities = 0;
     status_.enabled_capabilities = 0;
     status_.status_flags = 0;

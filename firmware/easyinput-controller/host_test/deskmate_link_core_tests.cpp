@@ -204,9 +204,16 @@ void controller_retries_disconnect_and_does_not_replay() {
         3, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
     controller.receive(response(LinkMessageType::GetCapabilities, 2,
                                 capabilities.data(), capabilities.size()), 2);
+    CHECK(controller.poll(2, wire));
+    const std::array<std::uint8_t, 11> status = {
+        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 3, 1, 6};
+    controller.receive(response(LinkMessageType::GetStatus, 3,
+                                status.data(), status.size()), 3);
+    CHECK(controller.snapshot().agent_state == LinkAgentState::Working);
+    CHECK(controller.snapshot().last_error == LinkErrorCode::Internal);
     CHECK(controller.queue_agent_state(LinkAgentState::Working, 7));
 
-    std::uint32_t start = 2;
+    std::uint32_t start = 3;
     for (unsigned failure = 0; failure < 3; ++failure) {
         CHECK(controller.poll(start, wire));
         CHECK(controller.poll(start + 250, wire));
@@ -218,6 +225,11 @@ void controller_retries_disconnect_and_does_not_replay() {
     CHECK(failed.state == LinkControllerState::Waiting);
     CHECK(failed.request_timeouts == 3);
     CHECK(failed.retries == 6);
+    CHECK(failed.agent_state == LinkAgentState::Idle);
+    CHECK(failed.status_flags == 0);
+    CHECK(failed.last_error == LinkErrorCode::None);
+    CHECK(failed.implemented_capabilities == 0);
+    CHECK(failed.enabled_capabilities == 0);
     CHECK(!controller.queue_agent_state(LinkAgentState::Working, 7));
     const std::uint32_t reconnect_due = start - 1000;
     CHECK(!controller.poll(reconnect_due - 1, wire));
@@ -278,7 +290,7 @@ void errors_and_unmatched_frames_fail_closed() {
     const auto snapshot = controller.snapshot();
     CHECK(snapshot.state == LinkControllerState::Waiting);
     CHECK(snapshot.semantic_errors == 3);
-    CHECK(snapshot.last_error == LinkErrorCode::Busy);
+    CHECK(snapshot.last_error == LinkErrorCode::None);
     CHECK(!controller.poll(2 * (kDeskMateLinkHelloIntervalMs + 2) + 3,
                            wire));
 }
