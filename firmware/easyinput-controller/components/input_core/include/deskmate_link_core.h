@@ -67,6 +67,10 @@ inline constexpr std::uint32_t kLinkT08RequiredCapabilities =
     kLinkCapabilityCore | kLinkCapabilityAgentState;
 inline constexpr std::uint32_t kLinkT08DeferredCapabilities =
     kLinkCapabilityDisplay | kLinkCapabilityMotion | kLinkCapabilityAudio;
+inline constexpr std::uint32_t kLinkT09RequiredCapabilities =
+    kLinkCapabilityCore | kLinkCapabilityAgentState | kLinkCapabilityDisplay;
+inline constexpr std::uint32_t kLinkT09ForbiddenCapabilities =
+    kLinkCapabilityMotion | kLinkCapabilityAudio;
 inline constexpr std::uint8_t kLinkT08AllowedStatusFlags =
     (1u << 0) | (1u << 7);
 

@@ -169,7 +169,7 @@ void controller_handshake_status_and_state() {
     CHECK(same_wire(wire, "444D4C4B01010200020000000000B961"));
 
     const std::array<std::uint8_t, 10> capabilities = {
-        3, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
+        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
     controller.receive(response(LinkMessageType::GetCapabilities, 2,
                                 capabilities.data(), capabilities.size()), 2);
     CHECK(controller.poll(2, wire));
@@ -201,7 +201,7 @@ void controller_retries_disconnect_and_does_not_replay() {
     controller.receive(response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
     CHECK(controller.poll(1, wire));
     const std::array<std::uint8_t, 10> capabilities = {
-        3, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
+        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
     controller.receive(response(LinkMessageType::GetCapabilities, 2,
                                 capabilities.data(), capabilities.size()), 2);
     CHECK(controller.poll(2, wire));
@@ -261,7 +261,7 @@ void malformed_response_fails_closed() {
     CHECK(controller.snapshot().state == LinkControllerState::Waiting);
 }
 
-void deferred_t08_capabilities_and_status_fail_closed() {
+void forbidden_t09_capabilities_and_status_fail_closed() {
     LinkWireFrame wire{};
     const std::array<std::uint8_t, 8> hello = {
         2, 1, 0xdd, 0xcc, 0xbb, 0xaa, 0x80, 0};
@@ -273,7 +273,7 @@ void deferred_t08_capabilities_and_status_fail_closed() {
         response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
     CHECK(capabilities_controller.poll(1, wire));
     const std::array<std::uint8_t, 10> deferred_capabilities = {
-        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
+        15, 0, 0, 0, 15, 0, 0, 0, 0x80, 0};
     capabilities_controller.receive(
         response(LinkMessageType::GetCapabilities, 2,
                  deferred_capabilities.data(), deferred_capabilities.size()),
@@ -289,7 +289,7 @@ void deferred_t08_capabilities_and_status_fail_closed() {
         response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
     CHECK(status_controller.poll(1, wire));
     const std::array<std::uint8_t, 10> capabilities = {
-        3, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
+        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
     status_controller.receive(
         response(LinkMessageType::GetCapabilities, 2,
                  capabilities.data(), capabilities.size()),
@@ -348,7 +348,7 @@ int main() {
     controller_handshake_status_and_state();
     controller_retries_disconnect_and_does_not_replay();
     malformed_response_fails_closed();
-    deferred_t08_capabilities_and_status_fail_closed();
+    forbidden_t09_capabilities_and_status_fail_closed();
     errors_and_unmatched_frames_fail_closed();
     if (failures != 0) {
         std::cerr << "deskmate_link_core_tests: " << failures << " failure(s)\n";

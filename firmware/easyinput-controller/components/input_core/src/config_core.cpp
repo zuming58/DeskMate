@@ -226,12 +226,13 @@ bool ConfigReadStream::encode_next(std::array<uint8_t, kConfigFeaturePayloadByte
 bool ConfigReadStream::mark_sent() { if (!pending_) return false; if (++next_chunk_ >= total_chunks_) pending_ = false; return !pending_; }
 void ConfigReadStream::abort() { document_ = {}; request_id_ = epoch_ = 0; next_chunk_ = total_chunks_ = 0; pending_ = false; }
 bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
-                                 const LinkStatusSnapshot& link) {
+                                 const LinkStatusSnapshot& link,
+                                 const AgentStateDiagnostics& agent) {
   abort();
   if (!id || !epoch) return false;
   const int written = std::snprintf(
       json_.data(), json_.size(),
-      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu}})",
+      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true,"agent_state_bridge_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu},"agent_state":{"accepted":%lu,"malformed":%lu,"duplicates":%lu,"expired":%lu,"dropped_disconnected":%lu,"forwarded":%lu,"queue_drops":%lu}})",
       link_controller_state_name(link.state),
       static_cast<unsigned long>(link.rx_frames),
       static_cast<unsigned long>(link.tx_frames),
@@ -244,7 +245,14 @@ bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
       static_cast<unsigned long>(link.queue_drops),
       static_cast<unsigned long>(link.peer_restarts),
       static_cast<unsigned long>(link.unexpected_frames),
-      static_cast<unsigned long>(link.semantic_errors));
+      static_cast<unsigned long>(link.semantic_errors),
+      static_cast<unsigned long>(agent.accepted),
+      static_cast<unsigned long>(agent.malformed),
+      static_cast<unsigned long>(agent.duplicates),
+      static_cast<unsigned long>(agent.expired),
+      static_cast<unsigned long>(agent.dropped_disconnected),
+      static_cast<unsigned long>(agent.forwarded),
+      static_cast<unsigned long>(agent.queue_drops));
   if (written <= 0 || static_cast<size_t>(written) >= json_.size()) {
     abort();
     return false;

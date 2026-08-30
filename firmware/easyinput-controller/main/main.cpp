@@ -1,3 +1,4 @@
+#include "agent_state_core.h"
 #include "board_pins.h"
 #include "input_core.h"
 #include "input_runtime.h"
@@ -48,6 +49,10 @@ constexpr size_t kConfigCommandQueueCapacity = 8;
 std::array<uint8_t, kConfigCommandQueueCapacity * sizeof(ConfigFeatureCommand)>
     config_command_queue_storage{};
 QueueHandle_t config_command_queue = nullptr;
+StaticQueue_t agent_state_command_queue_control{};
+std::array<uint8_t, sizeof(ConfigFeatureCommand)>
+    agent_state_command_queue_storage{};
+QueueHandle_t agent_state_command_queue = nullptr;
 QueueHandle_t config_save_queue = nullptr;
 QueueHandle_t config_result_queue = nullptr;
 StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
@@ -79,6 +84,7 @@ ConfigWriteAssembler config_write_assembler;
 ConfigReadStream config_read_stream;
 ConfigStatusStream config_status_stream;
 DeskMateLinkUart deskmate_link_uart;
+AgentStateBridge agent_state_bridge;
 bool config_save_in_flight = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
@@ -346,7 +352,27 @@ void input_owner_task(void*) {
                                  input_owner_save_result.document.length, input_owner_save_result.document.crc16);
             }
         }
-        while (xQueueReceive(config_command_queue, &input_owner_config_command, 0) == pdTRUE) {
+        while (xQueueReceive(agent_state_command_queue,
+                             &input_owner_config_command, 0) == pdTRUE) {
+            const uint32_t current_epoch =
+                runtime.diagnostics().usb_mount_epoch;
+            if (input_owner_config_command.epoch != current_epoch) {
+                agent_state_bridge.clear_for_usb_epoch(current_epoch);
+                continue;
+            }
+            AgentStateDispatch dispatch{};
+            if (agent_state_bridge.accept(
+                    input_owner_config_command.payload.data(),
+                    input_owner_config_command.length,
+                    input_owner_config_command.epoch, now_ms,
+                    deskmate_link_uart.snapshot(), dispatch)) {
+                agent_state_bridge.note_forward_result(
+                    deskmate_link_uart.queue_agent_state(
+                        dispatch.state, dispatch.transition_id));
+            }
+        }
+        while (xQueueReceive(config_command_queue,
+                             &input_owner_config_command, 0) == pdTRUE) {
             if (input_owner_config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
                 config_write_assembler.abort();
                 config_read_stream.abort();
@@ -388,10 +414,22 @@ void input_owner_task(void*) {
                     } else {
                         (void)config_status_stream.replace(
                             request.request_id, input_owner_config_command.epoch,
-                            deskmate_link_uart.snapshot());
+                            deskmate_link_uart.snapshot(),
+                            agent_state_bridge.diagnostics());
                     }
                 }
             }
+        }
+
+        agent_state_bridge.clear_for_usb_epoch(
+            runtime.diagnostics().usb_mount_epoch);
+        AgentStateDispatch expiry_dispatch{};
+        if (agent_state_bridge.poll(
+                now_ms, runtime.diagnostics().usb_mount_epoch,
+                deskmate_link_uart.snapshot(), expiry_dispatch)) {
+            agent_state_bridge.note_forward_result(
+                deskmate_link_uart.queue_agent_state(
+                    expiry_dispatch.state, expiry_dispatch.transition_id));
         }
 
         runtime.service_release_reassertion(now_ms);
@@ -512,6 +550,11 @@ extern "C" void app_main(void) {
         kConfigCommandQueueCapacity, sizeof(ConfigFeatureCommand),
         config_command_queue_storage.data(), &config_command_queue_control);
     ESP_ERROR_CHECK(config_command_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
+    agent_state_command_queue = xQueueCreateStatic(
+        1, sizeof(ConfigFeatureCommand), agent_state_command_queue_storage.data(),
+        &agent_state_command_queue_control);
+    ESP_ERROR_CHECK(agent_state_command_queue == nullptr ? ESP_ERR_NO_MEM
+                                                         : ESP_OK);
     config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
     config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
     ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
@@ -631,17 +674,33 @@ extern "C" uint16_t tud_hid_get_report_cb(
 extern "C" void tud_hid_set_report_cb(
     uint8_t, uint8_t report_id, hid_report_type_t report_type,
     uint8_t const* buffer, uint16_t length) {
+    if (report_type != HID_REPORT_TYPE_FEATURE) return;
     ConfigFeatureReportView feature{};
-    if (report_type != HID_REPORT_TYPE_FEATURE ||
-        !normalize_config_feature_report(report_id, buffer, length, feature)) return;
+    AgentStateFeatureReportView agent_feature{};
+    if (normalize_agent_state_feature_report(
+            report_id, buffer, length, agent_feature)) {
+        feature.report_id = kAgentStateReportId;
+        feature.payload = agent_feature.payload;
+        feature.length = agent_feature.length;
+    } else if (!normalize_config_feature_report(
+                   report_id, buffer, length, feature)) {
+        return;
+    }
     const bool config_read = feature.report_id == 0x13;
     ConfigFeatureCommand command{};
     command.report_id = feature.report_id;
     command.length = static_cast<uint8_t>(config_read ? kConfigReadRequestPayloadBytes : feature.length);
     command.epoch = callback_lifecycle.snapshot().epoch;
     std::copy_n(feature.payload, command.length, command.payload.begin());
-    if (config_command_queue != nullptr &&
-        xQueueSend(config_command_queue, &command, 0) == pdTRUE) {
+    QueueHandle_t destination = feature.report_id == kAgentStateReportId
+        ? agent_state_command_queue
+        : config_command_queue;
+    const BaseType_t queued = feature.report_id == kAgentStateReportId
+        ? (destination == nullptr ? pdFALSE
+                                  : xQueueOverwrite(destination, &command))
+        : (destination == nullptr ? pdFALSE
+                                  : xQueueSend(destination, &command, 0));
+    if (queued == pdTRUE) {
         notify_owner_from_callback();
     }
 }

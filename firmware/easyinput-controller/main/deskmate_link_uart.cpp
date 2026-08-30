@@ -64,6 +64,8 @@ bool DeskMateLinkUart::queue_agent_state(LinkAgentState state,
     portENTER_CRITICAL(&status_mux_);
     const bool accepted =
         published_status_.state == LinkControllerState::Connected &&
+        (published_status_.enabled_capabilities &
+         kLinkT09RequiredCapabilities) == kLinkT09RequiredCapabilities &&
         !agent_state_pending_ && transition_id != 0 &&
         static_cast<std::uint8_t>(state) <=
             static_cast<std::uint8_t>(LinkAgentState::Error);

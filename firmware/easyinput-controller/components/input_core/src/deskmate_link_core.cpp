@@ -425,9 +425,9 @@ bool LinkController::handle_response(const LinkFrame& incoming,
         const std::uint32_t enabled = read_u32(incoming.payload.data() + 4);
         const std::uint16_t max_payload = read_u16(incoming.payload.data() + 8);
         if ((enabled & ~implemented) != 0 ||
-            (enabled & kLinkT08RequiredCapabilities) !=
-                kLinkT08RequiredCapabilities ||
-            ((implemented | enabled) & kLinkT08DeferredCapabilities) != 0 ||
+            (enabled & kLinkT09RequiredCapabilities) !=
+                kLinkT09RequiredCapabilities ||
+            ((implemented | enabled) & kLinkT09ForbiddenCapabilities) != 0 ||
             max_payload != kDeskMateLinkMaxPayloadBytes) {
             return false;
         }
@@ -498,7 +498,9 @@ void LinkController::receive(const LinkFrame& incoming,
 bool LinkController::queue_agent_state(LinkAgentState state,
                                        std::uint32_t transition_id) {
     if (status_.state != LinkControllerState::Connected ||
-        !capabilities_known_ || queued_agent_state_.pending ||
+        !capabilities_known_ ||
+        (status_.enabled_capabilities & kLinkT09RequiredCapabilities) !=
+            kLinkT09RequiredCapabilities || queued_agent_state_.pending ||
         transition_id == 0 ||
         !valid_agent_state(static_cast<std::uint8_t>(state))) {
         return false;

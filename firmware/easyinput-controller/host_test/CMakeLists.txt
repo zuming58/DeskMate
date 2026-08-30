@@ -17,6 +17,13 @@ add_executable(deskmate_link_core_tests
 target_include_directories(deskmate_link_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME deskmate_link_core_tests COMMAND deskmate_link_core_tests)
 
+add_executable(agent_state_core_tests
+    agent_state_core_tests.cpp
+    ../components/input_core/src/agent_state_core.cpp
+)
+target_include_directories(agent_state_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME agent_state_core_tests COMMAND agent_state_core_tests)
+
 add_executable(input_core_tests input_core_tests.cpp ../components/input_core/src/input_core.cpp ../components/input_core/src/hid_report.cpp)
 target_include_directories(input_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_core_tests COMMAND input_core_tests)
