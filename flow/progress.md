@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-30 · T08 cross-end audit fixes stale controller status; Xiaozhi remains hardware-blocked
+
+- role/baseline：在 EasyInput 隔离工作树 `F:\Codex\deskmate-t08-easyinput` 复核 `codex/easyinput-t08-link-controller@a2e7072edaadffa60e9c5b9d77b3331f428015ed`，并交叉审计小智远端 `codex/xiaozhi-t08-link-endpoint@db52e883156b5a4a6e63c0954eb7e3073d3b8aae`。冻结合同 `c8b8a344a72a849640c8b19575768d6daf4d6667` 是两端祖先，`v1.md`、黄金向量和 README 的 SHA-256 逐文件一致。
+- fix：审计发现 EasyInput 在三次请求失败进入 waiting/faulted 后只清能力与 flags，仍保留对端旧 `agent_state/last_error`，违反“断线清除 peer-derived status”合同。实现提交 `105ffa7853e1f1483a0909b1c0acf08ab7054291` 统一把断线/故障状态复位为 idle、无错误、零 flags/能力，并补充真实握手、状态、三轮失败后的回归断言；没有修改输入、USB、配置、灯效、Host Action、桌面或小智固件。
+- verification：EasyInput Host CTest `8/8`；ESP-IDF v5.5.5、target `esp32s3`、固定 16 MB 分区干净构建通过，分区表 SHA-256 保持 `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`。小智 Host CTest `6/6`；ESP-IDF v5.5.3、target `esp32s3` 干净构建通过，app 150,432 字节、SHA-256 `E7042239508134514F3CA5F42E27F0A3F09365A1633FC846E351BA5C63E7E140`，与交接一致。
+- blockers/next：小智生产入口仍以 `verified=false/-1/-1` 返回 `HARDWARE_PINOUT_BLOCKED`，不会安装 UART；新工程仍使用默认 app `0x10000`/1 MiB 分区，而固定参考板使用 `partitions/v1/16m.csv`、app `ota_0@0x100000`/6 MiB。当前不得烧录或接线。下一步由小智窗口先固定有来源的 16 MB 布局和恢复方案，再以原理图/PCB 网表或断电通断测量证明实体 TX/RX 焊盘到 SoC GPIO；随后本机只做最终差异审计、生成两板烧录卡和只读 Link HIL。
+- hardware：本轮未扫描端口、识别设备、读取或写入 Flash/NVS、烧录、擦除、monitor、写 eFuse、接线，也未初始化 OLED/舵机/音频。
+
 ## 2026-08-29 · T08 EasyInput DeskMate Link controller code and build gate complete
 
 - 做了什么：在隔离工作树 `F:\Codex\deskmate-t08-easyinput`、分支 `codex/easyinput-t08-link-controller` 完成 EasyInput 总控端；共享合同/黄金向量提交为 `c8b8a344a72a849640c8b19575768d6daf4d6667`，实现提交为 `697bffa0f372ef57e4b41fa3fa1d7b39bffbab0e`。新增纯 C++ codec/CRC/流式解析器/请求生命周期、GPIO43/44 的 UART0 唯一 owner、HELLO/能力/状态轮询、有限重试、对端重启和旧状态不重放，并把脱敏 Link 状态兼容加入既有 HID 状态响应。
