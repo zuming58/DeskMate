@@ -2,7 +2,7 @@
 
 ## 2026-08-30 · Desktop configuration read race fixed and application picker compacted
 
-- scope/base：在隔离工作树 `F:\Codex\deskmate-t07-main-merge`、分支 `codex/desktop-config-read-ui-fix` 中，从最新 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d` 修复桌面端；原工作树 `F:\Codex\deskmate` 及其中未提交界面修改未被覆盖。
+- scope/base：在隔离工作树 `F:\Codex\deskmate-t07-main-merge`、分支 `codex/desktop-config-read-ui-fix` 中，从最新 `origin/main@3e2a046f49260ead422da4c295c3321de13dca5d` 修复桌面端，实现提交 `2afb6b5f0298d84aa23fa42d6f647edef9ac2717`；原工作树 `F:\Codex\deskmate` 及其中未提交界面修改未被覆盖。
 - root cause：独立运行最新原生输入桥时，当前 EasyInput 成功返回能力 3/3 块和完整配置 25/25 块（1191 字节、CRC16 53500、来源 DeskMate NVS），证明固件 Vendor HID 配置通道正常。当天只在开发模式失败，是因为 React StrictMode 重复挂载按键页，同一时间触发两次读取；第二次收到 `config-read-in-progress` 并覆盖活动页面状态，而首个成功结果返回给已卸载页面。
 - fix/UI：输入桥现在将相同模式的并发读取合并到同一个有界请求和 Promise，能力读取与配置快照仍各只发送一次；不同模式并发和配置写入冲突继续失败关闭。打开应用选择器同步收紧字号、行高、图标、滚动条和按钮密度，并为长应用名保留省略显示。
 - verification：新增重复读取单飞回归；定向测试 41/41，全量 `npm test` 116/116。标准 `npm run build:desktop` 的 Vite/原生桥构建通过，但仓库 `release` 目录被 Windows 进程占用，electron-builder 在最终重命名时报既有 `EPERM`；在独立临时输出目录执行同等打包成功。打包版真机运行显示“键盘系统 已读取 / DeskMate NVS · 5d8cf77e2e78a1ee”，开发版视觉检查确认应用行字号 11px、最小高度 36px。
