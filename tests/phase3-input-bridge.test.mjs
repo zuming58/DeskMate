@@ -69,6 +69,41 @@ test("agent-state bridge is latest-wins and never replays after disconnect", asy
   manager.stop();
 });
 
+test("agent-state bridge bounds timeouts and ignores stale acknowledgements", async () => {
+  const writes = [];
+  const timers = new Map();
+  let timerSequence = 0;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  child.kill = () => {};
+  const manager = new InputBridgeManager({
+    executable: "bridge.exe",
+    spawnImpl: () => child,
+    setTimer: (callback) => { const id = ++timerSequence; timers.set(id, callback); return id; },
+    clearTimer: (id) => timers.delete(id),
+  });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, time: "2026-08-21T10:00:00.000Z", sequence: 1 }));
+
+  const firstReport = Buffer.alloc(64); firstReport[0] = 0x12;
+  const latestReport = Buffer.from(firstReport); latestReport[2] = 3;
+  const first = manager.sendAgentState(firstReport);
+  const latest = manager.sendAgentState(latestReport);
+  const firstRequestId = writes[0].requestId;
+  const firstTimeout = [...timers.values()][0];
+  firstTimeout();
+
+  assert.deepEqual(await first, { ok: false, reason: "agent-state-write-timeout" });
+  assert.equal(writes.length, 2, "only the latest queued state is dispatched after timeout");
+  manager.handleLine(JSON.stringify({ version: 1, type: "agent-state-write", source: "easyinput-hid", requestId: firstRequestId, ok: true, reason: "", time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.equal(manager.pendingAgentState.requestId, writes[1].requestId, "a stale acknowledgement must not finish the current request");
+
+  manager.stop();
+  assert.deepEqual(await latest, { ok: false, reason: "input-bridge-stopped" });
+});
+
 test("fixed text bridge events expose metadata only", () => {
   const base = { version: 1, source: "easyinput-hid", time: "2026-08-21T10:00:00.000Z", sequence: 9 };
   const ready = parseBridgeLine(JSON.stringify({ ...base, type: "fixed-text", requestId: "fixed-12345678", bytes: 12, text: "private", devicePath: "private" }));

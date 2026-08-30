@@ -46,6 +46,10 @@ LinkStatusSnapshot ready_link(std::uint32_t peer_restarts = 0) {
 void normalizes_both_tinyusb_shapes() {
     auto payload = command(2, 3, 9, 1000);
     AgentStateFeatureReportView view{};
+    CHECK(!normalize_agent_state_feature_report(
+        kAgentStateReportId, nullptr, payload.size(), view));
+    CHECK(!normalize_agent_state_feature_report(
+        kAgentStateReportId, payload.data(), 0, view));
     CHECK(normalize_agent_state_feature_report(
         kAgentStateReportId, payload.data(), payload.size(), view));
     CHECK(view.payload == payload.data() && view.length == payload.size());

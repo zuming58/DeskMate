@@ -39,7 +39,7 @@ bool normalize_agent_state_feature_report(
     std::uint8_t report_id, const std::uint8_t* buffer, std::size_t length,
     AgentStateFeatureReportView& out) {
     out = {};
-    if (buffer == nullptr) return false;
+    if (buffer == nullptr || length == 0) return false;
     const bool inline_report_id =
         buffer[0] == kAgentStateReportId &&
         (length == kAgentStatePayloadBytes + 1 ||
