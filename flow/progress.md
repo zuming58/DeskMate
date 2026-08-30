@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-30 · T09 Xiaozhi app flash and exact readback confirmed; normal boot and OLED HIL pending
+
+- 做了什么：在现有 T08 app、固定分区表、NVS、otadata 和板级身份均已完成只读备份与校验后，按用户精确授权，将源码 `b26e99e07dac4af4ee57bf8e40cb2efbc57f731d` 的小智 T09 app 单独写入 `0x100000..0x13183F`；写入工具自动擦除仅覆盖到 `0x131FFF`。写入前后均在同一受控流程中 fresh 验明为同一块 ESP32-S3/16 MB 小智板，身份数据未持久化。
+- 精确证据：候选和板上独立读回均为 202,816 字节，SHA-256 均为 `9BF9183376FEF427E0549EFCA942B193979C11BF563EBA989F7E487F956A9786`；结果为 `APP_FLASH_AND_EXACT_READBACK_CONFIRMED`。Git 外恢复目录新增烧录回执 `t09-b26e99e-flash-receipt.json`，回执 SHA-256 为 `1BE01E0BCB46641539C947301AD9A9546D63D62BF4889EF05EDA99B9FE5D7EFD`。
+- 安全边界：未写分区表、NVS、otadata、bootloader 或 eFuse，未整片擦除，未操作 EasyInput、舵机或音频；设备按授权保持在待正常复位状态，本条不冒充 OLED 已启动或三端 HIL 已通过。
+- 下一步：用户只按一次小智 `RESET`（不按 `BOOT`）或正常断电重开，先确认 OLED 冷启动即显示 idle 大眼睛；通过后恢复 GND 与交叉 TX/RX、保持 3V3 悬空，再执行七状态、latest-wins、重连不重放和 T03～T06 联合回归。
+
 ## 2026-08-30 · T09 Xiaozhi identity and recovery backup confirmed; app flash authorization pending
 
 - 做了什么：按用户单独授权，只对当前唯一 USB 串行候选执行 fresh 小智验身；前后身份在同一进程内匹配且未持久化 MAC/序列号。确认芯片为 ESP32-S3、Flash 为 16 MB 后，依次只读备份固定分区表、当前 T08 app、NVS 和 otadata。
