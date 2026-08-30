@@ -1,8 +1,8 @@
 # T08 first read-only two-board acceptance
 
-Status: `PARTIAL_HIL_CONFIRMED / SIGNAL_DISCONNECT_AND_COMBINED_REGRESSION_PENDING`
+Status: `LINK_HIL_CONFIRMED / SIGNAL_DISCONNECT_CONFIRMED / COMBINED_SOFTWARE_REGRESSION_DEFERRED`
 
-The two boards have now completed the positive connection and peer-restart portions of this checklist. Individual TX/RX disconnect recovery and the combined T03-T06 regression remain open, so T08 is not locked yet.
+The two boards have now completed the positive connection, peer-restart and individual TX/RX disconnect-recovery portions of this checklist. The combined T03-T06 regression remains open, so T08 is not locked yet.
 
 ## Observed evidence · 2026-08-30
 
@@ -10,13 +10,16 @@ The two boards have now completed the positive connection and peer-restart porti
 - EasyInput UART0 local loopback produced matching `rx_frames=579` and `tx_frames=579`, with zero CRC errors. A direct Xiaozhi COM probe returned a byte-valid frozen HELLO response with a valid CRC before the boards were connected.
 - The first board-to-board attempt incorrectly paired RX with RX and TX with TX. After crossing the signals as required by the frozen contract, two read-only snapshots stayed `connected` and advanced from `rx=21/tx=81` to `rx=23/tx=83`; timeout and retry counters did not continue growing.
 - After a Xiaozhi reset, EasyInput observed `peer_restarts=1`, returned to `connected`, and advanced from `rx=171/tx=231` to `rx=173/tx=233`. The reset introduced ROM startup noise (`framing_errors=116`) and three semantic rejects; both counters then stayed stable, while CRC/version/length/queue-drop counters remained zero.
+- With only EasyInput TXD0 disconnected, two snapshots remained `waiting`: `rx=0`, `tx=858 -> 894`, `request_timeouts=286 -> 298` and `retries=572 -> 596`. CRC, framing, version, length, unexpected-frame, semantic and queue-drop counters remained zero for that boot.
+- The first physical restoration produced valid but unexpected reflected frames. The user reseated the same logical crossed wiring and cold-started both boards; two snapshots then stayed `connected` and advanced from `rx=21/tx=24` to `rx=22/tx=25`, with no new protocol or queue errors. This is recorded as an intermittent physical-contact/startup observation, not as proof that the logical wiring had been wrong.
+- The user later explicitly disconnected only Xiaozhi TX to EasyInput RXD0 while retaining EasyInput TXD0 to Xiaozhi RX and common ground. Two snapshots remained `waiting`: `rx=0`, `tx=52 -> 57`, `request_timeouts=17 -> 19` and `retries=34 -> 38`; all protocol and queue error counters remained zero. After restoring RXD0 and cold-starting both boards, two snapshots returned to `connected` and advanced from `rx=13/tx=16` to `rx=14/tx=17`, with `unexpected_frames=0` and all CRC/version/length/semantic/queue counters at zero. The stable `framing_errors=58` value was startup noise and did not grow between samples.
+- With both signals restored and Link connected, the user confirmed the physical buttons, encoder rotation and encoder press behavior remained healthy. DeskMate was not running, so voice input, Open Application, history copy and the configuration-page read were not exercised in this session and remain explicitly deferred.
 - No OLED, servo or Xiaozhi audio action occurred. No additional Flash/NVS read or write, erase, partition change or eFuse operation was performed during Link HIL.
 
 ## Remaining acceptance
 
-1. Disconnect EasyInput TXD0 and RXD0 one at a time while retaining common ground; require bounded waiting and automatic recovery after reconnection.
-2. Confirm no old Agent state is replayed after either disconnect.
-3. Repeat the locked EasyInput key, encoder, LED, configuration, Host Action and voice regressions while Link is connected and while it is faulted.
+1. Start the accepted DeskMate candidate and repeat voice input, Open Application, history copy and configuration-page read while Link is connected.
+2. The disconnected-state status/config channel remained responsive during both confirmed signal-direction tests. Complete any remaining user-visible faulted-state regression together with the deferred software checks before marking the complete T08 package locked.
 
 ## Preconditions
 

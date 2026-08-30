@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-08-30 · T08 two-board Link and both signal-direction HIL confirmed; software regression deferred
+
+- 做了什么：在已烧录的 EasyInput `defaea8361cbd4f63e52c281cd1fd7a7cca6f19d` 与小智 `132117e8cf8aeae07319cc647d2634326ec14637` 上，按冻结三线合同逐根断开信号线，保留 GND 共地且始终不连接 3V3；仅通过 EasyInput 已冻结 HID 状态通道读取脱敏 Link 状态与计数。
+- 真机证据：断开 EasyInput TXD0→小智 RX 时保持 `waiting/rx=0`，`tx 858→894`、timeout `286→298`、retry `572→596`。用户随后明确只断开小智 TX→EasyInput RXD0、保留另一信号与 GND；状态同样保持 `waiting/rx=0`，`tx 52→57`、timeout `17→19`、retry `34→38`，所有协议与队列错误为 0。恢复 RXD0 并冷启动后 Link 保持 `connected`，收发从 `13/16` 增至 `14/17`，所有新增协议错误为 0。
+- 接触观察：第一次恢复同一逻辑线序时出现有效但 unexpected 的回送帧；用户重新插拔相同交叉接法并冷启动后恢复 `connected`，收发 `21/24→22/25` 且 unexpected 归零。因此只记录为间歇性接触/启动观察，不把它误写成已经证实的线序错误。
+- 既有功能回归：恢复两根信号后，用户确认实体按钮、旋钮旋转和旋钮按压均正常。DeskMate 当时未运行，因此语音输入、打开应用、历史复制和配置页读取没有执行，明确保留为延期项，不冒充通过。
+- 安全与产出：未写 HID/配置，未读取或写入 Flash/NVS，未烧录、擦除、改分区或 eFuse，也未操作 OLED、舵机和小智音频。证据已补入 `docs/testing/t08-first-read-only-link-acceptance.md`；状态推进为 `LINK_HIL_CONFIRMED / SIGNAL_DISCONNECT_CONFIRMED / COMBINED_SOFTWARE_REGRESSION_DEFERRED`。
+- 下一步：保持两根信号线与 GND 正常连接、3V3 悬空；可以继续 T09 候选准备，但在标记完整 T08 包锁定或执行 T09 三端真机验收前，仍需启动已接受的 DeskMate 候选补做语音、打开应用、历史复制、配置读取及一次用户可见故障态回归。
+
 ## 2026-08-30 · T09C independent audit confirmed after boundary hardening
 
 - 做了什么：在隔离工作树 `F:\Codex\deskmate-t09-final-audit`、分支 `codex/desktop-t09-agent-state-audit` 独立审计远端 T09C `543a49a1ca47a2007edc76fed9ba8164994bc8d9`。审计提交 `86d54a70878dcfc2d6a07b6575279c914701b275` 在任何首字节访问前拒绝 null/zero-length Feature Report，并补齐固件边界向量与桌面 timeout、latest-wins、stale ACK、stop cleanup 回归；未改冻结合同、DeskMate Link、小智、界面导航或硬件引脚。
