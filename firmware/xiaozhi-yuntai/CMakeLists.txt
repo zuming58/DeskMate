@@ -25,3 +25,9 @@ if(NOT CONFIG_BOOTLOADER_LOG_LEVEL_NONE OR NOT CONFIG_LOG_DEFAULT_LEVEL_NONE)
     message(FATAL_ERROR
         "DeskMate Xiaozhi Phase B requires bootloader and application logging off.")
 endif()
+
+if(NOT CONFIG_PARTITION_TABLE_CUSTOM OR
+   NOT CONFIG_PARTITION_TABLE_CUSTOM_FILENAME STREQUAL "partitions/v1/16m.csv")
+    message(FATAL_ERROR
+        "DeskMate Xiaozhi T08 requires the sourced 16 MiB OTA partition contract.")
+endif()

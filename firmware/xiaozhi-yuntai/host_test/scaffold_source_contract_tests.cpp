@@ -60,6 +60,7 @@ int main() {
     const auto owner_source = ReadAll(OWNER_SOURCE_PATH);
     const auto transport_header = ReadAll(TRANSPORT_HEADER_PATH);
     const auto sdkconfig_defaults = ReadAll(SDKCONFIG_DEFAULTS_PATH);
+    const auto partition_table = ReadAll(PARTITION_TABLE_PATH);
     const auto module_gitignore = ReadAll(MODULE_GITIGNORE_PATH);
     const auto link_contract = ReadAll(LINK_CONTRACT_PATH);
     const auto link_vectors = ReadAll(LINK_VECTORS_PATH);
@@ -69,6 +70,8 @@ int main() {
     CHECK(Contains(root_cmake, "CONFIG_ESP_CONSOLE_NONE"));
     CHECK(Contains(root_cmake, "CONFIG_BOOTLOADER_LOG_LEVEL_NONE"));
     CHECK(Contains(root_cmake, "CONFIG_LOG_DEFAULT_LEVEL_NONE"));
+    CHECK(Contains(root_cmake, "CONFIG_PARTITION_TABLE_CUSTOM"));
+    CHECK(Contains(root_cmake, "partitions/v1/16m.csv"));
     CHECK(Contains(main_cmake, "deskmate_link_uart.cpp"));
     CHECK(Contains(main_cmake, "esp_driver_uart"));
 
@@ -80,9 +83,25 @@ int main() {
                    "CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y"));
     CHECK(Contains(sdkconfig_defaults, "CONFIG_LOG_DEFAULT_LEVEL_NONE=y"));
     CHECK(Contains(sdkconfig_defaults, "CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y"));
+    CHECK(Contains(sdkconfig_defaults,
+                   "CONFIG_PARTITION_TABLE_CUSTOM=y"));
+    CHECK(Contains(sdkconfig_defaults,
+                   "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v1/16m.csv\""));
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_UART_DEFAULT=y"));
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_UART_CUSTOM=y"));
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y"));
+    CHECK(Contains(partition_table,
+                   "nvs,      data, nvs,     0x9000,    0x4000,"));
+    CHECK(Contains(partition_table,
+                   "otadata,  data, ota,     0xd000,    0x2000,"));
+    CHECK(Contains(partition_table,
+                   "phy_init, data, phy,     0xf000,    0x1000,"));
+    CHECK(Contains(partition_table,
+                   "model,    data, spiffs,  0x10000,   0xF0000,"));
+    CHECK(Contains(partition_table,
+                   "ota_0,    app,  ota_0,   0x100000,  6M,"));
+    CHECK(Contains(partition_table,
+                   "ota_1,    app,  ota_1,   0x700000,  6M,"));
 
     CHECK(Contains(protocol_header, "kLinkMaxPayloadBytes = 128"));
     CHECK(Contains(protocol_header, "kLinkInterByteTimeoutMs = 100"));
@@ -111,10 +130,12 @@ int main() {
     CHECK(Occurrences(uart_source, "uart_driver_delete(") == 1);
     CHECK(Occurrences(uart_source, "xTaskCreate(") == 1);
     CHECK(Contains(uart_source, "kHardwarePinoutBlocked"));
+    CHECK(Contains(uart_source, "PlanBoardLinkUartInstall"));
     CHECK(Contains(pinout_header, "kBoardLinkPinout"));
-    CHECK(Contains(pinout_header, "false,"));
-    CHECK(Occurrences(pinout_header, "-1") == 2);
-    CHECK(!Contains(pinout_header, "true,"));
+    CHECK(Contains(pinout_header, "true,"));
+    CHECK(Contains(pinout_header, "43,"));
+    CHECK(Contains(pinout_header, "44,"));
+    CHECK(Contains(pinout_header, "install_allowed"));
     CHECK(Contains(uart_header, "kHardwarePinoutBlocked"));
     CHECK(Contains(main_source, "StartDeskMateLinkUart(endpoint)"));
     CHECK(!Contains(main_source, "uart_"));
@@ -132,11 +153,11 @@ int main() {
     CHECK(!Contains(production, "esp_codec"));
     CHECK(!Contains(production, "uart_write_bytes") ||
           Occurrences(production, "uart_write_bytes") == 1);
-    CHECK(Contains(model_source, "CapabilityGate::kHardwarePinoutBlocked"));
+    CHECK(Contains(model_source, "CapabilityGate::kReady"));
     CHECK(Contains(model_source, "CapabilityGate::kPendingValidation"));
     CHECK(Contains(model_source, "CapabilityGate::kDisabledByProduct"));
     CHECK(Contains(model_source, "ContractState::kFrozen"));
-    CHECK(Contains(model_source, "RuntimeState::kProtocolReadyPinoutBlocked"));
+    CHECK(Contains(model_source, "RuntimeState::kProtocolReady"));
 
     CHECK(Contains(link_contract, "DESKMATE_LINK_V1_FROZEN"));
     CHECK(Contains(link_contract, "CRC16-CCITT-FALSE"));

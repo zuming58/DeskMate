@@ -8,14 +8,30 @@ struct BoardLinkPinout {
     int rx_gpio;
 };
 
-// The board photo proves GND/TX/RX silkscreen labels, and source inspection
-// proves current feature code does not occupy GPIO43/44. Neither proves PCB
-// continuity from those pads to the ESP32-S3. Keep the hardware path closed
-// until a schematic net or powered-off continuity measurement is recorded.
-inline constexpr BoardLinkPinout kBoardLinkPinout{
-    false,
-    -1,
-    -1,
+struct BoardLinkUartInstallPlan {
+    bool install_allowed;
+    int tx_gpio;
+    int rx_gpio;
 };
+
+constexpr BoardLinkUartInstallPlan PlanBoardLinkUartInstall(
+    const BoardLinkPinout& pinout) noexcept {
+    if (!pinout.verified || pinout.tx_gpio < 0 || pinout.rx_gpio < 0 ||
+        pinout.tx_gpio == pinout.rx_gpio) {
+        return {false, -1, -1};
+    }
+    return {true, pinout.tx_gpio, pinout.rx_gpio};
+}
+
+// Board1_2 schematic and PCB network evidence identifies the physical
+// GND/TX/RX header as GND, TXD0 and RXD0. Espressif's ESP32-S3 definition maps
+// TXD0 to GPIO43 and RXD0 to GPIO44. See the T08 pinout provenance audit.
+inline constexpr BoardLinkPinout kBoardLinkPinout{
+    true,
+    43,
+    44,
+};
+
+static_assert(PlanBoardLinkUartInstall(kBoardLinkPinout).install_allowed);
 
 }  // namespace deskmate::xiaozhi

@@ -4,7 +4,7 @@ namespace deskmate::xiaozhi {
 namespace {
 
 constexpr EndpointCapabilities kCapabilities{
-    CapabilityGate::kHardwarePinoutBlocked,
+    CapabilityGate::kReady,
     CapabilityGate::kPendingValidation,
     CapabilityGate::kLocked,
     CapabilityGate::kDisabledByProduct,
@@ -14,8 +14,8 @@ constexpr EndpointCapabilities kCapabilities{
 
 constexpr EndpointStatus kStatus{
     ContractState::kFrozen,
-    RuntimeState::kProtocolReadyPinoutBlocked,
-    false,
+    RuntimeState::kProtocolReady,
+    true,
     false,
     false,
     false,
@@ -36,6 +36,8 @@ const EndpointStatus& GetEndpointStatus() noexcept {
 
 const char* ToString(CapabilityGate gate) noexcept {
     switch (gate) {
+        case CapabilityGate::kReady:
+            return "ready";
         case CapabilityGate::kDisabledByProduct:
             return "disabled_by_product";
         case CapabilityGate::kPendingValidation:
@@ -58,6 +60,8 @@ const char* ToString(ContractState state) noexcept {
 
 const char* ToString(RuntimeState state) noexcept {
     switch (state) {
+        case RuntimeState::kProtocolReady:
+            return "protocol_ready";
         case RuntimeState::kProtocolReadyPinoutBlocked:
             return "protocol_ready_pinout_blocked";
     }

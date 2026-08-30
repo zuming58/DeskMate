@@ -5,6 +5,7 @@
 namespace deskmate::xiaozhi {
 
 enum class CapabilityGate : std::uint8_t {
+    kReady,
     kDisabledByProduct,
     kPendingValidation,
     kLocked,
@@ -16,6 +17,7 @@ enum class ContractState : std::uint8_t {
 };
 
 enum class RuntimeState : std::uint8_t {
+    kProtocolReady,
     kProtocolReadyPinoutBlocked,
 };
 

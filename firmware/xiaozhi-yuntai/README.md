@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_PINOUT_BLOCKED / HARDWARE_NOT_AUTHORIZED`。
+当前状态：`T08_PHASE_B_PROTOCOL_READY / DESKMATE_LINK_V1_FROZEN / PARTITION_CONTRACT_RESTORED / HARDWARE_PINOUT_VERIFIED / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_NOT_AUTHORIZED`。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -15,11 +15,24 @@ Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中�
 
 `SET_AGENT_STATE` 只修改 RAM 中的状态。DISPLAY、MOTION、AUDIO 能力保持关闭；工程不初始化 OLED、麦克风、功放、扬声器、I2S、LEDC、PWM 或舵机。
 
+## Partition contract
+
+产品文件 [`partitions/v1/16m.csv`](partitions/v1/16m.csv) 与只读参考 `F:\Codex\xiaozhi-yuntai\partitions\v1\16m.csv` 逐字节一致，SHA-256 均为 `5F9FA5E46E092D5571D19DA7B8956F6F9BFD5B7F603799B24D8DFCE769E30C14`。ESP-IDF 配置强制使用该文件：
+
+- `nvs`：`0x9000 / 0x4000`
+- `otadata`：`0xD000 / 0x2000`
+- `phy_init`：`0xF000 / 0x1000`
+- `model`：`0x10000 / 0xF0000`
+- `ota_0`：`0x100000 / 0x600000`
+- `ota_1`：`0x700000 / 0x600000`
+
+根 CMake 会在配置未指向该文件时直接失败，Host 测试也锁定全部条目。来源与许可证记录见 [`t08-xiaozhi-partition-contract-audit.md`](../../docs/provenance/t08-xiaozhi-partition-contract-audit.md)。
+
 ## Hardware pinout gate
 
-现有照片只能证明板上有 `GND/TX/RX` 丝印，当前板型源码只能证明功能代码没有占用 GPIO43/44。缺少 PCB 网络、原理图或断电通断测量，不能证明焊盘到 ESP32-S3 GPIO43/44 的实际连接。
+公开 Board1_2 PCB 网络证明三针接头 H2 的 pad 1/2/3 分别属于 `GND/TX/RX`；同版原理图证明 `TX/RX` 分别连接到模块 `TXD0/RXD0`。Espressif 的 ESP32-S3 定义将 TXD0/RXD0 对应为 GPIO43/GPIO44。因此 [`board_link_pinout.h`](main/board_link_pinout.h) 现在为 `verified=true`、TX GPIO43、RX GPIO44。
 
-因此 [`board_link_pinout.h`](main/board_link_pinout.h) 固定为未验证和 `-1/-1`，启动入口返回 `HARDWARE_PINOUT_BLOCKED`，不会安装 UART driver、配置 GPIO 或创建 owner task。完整证据见 [`t08-xiaozhi-link-phase-b-pinout-audit.md`](../../docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md)。
+Host 门禁会验证：未验证配置即使携带 43/44 也禁止安装 UART；已验证产品配置只能向 UART owner 提供 43/44。完整板级证据见 [`t08-xiaozhi-link-phase-b-pinout-audit.md`](../../docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md)。这不代替独立供电、共地、空闲电压、短路和恢复检查，也不构成接线或烧录授权。
 
 应用控制台、次控制台、bootloader 日志和应用日志均关闭；不写 eFuse。ESP32-S3 ROM 启动字节仍可能存在，协议 parser 会把它作为噪声丢弃。
 
@@ -40,4 +53,4 @@ idf.py --version
 idf.py -C firmware/xiaozhi-yuntai build
 ```
 
-当前默认 1 MiB factory 分区仅用于编译证明，不是获准烧录的最终 Flash/OTA/恢复合同。任何接线、设备识别、Flash 操作或真机 HIL 都必须等待 pinout/electrical/recovery 门和用户新的明确授权。
+干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。任何接线、设备识别、Flash 操作或真机 HIL 仍必须等待 electrical/recovery 门和用户新的明确授权。

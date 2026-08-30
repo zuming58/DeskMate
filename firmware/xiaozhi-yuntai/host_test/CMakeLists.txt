@@ -39,6 +39,12 @@ add_executable(link_uart_owner_tests link_uart_owner_tests.cpp fake_uart.cpp ${C
 target_include_directories(link_uart_owner_tests PRIVATE "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 add_test(NAME link_uart_owner_tests COMMAND link_uart_owner_tests)
 
+add_executable(board_link_pinout_tests board_link_pinout_tests.cpp)
+target_include_directories(board_link_pinout_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../main"
+)
+add_test(NAME board_link_pinout_tests COMMAND board_link_pinout_tests)
+
 add_executable(scaffold_source_contract_tests scaffold_source_contract_tests.cpp)
 target_compile_definitions(scaffold_source_contract_tests PRIVATE
     ROOT_CMAKE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../CMakeLists.txt"
@@ -57,6 +63,7 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     OWNER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
+    PARTITION_TABLE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../partitions/v1/16m.csv"
     MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/v1.md"
     LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-v1.json"

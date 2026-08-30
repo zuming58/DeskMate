@@ -27,7 +27,8 @@ constexpr UBaseType_t kDeskMateLinkTaskPriority = 7;
 class EspIdfUartTransport final : public Transport {
 public:
     bool Open(const BoardLinkPinout& pinout) noexcept {
-        if (!pinout.verified || pinout.tx_gpio < 0 || pinout.rx_gpio < 0) {
+        const auto install_plan = PlanBoardLinkUartInstall(pinout);
+        if (!install_plan.install_allowed) {
             return false;
         }
 
@@ -42,7 +43,8 @@ public:
             .flags = {},
         };
         if (uart_param_config(kDeskMateLinkUart, &config) != ESP_OK ||
-            uart_set_pin(kDeskMateLinkUart, pinout.tx_gpio, pinout.rx_gpio,
+            uart_set_pin(kDeskMateLinkUart, install_plan.tx_gpio,
+                         install_plan.rx_gpio,
                          UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK ||
             uart_driver_install(kDeskMateLinkUart, kDeskMateLinkRxBufferBytes,
                                 0, kDeskMateLinkEventQueueLength,
@@ -128,7 +130,7 @@ void DeskMateLinkTask(void*) {
 
 LinkUartStartResult StartDeskMateLinkUart(
     XiaozhiLinkEndpoint& endpoint) noexcept {
-    if (!kBoardLinkPinout.verified) {
+    if (!PlanBoardLinkUartInstall(kBoardLinkPinout).install_allowed) {
         return LinkUartStartResult::kHardwarePinoutBlocked;
     }
     if (!g_transport.Open(kBoardLinkPinout)) {
