@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-31 - T09.1 Xiaozhi app flash and exact readback confirmed; normal boot pending
+
+- What happened: after a fresh identity check confirmed the only USB serial candidate as the same ESP32-S3/16 MiB Xiaozhi board, the existing T09 app, fixed partition table, NVS and otadata were read and backed up to a Git-external recovery directory. The current app and all protected regions matched their expected hashes before writing.
+- Authorized write: source `65144a1e0a8294f202b59f23affd46cc2ca60c83`, app 202,880 bytes (`0x31880`), SHA-256 `709515DF57A96C04A86FECEE9242D57E0AE558E70C3236E6B4124656DED544D3`, written only at `0x100000..0x13187F`; the write tool erased only the covering sectors through `0x131FFF`.
+- Verification: an independent readback of the full written app produced the same SHA-256. The device identity matched again after writing. The Git-external flash receipt SHA-256 is `20642BA0C01B958DFF401BD32B2C61EEC18D14B91137EE56A55251F686236CA9`.
+- Safety boundary: no whole-chip erase, partition/bootloader/NVS/otadata/eFuse write, EasyInput operation, servo action or audio initialization occurred. The device was deliberately left without an automatic application reset, so this evidence is `APP_FLASH_AND_EXACT_READBACK_CONFIRMED`, not normal-boot or Link HIL confirmation.
+- Next: normally reset or power-cycle Xiaozhi without pressing BOOT. The OLED should first distinguish startup: sad/error eyes mean UART startup failed; neutral eyes mean UART startup succeeded. Then restore/retain the known crossed three-wire Link and read EasyInput's privacy-safe Link counters before triggering one real DeskMate state.
+
 ## 2026-08-31 - T09.1 Xiaozhi Link startup candidate built; HIL authorization pending
 
 - What changed: the optional OLED path is now split into synchronous display initialization and a separate display-task start. `app_main` initializes the OLED and endpoint, installs/starts the frozen T08 UART transport, and only then allocates the optional display task. DeskMate Link framing, GPIO43/GPIO44, 115200/8N1, OLED scenes, servo and audio boundaries are unchanged.
