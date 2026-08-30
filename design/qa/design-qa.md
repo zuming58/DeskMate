@@ -1,5 +1,12 @@
 # T07D companion UI design QA
 
+## 2026-08-30 application picker density follow-up
+
+- Source defect：用户真机截图显示打开应用列表的文字、行高和图标明显大于右侧编辑器及整套 T07 界面语言。
+- Implemented target：保留现有浅色卡片、蓝色交互和 350px 编辑栏，不改变信息架构；应用行调整为 11px 字号、36px 最小高度、15px 图标，搜索框和底部按钮同步收紧，长名称单行省略。
+- Visual verification：开发运行时进入 KEY8 打开应用状态，列表成功加载 30 项；计算样式确认行字号 11px、最小高度 36px，并检查滚动条、悬停态、已选应用和底部操作仍可辨识。配置页同时显示板上配置已读取。
+- Result：passed。没有改变 T07 导航、主网格、按键卡片或固件合同。
+
 final result: passed
 
 ## Visual truth
