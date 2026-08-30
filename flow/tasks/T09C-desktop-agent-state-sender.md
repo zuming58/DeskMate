@@ -47,6 +47,8 @@ Completed evidence:
 - ESP-IDF `v5.5.5`, target `esp32s3`, fixed 16 MB partition build passed.
   App size is 318,768 bytes (`0x4DD30`), SHA-256
   `B275C31CBC681FF07A1AA79614AD39C397DB4045C9F2A7F040A46F95590C746D`.
+  This is code-gate evidence, not a flash authorization image; rebuild the
+  final remote HEAD and recalculate its hash before any write request.
 - Fixed partition-table SHA-256 remains
   `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`.
 - `git diff --check`, ASCII paths, privacy/secret scan, ignored build-product

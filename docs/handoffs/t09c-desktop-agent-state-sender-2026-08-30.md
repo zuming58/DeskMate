@@ -29,6 +29,8 @@ servo or audio behavior. Desktop tests are `125/125`, EasyInput Host CTest is
 `9/9`, the native protocol self-test and Release desktop package pass, and the
 ESP-IDF v5.5.5 fixed-partition app is 318,768 bytes (`0x4DD30`) with SHA-256
 `B275C31CBC681FF07A1AA79614AD39C397DB4045C9F2A7F040A46F95590C746D`.
+This image is code-gate evidence only. The final remote HEAD must be rebuilt
+cleanly and its new hash shown before any flash authorization is requested.
 
 The next action is an independent review followed by a separately authorized
 desktop plus two-board T09 OLED acceptance. Before that acceptance, also close
