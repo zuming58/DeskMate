@@ -65,6 +65,10 @@ inline constexpr std::uint32_t kLinkCapabilityMotion = 1u << 3;
 inline constexpr std::uint32_t kLinkCapabilityAudio = 1u << 4;
 inline constexpr std::uint32_t kLinkT08RequiredCapabilities =
     kLinkCapabilityCore | kLinkCapabilityAgentState;
+inline constexpr std::uint32_t kLinkT08DeferredCapabilities =
+    kLinkCapabilityDisplay | kLinkCapabilityMotion | kLinkCapabilityAudio;
+inline constexpr std::uint8_t kLinkT08AllowedStatusFlags =
+    (1u << 0) | (1u << 7);
 
 struct LinkFrame {
     std::uint8_t version{kDeskMateLinkVersion};

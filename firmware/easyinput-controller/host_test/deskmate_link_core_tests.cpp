@@ -261,6 +261,50 @@ void malformed_response_fails_closed() {
     CHECK(controller.snapshot().state == LinkControllerState::Waiting);
 }
 
+void deferred_t08_capabilities_and_status_fail_closed() {
+    LinkWireFrame wire{};
+    const std::array<std::uint8_t, 8> hello = {
+        2, 1, 0xdd, 0xcc, 0xbb, 0xaa, 0x80, 0};
+
+    LinkController capabilities_controller;
+    capabilities_controller.start(1, 0);
+    CHECK(capabilities_controller.poll(0, wire));
+    capabilities_controller.receive(
+        response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
+    CHECK(capabilities_controller.poll(1, wire));
+    const std::array<std::uint8_t, 10> deferred_capabilities = {
+        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
+    capabilities_controller.receive(
+        response(LinkMessageType::GetCapabilities, 2,
+                 deferred_capabilities.data(), deferred_capabilities.size()),
+        2);
+    CHECK(capabilities_controller.snapshot().semantic_errors == 1);
+    CHECK(capabilities_controller.snapshot().implemented_capabilities == 0);
+    CHECK(capabilities_controller.snapshot().enabled_capabilities == 0);
+
+    LinkController status_controller;
+    status_controller.start(1, 0);
+    CHECK(status_controller.poll(0, wire));
+    status_controller.receive(
+        response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
+    CHECK(status_controller.poll(1, wire));
+    const std::array<std::uint8_t, 10> capabilities = {
+        3, 0, 0, 0, 3, 0, 0, 0, 0x80, 0};
+    status_controller.receive(
+        response(LinkMessageType::GetCapabilities, 2,
+                 capabilities.data(), capabilities.size()),
+        2);
+    CHECK(status_controller.poll(2, wire));
+    const std::array<std::uint8_t, 11> deferred_status = {
+        0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 0, 3, 0};
+    status_controller.receive(
+        response(LinkMessageType::GetStatus, 3, deferred_status.data(),
+                 deferred_status.size()),
+        3);
+    CHECK(status_controller.snapshot().semantic_errors == 1);
+    CHECK(status_controller.snapshot().status_flags == 0);
+}
+
 void errors_and_unmatched_frames_fail_closed() {
     LinkController controller;
     controller.start(1, 0);
@@ -304,6 +348,7 @@ int main() {
     controller_handshake_status_and_state();
     controller_retries_disconnect_and_does_not_replay();
     malformed_response_fails_closed();
+    deferred_t08_capabilities_and_status_fail_closed();
     errors_and_unmatched_frames_fail_closed();
     if (failures != 0) {
         std::cerr << "deskmate_link_core_tests: " << failures << " failure(s)\n";
