@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T11A desktop software final handoff](handoffs/t11a-desktop-software-final-2026-09-01.md)
 - [T11A expression and Link UX handoff](handoffs/t11a-expression-link-ux-2026-08-31.md)
 - [T11A desktop Link diagnostics and recovery handoff](handoffs/t11a-desktop-link-diagnostics-recovery-2026-08-31.md)
 - [T11A microphone source selection handoff](handoffs/t11a-desktop-microphone-source-selection-2026-08-31.md)

@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11A Windows software finalized; packaged-app and physical acceptance remain open
+
+- What changed: branch `codex/t11a-desktop-finalize` was created from cumulative T11A HEAD `d95860b9d1ffe22ae5cee80a1ccd28cd413f49e8` without touching the dirty primary worktree. The final audit closes the Windows code scope for LAN microphone reception, persisted computer/EasyInput source selection, per-recording source locking, visible pre-start fallback, mid-record fail-closed behavior, ordinary-keyboard trigger suppression, Link/Agent diagnostics, reconnect recovery, and the separated local-preview/real-state controls. No new state machine or transport was needed.
+- Verification: clean dependency installation passed; `npm test` passed `187/187` with zero failure/skip/todo; `npm run build:desktop` passed including native InputBridge Release publish, Vite production build and Windows Electron packaging. `git diff --check` passed and generated dependencies/build/package output remains ignored. Local package evidence is `release/win-unpacked/DeskMate.exe`, 202,690,560 bytes, SHA-256 `B48D138250C4737536374DD2D7D0D208A53F6A6551672DD1F67DF442E9C8D53D`.
+- Interpretation: status is `T11A_SOFTWARE_LOCKED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`. The remaining work is user-present packaged-app and hardware acceptance, not missing T11A implementation. EasyInput speaker downlink/full duplex dialogue is explicitly a later T11B/T11E scope.
+- Safety and handoff: no app/UI automation, port/LAN/device/Flash/NVS/otadata/eFuse access, audio capture, firmware, OLED, servo or speaker action occurred. Detailed closure and the six-item acceptance matrix are in `docs/handoffs/t11a-desktop-software-final-2026-09-01.md`.
+
 ## 2026-08-31 - T11A expression and Link UX software package complete; physical acceptance remains open
 
 - What changed: from exact desktop base `93a2d71efca6dd5297a3f654d3ebeacdeb8215eb`, branch `codex/t11a-expression-link-ux` now separates the companion page's seven Windows-only expression previews from a directly visible Xiaozhi work-state test. Local preview copy and notices explicitly say no hardware state was sent. The hardware panel publishes only the frozen idle/listening/thinking/working/waiting/completed/error values through the existing manual Agent State path; clicking the selected state again issues a new request.
