@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-31 - Codex global lifecycle hook installed without replacing legacy hooks
+
+- What changed: on dedicated software branch `codex/t10-codex-global-status`, the already packaged Codex lifecycle adapter was installed into the user-level Codex hook boundary. `C:\Users\Administrator\.codex\hooks.json` now appends a bounded DeskMate handler to seven supported lifecycle events, using `C:\Users\Administrator\.codex\hooks\deskmate-codex-status-hook.cjs`. The existing EasyInput executable handlers remain first and unchanged; `SubagentStart` and `SubagentStop` were not modified.
+- Why and interpretation: this makes real Codex work state available to DeskMate for every newly opened Codex task, instead of tying the feature to one special window. Hooks are loaded at task start, so the currently open task is intentionally not restarted and will not hot-reload the change. Multiple concurrent Codex tasks still use latest-event-wins; task aggregation is deferred rather than guessed.
+- Safety and recovery: the original global file was backed up to `C:\Users\Administrator\.codex\backups\hooks-before-deskmate-20260831-121308.json`, SHA-256 `E6B5060315421B4B895C06E68804FD650BE93599F9DEB8813C13EFCBE986FE58`. The helper forwards no prompt, response, tool payload, transcript, cwd, identifiers or device data and silently exits when DeskMate is unavailable. No firmware or hardware operation occurred.
+- Verification and output: helper syntax passed; global JSON parsed; all legacy handler objects matched the backup; exactly seven DeskMate handlers were present; the configured Windows command exited zero with no output in 188 ms against the packaged DeskMate pipe. Full install and rollback handoff: `docs/handoffs/t10-codex-global-hook-install-2026-08-31.md`.
+- Next: close and reopen one Codex task, approve the hook trust prompt if shown, select Codex in DeskMate, and observe a real prompt/tool/wait/stop lifecycle. Keep firmware development on its existing separate branches; this branch remains desktop integration only.
+
 ## 2026-08-31 - Codex real lifecycle status adapter implemented and packaged
 
 - 做了什么：在分支 `codex/t10-desktop-config-app-polish` 基于 `21580e51a2cc2947522ad2d520c07f8613c692b1` 完成首个真实 Agent 适配器，实现提交为 `28e9563eb1b2f316c618fa2a52511f72c7d7b4c3`。官方 Codex `SessionStart/UserPromptSubmit/PreToolUse/PermissionRequest/PostToolUse/Stop/SessionEnd` 生命周期经仓库 Hook、隐私最小化本机命名管道和 Electron 主进程进入既有 `0x12 -> EasyInput -> DeskMate Link -> Xiaozhi OLED` 状态链；界面保留人工七状态作为回退，并把显示名称纠正为 WorkBuddy（持久化兼容 ID 仍为 `workbody`）。
