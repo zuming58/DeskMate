@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T10E single-UDP-endpoint repair flashed and exactly read back
+
+- Pre-write gate: the only native USB candidate was freshly identified as the expected ESP32-S3 with 8 MiB PSRAM and 16 MiB Flash. The authorized old app range `0x010000..0x0E099F` was read in full and matched SHA-256 `88D392070591E5E04862730A0DECB0CE7954E98BEF0650EF6744BBA96F95A642`, so the write gate opened; mismatch would have stopped without writing.
+- Authorized write: branch HEAD `7f0a8e83f45b707e362ef04a1d0b101dafde7d75`, firmware implementation `ddf0a7dde9ed83e974bac805d9e811619fa3e697`, app 854,432 bytes, written only at `0x010000..0x0E099F`. The tool erased only the covering sectors through `0x0E0FFF` and verified the transfer hash.
+- Independent verification: a separate full readback of all 854,432 bytes produced SHA-256 `3FBAF210F30E8BF468C3FBAEF085BAFC07F111495155AB58A330F300930599B7`, exactly matching the approved image. The Git-external privacy-safe receipt is `F:\Codex\deskmate-device-backups\easyinput\t10e-endpoint-fix-preflash-20260831\manifest.json`.
+- Safety and next: no whole-chip erase and no partition-table, bootloader, NVS, sound bank, eFuse or Xiaozhi write occurred. EasyInput remains deliberately in download mode, so status is `APP_FLASH_AND_EXACT_READBACK_CONFIRMED / NORMAL_BOOT_PENDING`. Power-cycle normally without pressing BOOT, restart the 30-second microphone diagnostic, and require rising `audioFrames`, non-zero level while speaking and stable `sourceRejects`.
+
 ## 2026-08-31 - T10E microphone zero-audio root cause fixed; app-only HIL pending
 
 - Evidence and root cause: the real desktop diagnostic showed 698 valid heartbeats, successful control/ACK, zero accepted audio frames and 14 source rejections. Source review then confirmed that T10E sent `EIHB/EICA` from the control socket but `EIAU` from a second ephemeral sender socket. Because T11A correctly locks the peer `IP:port` after a matching ACK, all real PCM packets were rejected before level calculation; Ethernet on the PC and Wi-Fi on EasyInput are not the blocker.
