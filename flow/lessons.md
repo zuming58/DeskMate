@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A polished dashboard must not turn fixtures into telemetry
+
+- Symptom: fixed temperature, humidity, light, pose and “synced two seconds ago” copy looked like live hardware even when only EasyInput HID was present.
+- Practice: derive the compact summary from the same sanitized Link diagnostic used by the detailed diagnostics page. Label local rendering as software preview and keep unintegrated sensor/motion fields visibly pending.
+- Rule: UI polish does not lower the evidence bar. A fixture belongs in tests or an explicitly labelled simulator, never on a production status surface.
+
 ## A successful HID write is not proof of downstream device rendering
 
 - Symptom: EasyInput could appear connected and accept an Agent State Feature Report while the EasyInput-to-Xiaozhi Link was unavailable, leaving the OLED unchanged even though the desktop looked healthy.

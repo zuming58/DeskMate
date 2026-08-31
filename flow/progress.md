@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11A Workbench status truthfulness package complete; hardware confirmation remains open
+
+- What changed: branch `codex/t11a-desktop-status-truthfulness` was created from locked Windows base `73057c92be7f631c19619bb8984b66504abbb046`; implementation commit `de105c0` removes production-looking fixtures from the Workbench. The face card is now an explicit software preview, the compact device summary comes from the existing sanitized DeskMate Link diagnostic, and missing temperature/humidity/light/servo integrations are shown as pending or disabled. The header date is local instead of fixed.
+- Persistence: application schema v9 resets only the exact historical sample `正在整理桌宠开发文档 / 68%` to idle. Non-identical saved Agent state is preserved. This prevents old demo content from appearing as a live Codex task without erasing real restored state.
+- Verification: after `npm ci --include=dev`, `npm test` passed `192/192` with zero failure/skip/todo; `npm run build:desktop` passed native InputBridge publish, Vite production build and Windows Electron directory packaging. `git diff --check`, ASCII changed paths, differential secret, firmware-scope and ignored build-output checks passed. Package evidence is `release/win-unpacked/DeskMate.exe`, 202,690,560 bytes, SHA-256 `6993BAC803B0721D15FF6A3CD4838826D86BA02F88AB8873A80337F886DEFA0D`.
+- Safety and next: no app launch/UI automation, port/LAN/device/Flash access, firmware, microphone, OLED, servo or speaker action occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. User-present follow-up only needs to confirm the packaged Workbench shows the true Link state and never labels pending fields as live telemetry. Detailed handoff: `docs/handoffs/t11a-desktop-status-truthfulness-2026-09-01.md`.
+
 ## 2026-09-01 - T11A Windows software finalized; packaged-app and physical acceptance remain open
 
 - What changed: branch `codex/t11a-desktop-finalize` was created from cumulative T11A HEAD `d95860b9d1ffe22ae5cee80a1ccd28cd413f49e8` without touching the dirty primary worktree. The final audit closes the Windows code scope for LAN microphone reception, persisted computer/EasyInput source selection, per-recording source locking, visible pre-start fallback, mid-record fail-closed behavior, ordinary-keyboard trigger suppression, Link/Agent diagnostics, reconnect recovery, and the separated local-preview/real-state controls. No new state machine or transport was needed.

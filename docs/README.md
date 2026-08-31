@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T11A desktop status truthfulness handoff](handoffs/t11a-desktop-status-truthfulness-2026-09-01.md)
 - [T11A desktop software final handoff](handoffs/t11a-desktop-software-final-2026-09-01.md)
 - [T11A expression and Link UX handoff](handoffs/t11a-expression-link-ux-2026-08-31.md)
 - [T11A desktop Link diagnostics and recovery handoff](handoffs/t11a-desktop-link-diagnostics-recovery-2026-08-31.md)

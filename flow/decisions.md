@@ -1,5 +1,12 @@
 # Decisions
 
+## D042 - Workbench hardware claims require bounded runtime evidence
+
+- Date: 2026-09-01
+- Decision: the Workbench may describe Xiaozhi as connected only from the already sanitized DeskMate Link diagnostic state. EasyInput HID presence alone means only that the controller is present; missing or invalid Link diagnostics remain `unavailable`.
+- Presentation: local face buttons are labelled software preview. Temperature, humidity, ambient light and servo pose stay `pending` or `disabled` until a frozen adapter supplies real bounded telemetry. Fixed demo values, fabricated pose and fake relative sync time are forbidden on the product surface.
+- Migration: the exact legacy sample task `正在整理桌宠开发文档 / 68%` is reset to idle once at schema v9. Any non-identical persisted Agent event is preserved as user/runtime state.
+
 ## D041 - Software expression preview and Xiaozhi work-state control are separate products surfaces
 
 - Date: 2026-08-31
