@@ -27,6 +27,11 @@ and control datagrams are accepted only from the resolved IPv4 address.
 
 All integers are little-endian.
 
+One EasyInput runtime sends `EIHB`, `EICA` and `EIAU` through the same UDP
+socket, so all three packet types have the same source address and source port.
+The firmware must not create a second ephemeral PCM sender socket because the
+desktop locks the peer endpoint only after a matching acknowledgement.
+
 ### `EIHB` heartbeat
 
 The device sends a 20-byte heartbeat approximately once per second:

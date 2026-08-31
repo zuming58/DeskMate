@@ -1,5 +1,16 @@
 # Lessons learned
 
+## A UDP endpoint lock must cover the real multi-packet path
+
+- Symptom: heartbeat and control ACK were healthy, while desktop audio frames
+  stayed at zero and `sourceRejects` kept increasing.
+- Root cause: control packets and PCM used separate UDP sockets and therefore
+  different ephemeral source ports. The desktop correctly locked the endpoint
+  after the ACK and rejected PCM from the other port.
+- Rule: when a session locks an `IP:port`, heartbeat, ACK and business data must
+  reuse one socket. Keep a source-contract test that prevents a second sender
+  socket from returning.
+
 ## Optional network audio must retry configuration, not only reconnection
 
 - Symptom: an initial Wi-Fi configuration failure could leave a fail-soft audio task repeatedly calling reconnect without ever reapplying the rejected station configuration; successful first socket creation was also incorrectly counted as recovery.

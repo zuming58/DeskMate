@@ -357,6 +357,9 @@ int main() {
     CHECK(contains(audio_service_source, "MALLOC_CAP_SPIRAM"));
     CHECK(contains(audio_service_source, "xQueueCreateStatic"));
     CHECK(contains(audio_service_source, "xQueueReceive(frame_queue_"));
+    CHECK(occurrences(audio_service_source,
+                      "socket(AF_INET, SOCK_DGRAM, IPPROTO_IP)") == 1);
+    CHECK(!contains(audio_service_source, "audio_sender"));
     CHECK(contains(audio_service_source, "PeripheralPowerOwner::KeyboardMic"));
     CHECK(contains(audio_service_source, "getaddrinfo(config.audio_host.data()"));
     CHECK(!contains(audio_service_source, "INADDR_BROADCAST"));

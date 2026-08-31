@@ -47,23 +47,16 @@ private:
         std::uint32_t timestamp_ms{};
         std::array<std::int16_t, kAudioFrameSamples> pcm{};
     };
-    struct SenderTarget {
-        bool valid{};
-        sockaddr_in address{};
-    };
-
     static constexpr EventBits_t kWifiConnectedBit = 1U << 0;
     static constexpr EventBits_t kWifiDisconnectedBit = 1U << 1;
 
     static void control_task_entry(void* context);
     static void capture_task_entry(void* context);
-    static void sender_task_entry(void* context);
     static void network_event(void* context, esp_event_base_t base,
                               std::int32_t event_id, void* event_data);
 
     void control_loop();
     void capture_loop();
-    void sender_loop();
     bool initialize_network_stack();
     bool apply_wifi_config(const AudioCaptureConfig& config);
     bool resolve_target(const AudioCaptureConfig& config,
@@ -87,24 +80,19 @@ private:
     QueueHandle_t capture_command_queue_{};
     QueueHandle_t capture_result_queue_{};
     QueueHandle_t frame_queue_{};
-    QueueHandle_t sender_target_queue_{};
     StaticQueue_t config_queue_control_{};
     StaticQueue_t capture_command_queue_control_{};
     StaticQueue_t capture_result_queue_control_{};
     StaticQueue_t frame_queue_control_{};
-    StaticQueue_t sender_target_queue_control_{};
     std::array<std::uint8_t, sizeof(ConfigMessage)> config_queue_storage_{};
     std::array<std::uint8_t, sizeof(CaptureCommand) * 4>
         capture_command_queue_storage_{};
     std::array<std::uint8_t, sizeof(CaptureResult) * 2>
         capture_result_queue_storage_{};
-    std::array<std::uint8_t, sizeof(SenderTarget)>
-        sender_target_queue_storage_{};
     std::uint8_t* frame_queue_storage_{};
 
     TaskHandle_t control_task_{};
     TaskHandle_t capture_task_{};
-    TaskHandle_t sender_task_{};
 
     std::atomic<std::uint8_t> state_{
         static_cast<std::uint8_t>(AudioCaptureState::Disabled)};

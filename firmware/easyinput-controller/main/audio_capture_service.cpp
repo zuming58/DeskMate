@@ -22,7 +22,7 @@ namespace {
 
 constexpr std::uint32_t kHeartbeatIntervalMs = 1000;
 constexpr std::uint32_t kReconnectDelayMs = 1000;
-constexpr std::uint32_t kControlReceiveTimeoutMs = 200;
+constexpr std::uint32_t kControlReceiveTimeoutMs = 10;
 constexpr std::uint32_t kMicrophoneReadTimeoutMs = 80;
 constexpr std::uint32_t kCaptureStartTimeoutMs = 750;
 constexpr std::uint32_t kCaptureRecoveryDelayMs = 80;
@@ -63,21 +63,16 @@ bool AudioCaptureService::begin(PeripheralPowerController& power) {
     frame_queue_ = xQueueCreateStatic(
         kAudioFrameQueueCapacity, sizeof(CapturedFrame), frame_queue_storage_,
         &frame_queue_control_);
-    sender_target_queue_ = xQueueCreateStatic(
-        1, sizeof(SenderTarget), sender_target_queue_storage_.data(),
-        &sender_target_queue_control_);
     wifi_events_ = xEventGroupCreate();
     if (config_queue_ == nullptr || capture_command_queue_ == nullptr ||
         capture_result_queue_ == nullptr || frame_queue_ == nullptr ||
-        sender_target_queue_ == nullptr || wifi_events_ == nullptr ||
+        wifi_events_ == nullptr ||
         !initialize_network_stack()) {
         set_state(AudioCaptureState::Faulted);
         return false;
     }
     if (xTaskCreate(capture_task_entry, "audio_capture", 6144, this, 6,
                     &capture_task_) != pdPASS ||
-        xTaskCreate(sender_task_entry, "audio_sender", 6144, this, 4,
-                    &sender_task_) != pdPASS ||
         xTaskCreate(control_task_entry, "audio_control", 8192, this, 4,
                     &control_task_) != pdPASS) {
         set_state(AudioCaptureState::Faulted);
@@ -121,10 +116,6 @@ void AudioCaptureService::control_task_entry(void* context) {
 
 void AudioCaptureService::capture_task_entry(void* context) {
     static_cast<AudioCaptureService*>(context)->capture_loop();
-}
-
-void AudioCaptureService::sender_task_entry(void* context) {
-    static_cast<AudioCaptureService*>(context)->sender_loop();
 }
 
 void AudioCaptureService::network_event(void* context, esp_event_base_t base,
@@ -244,8 +235,6 @@ void AudioCaptureService::control_loop() {
             wifi_configured = false;
             session.abort();
             stop_capture(0);
-            SenderTarget no_target{};
-            (void)xQueueOverwrite(sender_target_queue_, &no_target);
             if (control_socket >= 0) {
                 close(control_socket);
                 control_socket = -1;
@@ -307,10 +296,6 @@ void AudioCaptureService::control_loop() {
                 continue;
             }
             session.configure_source(target.sin_addr.s_addr, true);
-            SenderTarget sender_target{};
-            sender_target.valid = true;
-            sender_target.address = target;
-            (void)xQueueOverwrite(sender_target_queue_, &sender_target);
             if (transport_fault) {
                 increment(recoveries_);
                 transport_fault = false;
@@ -334,6 +319,43 @@ void AudioCaptureService::control_loop() {
             stop_capture(session.session_id());
             set_state(AudioCaptureState::Ready);
         }
+
+        // Heartbeats, ACKs and PCM must use the same UDP socket. The desktop
+        // locks the peer only after a matching ACK, including its source port.
+        // A second sender socket would therefore make every valid EIAU packet
+        // look like a spoofed source and be rejected.
+        bool audio_send_failed = false;
+        std::array<std::uint8_t, kAudioPacketBytes> packet{};
+        for (std::uint8_t drained = 0; drained < 8; ++drained) {
+            CapturedFrame frame{};
+            if (xQueueReceive(frame_queue_, &frame, 0) != pdTRUE) break;
+            if (!session.active() || frame.session_id != session.session_id()) {
+                increment(dropped_frames_);
+                continue;
+            }
+            encode_audio_packet_header(packet.data(), frame.session_id,
+                                       frame.sequence, frame.timestamp_ms);
+            std::memcpy(packet.data() + kAudioPacketHeaderBytes,
+                        frame.pcm.data(), kAudioFramePayloadBytes);
+            const int sent = sendto(
+                control_socket, packet.data(), packet.size(), 0,
+                reinterpret_cast<sockaddr*>(&target), sizeof(target));
+            if (sent != static_cast<int>(packet.size())) {
+                increment(send_errors_);
+                increment(dropped_frames_);
+                const std::uint64_t failed_session = session.session_id();
+                session.abort();
+                stop_capture(failed_session);
+                close(control_socket);
+                control_socket = -1;
+                transport_fault = true;
+                audio_send_failed = true;
+                break;
+            }
+            increment(sent_frames_);
+        }
+        if (audio_send_failed) continue;
+
         if (static_cast<std::uint32_t>(current_time - last_heartbeat) >=
             kHeartbeatIntervalMs) {
             std::array<std::uint8_t, kAudioHeartbeatBytes> heartbeat{};
@@ -543,54 +565,6 @@ void AudioCaptureService::capture_loop() {
             (void)xQueueSend(capture_result_queue_, &failure, 0);
         }
         xQueueReset(frame_queue_);
-    }
-}
-
-void AudioCaptureService::sender_loop() {
-    SenderTarget target{};
-    int data_socket = -1;
-    std::array<std::uint8_t, kAudioPacketBytes> packet{};
-    for (;;) {
-        SenderTarget incoming{};
-        if (xQueueReceive(sender_target_queue_, &incoming, 0) == pdTRUE) {
-            target = incoming;
-            if (data_socket >= 0) {
-                close(data_socket);
-                data_socket = -1;
-            }
-        }
-        CapturedFrame frame{};
-        if (xQueueReceive(frame_queue_, &frame, ticks(kAudioFrameDurationMs)) !=
-            pdTRUE) {
-            continue;
-        }
-        if (!target.valid) {
-            increment(dropped_frames_);
-            continue;
-        }
-        if (data_socket < 0) {
-            data_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-            if (data_socket < 0) {
-                increment(send_errors_);
-                increment(dropped_frames_);
-                continue;
-            }
-        }
-        encode_audio_packet_header(packet.data(), frame.session_id,
-                                   frame.sequence, frame.timestamp_ms);
-        std::memcpy(packet.data() + kAudioPacketHeaderBytes, frame.pcm.data(),
-                    kAudioFramePayloadBytes);
-        const int sent = sendto(
-            data_socket, packet.data(), packet.size(), 0,
-            reinterpret_cast<sockaddr*>(&target.address),
-            sizeof(target.address));
-        if (sent != static_cast<int>(packet.size())) {
-            increment(send_errors_);
-            close(data_socket);
-            data_socket = -1;
-        } else {
-            increment(sent_frames_);
-        }
     }
 }
 
