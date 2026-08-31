@@ -145,7 +145,12 @@ function CompanionLiveBar({ conversation }) {
 
 function resolveHash() {
   const value = window.location.hash.replace("#/", "").replace("#", "");
-  return pages[value] ? value : "dashboard";
+  const page = value.split("/")[0];
+  return pages[page] ? page : "dashboard";
+}
+
+function resolveRouteDetail() {
+  return window.location.hash.replace("#/", "").replace("#", "").split("/")[1] || "";
 }
 
 export function App() {
@@ -253,7 +258,7 @@ function AppContent() {
   }, [toast]);
   const navigate = (page) => {
     window.location.hash = `/${page}`;
-    setCurrent(page);
+    setCurrent(page.split("/")[0]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const CurrentPage = pages[current] || DashboardPage;
@@ -265,7 +270,7 @@ function AppContent() {
         <AppHeader current={current} setMobileOpen={setMobileOpen} />
         <div className="app-content">
           <div className={current === "voice" ? "" : "voice-workflow-host--hidden"}><VoicePage navigate={navigate} notify={setToast} /></div>
-          {current !== "voice" && <CurrentPage navigate={navigate} notify={setToast} />}
+          {current !== "voice" && <CurrentPage navigate={navigate} notify={setToast} initialSection={resolveRouteDetail()} />}
         </div>
       </main>
       {toast && <div className="toast"><CircleCheck size={18} />{toast}</div>}

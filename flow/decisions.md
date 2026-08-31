@@ -1,5 +1,12 @@
 # Decisions
 
+## D041 - Software expression preview and Xiaozhi work-state control are separate products surfaces
+
+- Date: 2026-08-31
+- Decision: default, blink, happy, sad, angry, thinking and listening remain Windows-only expression previews. They never silently publish Agent State because several local expressions have no one-to-one meaning in the frozen hardware vocabulary.
+- Hardware control: Xiaozhi testing exposes exactly idle, listening, thinking, working, waiting, completed and error and reuses the single existing manual Agent State publisher. Repeating the selected state is an explicit new request, not a local no-op.
+- Evidence: the UI keeps EasyInput write ACK, DeskMate Link health and physical Xiaozhi display confirmation distinct. A controller ACK cannot be labelled as Xiaozhi display success, and disconnected Link states remain visibly unconfirmed.
+
 ## D040 - HID presence, DeskMate Link health and Agent write ACK are distinct facts
 
 - Date: 2026-08-31

@@ -65,6 +65,7 @@ import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCap
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicrophoneSession } from "./domain/microphoneSource.js";
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "./domain/linkDiagnostics.js";
+import { agentStateEvidence, manualAgentStateFailureMessage, previewSoftwareExpression, requestManualAgentState } from "./domain/expressionLinkUx.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
 import { processVoiceRecording } from "./services/voicePipeline.js";
 import { mapAiStateToPetIntent } from "./domain/petIntent.js";
@@ -213,7 +214,51 @@ function ExpressionTile({ preset, selected, onClick, compact = false }) {
   );
 }
 
-export function CompanionPage({ notify }) {
+function AgentStateTestPanel({ notify, navigate, index = "03" }) {
+  const { state, patch, event } = useAppStore();
+  const control = normalizeAgentControl(state.agentControl);
+  const evidence = agentStateEvidence(state.runtime?.inputBridge);
+  const [request, setRequest] = useState({ status: "idle", label: "尚未发送", at: "" });
+  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
+  const sendState = async (requestedState) => {
+    const selected = manualAgentState(requestedState);
+    updateControl({ state: requestedState });
+    setRequest({ status: "sending", label: `正在发送 ${selected.label}…`, at: "" });
+    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control, requestedState });
+    if (!result.ok) {
+      const label = manualAgentStateFailureMessage(result.reason);
+      setRequest({ status: "error", label, at: new Date().toISOString() });
+      notify(label);
+      return;
+    }
+    const progress = requestedState === "completed" ? 100 : requestedState === "idle" ? 0 : state.aiEvent.progress;
+    event({ type: requestedState, agent: result.agentName, progress, detail: `手动状态 · ${selected.label}` });
+    setRequest({ status: "success", label: `EasyInput 写入 ACK 成功 · ${selected.label}`, at: new Date().toISOString() });
+    notify(evidence.link.status === "connected" ? "EasyInput 已接受状态；Link 已连接，请观察小智屏幕确认显示" : "EasyInput 已接受状态，但 Link 未连接，不能证明小智已经显示");
+  };
+  const requestIsNewest = request.at && (!evidence.delivery.at || Date.parse(request.at) >= Date.parse(evidence.delivery.at));
+  const showRequest = request.status === "sending" || requestIsNewest;
+  const deliveryLabel = showRequest ? request.label : evidence.easyInputLabel;
+  const deliveryTone = showRequest && request.status === "success" ? "success" : showRequest && request.status === "error" ? "warning" : evidence.delivery.status === "acknowledged" ? "success" : "neutral";
+  return (
+    <Card className="companion-hardware-state-test">
+      <div className="companion-hardware-state-test__header">
+        <SectionTitle index={index} title="小智工作状态测试" description="通过既有 Agent State 通道真实写入 EasyInput；重复点击当前状态也会产生一次新发送。" />
+        <StatusBadge tone={evidence.link.status === "connected" ? "success" : "demo"}>Link · {evidence.linkLabel}</StatusBadge>
+      </div>
+      <div className="manual-agent-state-grid" aria-label="发送小智真实工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={request.status === "sending"} key={item.id} onClick={() => { void sendState(item.id); }}><strong>{item.label}</strong><span>{item.transport}</span><small>{item.description}</small></button>)}</div>
+      <div className="agent-state-evidence" aria-live="polite">
+        <div><small>当前选择</small><strong>{manualAgentState(control.state).label}</strong></div>
+        <div><small>EasyInput 写入</small><StatusBadge tone={deliveryTone}>{deliveryLabel}</StatusBadge></div>
+        <div><small>小智 DeskMate Link</small><StatusBadge tone={evidence.link.status === "connected" ? "success" : "demo"}>{evidence.linkLabel}</StatusBadge></div>
+        <div><small>显示证据</small><strong>{evidence.link.status === "connected" ? "需观察小智屏幕确认" : "当前不能确认"}</strong></div>
+      </div>
+      <div className="companion-hardware-state-test__footer"><p>EasyInput ACK 只证明写入被总控接受，不等于小智已经显示。Link 未连接时绝不把它当成小智显示成功。</p><Button icon={Gauge} variant="ghost" onClick={() => navigate?.("settings/diagnostics")}>查看系统诊断</Button></div>
+    </Card>
+  );
+}
+
+export function CompanionPage({ notify, navigate }) {
   const { state, patch } = useAppStore();
   const [section, setSection] = useState("overview");
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
@@ -273,8 +318,9 @@ export function CompanionPage({ notify }) {
           <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
           <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
           <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴对话" : "开始陪伴对话"}</Button>
-          <div className="companion-expression-strip" aria-label="快捷表情">
-            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => { if (sessionActive) return notify("实时陪伴会话拥有表情优先权，请结束会话后再预览"); patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}
+          <div className="companion-expression-preview-heading"><strong>Windows 软件表情预览</strong><small>只改变本页画面，不控制小智</small></div>
+          <div className="companion-expression-strip" aria-label="Windows 软件表情预览">
+            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => previewSoftwareExpression({ patch, notify, preset, sessionActive })} />)}
           </div>
         </Card>
         <div className="companion-side-stack">
@@ -297,6 +343,7 @@ export function CompanionPage({ notify }) {
           </Card>
           <Notice tone="info" title="语音互斥边界">陪伴会话与文字语音输入共用唯一前台会话仲裁器；启动语音输入或语音编辑会立即结束陪伴会话，结束后不会自动恢复。</Notice>
         </div>
+        <AgentStateTestPanel notify={notify} navigate={navigate} />
       </div>}
       {section === "memory" && <MemoryManagementPage notify={notify} />}
       {section === "expressions" && <ExpressionsPage notify={notify} embedded />}
@@ -1031,9 +1078,9 @@ export function AgentsPage({ notify, embedded = false }) {
     if (control.agentId === "custom" && !control.customName.trim()) { notify("请先填写自定义 Agent 名称"); return; }
     updateControl({ state: requestedState });
     setSendState({ status: "sending", label: "正在发送…" });
-    const result = await voiceAdapters.desktop.setManualAgentState({ agentId: control.agentId, state: selected.transport });
+    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control, requestedState });
     if (!result?.ok) {
-      const reason = result?.reason === "voice-workflow-active" ? "语音流程正在使用表情，结束后再发送" : result?.reason === "easyinput-not-connected" ? "EasyInput 尚未连接" : result?.reason === "deskmatelink-unavailable" ? "尚未读取到小智 Link 状态" : result?.reason === "deskmatelink-waiting" ? "EasyInput 正在等待小智 Link" : result?.reason === "deskmatelink-faulted" ? "小智 Link 当前故障" : result?.reason || "状态发送失败";
+      const reason = manualAgentStateFailureMessage(result?.reason);
       setSendState({ status: "error", label: reason });
       notify(reason);
       return;
@@ -1104,12 +1151,12 @@ export function ExpressionsPage({ notify, embedded = false }) {
   };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="表情库" description="管理内置表情、导入预览与工作状态映射" actions={<label className="button button--primary expression-upload"><Upload size={17} /><span>导入表情</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label>} />}
-      {embedded && <div className="embedded-heading"><div><span>ELASTIC EYES</span><h2>表情库</h2><p>默认、眨眼、开心、难过、生气、思考和聆听使用同一套真实图片资源。</p></div><label className="button expression-upload"><Upload size={17} /><span>导入预览</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label></div>}
-      <Notice tone="demo" title="软件表情预览">所有切换只更新 Windows 软件画面；小智 OLED 表情协议与固件尚未接入。</Notice>
+      {!embedded && <PageIntro title="Windows 软件表情预览库" description="管理本地画面预览和状态映射；这里的按钮不会控制小智" actions={<label className="button button--primary expression-upload"><Upload size={17} /><span>导入表情</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label>} />}
+      {embedded && <div className="embedded-heading"><div><span>WINDOWS PREVIEW ONLY</span><h2>Windows 软件表情预览库</h2><p>默认、眨眼、开心、难过、生气、思考和聆听只改变 DeskMate 软件画面。</p></div><label className="button expression-upload"><Upload size={17} /><span>导入预览</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={importExpression} /></label></div>}
+      <Notice tone="demo" title="只做软件预览">本区域不会发送 Agent State，也不会控制小智 OLED。请回到“陪伴与记忆”中的“小智工作状态测试”发送真实七状态。</Notice>
       <div className="library-toolbar"><Segmented value={category} onChange={setCategory} options={[{ value: "all", label: "全部" }, { value: "work", label: "工作状态" }, { value: "life", label: "情绪状态" }]} /><SearchField value={query} onChange={setQuery} placeholder="搜索表情" /></div>
-      <div className="expression-library">{displayPresets.map((preset) => <ExpressionTile key={preset.id} preset={preset} selected={preset.id === "custom-preview" ? false : selected === preset.id} onClick={() => { if (preset.id !== "custom-preview") patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}</div>
-      <Card className="assignment-card"><SectionTitle index="02" title="当前状态映射" description="选择一个工作状态，再指定桌宠显示的表情。" /><div className="assignment-grid">{assignments.map((assignment) => <div key={assignment.key}><span>{assignment.label}</span><Select value={state.expressionMapping[assignment.key]} onChange={(value) => updateStatusMapping(assignment.key, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></div>)}</div></Card>
+      <div className="expression-library">{displayPresets.map((preset) => <ExpressionTile key={preset.id} preset={preset} selected={preset.id === "custom-preview" ? false : selected === preset.id} onClick={() => { if (preset.id === "custom-preview") return notify(`软件预览：正在查看“${preset.name}”；未发送到小智`); previewSoftwareExpression({ patch, notify, preset }); }} />)}</div>
+      <Card className="assignment-card"><SectionTitle index="02" title="软件预览状态映射" description="选择工作状态对应的 Windows 预览表情；这里不会发送硬件状态。" /><div className="assignment-grid">{assignments.map((assignment) => <div key={assignment.key}><span>{assignment.label}</span><Select value={state.expressionMapping[assignment.key]} onChange={(value) => updateStatusMapping(assignment.key, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></div>)}</div></Card>
     </div>
   );
 }
@@ -1174,9 +1221,9 @@ export function SensorsPage({ notify }) {
   );
 }
 
-export function SettingsPage({ notify }) {
+export function SettingsPage({ notify, initialSection = "" }) {
   const { state, patch, reset, replace, exportConfig } = useAppStore();
-  const [section, setSection] = useState("input");
+  const [section, setSection] = useState(["input", "format", "appearance", "account", "connections", "diagnostics"].includes(initialSection) ? initialSection : "input");
   const [bailianKey, setBailianKey] = useState("");
   const [showBailianKey, setShowBailianKey] = useState(false);
   const [bailianWorkspace, setBailianWorkspace] = useState("");
