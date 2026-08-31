@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-31 - T10E EasyInput onboard microphone code and build gates complete
+
+- What and why: from the accepted three-end T09 baseline `381cef3114c0219d2f760b112db0afdefe721d8d`, branch `codex/t10e-easyinput-audio-capture` froze `EASYINPUT_AUDIO_CAPTURE_V1_FROZEN` and implemented the EasyInput V2 onboard microphone as the DeskMate V1 audio-capture endpoint. The fixed Maker reference `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` was audited before a clean product-side implementation so the existing LAN audio behavior was reused without copying the external project.
+- How it works: complete T05 JSON projects only the four existing Wi-Fi/audio destination fields; I2S0 reads GPIO9/10/11 through the existing GPIO8 `KeyboardMic` lease; control, capture and UDP sending remain isolated behind a 64-frame PSRAM queue that drops oldest audio. Only legal `EICC start` enables I2S, while S1/S3 can only prepare Wi-Fi. Every network, allocation or I2S failure is audio-local and diagnostics remain sanitized.
+- Outputs: implementation commit `9134931b0c1504c02452d20c0c6483f267dff85d`; contract `docs/contracts/easyinput-audio-capture-v1.md`; reference audit `docs/provenance/t10e-easyinput-audio-capture-reference-audit.md`; task `flow/tasks/T10E-easyinput-audio-capture.md`; handoff `docs/handoffs/t10e-easyinput-audio-capture-2026-08-31.md`.
+- Verification: EasyInput Host CTest 10/10, exact ESP-IDF v5.5.5 `esp32s3` fixed-partition build, desktop 127/127 and desktop package all pass. App size is 854,432 bytes (`0xD09A0`), SHA-256 `B9198F6A6CEE66F38C6957669D12699B3E9EE81565F0F37C0F4CAC5E84EFF807`, with 73% of the 3 MiB factory app partition free. Static scope, provenance/license, high-risk secret, ASCII path, build-artifact, `git diff --check` and AGENTS/CLAUDE checks pass.
+- Safety and next: no port scan, device identification, Flash/NVS access, flash, erase or monitor occurred. T10E remains `HIL_NOT_AUTHORIZED`; next is a separately authorized final-image/app-only preparation and real microphone matrix. Do not start T11E speaker, BLE, Xiaozhi audio or motion work in this branch.
+
 ## 2026-08-31 - T09 three-end visible state path accepted; physical reconnect regression deferred
 
 - What was confirmed: the live Desktop -> EasyInput -> DeskMate Link -> Xiaozhi OLED path stayed `connected`, RX/TX counters advanced without new timeouts, and the user visibly accepted all seven frozen states. `thinking` automatically returned to neutral idle after TTL, and a rapid `listening -> thinking -> working -> completed` sequence ended at the latest happy scene without queue drops.
