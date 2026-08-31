@@ -26,7 +26,11 @@ export const defaultState = {
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
   settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
-  runtime: { inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" }, lastTrigger: null },
+  runtime: {
+    inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
+    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, service: { configured: false, provider: "doubao" } },
+    lastTrigger: null,
+  },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
   agentExpressionMapping: { codex: "focus", claude: "listen", hermes: "think", workbody: "happy" },
   agentControl: { agentId: "codex", customName: "", state: "idle" },
@@ -53,7 +57,7 @@ function mergeDefaults(value) {
     expressionEditor: { ...defaultState.expressionEditor, ...(value.expressionEditor || {}) },
     motion: { ...defaultState.motion, ...(value.motion || {}) },
     sensors: { ...defaultState.sensors, ...(value.sensors || {}) },
-    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) } },
+    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) }, companion: { ...defaultState.runtime.companion, ...(value.runtime?.companion || {}) } },
     aiEvent: { ...defaultState.aiEvent, ...(value.aiEvent || {}) },
     aiIntent: value.aiIntent || defaultState.aiIntent,
   };

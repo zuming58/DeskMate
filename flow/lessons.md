@@ -1,5 +1,17 @@
 # Lessons learned
 
+## An unavailable hardware adapter must be explicit, not replaced by a convenient fallback
+
+- Symptom: a desktop conversation UI can appear complete when it silently captures the computer microphone, even though the product contract says EasyInput is the only V1 audio endpoint.
+- Practice: freeze source/sink interfaces, ship explicit unavailable production adapters until the firmware/bridge exists, and use simulated adapters only in automated tests. Readiness UI must name the missing source or sink.
+- Rule: a test double may prove lifecycle logic, but it must never be selected automatically in production or presented as hardware integration evidence.
+
+## Persist a final conversation turn before announcing it as complete
+
+- Symptom: if the renderer is notified first, an exit or crash between UI display and SQLite write loses a turn that the user already saw as completed.
+- Practice: use a unique provider/source event ID and one transaction for outbox processing, turn insertion, and completion. Identical retries are idempotent; conflicting reuse fails closed; interrupted processing is recoverable.
+- Rule: final UI events are downstream of durable local commit, not the trigger for it.
+
 ## Real Agent state needs lifecycle evidence, not process presence
 
 - Symptom: a running Codex executable or foreground Codex window can be idle, working, waiting for approval or finished, so process/window polling would present fabricated state and becomes ambiguous when several Agent apps are open.

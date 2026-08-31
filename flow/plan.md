@@ -6,6 +6,8 @@
 
 ### Current execution point
 
+- T11 Windows realtime companion core is implemented on `codex/t11-desktop-realtime-companion`: one foreground session controller, Doubao binary adapter, finite reconnect, explicit EasyInput audio source/sink boundary, compact live capsule, T09 expression ownership, and transactional exactly-once local turns. Contract: [`T11_DESKTOP_REALTIME_COMPANION_V1_FROZEN`](../docs/contracts/t11-desktop-realtime-companion-v1.md). Real audio/network/HIL remains blocked on the separate T10E EasyInput adapter and user-present acceptance; this software branch does not touch firmware or hardware.
+
 - T10 Codex real status v1 is implemented as the first privacy-safe provider adapter: repository-local official lifecycle Hooks feed a bounded local named pipe; only the explicitly selected Codex provider can publish into the existing T09 state path, and active VoiceWorkflow remains higher priority. WorkBuddy, Hermes and Claude Code remain manual; no process/window guessing or transcript inspection is allowed. Contract: [`CODEX_REAL_STATUS_V1_FROZEN`](../docs/contracts/t10-codex-real-status-v1.md).
 
 - T09 三端可见状态链已真机通过：七种冻结状态全部由用户确认，`thinking` TTL 自动回 idle，快速 `listening→thinking→working→completed` 由 latest-wins 收敛到开心表情，Link/Agent 计数无协议、断线或队列丢弃错误。证据见 [`t09-three-end-agent-state-acceptance-2026-08-31.md`](../docs/testing/t09-three-end-agent-state-acceptance-2026-08-31.md)。用户离开现场后，实体重启/断线不重放与可选 T03～T06 组合回归明确延期，不允许远程代做硬件操作。

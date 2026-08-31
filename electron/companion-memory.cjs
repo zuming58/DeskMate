@@ -1,6 +1,7 @@
 const path = require("path");
 const { randomUUID } = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
+const { fingerprintEvent, normalizeEvent } = require("./companion-memory-outbox.cjs");
 
 const ROLES = new Set(["user", "assistant"]);
 const CANDIDATE_STATES = new Set(["pending", "accepted", "rejected"]);
@@ -25,7 +26,8 @@ class CompanionMemoryStore {
         role TEXT NOT NULL CHECK(role IN ('user','assistant')),
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        summary_day TEXT
+        summary_day TEXT,
+        source_event_id TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_turns_created_at ON conversation_turns(created_at);
       CREATE INDEX IF NOT EXISTS idx_turns_summary_day ON conversation_turns(summary_day);
@@ -54,7 +56,23 @@ class CompanionMemoryStore {
         vector BLOB NOT NULL,
         created_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS companion_memory_outbox (
+        event_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','processing','completed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        completed_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_companion_memory_outbox_status ON companion_memory_outbox(status, created_at);
     `);
+    const turnColumns = new Set(this.db.prepare("PRAGMA table_info(conversation_turns)").all().map((column) => column.name));
+    if (!turnColumns.has("source_event_id")) this.db.exec("ALTER TABLE conversation_turns ADD COLUMN source_event_id TEXT");
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_source_event_id ON conversation_turns(source_event_id) WHERE source_event_id IS NOT NULL;");
+    this.db.prepare("UPDATE companion_memory_outbox SET status='pending' WHERE status='processing'").run();
   }
 
   appendTurn({ sessionId, role, content, createdAt = this.now() } = {}) {
@@ -63,6 +81,38 @@ class CompanionMemoryStore {
     const value = { id: randomUUID(), sessionId: boundedText(sessionId, "会话 ID", 120), role: normalizedRole, content: boundedText(content, "会话内容", 50000), createdAt: Math.max(0, Number(createdAt) || this.now()) };
     this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)").run(value.id, value.sessionId, value.role, value.content, value.createdAt);
     return { id: value.id, createdAt: value.createdAt };
+  }
+
+  commitConversationTurn({ eventId, sessionId, role, content, createdAt = new Date(this.now()).toISOString() } = {}) {
+    const event = normalizeEvent({
+      eventId,
+      sessionId,
+      kind: "conversation.turn_final",
+      createdAt,
+      payload: { role, text: content },
+    });
+    const fingerprint = fingerprintEvent(event);
+    const existing = this.db.prepare("SELECT fingerprint, status FROM companion_memory_outbox WHERE event_id=?").get(event.eventId);
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) throw new Error("memory-event-id-collision");
+      return { ok: true, inserted: false, eventId: event.eventId, status: existing.status };
+    }
+
+    const at = new Date(event.createdAt).getTime();
+    const turnId = randomUUID();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("INSERT INTO companion_memory_outbox (event_id, session_id, kind, payload_json, fingerprint, status, attempts, created_at) VALUES (?, ?, ?, ?, ?, 'processing', 1, ?)")
+        .run(event.eventId, event.sessionId, event.kind, JSON.stringify(event.payload), fingerprint, at);
+      this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at, source_event_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(turnId, event.sessionId, event.payload.role, event.payload.text, at, event.eventId);
+      this.db.prepare("UPDATE companion_memory_outbox SET status='completed', completed_at=? WHERE event_id=?").run(this.now(), event.eventId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      try { this.db.exec("ROLLBACK"); } catch { /* original error wins */ }
+      throw error;
+    }
+    return { ok: true, inserted: true, eventId: event.eventId, turnId, status: "completed" };
   }
 
   upsertDailySummary({ day, summary, sourceTurnCount = 0 } = {}) {

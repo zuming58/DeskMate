@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11 desktop realtime companion frozen contract](contracts/t11-desktop-realtime-companion-v1.md)
+- [T11 desktop realtime companion task](../flow/tasks/T11-desktop-realtime-companion.md)
+- [T11 desktop realtime companion handoff](handoffs/t11-desktop-realtime-companion-2026-08-31.md)
+- [T11 Doubao realtime reference audit](provenance/t11-doubao-realtime-reference-audit.md)
 - [T10 Desktop manual Agent control frozen contract](contracts/t10-desktop-manual-agent-control-v1.md)
 - [T10 Codex real status adapter frozen contract](contracts/t10-codex-real-status-v1.md)
 - [T10A motion safety core frozen contract](contracts/t10-motion-safety-core-v1.md)

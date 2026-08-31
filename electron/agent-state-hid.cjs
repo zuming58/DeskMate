@@ -8,6 +8,7 @@ const MAX_TTL_MS = 600000;
 const VOICE_WORKFLOW_SOURCE_HASH = 0x7c89f35a;
 const MANUAL_AGENT_SOURCE_HASH = 0x4d414e55;
 const CODEX_HOOK_SOURCE_HASH = 0x43445848;
+const COMPANION_CONVERSATION_SOURCE_HASH = 0x434f4d50;
 
 const AGENT_STATES = Object.freeze({
   idle: 0,
@@ -91,6 +92,8 @@ class AgentStatePublisher {
     this.liveStreamInterrupted = false;
     this.lastProviderAgentState = null;
     this.providerStreamInterrupted = false;
+    this.lastCompanionAgentState = null;
+    this.companionStreamInterrupted = false;
   }
 
   publishVoiceState(value = {}) {
@@ -101,6 +104,7 @@ class AgentStatePublisher {
     const state = VOICE_STATE_MAP[value.state];
     if (!state) return Promise.resolve({ ok: false, ignored: true, reason: "voice-state-unmapped" });
     this.providerStreamInterrupted = true;
+    this.companionStreamInterrupted = true;
     if (!this.liveStreamInterrupted && state === this.lastLiveAgentState) {
       return Promise.resolve({ ok: true, suppressed: true });
     }
@@ -123,6 +127,7 @@ class AgentStatePublisher {
     this.liveStreamInterrupted = true;
     this.lastLiveAgentState = null;
     this.providerStreamInterrupted = true;
+    this.companionStreamInterrupted = true;
     const report = encodeAgentStateFeatureReport({
       state,
       transitionId: this.nextTransitionId(),
@@ -139,6 +144,7 @@ class AgentStatePublisher {
     if (!this.providerStreamInterrupted && state === this.lastProviderAgentState) return Promise.resolve({ ok: true, suppressed: true });
     this.liveStreamInterrupted = true;
     this.lastLiveAgentState = null;
+    this.companionStreamInterrupted = true;
     this.providerStreamInterrupted = false;
     this.lastProviderAgentState = state;
     const report = encodeAgentStateFeatureReport({
@@ -146,6 +152,26 @@ class AgentStatePublisher {
       transitionId: this.nextTransitionId(),
       ttlMs: STATE_TTL_MS[state],
       sourceHash: CODEX_HOOK_SOURCE_HASH,
+    });
+    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+  }
+
+  publishCompanionState(value = {}) {
+    if (value.source !== "companion-conversation-v1") return Promise.resolve({ ok: false, ignored: true, reason: "companion-agent-source-invalid" });
+    const state = String(value.state || "");
+    if (!Object.hasOwn(AGENT_STATES, state)) return Promise.resolve({ ok: false, ignored: true, reason: "companion-agent-state-invalid" });
+    if (!this.companionStreamInterrupted && state === this.lastCompanionAgentState) return Promise.resolve({ ok: true, suppressed: true });
+    this.liveStreamInterrupted = true;
+    this.lastLiveAgentState = null;
+    this.providerStreamInterrupted = true;
+    this.lastProviderAgentState = null;
+    this.companionStreamInterrupted = false;
+    this.lastCompanionAgentState = state;
+    const report = encodeAgentStateFeatureReport({
+      state,
+      transitionId: this.nextTransitionId(),
+      ttlMs: STATE_TTL_MS[state],
+      sourceHash: COMPANION_CONVERSATION_SOURCE_HASH,
     });
     return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
   }
@@ -157,6 +183,7 @@ module.exports = {
   AGENT_STATE_PROTOCOL_VERSION,
   AGENT_STATE_REPORT_ID,
   CODEX_HOOK_SOURCE_HASH,
+  COMPANION_CONVERSATION_SOURCE_HASH,
   MAX_TTL_MS,
   MANUAL_AGENT_SOURCE_HASH,
   STATE_TTL_MS,

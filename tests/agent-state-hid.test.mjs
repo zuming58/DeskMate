@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const {
   AgentStatePublisher,
   CODEX_HOOK_SOURCE_HASH,
+  COMPANION_CONVERSATION_SOURCE_HASH,
   MANUAL_AGENT_SOURCE_HASH,
   createTransitionSequence,
   encodeAgentStateFeatureReport,
@@ -107,6 +108,19 @@ test("real Codex hook publication uses a distinct source and respects stream int
   assert.equal((await publisher.publishProviderState({ source: "simulation", state: "working" })).ignored, true);
   assert.deepEqual(reports.map((report) => report[2]), [2, 0, 2]);
   assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [CODEX_HOOK_SOURCE_HASH, MANUAL_AGENT_SOURCE_HASH, CODEX_HOOK_SOURCE_HASH]);
+});
+
+test("companion conversation owns the seven-state stream until VoiceWorkflow preempts it", async () => {
+  const reports = [];
+  const publisher = new AgentStatePublisher({ send: async (report) => { reports.push(report); return { ok: true }; }, nextTransitionId: createTransitionSequence(41) });
+  assert.equal((await publisher.publishCompanionState({ source: "companion-conversation-v1", state: "waiting" })).ok, true);
+  assert.equal((await publisher.publishCompanionState({ source: "companion-conversation-v1", state: "waiting" })).suppressed, true);
+  await publisher.publishCompanionState({ source: "companion-conversation-v1", state: "listening" });
+  await publisher.publishVoiceState({ source: "voice-workflow", state: "recording" });
+  await publisher.publishCompanionState({ source: "companion-conversation-v1", state: "listening" });
+  assert.equal((await publisher.publishCompanionState({ source: "simulation", state: "working" })).ignored, true);
+  assert.deepEqual(reports.map((report) => report[2]), [4, 1, 1, 1]);
+  assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [COMPANION_CONVERSATION_SOURCE_HASH, COMPANION_CONVERSATION_SOURCE_HASH, 0x7c89f35a, COMPANION_CONVERSATION_SOURCE_HASH]);
 });
 
 test("publisher fails closed without logging or throwing transport failures", async () => {

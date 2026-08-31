@@ -14,6 +14,10 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
+const { CompanionConversationController } = require("./companion-conversation.cjs");
+const { UnavailableCompanionAudioSink, UnavailableCompanionAudioSource } = require("./companion-audio.cjs");
+const { DoubaoRealtimeSession } = require("./doubao-realtime.cjs");
+const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
@@ -49,6 +53,9 @@ let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
 let aiServiceStore;
 let companionMemoryStore;
+let companionConversationController;
+let foregroundSessionState = initialForegroundSession();
+let activeDictationSession = null;
 let appActionStore;
 let hostActionExecutor;
 let isQuitting = false;
@@ -66,6 +73,58 @@ const activeRealtimeSessions = new Map();
 const agentStatePublisher = new AgentStatePublisher({
   send: (report) => inputBridge?.sendAgentState(report) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
 });
+
+function companionIsActive() {
+  return Boolean(companionConversationController?.snapshot?.().active);
+}
+
+function releaseForegroundSession(session) {
+  if (!session) return;
+  foregroundSessionState = finishForegroundSession(foregroundSessionState, session).state;
+}
+
+async function beginDictationForeground() {
+  if (companionIsActive()) await companionConversationController.stop("dictation-preempted");
+  if (activeDictationSession) return activeDictationSession;
+  const sessionId = `dictation-${randomUUID()}`;
+  const started = startForegroundSession(foregroundSessionState, { mode: "dictation", sessionId });
+  foregroundSessionState = started.state;
+  activeDictationSession = { sessionId, generation: foregroundSessionState.active.generation };
+  return activeDictationSession;
+}
+
+function finishDictationForeground() {
+  releaseForegroundSession(activeDictationSession);
+  activeDictationSession = null;
+}
+
+function updateCompanionOverlay(event = {}) {
+  const map = { connecting: "organizing", listening: "recording", thinking: "transcribing", speaking: "outputting", completed: "completed", error: "error", idle: "idle", stopping: "cancelled" };
+  const state = event.type === "state" ? map[event.state] : null;
+  const transcript = ["transcript.partial", "turn.user-final", "reply.partial", "turn.assistant-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
+  const snapshot = {
+    state: state || (event.type?.startsWith("reply") ? "outputting" : event.type?.startsWith("transcript") ? "recording" : "organizing"),
+    message: event.error || ({ connecting: "正在连接豆包实时对话…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
+    transcript,
+    seconds: 0,
+    level: event.type?.startsWith("transcript") ? 24 : 0,
+    floating: true,
+  };
+  overlayWindow?.webContents.send("voice-state", snapshot);
+  if (snapshot.state === "idle") overlayWindow?.hide();
+  else {
+    positionAndShowOverlay();
+    if (["completed", "error", "cancelled"].includes(snapshot.state)) setTimeout(() => { if (!companionIsActive()) overlayWindow?.hide(); }, 1800);
+  }
+}
+
+function handleCompanionConversationEvent(event = {}) {
+  sendToMain("companion-conversation-event", event);
+  updateCompanionOverlay(event);
+  if (event.type === "state" && ["idle", "error"].includes(event.state) && foregroundSessionState.active?.mode === "companion") {
+    releaseForegroundSession({ sessionId: event.sessionId, generation: event.generation });
+  }
+}
 
 function loadTextModelSecret() {
   if (aiServiceStore?.status().text.configured) return aiServiceStore.loadTextSecret();
@@ -227,7 +286,8 @@ async function handleCodexHookState(value) {
   const updatedAt = new Date().toISOString();
   let delivery = activeAgentProvider === "codex" ? "pending" : "not-selected";
   if (activeAgentProvider === "codex") {
-    if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) delivery = "voice-workflow-active";
+    if (companionIsActive()) delivery = "companion-conversation-active";
+    else if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) delivery = "voice-workflow-active";
     else {
       const result = await agentStatePublisher.publishProviderState({ source: "codex-hook-v1", state: value.state });
       delivery = result?.ok ? (result.suppressed ? "suppressed" : "sent") : result?.reason || "send-failed";
@@ -244,6 +304,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
   const phase = voiceSessionRecording ? "stop" : "start";
   const workflow = phase === "stop" ? activeVoiceWorkflow : requestedWorkflow === "edit" ? "edit" : "input";
   if (phase === "start") {
+    await beginDictationForeground();
     const captureToken = ++voiceTargetCaptureToken;
     voiceTargetWindow = null;
     voiceEditContext = null;
@@ -253,6 +314,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
       if (!windowId || captureToken !== voiceTargetCaptureToken) {
         sendToMain("voice-edit-error", { source, reason: "no-captured-target", at: new Date().toISOString() });
         updateVoiceState({ state: "error", message: "未能锁定原输入窗口", floating: lastVoiceState.floating, source: "voice-workflow" });
+        finishDictationForeground();
         return { ignored: true, reason: "no-captured-target" };
       }
       const selection = await captureVoiceEditSelection(windowId);
@@ -260,6 +322,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
         sendToMain("voice-edit-error", { source, reason: selection.reason || "selection-capture-failed", at: new Date().toISOString() });
         const message = selection.reason === "selection-empty" ? "没有检测到选中文字" : selection.reason === "selection-too-long" ? "选中文字过长" : selection.reason === "target-window-changed" ? "原输入窗口已经变化" : "未能读取选中文字";
         updateVoiceState({ state: "error", message, floating: lastVoiceState.floating, source: "voice-workflow" });
+        finishDictationForeground();
         return { ignored: true, reason: selection.reason || "selection-capture-failed" };
       }
       voiceTargetWindow = windowId;
@@ -281,14 +344,18 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
   return payload;
 }
 
-function emitVoiceCancel(source = "keyboard") {
-  if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ignored: true, reason: "voice-idle" };
+async function emitVoiceCancel(source = "keyboard") {
+  if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) {
+    if (companionIsActive()) return companionConversationController.stop(source === "keyboard" ? "escape" : source);
+    return { ignored: true, reason: "voice-idle" };
+  }
   voiceSessionRecording = false;
   voiceTargetCaptureToken += 1;
   voiceTargetWindow = null;
   voiceEditContext = null;
   activeVoiceWorkflow = "input";
   voiceTargetCapturePromise = Promise.resolve(null);
+  finishDictationForeground();
   sendToMain("voice-cancel", { source, at: new Date().toISOString() });
   return { cancelled: true };
 }
@@ -388,6 +455,7 @@ function positionAndShowOverlay() {
 
 function updateVoiceState(value = {}) {
   const state = VOICE_STATES.has(value.state) ? value.state : "error";
+  if (state !== "idle" && value.source === "voice-workflow" && !activeDictationSession) void beginDictationForeground();
   void agentStatePublisher.publishVoiceState({ state, source: value.source });
   lastVoiceState = {
     state,
@@ -398,6 +466,7 @@ function updateVoiceState(value = {}) {
     floating: value.floating !== false,
   };
   voiceSessionRecording = state === "recording";
+  if (["idle", "completed", "error", "cancelled"].includes(state)) finishDictationForeground();
   overlayWindow?.webContents.send("voice-state", lastVoiceState);
   if (!lastVoiceState.floating || ["idle"].includes(state)) overlayWindow?.hide();
   else {
@@ -468,7 +537,10 @@ function startInputBridge() {
     return;
   }
   inputBridge = new InputBridgeManager({ executable });
-  inputBridge.on("status", (value) => sendToMain("input-bridge-status", value));
+  inputBridge.on("status", (value) => {
+    sendToMain("input-bridge-status", value);
+    if (value?.boardConnected === false && companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
+  });
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
   inputBridge.on("trigger", (event) => {
     sendToMain("key-diagnostic", event);
@@ -545,11 +617,45 @@ async function runBailianOrganizerTest(text) {
   app.exit(report.ok ? 0 : 1);
 }
 
+function companionConversationStatus() {
+  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, error: "" };
+  const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
+  return { ...snapshot, service, foregroundMode: foregroundSessionState.active?.mode || null };
+}
+
+async function startCompanionConversation() {
+  if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
+    return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
+  }
+  if (!aiServiceStore?.status?.().realtime?.configured) return { ok: false, reason: "realtime-service-not-configured", status: companionConversationStatus() };
+  if (companionIsActive()) return { ok: false, reason: "companion-session-active", status: companionConversationStatus() };
+  const sessionId = `companion-${randomUUID()}`;
+  const started = startForegroundSession(foregroundSessionState, { mode: "companion", sessionId });
+  foregroundSessionState = started.state;
+  const lease = { sessionId, generation: foregroundSessionState.active.generation };
+  const result = await companionConversationController.start(lease);
+  if (!result.ok) releaseForegroundSession(lease);
+  return { ...result, status: companionConversationStatus() };
+}
+
+async function stopCompanionConversation(reason = "user") {
+  const result = await companionConversationController.stop(reason);
+  return { ...result, status: companionConversationStatus() };
+}
+
 app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
+  companionConversationController = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: aiServiceStore.loadRealtimeSecret(), onEvent }),
+    audioSource: new UnavailableCompanionAudioSource(),
+    audioSink: new UnavailableCompanionAudioSink(),
+    commitTurn: (turn) => companionMemoryStore.commitConversationTurn(turn),
+    publishState: (value) => agentStatePublisher.publishCompanionState(value),
+    onEvent: handleCompanionConversationEvent,
+  });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
@@ -605,12 +711,13 @@ app.whenReady().then(async () => {
     return { ok: true, saved: true, source: verified.source, fingerprint: verified.fingerprint, verificationAttempts: verified.attempts };
   });
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
-  handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
+  handleTrusted("desktop:set-voice-recording", async (recording) => { if (recording) await beginDictationForeground(); voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));
   handleTrusted("desktop:set-manual-agent-state", async (value = {}) => {
     const agentId = typeof value.agentId === "string" && /^[a-z0-9-]{1,32}$/.test(value.agentId) ? value.agentId : "";
     const state = typeof value.state === "string" ? value.state : "";
     if (!agentId || !["idle", "listening", "thinking", "working", "waiting", "completed", "error"].includes(state)) return { ok: false, reason: "manual-agent-request-invalid" };
+    if (companionIsActive()) return { ok: false, reason: "companion-conversation-active" };
     if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ok: false, reason: "voice-workflow-active" };
     const result = await agentStatePublisher.publishManualState({ source: "manual-agent-control", state });
     return result?.ok ? { ok: true, agentId, state } : { ok: false, reason: result?.reason || "agent-state-send-failed" };
@@ -635,6 +742,9 @@ app.whenReady().then(async () => {
   handleTrusted("ai-services:clear-text", () => aiServiceStore.clearText());
   handleTrusted("ai-services:save-realtime", (value) => aiServiceStore.saveRealtime(value || {}));
   handleTrusted("ai-services:clear-realtime", () => aiServiceStore.clearRealtime());
+  handleTrusted("companion:get-status", () => companionConversationStatus());
+  handleTrusted("companion:start", () => startCompanionConversation());
+  handleTrusted("companion:stop", () => stopCompanionConversation("user"));
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
@@ -711,6 +821,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

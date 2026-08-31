@@ -213,21 +213,42 @@ function ExpressionTile({ preset, selected, onClick, compact = false }) {
 export function CompanionPage({ notify }) {
   const { state, patch } = useAppStore();
   const [section, setSection] = useState("overview");
-  const [sessionActive, setSessionActive] = useState(false);
-  const expression = sessionActive ? "listen" : state.currentExpression;
+  const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
+  const sessionActive = Boolean(conversation.active);
+  const conversationExpression = { connecting: "listen", listening: "listen", thinking: "think", speaking: "focus", completed: "happy", error: "alert", stopping: "sleep" }[conversation.state];
+  const expression = conversationExpression || state.currentExpression;
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
   const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
-  const toggleSession = () => {
-    const next = !sessionActive;
-    setSessionActive(next);
-    notify(next ? "陪伴对话进入软件聆听预览；实时语音桥待接入" : "已结束陪伴对话预览");
+  const conversationCopy = {
+    idle: ["你好，我在这里", "按一下进入连续对话；文字语音输入会优先中断陪伴会话。"],
+    connecting: ["正在连接…", "正在建立豆包实时对话会话。"],
+    listening: ["我在聆听…", conversation.transcript || "请开始说话，再按一次或 Esc 结束。"],
+    thinking: ["让我想一想…", conversation.transcript || "正在理解这一轮对话。"],
+    speaking: ["正在回答…", conversation.reply || "回复音频正在送往已接入的音频输出。"],
+    completed: ["这一轮完成啦", "会话保持开启，马上继续倾听。"],
+    stopping: ["正在结束…", "正在释放网络与音频资源。"],
+    error: ["陪伴会话已停止", conversation.error || "请检查服务和音频适配状态。"],
+  }[conversation.state] || ["你好，我在这里", "随时陪伴，记住你的偏好与重要事项。"];
+  const blockerCopy = {
+    "realtime-service-not-configured": "请先在“设备与诊断 → AI 服务”配置豆包实时语音",
+    "easyinput-audio-source-pending": "EasyInput 板载麦克风适配器仍由 T10E 接入",
+    "easyinput-audio-sink-pending": "EasyInput 扬声器播放适配器尚未接入",
+    "voice-workflow-active": "文字语音输入或语音编辑正在使用音频，请先结束",
+    "desktop-bridge-unavailable": "请使用 DeskMate 桌面版启动陪伴对话",
+  };
+  const toggleSession = async () => {
+    try {
+      const result = sessionActive ? await globalThis.desktopBridge?.stopCompanionConversation?.() : await globalThis.desktopBridge?.startCompanionConversation?.();
+      if (!result?.ok) return notify(blockerCopy[result?.reason] || `陪伴对话未启动：${result?.reason || "服务不可用"}`);
+      notify(sessionActive ? "陪伴对话已安全结束" : "陪伴对话已开始");
+    } catch (error) { notify(`陪伴对话失败：${error.message}`); }
   };
   return (
     <div className="page page--companion">
       <PageIntro
         title="AI 陪伴"
         description="陪伴对话、记忆提醒、AI 联动、表情与动作的统一入口"
-        actions={<StatusBadge tone="demo">软件预览 · 小智待接入</StatusBadge>}
+        actions={<StatusBadge tone={sessionActive ? "success" : "demo"}>{sessionActive ? "实时陪伴中" : "T11 软件核心 · 等待 T10E 音频"}</StatusBadge>}
       />
       <Segmented
         value={section}
@@ -242,17 +263,17 @@ export function CompanionPage({ notify }) {
       />
       {section === "overview" && <div className="companion-overview">
         <Card className="companion-stage">
-          <div className="card-heading"><div><strong>DeskMate 陪伴预览</strong><small>WINDOWS · SOFTWARE PREVIEW</small></div><StatusBadge tone={sessionActive ? "success" : "neutral"}>{sessionActive ? "聆听中" : selectedPreset.name}</StatusBadge></div>
-          <div className={`companion-stage__face ${sessionActive ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
-          <div className="companion-stage__copy"><h2>{sessionActive ? "我在聆听…" : "你好，我在这里"}</h2><p>{sessionActive ? "当前只是软件交互预览，不会占用语音输入流程。" : "随时陪伴，记住你的偏好与重要事项。"}</p></div>
-          <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴预览" : "开始陪伴对话"}</Button>
+          <div className="card-heading"><div><strong>DeskMate 实时陪伴</strong><small>WINDOWS · DOUBAO REALTIME</small></div><StatusBadge tone={conversation.state === "error" ? "warning" : sessionActive ? "success" : "neutral"}>{sessionActive ? ({ connecting: "连接中", listening: "聆听中", thinking: "思考中", speaking: "播报中", completed: "本轮完成", stopping: "结束中" }[conversation.state] || "会话中") : selectedPreset.name}</StatusBadge></div>
+          <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
+          <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
+          <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴对话" : "开始陪伴对话"}</Button>
           <div className="companion-expression-strip" aria-label="快捷表情">
-            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => { setSessionActive(false); patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}
+            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => { if (sessionActive) return notify("实时陪伴会话拥有表情优先权，请结束会话后再预览"); patch({ currentExpression: preset.id }); notify(`已预览“${preset.name}”表情`); }} />)}
           </div>
         </Card>
         <div className="companion-side-stack">
           <Card>
-            <SectionTitle index="01" title="陪伴与记忆" description="以下是界面样例；正式记忆服务尚未接入。" />
+            <SectionTitle index="01" title="陪伴与记忆" description="最终用户和助手回合先事务写入本地 SQLite，再显示为完成。" />
             <div className="companion-info-list">
               <button onClick={() => notify("提醒功能待接入本地调度器")}><span className="companion-info-icon"><BellRinging size={20} /></span><span><small>下一个提醒 · 演示</small><strong>14:30 准备产品周会材料</strong></span><StatusBadge tone="demo">今天</StatusBadge></button>
               <button onClick={() => notify("长期记忆检索待接入 DeskMate memory 目录")}><span className="companion-info-icon"><Book2 size={20} /></span><span><small>记忆片段 · 演示</small><strong>你偏好简洁直达的方案与深色主题</strong></span><StatusBadge tone="neutral">8月26日</StatusBadge></button>
@@ -263,11 +284,12 @@ export function CompanionPage({ notify }) {
             <div className="companion-status-list">
               <div><span><Keyboard size={18} />EasyInput</span><StatusBadge tone={boardConnected ? "success" : "demo"}>{boardConnected ? "已连接" : "等待设备"}</StatusBadge></div>
               <div><span><Robot size={18} />小智云台</span><StatusBadge tone="warning">待接入</StatusBadge></div>
-              <div><span><Microphone2 size={18} />陪伴实时语音</span><StatusBadge tone="demo">待开发</StatusBadge></div>
-              <div><span><Link size={18} />记忆与提醒</span><StatusBadge tone="demo">待开发</StatusBadge></div>
+              <div><span><Microphone2 size={18} />豆包实时对话</span><StatusBadge tone={conversation.service?.configured ? "success" : "demo"}>{conversation.service?.configured ? "凭据已配置" : "待配置"}</StatusBadge></div>
+              <div><span><Microphone2 size={18} />EasyInput 麦克风</span><StatusBadge tone={conversation.audioSource?.available ? "success" : "demo"}>{conversation.audioSource?.available ? "已接入" : "T10E 待接入"}</StatusBadge></div>
+              <div><span><Link size={18} />逐轮本地记忆</span><StatusBadge tone="success">SQLite 已接入</StatusBadge></div>
             </div>
           </Card>
-          <Notice tone="info" title="语音互斥边界">陪伴对话与文字语音输入将共用同一个版本化语音状态机；当前页面不会启动第二套麦克风流程。</Notice>
+          <Notice tone="info" title="语音互斥边界">陪伴会话与文字语音输入共用唯一前台会话仲裁器；启动语音输入或语音编辑会立即结束陪伴会话，结束后不会自动恢复。</Notice>
         </div>
       </div>}
       {section === "memory" && <MemoryManagementPage notify={notify} />}
@@ -305,7 +327,7 @@ function MemoryManagementPage({ notify }) {
         <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话接通后自动进入这条流水线。</p></div>
         <StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge>
       </div>
-      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆仓已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `已建立 SQLite WAL 事务库，现有 ${memoryStatus.turns} 条会话事件。陪伴实时对话尚未接入，因此不会伪造摘要或候选。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆仓已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `已建立 SQLite WAL 事务库，现有 ${memoryStatus.turns} 条真实会话事件。T11 逐轮落盘已经接通；自动摘要和记忆候选留到 T12，不会提前伪造。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       <div className="memory-metrics">
         <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
         <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />
@@ -318,7 +340,7 @@ function MemoryManagementPage({ notify }) {
       </Card>
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的记忆" description="本地事务库已经就绪；实时陪伴对话尚未接入，因此不会生成虚构摘要或长期记忆候选。" action={<Button variant="soft" onClick={() => notify("记忆底座已完成；下一步由陪伴对话写入会话事件并触发摘要任务")}>查看当前边界</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : "记忆候选"}</span><time>{item.day}</time></div><p>{item.content}</p>{item.type === "candidate" && item.state === "pending" && <div className="button-row"><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></div>}</article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；每日摘要、人工确认和长期记忆候选将在 T12 接入。" action={<Button variant="soft" onClick={() => notify("T11 只保存真实逐轮对话；T12 才生成可管理的摘要与候选")}>查看当前边界</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : "记忆候选"}</span><time>{item.day}</time></div><p>{item.content}</p>{item.type === "candidate" && item.state === "pending" && <div className="button-row"><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></div>}</article>)}</div>}
         </Card>
         <Card>
           <SectionTitle index="01" title="计划中的记忆流水线" description="先可靠落盘，再异步总结；异常退出后可从未整理候选恢复。" />
@@ -1106,7 +1128,7 @@ export function SettingsPage({ notify }) {
   const clearBailian = async () => { try { const value = await globalThis.desktopBridge?.clearBailianCredentials?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setBailianStatus(value); updateSettings({ sttMode: "unconfigured" }); notify("本机千问 API Key 已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const saveTextService = async () => { try { const value = await globalThis.desktopBridge?.saveTextModelService?.(textService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setTextService((current) => ({ ...current, apiKey: "" })); notify("文本大模型接口已加密保存，智能整理与语音编辑将使用该服务"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearTextService = async () => { try { const value = await globalThis.desktopBridge?.clearTextModelService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify(bailianStatus.configured ? "已移除自定义文本模型，将回退到百炼 qwen3.7-flash" : "文本大模型配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
-  const saveRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.saveRealtimeVoiceService?.(realtimeService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setRealtimeService((current) => ({ ...current, accessKey: "", appKey: "" })); notify("实时语音凭据已加密保存；陪伴会话适配器仍待接入，不会立即联网"); } catch (error) { notify(`保存失败：${error.message}`); } };
+  const saveRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.saveRealtimeVoiceService?.(realtimeService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setRealtimeService((current) => ({ ...current, accessKey: "", appKey: "" })); notify("实时语音凭据已加密保存；只有开始陪伴会话时才会联网"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.clearRealtimeVoiceService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify("实时语音配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", shortcut: { value: state.settings.voiceShortcut, registered: Boolean(caps.shortcutRegistered) }, microphone: { selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
   const downloadConfig = () => { const blob = new Blob([exportConfig()], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-config.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 0); notify("配置 JSON 已导出"); };
@@ -1146,7 +1168,7 @@ export function SettingsPage({ notify }) {
               </section>
 
               <section className="service-config-block">
-                <div className="account-card"><span className="avatar"><Microphone2 size={28} /></span><div><strong>实时语音 · 陪伴对话</strong><p>参考苏丽娘的实时 WebSocket 链路，负责低延时 ASR、对话和 TTS，不直接执行 Windows 动作。</p></div><StatusBadge tone="demo">{aiServiceStatus.realtime?.configured ? "凭据已保存 · 待接入" : "待配置"}</StatusBadge></div>
+                <div className="account-card"><span className="avatar"><Microphone2 size={28} /></span><div><strong>实时语音 · 陪伴对话</strong><p>豆包实时对话负责低延时 ASR、对话和 TTS；密钥只在 Electron 主进程解密，不直接执行 Windows 动作。</p></div><StatusBadge tone={aiServiceStatus.realtime?.configured ? "success" : "demo"}>{aiServiceStatus.realtime?.configured ? "凭据已保存" : "待配置"}</StatusBadge></div>
                 <SettingRow title="服务商" description="首个适配目标为豆包实时语音；自定义服务需要另写协议适配器"><select value={realtimeService.provider} onChange={(event) => setRealtimeService((current) => ({ ...current, provider: event.target.value }))}><option value="doubao">豆包实时语音</option><option value="custom">自定义 WebSocket</option></select></SettingRow>
                 <label className="field-label">WebSocket 地址<input value={realtimeService.endpoint} onChange={(event) => setRealtimeService((current) => ({ ...current, endpoint: event.target.value }))} placeholder="wss://..." /></label>
                 <div className="service-config-grid"><label className="field-label">App ID<input value={realtimeService.appId} onChange={(event) => setRealtimeService((current) => ({ ...current, appId: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "重新保存时请填写" : "App ID"} /></label><label className="field-label">Access Key<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.accessKey} onChange={(event) => setRealtimeService((current) => ({ ...current, accessKey: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "已加密保存；重新保存时请填写" : "Access Key"} /></label><label className="field-label">App Key（可选）<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.appKey} onChange={(event) => setRealtimeService((current) => ({ ...current, appKey: event.target.value }))} placeholder="留空则由适配器使用服务默认值" /></label><label className="field-label">Resource ID<input value={realtimeService.resourceId} onChange={(event) => setRealtimeService((current) => ({ ...current, resourceId: event.target.value }))} /></label><label className="field-label">模型版本<input value={realtimeService.model} onChange={(event) => setRealtimeService((current) => ({ ...current, model: event.target.value }))} /></label><label className="field-label">女性音色<input value={realtimeService.voice} onChange={(event) => setRealtimeService((current) => ({ ...current, voice: event.target.value }))} /></label></div>

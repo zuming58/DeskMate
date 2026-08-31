@@ -59,12 +59,15 @@ test("natural blinking is bounded and respects reduced-motion preference", async
   assert.match(face, /clearTimeout\(resetTimer\)/);
 });
 
-test("companion previews stay honest and do not create a second microphone workflow", async () => {
+test("companion UI is a real main-process session entry and does not create a renderer microphone workflow", async () => {
   const pages = await source("src/pages.jsx");
+  const preload = await source("electron/preload.cjs");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("export function DashboardPage"));
-  assert.match(companion, /软件预览 · 小智待接入/);
-  assert.match(companion, /实时语音桥待接入/);
-  assert.match(companion, /不会启动第二套麦克风流程/);
+  assert.match(companion, /T11 软件核心 · 等待 T10E 音频/);
+  assert.match(companion, /startCompanionConversation/);
+  assert.match(companion, /唯一前台会话仲裁器/);
+  assert.match(preload, /startCompanionConversation: \(\) => ipcRenderer\.invoke\("companion:start"\)/);
+  assert.match(preload, /onCompanionConversationEvent/);
   assert.doesNotMatch(companion, /getUserMedia|MediaRecorder|useRecorder/);
   assert.match(pages, /未发送到小智舵机/);
 });

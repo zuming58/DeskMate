@@ -1,5 +1,13 @@
 # Decisions
 
+## D038 - Companion dialogue has one foreground owner and an explicit EasyInput audio boundary
+
+- Date: 2026-08-31
+- Decision: T11 uses one `CompanionConversationController` for the continuous dialogue lifecycle and one foreground-session arbiter shared with existing text voice input/edit. Dictation preempts companion; companion never resumes automatically. Doubao credentials, protocol, PCM queues, and turn persistence remain in Electron main.
+- Audio boundary: production uses explicit `CompanionAudioSource` and `CompanionAudioSink` contracts. Until T10E supplies the EasyInput implementation, DeskMate reports the missing adapter and refuses to claim a live conversation. Computer and Xiaozhi audio are not silent fallbacks.
+- Persistence and status: final turns are committed transactionally before final UI events. While companion is active it owns the existing T09 expression stream; displaced Codex/manual states are dropped rather than replayed.
+- Consequence: future audio transports and providers can be added behind the frozen adapters without duplicating VoiceWorkflow, exposing credentials to React, or changing firmware state vocabulary.
+
 ## D037 - Codex real status uses official lifecycle hooks and explicit provider ownership
 
 - Date: 2026-08-31

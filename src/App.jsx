@@ -117,6 +117,32 @@ const pages = {
   settings: SettingsPage,
 };
 
+const companionStateCopy = {
+  connecting: { label: "正在连接", message: "正在连接豆包实时对话…" },
+  listening: { label: "正在倾听", message: "请开始说话" },
+  thinking: { label: "正在思考", message: "DeskMate 正在组织回答" },
+  speaking: { label: "正在播报", message: "DeskMate 正在回答" },
+  stopping: { label: "正在结束", message: "正在释放会话与音频资源" },
+  completed: { label: "本轮完成", message: "准备继续倾听" },
+  error: { label: "对话异常", message: "陪伴会话已安全停止" },
+};
+
+function CompanionLiveBar({ conversation }) {
+  if (!conversation || conversation.state === "idle") return null;
+  const copy = companionStateCopy[conversation.state] || companionStateCopy.connecting;
+  const text = conversation.state === "speaking" ? conversation.reply : conversation.transcript;
+  return (
+    <div className={`companion-live-bar is-${conversation.state}`} role="status" aria-live="polite">
+      <span className="companion-live-bar__dot" />
+      <Microphone2 size={17} stroke={1.8} />
+      <strong>{copy.label}</strong>
+      <span className="companion-live-bar__text">{text || conversation.error || copy.message}</span>
+      {conversation.active && <button onClick={() => globalThis.desktopBridge?.stopCompanionConversation?.()}>结束</button>}
+      <small>Esc 结束</small>
+    </div>
+  );
+}
+
 function resolveHash() {
   const value = window.location.hash.replace("#/", "").replace("#", "");
   return pages[value] ? value : "dashboard";
@@ -188,6 +214,27 @@ function AppContent() {
     voiceAdapters.desktop.capabilities().then((value) => { if (value.inputBridge) updateBridge(value.inputBridge); }).catch(() => {});
     return voiceAdapters.desktop.onInputBridgeStatus(updateBridge);
   }, [patch]);
+  useEffect(() => {
+    if (!globalThis.desktopBridge) return undefined;
+    const updateCompanion = (value = {}) => {
+      const runtime = runtimeRef.current || {};
+      const current = runtime.companion || {};
+      const next = { ...current };
+      if (value.type === "state") {
+        next.state = value.state || "error";
+        next.active = !["idle", "error"].includes(next.state);
+        next.sessionId = value.sessionId || next.sessionId || "";
+        next.generation = Number(value.generation) || next.generation || 0;
+        next.error = value.error || (next.state === "error" ? next.error : "");
+        if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
+      } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
+      else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
+      else Object.assign(next, value);
+      patch({ runtime: { ...runtime, companion: next } });
+    };
+    globalThis.desktopBridge.getCompanionConversationStatus?.().then(updateCompanion).catch(() => {});
+    return globalThis.desktopBridge.onCompanionConversationEvent?.(updateCompanion);
+  }, [patch]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;
@@ -221,6 +268,7 @@ function AppContent() {
         </div>
       </main>
       {toast && <div className="toast"><CircleCheck size={18} />{toast}</div>}
+      <CompanionLiveBar conversation={state.runtime?.companion} />
       <div className="demo-watermark"><Sparkles size={14} />{state.runtime?.inputBridge?.boardConnected ? "EasyInput 真机桥已连接" : "软件核心已就绪 · 等待板子"}</div>
     </div>
   );
