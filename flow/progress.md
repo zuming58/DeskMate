@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-08-31 - T10E microphone zero-audio root cause fixed; app-only HIL pending
+
+- Evidence and root cause: the real desktop diagnostic showed 698 valid heartbeats, successful control/ACK, zero accepted audio frames and 14 source rejections. Source review then confirmed that T10E sent `EIHB/EICA` from the control socket but `EIAU` from a second ephemeral sender socket. Because T11A correctly locks the peer `IP:port` after a matching ACK, all real PCM packets were rejected before level calculation; Ethernet on the PC and Wi-Fi on EasyInput are not the blocker.
+- Fix: firmware commit `ddf0a7d3acbbb2119029b3df20376fa6864aed84` removes the second UDP socket/task and drains the existing bounded PCM queue from the control-network task. Heartbeat, ACK and PCM now share one socket and source port. Capture remains a separate higher-priority task, stale-session frames are dropped, and any send failure still aborts only the audio session without affecting HID, LEDs or DeskMate Link.
+- Contract and prevention: `docs/contracts/easyinput-audio-capture-v1.md` now explicitly freezes the single-endpoint rule; the source-contract suite requires exactly one UDP socket constructor and rejects a restored `audio_sender` task. The reusable failure pattern is recorded in `flow/lessons.md`.
+- Verification: EasyInput Host CTest 10/10 passed; exact ESP-IDF v5.5.5 `esp32s3` fixed-partition build passed. The new app is 854,432 bytes (`0xD09A0`), SHA-256 `3FBAF210F30E8BF468C3FBAEF085BAFC07F111495155AB58A330F300930599B7`, data range `0x010000..0x0E099F`, covering sectors through `0x0E0FFF`, with 73% of the 3 MiB factory partition free. `git diff --check` passed.
+- Safety and next: no port scan, device access, Flash/NVS read or write, erase, monitor, eFuse or Xiaozhi operation occurred. Status is `CODE_FIX_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_REPAIR_PENDING`. Next, obtain a fresh app-only authorization for this exact image, then repeat the 30-second microphone test and require rising `audioFrames`, non-zero live level while speaking and no growing `sourceRejects`.
+
 ## 2026-08-31 - T10E EasyInput app-only flash and exact readback confirmed
 
 - Authorized write: after a fresh read confirmed that the connected ESP32-S3/16 MiB EasyInput still contained the expected T09 app, the clean T10E image from source HEAD `77fabec3f2fed2e4d103c058140ccdaa7c97048a` was written only at `0x010000..0x0E099F`; the tool erased only the covering sectors through `0x0E0FFF`.
