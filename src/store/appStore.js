@@ -5,9 +5,10 @@ import { legacyState } from "../domain/aiStatus.js";
 import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding } from "../domain/keymap.js";
 import { mapAiStateToPetIntent } from "../domain/petIntent.js";
 import { normalizeAgentControl } from "../domain/agentControl.js";
+import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 function normalizeHistoryEntry(item) {
   const text = String(item?.text || "");
@@ -25,7 +26,7 @@ export const defaultState = {
   vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ from: "桌面宠物", to: "桌宠" }, { from: "克劳德代码", to: "Claude Code" }] },
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
-  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
+  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
     companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, service: { configured: false, provider: "doubao" } },
@@ -50,7 +51,7 @@ function mergeDefaults(value) {
     keymap: Array.isArray(value.keymap) && value.keymap.length === 8 ? value.keymap.map((item, index) => normalizeKeyBinding(item, defaultState.keymap[index])) : structuredClone(defaultState.keymap),
     encoder: normalizeEncoder(value.encoder),
     vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
-    settings: { ...defaultState.settings, ...(value.settings || {}), operation: "toggle" },
+    settings: { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle" },
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
     agentControl: normalizeAgentControl(value.agentControl),
@@ -70,6 +71,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 5) raw = { ...raw, history: Array.isArray(raw.history) ? raw.history.map(normalizeHistoryEntry) : raw.history };
   if ((raw.schemaVersion ?? 0) < 6) raw = { ...raw, keymap: Array.isArray(raw.keymap) ? raw.keymap.map((item, index) => normalizeKeyBinding(item, DEFAULT_KEYMAP[index])) : raw.keymap, encoder: normalizeEncoder(raw.encoder), settings: { ...(raw.settings || {}), activeWindowOutputEnabled: true } };
   if ((raw.schemaVersion ?? 0) < 7) raw = { ...raw, agentControl: normalizeAgentControl(raw.agentControl) };
+  if ((raw.schemaVersion ?? 0) < 8) raw = { ...raw, settings: { ...(raw.settings || {}), microphoneSource: normalizeMicrophoneSource(raw.settings?.microphoneSource), globalShortcutsEnabled: false } };
   return mergeDefaults(raw);
 }
 
@@ -103,6 +105,8 @@ export function validateConfig(value) {
   if (value.vocabulary?.rules && (!Array.isArray(value.vocabulary.rules) || value.vocabulary.rules.some((item) => !item || typeof item.from !== "string" || typeof item.to !== "string"))) throw new Error("替换规则格式无效");
   if (value.settings !== undefined && (!value.settings || typeof value.settings !== "object" || Array.isArray(value.settings))) throw new Error("设置格式无效");
   if (value.settings?.voiceShortcut !== undefined && (typeof value.settings.voiceShortcut !== "string" || value.settings.voiceShortcut.length > 64)) throw new Error("语音快捷键格式无效");
+  if (value.settings?.microphoneSource !== undefined && !["computer", "easyinput"].includes(value.settings.microphoneSource)) throw new Error("麦克风来源无效");
+  if (value.settings?.globalShortcutsEnabled !== undefined && typeof value.settings.globalShortcutsEnabled !== "boolean") throw new Error("普通键盘全局快捷键设置无效");
   if (value.settings?.boardF22Enabled !== undefined && typeof value.settings.boardF22Enabled !== "boolean") throw new Error("板子 F22 设置无效");
   if (value.settings?.rightAltEnabled !== undefined && typeof value.settings.rightAltEnabled !== "boolean") throw new Error("右 Alt 设置无效");
   if (value.settings?.outputMode !== undefined && !["history", "clipboard"].includes(value.settings.outputMode)) throw new Error("文字输出方式无效");

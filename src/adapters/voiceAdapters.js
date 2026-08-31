@@ -42,7 +42,11 @@ export class DesktopBridgeAdapter {
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async startEasyInputMicTest() { return this.bridge?.startEasyInputMicTest ? this.bridge.startEasyInputMicTest() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async stopEasyInputMicTest() { return this.bridge?.stopEasyInputMicTest ? this.bridge.stopEasyInputMicTest() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async startEasyInputVoiceRecording() { return this.bridge?.startEasyInputVoiceRecording ? this.bridge.startEasyInputVoiceRecording() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async stopEasyInputVoiceRecording() { return this.bridge?.stopEasyInputVoiceRecording ? this.bridge.stopEasyInputVoiceRecording() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async cancelEasyInputVoiceRecording() { return this.bridge?.cancelEasyInputVoiceRecording ? this.bridge.cancelEasyInputVoiceRecording() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async registerShortcut(shortcut) { return this.bridge?.registerShortcut ? this.bridge.registerShortcut(shortcut) : { registered: false, shortcut, reason: "desktop-bridge-unavailable" }; }
+  async setGlobalShortcutsEnabled(enabled) { return this.bridge?.setGlobalShortcutsEnabled ? this.bridge.setGlobalShortcutsEnabled(enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setShortcutCapture(active) { return this.bridge?.setShortcutCapture ? this.bridge.setShortcutCapture(active) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async listApplications() { return this.bridge?.listApplications ? this.bridge.listApplications() : []; }
   async registerApplication(token) { return this.bridge?.registerApplication ? this.bridge.registerApplication(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -79,6 +83,7 @@ export class DesktopBridgeAdapter {
   onCodexAgentState(listener) { return this.bridge?.onCodexAgentState ? this.bridge.onCodexAgentState(listener) : () => {}; }
   onCompanionConversationEvent(listener) { return this.bridge?.onCompanionConversationEvent ? this.bridge.onCompanionConversationEvent(listener) : () => {}; }
   onEasyInputAudioEvent(listener) { return this.bridge?.onEasyInputAudioEvent ? this.bridge.onEasyInputAudioEvent(listener) : () => {}; }
+  onEasyInputVoiceRecordingEvent(listener) { return this.bridge?.onEasyInputVoiceRecordingEvent ? this.bridge.onEasyInputVoiceRecordingEvent(listener) : () => {}; }
   onNavigate(listener) { return this.bridge?.onNavigate ? this.bridge.onNavigate(listener) : () => {}; }
 }
 

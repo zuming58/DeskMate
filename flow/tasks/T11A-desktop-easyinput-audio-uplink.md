@@ -1,6 +1,6 @@
 # T11A desktop EasyInput audio uplink
 
-Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`
+Status: `TEST_CONFIRMED / BUILD_CONFIRMED / MICROPHONE_SOURCE_SELECTION_IMPLEMENTED / HIL_NOT_RUN`
 
 ## Objective
 
@@ -12,10 +12,12 @@ Implement the Windows production `EasyInputLanAudioSource`, safe configuration w
 - T05-compatible four-field preview/confirmation/write/readback transaction.
 - Separate sandboxed credential window and sanitized main-renderer status.
 - Microphone level/counter diagnostic without persistence or Doubao.
+- Persistent computer/EasyInput selection for the existing text `VoiceWorkflow`, one-source-per-recording locking, explicit pre-start fallback and completed-WAV handoff.
+- Board-scoped Raw Input voice/voice-edit triggers with ordinary global keyboard shortcuts disabled by default.
 
 ## Excluded
 
-Firmware changes/review, hardware operations, LAN scanning, speaker playback, computer-audio fallback, Xiaozhi audio, servo and full realtime HIL.
+Firmware changes/review, hardware operations, LAN scanning, speaker playback, Xiaozhi audio, servo and full realtime HIL. Computer fallback is permitted only for text dictation before a board recording starts; it is forbidden for companion dialogue and during an active board recording.
 
 ## Exit gate
 

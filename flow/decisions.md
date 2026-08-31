@@ -1,5 +1,13 @@
 # Decisions
 
+## D039 - Dictation locks one explicit microphone source and board shortcuts are device-scoped
+
+- Date: 2026-08-31
+- Decision: text voice input/edit persists `computer` or `easyinput`, defaults to a concrete Windows microphone, and locks the actual source at the start of every recording. An unavailable EasyInput source may fall back once before capture begins with a visible reason; a failure after start terminates the recording and never switches sources.
+- Trigger boundary: ordinary keyboard global voice/edit shortcuts are disabled by default. The EasyInput KEY1/KEY3 chords are recognized only through VID/PID-scoped Raw Input; generic F22 injection and ordinary keyboards cannot impersonate the board. Users may explicitly opt into the legacy global fallback in settings.
+- Compatibility: this refines D004 after T10E microphone HIL and records the same product choice referenced as D037 on the parallel firmware branch without renumbering or overwriting this branch's existing D037. It changes no firmware and keeps the single existing `VoiceWorkflow`.
+- Privacy: live board PCM, network coordinates and credentials stay in Electron main. Only one bounded completed WAV enters the existing renderer recording pipeline after the user stops text dictation.
+
 ## D038 - EasyInput audio credentials use an isolated configuration renderer
 
 - Date: 2026-08-31

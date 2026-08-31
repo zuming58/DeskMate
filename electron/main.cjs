@@ -18,6 +18,7 @@ const { CompanionConversationController } = require("./companion-conversation.cj
 const { UnavailableCompanionAudioSink } = require("./companion-audio.cjs");
 const { EasyInputLanAudioSource } = require("./easyinput-audio-source.cjs");
 const { EasyInputAudioManager } = require("./easyinput-audio-manager.cjs");
+const { EasyInputVoiceRecorder } = require("./easyinput-voice-recorder.cjs");
 const { DoubaoRealtimeSession } = require("./doubao-realtime.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
@@ -46,6 +47,7 @@ let tray;
 let inputBridge;
 let shortcut = DEFAULT_SHORTCUT;
 let editShortcutRegistered = false;
+let globalKeyboardShortcutsEnabled = false;
 let voiceSessionRecording = false;
 let activeVoiceWorkflow = "input";
 let voiceEditContext = null;
@@ -58,6 +60,7 @@ let companionMemoryStore;
 let companionConversationController;
 let easyInputAudioSource;
 let easyInputAudioManager;
+let easyInputVoiceRecorder;
 let audioSetupWindow;
 let easyInputAudioBoardConnected = false;
 let foregroundSessionState = initialForegroundSession();
@@ -436,16 +439,30 @@ function registerShortcut(nextShortcut = shortcut) {
   try { candidate = normalizeShortcut(nextShortcut || DEFAULT_SHORTCUT); }
   catch (error) { return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: error.message }; }
   if (candidate === DEFAULT_EDIT_SHORTCUT) return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: `${DEFAULT_EDIT_SHORTCUT} 已保留给语音编辑` };
+  const previous = shortcut;
+  if (!globalKeyboardShortcutsEnabled) { shortcut = candidate; return { registered: false, shortcut, disabled: true, reason: "global-keyboard-shortcuts-disabled" }; }
   if (candidate === shortcut && globalShortcut.isRegistered(shortcut)) return { registered: true, shortcut };
   let registered = false;
   try { registered = globalShortcut.register(candidate, () => { void emitVoiceToggle("fallback-shortcut", candidate); }); }
   catch (error) { return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: error.message }; }
   if (!registered) return { registered: globalShortcut.isRegistered(shortcut), shortcut, reason: "shortcut-unavailable" };
-  const previous = shortcut;
   shortcut = candidate;
   shortcutCaptureActive = false;
   if (previous !== candidate) globalShortcut.unregister(previous);
   return { registered: true, shortcut };
+}
+
+function setGlobalShortcutsEnabled(enabled) {
+  globalKeyboardShortcutsEnabled = Boolean(enabled);
+  if (!globalKeyboardShortcutsEnabled) {
+    if (globalShortcut.isRegistered(shortcut)) globalShortcut.unregister(shortcut);
+    if (globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT)) globalShortcut.unregister(DEFAULT_EDIT_SHORTCUT);
+    editShortcutRegistered = false;
+    return { ok: true, enabled: false, shortcut, registered: false, editShortcutRegistered: false };
+  }
+  const voice = registerShortcut(shortcut);
+  const edit = registerEditShortcut();
+  return { ok: Boolean(voice.registered), enabled: true, shortcut: voice.shortcut, registered: Boolean(voice.registered), editShortcutRegistered: Boolean(edit.registered), reason: voice.reason || edit.reason };
 }
 
 function setShortcutCapture(active) {
@@ -456,6 +473,7 @@ function setShortcutCapture(active) {
     editShortcutRegistered = false;
     return { ok: true, active: true, shortcut };
   }
+  if (!globalKeyboardShortcutsEnabled) return { ok: true, active: false, shortcut, registered: false, editShortcutRegistered: false };
   const result = globalShortcut.isRegistered(shortcut) ? { registered: true, shortcut } : registerShortcut(shortcut);
   const editResult = registerEditShortcut();
   return { ok: Boolean(result.registered), active: false, shortcut: result.shortcut, editShortcutRegistered: Boolean(editResult.registered), reason: result.reason };
@@ -594,6 +612,7 @@ function startInputBridge() {
     if (newlyConnected) void easyInputAudioManager?.refreshConfiguration();
     if (value?.boardConnected === false) {
       if (companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
+      if (easyInputVoiceRecorder?.status?.().recording) void easyInputVoiceRecorder.fail("easyinput-device-disconnected");
       void easyInputAudioManager?.suspend("easyinput-device-disconnected");
     }
   });
@@ -714,6 +733,10 @@ app.whenReady().then(async () => {
     networkInterfaces: () => os.networkInterfaces(),
     emit: (event) => sendToMain("easyinput-audio-event", event),
   });
+  easyInputVoiceRecorder = new EasyInputVoiceRecorder({
+    source: easyInputAudioSource,
+    emit: (event) => sendToMain("easyinput-voice-recording-event", event),
+  });
   companionConversationController = new CompanionConversationController({
     providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: aiServiceStore.loadRealtimeSecret(), onEvent }),
     audioSource: easyInputAudioSource,
@@ -733,7 +756,7 @@ app.whenReady().then(async () => {
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
+  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
@@ -743,11 +766,21 @@ app.whenReady().then(async () => {
     return { ok: true };
   } }));
   handleTrusted("desktop:stop-easyinput-mic-test", () => easyInputAudioManager.stopMicTest("user"));
+  handleTrusted("desktop:start-easyinput-voice-recording", async () => {
+    if (easyInputVoiceRecorder.status().recording) return { ok: false, reason: "easyinput-recording-active" };
+    await beginDictationForeground();
+    const result = await easyInputVoiceRecorder.start();
+    if (!result.ok) finishDictationForeground();
+    return result;
+  });
+  handleTrusted("desktop:stop-easyinput-voice-recording", () => easyInputVoiceRecorder.stop("user"));
+  handleTrusted("desktop:cancel-easyinput-voice-recording", () => easyInputVoiceRecorder.cancel("user-cancelled"));
   handleAudioSetup("audio-setup:load", () => easyInputAudioManager.setupSnapshot());
   handleAudioSetup("audio-setup:preview", (value) => easyInputAudioManager.previewSetup(value || {}));
   handleAudioSetup("audio-setup:commit", (token) => easyInputAudioManager.commitSetup(String(token || "")));
   handleAudioSetup("audio-setup:close", () => { audioSetupWindow?.close(); return { ok: true }; });
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
+  handleTrusted("desktop:set-global-shortcuts-enabled", (value) => setGlobalShortcutsEnabled(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
   handleTrusted("desktop:list-applications", () => appActionStore.discover());
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
@@ -788,7 +821,7 @@ app.whenReady().then(async () => {
     keyboardConfigState = { raw: verified.config, fingerprint: verified.fingerprint, source: verified.source, token: null };
     return { ok: true, saved: true, source: verified.source, fingerprint: verified.fingerprint, verificationAttempts: verified.attempts };
   });
-  handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
+  handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false, keyboardShortcuts: false } }));
   handleTrusted("desktop:set-voice-recording", async (recording) => { if (recording) await beginDictationForeground(); voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));
   handleTrusted("desktop:set-manual-agent-state", async (value = {}) => {
@@ -892,13 +925,12 @@ app.whenReady().then(async () => {
     if (!realtime) return { ok: false, reason: "session-not-active" };
     realtime.cancel(); activeRealtimeSessions.delete(key); return { ok: true };
   });
-  registerShortcut(DEFAULT_SHORTCUT);
-  registerEditShortcut();
+  setGlobalShortcutsEnabled(false);
   startInputBridge();
   app.on("activate", () => showMain());
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

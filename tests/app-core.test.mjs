@@ -12,6 +12,8 @@ test("migrates legacy storage to current schema without dropping defaults", () =
   assert.equal(result.keymap.length, 8);
   assert.equal(result.keymap[0].action, "voice-input");
   assert.equal(result.settings.activeWindowOutputEnabled, true);
+  assert.equal(result.settings.microphoneSource, "computer");
+  assert.equal(result.settings.globalShortcutsEnabled, false);
 });
 
 test("migrates history schema v4 to raw and organized text fields", () => {
@@ -39,6 +41,8 @@ test("rejects malformed imported configurations", () => {
   assert.throws(() => validateConfig({ schemaVersion: 99 }), /更高版本/);
   assert.throws(() => validateConfig({ settings: { sttMode: "pretend-connected" } }), /STT 模式/);
   assert.throws(() => validateConfig({ settings: { rightAltEnabled: "yes" } }), /右 Alt/);
+  assert.throws(() => validateConfig({ settings: { microphoneSource: "bluetooth" } }), /麦克风来源/);
+  assert.throws(() => validateConfig({ settings: { globalShortcutsEnabled: "yes" } }), /全局快捷键/);
 });
 
 test("falls back to defaults when persisted storage has an invalid shape", () => {

@@ -284,17 +284,27 @@ test("Right Alt is opt-in and Escape produces cancellation", () => {
   assert.equal(filter.accept(bridgeEvent({ source: "keyboard", key: "Escape" })).kind, "cancel");
 });
 
-test("voice edit triggers on Ctrl+Shift+E release without requiring the global shortcut", () => {
+test("ordinary keyboard voice edit is disabled by default and opt-in only", () => {
   const filter = new InputTriggerFilter({ now: () => 1000 });
   const down = bridgeEvent({ source: "keyboard", key: "VoiceEdit" });
   assert.equal(filter.accept(down).kind, "diagnostic");
-  assert.equal(filter.accept({ ...down, action: "up", sequence: 2 }).kind, "trigger");
+  assert.equal(filter.accept({ ...down, action: "up", sequence: 2 }).kind, "diagnostic");
+  filter.configure({ keyboardShortcuts: true });
+  assert.equal(filter.accept({ ...down, sequence: 3 }).kind, "diagnostic");
+  assert.equal(filter.accept({ ...down, action: "up", sequence: 4 }).kind, "trigger");
 });
 
-test("injected F22 fallback uses the same release-only trigger policy", () => {
+test("generic injected F22 cannot impersonate the EasyInput board", () => {
   const filter = new InputTriggerFilter({ now: () => 1000 });
   assert.equal(filter.accept(bridgeEvent({ source: "f22-fallback" })).kind, "diagnostic");
-  assert.equal(filter.accept(bridgeEvent({ source: "f22-fallback", action: "up", sequence: 2 })).kind, "trigger");
+  assert.equal(filter.accept(bridgeEvent({ source: "f22-fallback", action: "up", sequence: 2 })).kind, "diagnostic");
+});
+
+test("EasyInput native Ctrl Shift Space chord triggers through its board-only event", () => {
+  const filter = new InputTriggerFilter({ now: () => 1000 });
+  const down = bridgeEvent({ source: "easyinput-hid", key: "VoiceInput" });
+  assert.equal(filter.accept(down).kind, "diagnostic");
+  assert.equal(filter.accept({ ...down, action: "up", sequence: 2 }).kind, "trigger");
 });
 
 test("input bridge manager schedules an automatic restart after a crash", () => {

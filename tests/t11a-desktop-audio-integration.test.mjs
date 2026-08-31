@@ -21,6 +21,22 @@ test("main renderer receives only sanitized audio APIs and never setup secrets",
   assert.doesNotMatch(pages, /wifi_password|audio_host|192\.168\.|raw PCM/);
 });
 
+test("voice workflow can select the board recorder without exposing a live audio stream", () => {
+  for (const method of ["startEasyInputVoiceRecording", "stopEasyInputVoiceRecording", "cancelEasyInputVoiceRecording", "onEasyInputVoiceRecordingEvent"]) assert.match(preload, new RegExp(method));
+  assert.match(main, /new EasyInputVoiceRecorder/);
+  assert.match(pages, /EasyInput 板载麦克风（Wi-Fi）/);
+  assert.match(pages, /蓝牙麦克风（待接入）/);
+  assert.match(pages, /startMicrophoneSession/);
+});
+
+test("ordinary global shortcuts default off while board-native voice input remains explicit", () => {
+  assert.match(main, /globalKeyboardShortcutsEnabled = false/);
+  assert.match(main, /setGlobalShortcutsEnabled\(false\)/);
+  assert.doesNotMatch(main, /registerShortcut\(DEFAULT_SHORTCUT\);/);
+  assert.match(pages, /普通键盘全局快捷键/);
+  assert.match(pages, /EasyInput 按键 · 原生监听/);
+});
+
 test("credential window is isolated and has a strict local CSP", () => {
   assert.match(main, /audio-setup-preload\.cjs[\s\S]*nodeIntegration:\s*false[\s\S]*contextIsolation:\s*true[\s\S]*sandbox:\s*true/);
   assert.match(setupPreload, /audio-setup:preview/);

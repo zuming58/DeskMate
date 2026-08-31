@@ -469,6 +469,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort VkLShift = 0xA0;
     private const ushort VkRShift = 0xA1;
     private const ushort VkE = 0x45;
+    private const ushort VkSpace = 0x20;
     private const ushort VkV = 0x56;
     private const ushort VkF22 = 0x85;
     private const int WhKeyboardLl = 13;
@@ -486,6 +487,10 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private bool _hookControlDown;
     private bool _hookShiftDown;
     private bool _hookVoiceEditDown;
+    private bool _boardControlDown;
+    private bool _boardShiftDown;
+    private bool _boardVoiceInputDown;
+    private bool _boardVoiceEditDown;
     private bool _disposed;
     private readonly object _configSync = new();
     private readonly object _fixedTextSync = new();
@@ -563,6 +568,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             var isUp = (keyboard.Flags & RiKeyBreak) != 0;
             var action = isUp ? "up" : "down";
 
+            if (board) HandleBoardVoiceShortcut(keyboard.VKey, isUp);
+
             if (_diagnosticMode)
                 _writer.Input(board ? "easyinput-hid" : "other-keyboard", keyboard.VKey == VkF22 ? "F22" : $"VK_0x{keyboard.VKey:X2}_SCAN_0x{keyboard.MakeCode:X2}", action);
             else if (board && keyboard.VKey == VkF22)
@@ -575,6 +582,48 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         finally
         {
             Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private void HandleBoardVoiceShortcut(ushort virtualKey, bool isUp)
+    {
+        var isDown = !isUp;
+        if (virtualKey is VkControl or VkLControl or VkRControl)
+        {
+            _boardControlDown = isDown;
+            return;
+        }
+        if (virtualKey is VkShift or VkLShift or VkRShift)
+        {
+            _boardShiftDown = isDown;
+            return;
+        }
+        if (virtualKey == VkSpace)
+        {
+            if (isDown && _boardControlDown && _boardShiftDown && !_boardVoiceInputDown)
+            {
+                _boardVoiceInputDown = true;
+                _writer.Input("easyinput-hid", "VoiceInput", "down");
+            }
+            else if (isUp && _boardVoiceInputDown)
+            {
+                _boardVoiceInputDown = false;
+                _writer.Input("easyinput-hid", "VoiceInput", "up");
+            }
+            return;
+        }
+        if (virtualKey == VkE)
+        {
+            if (isDown && _boardControlDown && _boardShiftDown && !_boardVoiceEditDown)
+            {
+                _boardVoiceEditDown = true;
+                _writer.Input("easyinput-hid", "VoiceEdit", "down");
+            }
+            else if (isUp && _boardVoiceEditDown)
+            {
+                _boardVoiceEditDown = false;
+                _writer.Input("easyinput-hid", "VoiceEdit", "up");
+            }
         }
     }
 
@@ -801,6 +850,10 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         _boardConnected = connected;
         if (!connected)
         {
+            _boardControlDown = false;
+            _boardShiftDown = false;
+            _boardVoiceInputDown = false;
+            _boardVoiceEditDown = false;
             ResetConfigRead();
             lock (_fixedTextSync)
             {

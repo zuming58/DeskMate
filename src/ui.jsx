@@ -119,13 +119,14 @@ export function IconButton({ icon: Icon, label, variant = "ghost", ...props }) {
   );
 }
 
-export function Toggle({ checked, onChange, label }) {
+export function Toggle({ checked, onChange, label, disabled = false }) {
   return (
     <button
       className={`toggle ${checked ? "is-on" : ""}`}
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange?.(!checked)}
     >
       <span />

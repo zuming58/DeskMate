@@ -2,14 +2,15 @@
 
 ## Current implemented slice
 
-- `KEY1 / Ctrl+Shift+Space` continues to use the accepted text voice-input workflow.
-- `KEY3 / Ctrl+Shift+E` starts the same recorder/state machine in `edit` mode. The resident Windows input bridge observes the read-only keyboard chord and emits the semantic trigger only after the complete chord is released; this prevents the still-held Ctrl/Shift keys from corrupting the subsequent selection-copy operation. Electron's global shortcut remains a bounded fallback when the bridge is unavailable. Electron main then captures the selected text and exact foreground-window handle before recording. The renderer receives only workflow metadata and the spoken editing instruction; selected text never crosses into React.
+- `KEY1 / Ctrl+Shift+Space` continues to use the accepted text voice-input workflow. The resident Windows bridge recognizes the chord only when Raw Input identifies the EasyInput VID/PID. Ordinary keyboard global registration is disabled by default to prevent unrelated software, keyboards or input methods from opening the recorder.
+- `KEY3 / Ctrl+Shift+E` starts the same recorder/state machine in `edit` mode. The resident Windows input bridge observes the board-scoped read-only chord and emits the semantic trigger only after the complete chord is released; this prevents the still-held Ctrl/Shift keys from corrupting the subsequent selection-copy operation. An ordinary global fallback can be enabled explicitly in settings, but is not part of the default path. Electron main then captures the selected text and exact foreground-window handle before recording. The renderer receives only workflow metadata and the spoken editing instruction; selected text never crosses into React.
 - After ASR, the selected text and spoken instruction are sent by Electron main to the configured text model. Success writes the edited text back only when the original window is still foreground. Selection capture, model, or target failures leave the original selection unchanged.
 - Raw organizer mode is local deterministic replacement only. Smart/custom organizer mode uses the configured text model and retains the original transcript on failure.
 - Escape is a cancellation command only while the shared voice state is recording, transcribing, organizing or outputting. An idle, completed or failed session ignores Escape and never raises the floating cancellation state.
 - `companion-memory.sqlite3` is created in Electron `userData` with WAL and full synchronous commits. Every future conversation turn can be committed before any summary job. Daily summaries, reviewable candidates, accepted memories and embedding records have separate tables.
 - T11 adds one foreground companion session controller. Companion capture and text voice input/edit are mutually exclusive: dictation preempts and permanently ends the active companion session, while companion start is rejected during an active `VoiceWorkflow`.
-- The Doubao realtime adapter, finite reconnect, audio queues, credentials and turn commits live in Electron main. Production audio remains explicitly unavailable until the separate T10E EasyInput adapter is delivered; automated tests use simulated source/sink adapters and the software does not silently fall back to the computer or Xiaozhi microphone.
+- Text dictation defaults to a concrete Windows input device and can explicitly select the T10E EasyInput LAN source. The preference is local, while each recording locks its actual source. Board failure before start is visible and falls back once to the Windows source; failure after start ends the session without switching.
+- The Doubao realtime adapter, finite reconnect, audio queues, credentials and turn commits live in Electron main. T10E now supplies the accepted EasyInput uplink, but the realtime companion remains blocked by the intentionally unavailable EasyInput speaker sink. Automated tests use simulated source/sink adapters and the companion does not silently fall back to computer or Xiaozhi audio.
 
 ## Service separation
 
@@ -17,7 +18,7 @@
 | --- | --- | --- | --- |
 | Speech transcription | Bailian `qwen3-asr-flash` | voice input, KEY3 instruction | Existing encrypted Bailian credential |
 | Text model | Bailian fallback or configured OpenAI-compatible endpoint | smart organizer, KEY3 voice edit; later Bridge and memory jobs | API key encrypted in Electron main; endpoint/model status only in renderer |
-| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; real connection is blocked until the EasyInput source/sink adapter is available |
+| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; uplink exists, but real conversation remains blocked until the EasyInput speaker sink is available |
 | Memory | local SQLite WAL | future companion turns and retrieval | Never written to EasyInput or Xiaozhi Flash |
 
 The text model and realtime voice plane must remain separate. Realtime replies cannot directly run Windows commands. Conversation events go to a typed intent Bridge, which then invokes only registered, purpose-visible host actions. This preserves the existing UUID application registry rather than giving a model arbitrary shell access.

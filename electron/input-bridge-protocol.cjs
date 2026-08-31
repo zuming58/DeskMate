@@ -1,5 +1,5 @@
 const ALLOWED_SOURCES = new Set(["easyinput-hid", "f22-fallback", "keyboard"]);
-const ALLOWED_KEYS = new Set(["F22", "RightAlt", "Escape", "VoiceEdit", "Device"]);
+const ALLOWED_KEYS = new Set(["F22", "RightAlt", "Escape", "VoiceInput", "VoiceEdit", "Device"]);
 const ALLOWED_ACTIONS = new Set(["down", "up", "connected", "disconnected"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
@@ -86,11 +86,11 @@ function parseBridgeLine(line) {
 }
 
 class InputTriggerFilter {
-  constructor({ now = () => Date.now(), debounceMs = 350, stuckMs = 2000, boardF22 = true, rightAlt = false } = {}) {
+  constructor({ now = () => Date.now(), debounceMs = 350, stuckMs = 2000, boardF22 = true, rightAlt = false, keyboardShortcuts = false } = {}) {
     this.now = now;
     this.debounceMs = debounceMs;
     this.stuckMs = stuckMs;
-    this.config = { boardF22: Boolean(boardF22), rightAlt: Boolean(rightAlt) };
+    this.config = { boardF22: Boolean(boardF22), rightAlt: Boolean(rightAlt), keyboardShortcuts: Boolean(keyboardShortcuts) };
     this.down = new Map();
     this.lastTrigger = new Map();
   }
@@ -98,7 +98,11 @@ class InputTriggerFilter {
   configure(value = {}) {
     if (typeof value.boardF22 === "boolean") this.config.boardF22 = value.boardF22;
     if (typeof value.rightAlt === "boolean") this.config.rightAlt = value.rightAlt;
+    if (typeof value.keyboardShortcuts === "boolean") this.config.keyboardShortcuts = value.keyboardShortcuts;
     if (!this.config.boardF22) this.down.delete("easyinput-hid:F22");
+    if (!this.config.boardF22) this.down.delete("easyinput-hid:VoiceInput");
+    if (!this.config.boardF22) this.down.delete("easyinput-hid:VoiceEdit");
+    if (!this.config.keyboardShortcuts) this.down.delete("keyboard:VoiceEdit");
     if (!this.config.rightAlt) this.down.delete("keyboard:RightAlt");
     return { ...this.config };
   }
@@ -114,13 +118,14 @@ class InputTriggerFilter {
     if (event.type === "status") {
       if (!event.boardConnected) {
         this.reset("easyinput-hid", "F22");
+        this.reset("easyinput-hid", "VoiceInput");
         this.reset("easyinput-hid", "VoiceEdit");
         this.reset("keyboard", "VoiceEdit");
       }
       return { kind: "status", event };
     }
     if (event.key === "Escape") return event.action === "down" ? { kind: "cancel", event } : { kind: "diagnostic", event };
-    const enabled = event.key === "VoiceEdit" && ["easyinput-hid", "keyboard"].includes(event.source) ? true : ["easyinput-hid", "f22-fallback"].includes(event.source) && event.key === "F22" ? this.config.boardF22 : event.source === "keyboard" && event.key === "RightAlt" ? this.config.rightAlt : false;
+    const enabled = event.source === "easyinput-hid" && ["F22", "VoiceInput", "VoiceEdit"].includes(event.key) ? this.config.boardF22 : event.source === "keyboard" && event.key === "VoiceEdit" ? this.config.keyboardShortcuts : event.source === "keyboard" && event.key === "RightAlt" ? this.config.rightAlt : false;
     if (!enabled) return { kind: "diagnostic", event };
     const signature = `${event.source}:${event.key}`;
     if (event.action === "down") {

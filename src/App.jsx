@@ -174,8 +174,9 @@ function AppContent() {
     return () => { active = false; window.clearTimeout(timer); };
   }, [state.settings.voiceShortcut]);
   useEffect(() => {
-    voiceAdapters.desktop.setTriggerConfig({ boardF22: state.settings.boardF22Enabled, rightAlt: state.settings.rightAltEnabled }).catch(() => {});
-  }, [state.settings.boardF22Enabled, state.settings.rightAltEnabled]);
+    voiceAdapters.desktop.setTriggerConfig({ boardF22: state.settings.boardF22Enabled, rightAlt: state.settings.globalShortcutsEnabled && state.settings.rightAltEnabled, keyboardShortcuts: state.settings.globalShortcutsEnabled }).catch(() => {});
+    voiceAdapters.desktop.setGlobalShortcutsEnabled(state.settings.globalShortcutsEnabled).catch(() => {});
+  }, [state.settings.boardF22Enabled, state.settings.globalShortcutsEnabled, state.settings.rightAltEnabled]);
   useEffect(() => voiceAdapters.desktop.onVoiceToggle((detail) => {
     const source = detail.source || "global-shortcut";
     deviceEventBus.publish(createDeviceEvent("voice-toggle", source, { phase: detail.phase || null, shortcut: detail.shortcut || "", workflow: detail.workflow === "edit" ? "edit" : "input", selectionCaptured: Boolean(detail.selectionCaptured) }, { at: detail.at }));

@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A hardware shortcut and a global keyboard shortcut must not share authority by default
+
+- Symptom: `Ctrl+Shift+Space` was both the EasyInput firmware action and an Electron global shortcut. Any ordinary keyboard, input method or software-generated chord could therefore open the recorder and look like an unexplained hardware press.
+- Practice: identify the EasyInput device with Raw Input VID/PID and emit a semantic board event only after its complete chord is released. Keep Electron global registration disabled by default and behind an explicit user setting; reject generic F22 injection as a board source.
+- Rule: equivalent keystrokes are not equivalent authorities. Hardware actions must retain device provenance until the single `VoiceWorkflow` trigger filter accepts them.
+
+## A fallback is allowed only before a recording source acquires the session
+
+- Symptom: silently switching from a failed board microphone to the computer during an active recording would mix two physical sources, mislabel history and make disconnects look successful.
+- Practice: persist a preferred source, probe it at session start, expose a pre-start failure and lock the successful adapter for the entire recording. A mid-session source failure ends the recording and never invokes another adapter.
+- Rule: source fallback is a start-time product decision, not a transport recovery strategy.
+
 ## A device microphone test should prove transport without creating user data
 
 - Symptom: replaying or recording a sample makes microphone troubleshooting convenient, but it creates voice artifacts and widens the renderer/privacy boundary before the production conversation path is ready.
