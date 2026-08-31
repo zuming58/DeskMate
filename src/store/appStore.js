@@ -8,7 +8,16 @@ import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
+
+const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
+
+function isLegacyDemoAiEvent(value) {
+  return value?.type === "working"
+    && value?.agent === "Codex"
+    && value?.progress === 68
+    && value?.detail === "正在整理桌宠开发文档";
+}
 
 function normalizeHistoryEntry(item) {
   const text = String(item?.text || "");
@@ -39,8 +48,8 @@ export const defaultState = {
   expressionEditor: { eyeSize: 72, eyeGap: 58, brightness: 80, blink: true, color: "cyan" },
   motion: { preset: "attentive", speed: 45, range: 55 },
   sensors: { autoBrightness: true, faceTracking: false },
-  aiEvent: { type: "working", agent: "Codex", progress: 68, detail: "正在整理桌宠开发文档" },
-  aiIntent: mapAiStateToPetIntent({ state: "working" }),
+  aiEvent: { ...DEFAULT_AI_EVENT },
+  aiIntent: mapAiStateToPetIntent({ state: "idle" }),
 };
 
 function mergeDefaults(value) {
@@ -72,6 +81,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 6) raw = { ...raw, keymap: Array.isArray(raw.keymap) ? raw.keymap.map((item, index) => normalizeKeyBinding(item, DEFAULT_KEYMAP[index])) : raw.keymap, encoder: normalizeEncoder(raw.encoder), settings: { ...(raw.settings || {}), activeWindowOutputEnabled: true } };
   if ((raw.schemaVersion ?? 0) < 7) raw = { ...raw, agentControl: normalizeAgentControl(raw.agentControl) };
   if ((raw.schemaVersion ?? 0) < 8) raw = { ...raw, settings: { ...(raw.settings || {}), microphoneSource: normalizeMicrophoneSource(raw.settings?.microphoneSource), globalShortcutsEnabled: false } };
+  if ((raw.schemaVersion ?? 0) < 9 && isLegacyDemoAiEvent(raw.aiEvent)) raw = { ...raw, aiEvent: { ...DEFAULT_AI_EVENT }, aiIntent: mapAiStateToPetIntent({ state: "idle" }) };
   return mergeDefaults(raw);
 }
 

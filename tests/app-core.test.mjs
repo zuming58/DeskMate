@@ -14,6 +14,18 @@ test("migrates legacy storage to current schema without dropping defaults", () =
   assert.equal(result.settings.activeWindowOutputEnabled, true);
   assert.equal(result.settings.microphoneSource, "computer");
   assert.equal(result.settings.globalShortcutsEnabled, false);
+  assert.equal(result.aiEvent.type, "idle");
+  assert.equal(result.aiEvent.progress, 0);
+});
+
+test("removes only the legacy dashboard demo event during schema migration", () => {
+  const legacyDemo = migrateState({ schemaVersion: 8, aiEvent: { type: "working", agent: "Codex", progress: 68, detail: "正在整理桌宠开发文档" } });
+  assert.equal(legacyDemo.aiEvent.type, "idle");
+  assert.equal(legacyDemo.aiIntent.faceExpression, "sleep");
+  assert.equal(legacyDemo.aiIntent.motionIntent, "idle");
+
+  const realEvent = migrateState({ schemaVersion: 8, aiEvent: { type: "working", agent: "Codex", progress: 42, detail: "真实任务" } });
+  assert.deepEqual(realEvent.aiEvent, { type: "working", agent: "Codex", progress: 42, detail: "真实任务" });
 });
 
 test("migrates history schema v4 to raw and organized text fields", () => {

@@ -66,6 +66,7 @@ import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.
 import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicrophoneSession } from "./domain/microphoneSource.js";
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "./domain/linkDiagnostics.js";
 import { agentStateEvidence, manualAgentStateFailureMessage, previewSoftwareExpression, requestManualAgentState } from "./domain/expressionLinkUx.js";
+import { dashboardHardwareStatus } from "./domain/dashboardStatus.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
 import { processVoiceRecording } from "./services/voicePipeline.js";
 import { mapAiStateToPetIntent } from "./domain/petIntent.js";
@@ -410,10 +411,11 @@ function MemoryManagementPage({ notify }) {
 }
 
 export function DashboardPage({ navigate, notify }) {
-  const { state, event } = useAppStore();
+  const { state, patch } = useAppStore();
   const expression = state.currentExpression;
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
   const task = state.aiEvent;
+  const hardware = dashboardHardwareStatus(state.runtime?.inputBridge);
   const progress = Math.max(0, Math.min(100, Number(task.progress) || 0));
   const stateCopy = {
     idle: { label: "待命", heading: "等待新任务", tone: "neutral" },
@@ -429,21 +431,21 @@ export function DashboardPage({ navigate, notify }) {
       <PageIntro
         title="工作台"
         description="查看桌宠状态、AI 任务进度与设备运行情况"
-        actions={<Button icon={Sparkles} variant="soft" onClick={() => notify("智能联动模式已启用")}>智能联动模式</Button>}
+        actions={<Button icon={Sparkles} variant="soft" onClick={() => navigate("companion")}>查看 AI 联动</Button>}
       />
       <div className="dashboard-grid">
         <Card className="pet-showcase">
           <div className="card-heading">
-            <div><strong>桌宠实时状态</strong><small>DESKMATE · LIVE</small></div>
-            <StatusBadge tone="success">{selectedPreset.name}中</StatusBadge>
+            <div><strong>桌宠软件预览</strong><small>DESKMATE · LOCAL PREVIEW</small></div>
+            <StatusBadge tone="demo">软件预览 · {selectedPreset.name}</StatusBadge>
           </div>
           <div className="pet-visual">
             <CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} />
-            <span className="pet-mode"><span />{expression.toUpperCase()} · {selectedPreset.name}模式</span>
+            <span className="pet-mode"><span />{expression.toUpperCase()} · {selectedPreset.name}软件模式</span>
           </div>
           <div className="pet-footer">
-            <div><small>设备姿态</small><strong>正对用户 · 0°</strong></div>
-            <div className="sensor-mini"><span><strong>24.6℃</strong><small>温度</small></span><span><strong>46%</strong><small>湿度</small></span><span><strong>68%</strong><small>环境光</small></span></div>
+            <div><small>设备姿态</small><strong>舵机未启用 · 待校准</strong></div>
+            <div className="sensor-mini"><span><strong>待接入</strong><small>温度待接入</small></span><span><strong>待接入</strong><small>湿度待接入</small></span><span><strong>待接入</strong><small>环境光待接入</small></span></div>
           </div>
         </Card>
         <Card className="task-panel">
@@ -455,11 +457,11 @@ export function DashboardPage({ navigate, notify }) {
           </div>
           <Button variant="primary" className="button--wide" onClick={() => navigate("companion")}>查看陪伴与联动 <ArrowRight size={18} /></Button>
           <div className="task-divider" />
-          <div className="card-heading"><strong>工作表情</strong><button className="text-link" onClick={() => navigate("companion")}>管理表情 <ArrowRight size={14} /></button></div>
+          <div className="card-heading"><strong>软件表情预览</strong><button className="text-link" onClick={() => navigate("companion")}>管理预览 <ArrowRight size={14} /></button></div>
           <div className="expression-row">
-            {expressionPresets.slice(0, 3).map((item) => <ExpressionTile key={item.id} compact preset={item} selected={expression === item.id} onClick={() => event({ type: item.id === "focus" ? "working" : item.id === "listen" ? "listening" : "thinking", agent: "Codex", progress: state.aiEvent.progress, detail: state.aiEvent.detail })} />)}
+            {expressionPresets.slice(0, 3).map((item) => <ExpressionTile key={item.id} compact preset={item} selected={expression === item.id} onClick={() => previewSoftwareExpression({ patch, notify, preset: item })} />)}
           </div>
-          <div className="sync-line"><span />状态同步正常 · 2 秒前</div>
+          <div className={`sync-line sync-line--${hardware.tone}`}><span />{hardware.summary}<button className="text-link" onClick={() => navigate("settings/diagnostics")}>查看系统诊断</button></div>
         </Card>
       </div>
     </div>

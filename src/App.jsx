@@ -21,6 +21,7 @@ import { AppStoreProvider, useAppStore } from "./store/appStore.js";
 import { mockAdapters } from "./adapters/index.js";
 import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
+import { formatDashboardDate } from "./domain/dashboardStatus.js";
 import {
   AgentsPage,
   CompanionPage,
@@ -94,7 +95,7 @@ function AppHeader({ current, setMobileOpen }) {
       <div className="breadcrumbs"><strong>DESKMATE</strong><span>/</span><span>{meta.title}</span></div>
       <div className="app-header__right">
         <span className="service-status"><i />本地核心已运行</span>
-        <span className="app-date">8月20日 · 周四</span>
+        <span className="app-date">{formatDashboardDate()}</span>
         <button className="header-icon" aria-label="通知"><Bell size={19} stroke={1.7} /><i /></button>
       </div>
     </header>
