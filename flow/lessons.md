@@ -1,5 +1,17 @@
 # Lessons learned
 
+## ESP-IDF timeout units must follow the called API
+
+- Symptom: LAN heartbeat and control ACK remained healthy, but a real microphone
+  session produced zero audio frames even though the capture task was running.
+- Root cause: `i2s_channel_read` accepts milliseconds and converts them to
+  FreeRTOS ticks internally. Passing `pdMS_TO_TICKS(80)` gave the API about 8 ms
+  on the current 100 Hz tick configuration, shorter than one 20 ms audio frame,
+  so reads repeatedly timed out before a DMA frame arrived.
+- Rule: never wrap an ESP-IDF timeout merely because an adjacent FreeRTOS API
+  takes ticks. Confirm the exact frozen-version signature and fixed reference,
+  then lock the unit at the production call site with a source-contract test.
+
 ## A UDP endpoint lock must cover the real multi-packet path
 
 - Symptom: heartbeat and control ACK were healthy, while desktop audio frames

@@ -522,7 +522,7 @@ void AudioCaptureService::capture_loop() {
             std::size_t bytes_read = 0;
             const esp_err_t error = i2s_channel_read(
                 mic_rx_, raw.data(), sizeof(raw), &bytes_read,
-                ticks(kMicrophoneReadTimeoutMs));
+                kMicrophoneReadTimeoutMs);
             if (error != ESP_OK || bytes_read != sizeof(raw)) {
                 increment(read_errors_);
                 const AudioReadRecoveryDecision recovery =

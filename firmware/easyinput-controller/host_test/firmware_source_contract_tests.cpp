@@ -354,6 +354,9 @@ int main() {
     CHECK(contains(audio_core_source, "convert_i2s_32_to_pcm16"));
     CHECK(contains(audio_service_source, "I2S_NUM_0"));
     CHECK(contains(audio_service_source, "I2S_STD_SLOT_RIGHT"));
+    CHECK(contains(audio_service_source, "kMicrophoneReadTimeoutMs);"));
+    CHECK(!contains(audio_service_source,
+                    "ticks(kMicrophoneReadTimeoutMs)"));
     CHECK(contains(audio_service_source, "MALLOC_CAP_SPIRAM"));
     CHECK(contains(audio_service_source, "xQueueCreateStatic"));
     CHECK(contains(audio_service_source, "xQueueReceive(frame_queue_"));

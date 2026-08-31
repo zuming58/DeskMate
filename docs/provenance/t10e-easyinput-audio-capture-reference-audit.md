@@ -25,6 +25,10 @@ Reviewed paths:
 - Existing `EIHB`, `EICC`, `EICA` and `EIAU` wire layouts.
 - PCM S16LE, 16 kHz, mono, 20 ms / 320-sample frames.
 - I2S0 and GPIO9/10/11 right-slot microphone wiring.
+- The ESP-IDF `i2s_channel_read` timeout is passed in milliseconds exactly as
+  required by the v5.5.5 API and by the fixed Maker implementation. It is not
+  pre-converted to FreeRTOS ticks because ESP-IDF performs that conversion
+  internally.
 - Separate capture and sender execution with a 64-frame PSRAM queue and
   drop-oldest overflow behavior.
 - Source-address restriction, bounded control lease, bounded session duration
