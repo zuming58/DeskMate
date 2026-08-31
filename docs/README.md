@@ -3,6 +3,7 @@
 ## Current handoff
 
 - [T10 Desktop manual Agent control frozen contract](contracts/t10-desktop-manual-agent-control-v1.md)
+- [T10 Codex real status adapter frozen contract](contracts/t10-codex-real-status-v1.md)
 - [T10A motion safety core frozen contract](contracts/t10-motion-safety-core-v1.md)
 - [T10A Xiaozhi motion safety core task](../flow/tasks/T10A-xiaozhi-motion-safety-core.md)
 - [T10A Xiaozhi motion safety core handoff](handoffs/t10a-xiaozhi-motion-safety-core-2026-08-31.md)

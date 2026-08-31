@@ -1,8 +1,14 @@
 # Lessons learned
 
+## Real Agent state needs lifecycle evidence, not process presence
+
+- Symptom: a running Codex executable or foreground Codex window can be idle, working, waiting for approval or finished, so process/window polling would present fabricated state and becomes ambiguous when several Agent apps are open.
+- Practice: use the provider's documented lifecycle interface, normalize only metadata-backed events, and explicitly leave unobservable states manual. Strip the event at the adapter boundary before it reaches the product; never inspect transcripts or response text merely to improve an expression.
+- Rule: an Agent adapter may claim “real” only for states supported by a versioned provider event. The selected Agent owns the hardware route, active voice work has priority, and blocked/stale provider events are never replayed.
+
 ## Keep Agent identity separate from the hardware state vocabulary
 
-- Symptom: a product may support Codex, Workbody, Hermes and other Agents, but the existing device contract intentionally carries only seven coarse states. Sending provider names or guessing the active provider from windows/processes would widen the privacy boundary and behave ambiguously when several Agents are open.
+- Symptom: a product may support Codex, WorkBuddy, Hermes and other Agents, but the existing device contract intentionally carries only seven coarse states. Sending provider names or guessing the active provider from windows/processes would widen the privacy boundary and behave ambiguously when several Agents are open.
 - Practice: keep the selected Agent identity and custom label local to the desktop, normalize all providers to the frozen state vocabulary, and expose a manual selector until real provider adapters and ownership rules exist. Let active voice work take priority over manual display requests.
 - Rule: adding a provider must not create a new firmware state machine or leak provider identity to hardware. Identity selection, state inference and device rendering are separate responsibilities.
 

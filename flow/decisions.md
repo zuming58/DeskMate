@@ -1,9 +1,16 @@
 # Decisions
 
+## D037 - Codex real status uses official lifecycle hooks and explicit provider ownership
+
+- Date: 2026-08-31
+- Decision: Codex is the first automatic Agent adapter. Stable lifecycle hooks map a user turn, local tool execution, structured user input/approval wait, turn completion and session lifecycle into the existing seven-state contract. DeskMate never guesses activity from process existence, the foreground window or a title.
+- Privacy: the hook helper forwards only the event name and bounded canonical tool name over a local named pipe. Prompt/response text, tool arguments/results, transcripts, session identifiers, working directory and device data remain outside DeskMate. Hooks stay synchronous and bounded because official background hooks may complete out of order.
+- Ownership: the manually selected Agent remains authoritative. Codex hook events drive hardware only while Codex is selected; VoiceWorkflow has higher priority and blocked events are not replayed. WorkBuddy, Hermes and Claude Code remain manual until they have equally verifiable adapters.
+
 ## D036 - Manual Agent identity stays local while hardware receives only frozen state
 
 - Date: 2026-08-31
-- Decision: DeskMate v1 uses an explicit desktop selection for Codex, Workbody, Hermes, Claude Code or a bounded custom Agent. The renderer requests only a validated local Agent ID and one of the seven T09 states; Electron main publishes the existing `0x12` report. Agent names never cross into HID or DeskMate Link.
+- Decision: DeskMate v1 uses an explicit desktop selection for Codex, WorkBuddy, Hermes, Claude Code or a bounded custom Agent. The persisted compatibility ID remains `workbody`. The renderer requests only a validated local Agent ID and one of the seven T09 states; Electron main publishes the existing `0x12` report. Agent names never cross into HID or DeskMate Link.
 - Priority: an active VoiceWorkflow owns the visible state and rejects manual overrides. Automatic multi-Agent detection is deferred until each provider has a privacy-safe adapter and concurrent ownership policy.
 - Display boundary: Xiaozhi OLED represents Agent work state. EasyInput's five WS2812 LEDs remain key/encoder input feedback and are not repurposed in this slice.
 

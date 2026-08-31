@@ -22,6 +22,7 @@ const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capt
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
 const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 const { AgentStatePublisher } = require("./agent-state-hid.cjs");
+const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -56,6 +57,9 @@ let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
 let pendingEditShortcutTimer = null;
+let activeAgentProvider = "codex";
+let codexHookServer;
+let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
@@ -213,6 +217,24 @@ async function captureVoiceEditSelection(targetWindow) {
 
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+function sanitizedCodexHookStatus() {
+  return { provider: "codex", selected: activeAgentProvider === "codex", ...codexHookStatus };
+}
+
+async function handleCodexHookState(value) {
+  const updatedAt = new Date().toISOString();
+  let delivery = activeAgentProvider === "codex" ? "pending" : "not-selected";
+  if (activeAgentProvider === "codex") {
+    if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) delivery = "voice-workflow-active";
+    else {
+      const result = await agentStatePublisher.publishProviderState({ source: "codex-hook-v1", state: value.state });
+      delivery = result?.ok ? (result.suppressed ? "suppressed" : "sent") : result?.reason || "send-failed";
+    }
+  }
+  codexHookStatus = { receiver: "listening", connected: true, state: value.state, event: value.event, toolName: value.toolName, updatedAt, delivery };
+  sendToMain("codex-agent-state", sanitizedCodexHookStatus());
 }
 
 async function emitVoiceToggle(source = "global-shortcut", label = shortcut, requestedWorkflow = "input") {
@@ -427,6 +449,7 @@ function createWindow() {
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
     sendToMain("input-bridge-status", inputBridge?.snapshot() || { available: false, process: "unsupported", boardConnected: false });
+    sendToMain("codex-agent-state", sanitizedCodexHookStatus());
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
   mainWindow.on("close", (event) => {
@@ -529,6 +552,9 @@ app.whenReady().then(async () => {
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore });
+  codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
+  const codexReceiver = await codexHookServer.start();
+  codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
   if (bailianTestAudio) { await runBailianConnectionTest(bailianTestAudio); return; }
   if (bailianTestOrganizer) { await runBailianOrganizerTest(bailianTestOrganizer); return; }
   createWindow();
@@ -589,6 +615,15 @@ app.whenReady().then(async () => {
     const result = await agentStatePublisher.publishManualState({ source: "manual-agent-control", state });
     return result?.ok ? { ok: true, agentId, state } : { ok: false, reason: result?.reason || "agent-state-send-failed" };
   });
+  handleTrusted("desktop:set-active-agent-provider", (value) => {
+    const provider = typeof value === "string" ? value : "";
+    if (!["codex", "workbody", "hermes", "claude", "custom"].includes(provider)) return { ok: false, reason: "agent-provider-invalid" };
+    activeAgentProvider = provider;
+    const status = sanitizedCodexHookStatus();
+    sendToMain("codex-agent-state", status);
+    return { ok: true, provider, status };
+  });
+  handleTrusted("desktop:get-codex-agent-status", () => sanitizedCodexHookStatus());
   handleTrusted("desktop:clipboard-write", (value) => { const text = String(value || ""); if (text.length > 100000) return { ok: false, reason: "text-too-long" }; clipboard.writeText(text); return { ok: true, mode: "clipboard" }; });
   handleTrusted("desktop:paste-active-window", (text) => pasteIntoCapturedWindow(text));
   handleTrusted("desktop:key-diagnostic", (value) => ({ ok: true, event: value }));
@@ -676,6 +711,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

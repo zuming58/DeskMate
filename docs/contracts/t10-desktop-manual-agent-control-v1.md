@@ -4,11 +4,11 @@ Status: `T10_DESKTOP_MANUAL_AGENT_CONTROL_V1_FROZEN`
 
 ## Purpose
 
-DeskMate can manually select which coding Agent is currently represented and send one of the seven already-frozen Agent states through the real Desktop -> EasyInput -> Xiaozhi OLED path. This slice does not claim automatic provider detection.
+DeskMate can manually select which coding Agent is currently represented and send one of the seven already-frozen Agent states through the real Desktop -> EasyInput -> Xiaozhi OLED path. Codex now has a separate real lifecycle adapter defined by `t10-codex-real-status-v1.md`; manual control remains the fallback for every provider.
 
 ## Agent identity
 
-- Built-in choices: Codex, Workbody, Hermes and Claude Code.
+- Built-in choices: Codex, WorkBuddy, Hermes and Claude Code. The persisted compatibility ID remains `workbody`.
 - A bounded custom Agent name may be stored locally.
 - Agent identity and custom names never enter HID or DeskMate Link. Hardware receives only the frozen coarse state, transition identifier, TTL and an opaque manual-source hash.
 - Selecting an Agent does not inspect its process, account, window title, transcript, prompt or network activity.
@@ -40,9 +40,9 @@ The transport continues to use HID Feature Report `0x12` v2 and DeskMate Link v1
 - EasyInput's five WS2812 LEDs remain physical key/encoder feedback. This slice does not reinterpret them as Agent-state lamps.
 - Servo and Xiaozhi audio remain outside this control path.
 
-## Deferred automatic adapters
+## Automatic adapter boundary
 
-Automatic Codex, Workbody, Hermes or other provider detection is not part of v1. A future provider adapter must prove a privacy-safe, versioned state source and still normalize to these seven states. Concurrent providers require an explicit ownership policy rather than guessing from the foreground window.
+Codex lifecycle hooks are the only automatic adapter currently frozen. WorkBuddy, Hermes, Claude Code and other providers remain manual. Every future provider adapter must prove a privacy-safe, versioned state source and still normalize to these seven states. Concurrent providers use the explicit desktop selector rather than guessing from the foreground window.
 
 ## Acceptance
 

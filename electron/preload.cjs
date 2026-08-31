@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   setVoiceRecording: (recording) => ipcRenderer.invoke("desktop:set-voice-recording", Boolean(recording)),
   setVoiceState: (value) => ipcRenderer.invoke("desktop:set-voice-state", value),
   setManualAgentState: (value) => ipcRenderer.invoke("desktop:set-manual-agent-state", value),
+  setActiveAgentProvider: (provider) => ipcRenderer.invoke("desktop:set-active-agent-provider", provider),
+  getCodexAgentStatus: () => ipcRenderer.invoke("desktop:get-codex-agent-status"),
   writeClipboard: (text) => ipcRenderer.invoke("desktop:clipboard-write", text),
   pasteActiveWindow: (text) => ipcRenderer.invoke("desktop:paste-active-window", text),
   keyDiagnostic: (event) => ipcRenderer.invoke("desktop:key-diagnostic", event),
@@ -46,5 +48,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   onKeyDiagnostic: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("key-diagnostic", handler); return () => ipcRenderer.removeListener("key-diagnostic", handler); },
   onInputBridgeStatus: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("input-bridge-status", handler); return () => ipcRenderer.removeListener("input-bridge-status", handler); },
   onHostActionResult: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("host-action-result", handler); return () => ipcRenderer.removeListener("host-action-result", handler); },
+  onCodexAgentState: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("codex-agent-state", handler); return () => ipcRenderer.removeListener("codex-agent-state", handler); },
   onNavigate: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("desktop-navigate", handler); return () => ipcRenderer.removeListener("desktop-navigate", handler); },
 });

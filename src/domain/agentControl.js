@@ -1,6 +1,6 @@
 export const MANUAL_AGENT_OPTIONS = Object.freeze([
   { id: "codex", name: "Codex" },
-  { id: "workbody", name: "Workbody" },
+  { id: "workbody", name: "WorkBuddy" },
   { id: "hermes", name: "Hermes" },
   { id: "claude", name: "Claude Code" },
   { id: "custom", name: "其他 Agent" },

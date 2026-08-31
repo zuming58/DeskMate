@@ -25,7 +25,7 @@ export const agents = [
   { id: "codex", name: "Codex", state: "工作中", detail: "正在整理桌宠开发文档", progress: 68, tone: "blue" },
   { id: "claude", name: "Claude Code", state: "待命", detail: "最近一次活动：18 分钟前", progress: 0, tone: "violet" },
   { id: "hermes", name: "Hermes", state: "未连接", detail: "等待本地状态适配器", progress: 0, tone: "amber" },
-  { id: "workbody", name: "Workbody", state: "未配置", detail: "可添加自定义进程规则", progress: 0, tone: "cyan" },
+  { id: "workbody", name: "WorkBuddy", state: "未配置", detail: "可添加自定义进程规则", progress: 0, tone: "cyan" },
 ];
 
 export const expressionPresets = [

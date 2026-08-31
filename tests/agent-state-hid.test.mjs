@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const {
   AgentStatePublisher,
+  CODEX_HOOK_SOURCE_HASH,
   MANUAL_AGENT_SOURCE_HASH,
   createTransitionSequence,
   encodeAgentStateFeatureReport,
@@ -94,6 +95,18 @@ test("manual publication interrupts voice duplicate suppression without replayin
   await publisher.publishManualState({ source: "manual-agent-control", state: "waiting" });
   await publisher.publishVoiceState({ source: "voice-workflow", state: "recording" });
   assert.deepEqual(reports.map((report) => report[2]), [1, 4, 1]);
+});
+
+test("real Codex hook publication uses a distinct source and respects stream interruption", async () => {
+  const reports = [];
+  const publisher = new AgentStatePublisher({ send: async (report) => { reports.push(report); return { ok: true }; }, nextTransitionId: createTransitionSequence(31) });
+  assert.equal((await publisher.publishProviderState({ source: "codex-hook-v1", state: "thinking" })).ok, true);
+  assert.equal((await publisher.publishProviderState({ source: "codex-hook-v1", state: "thinking" })).suppressed, true);
+  await publisher.publishManualState({ source: "manual-agent-control", state: "idle" });
+  assert.equal((await publisher.publishProviderState({ source: "codex-hook-v1", state: "thinking" })).ok, true);
+  assert.equal((await publisher.publishProviderState({ source: "simulation", state: "working" })).ignored, true);
+  assert.deepEqual(reports.map((report) => report[2]), [2, 0, 2]);
+  assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [CODEX_HOOK_SOURCE_HASH, MANUAL_AGENT_SOURCE_HASH, CODEX_HOOK_SOURCE_HASH]);
 });
 
 test("publisher fails closed without logging or throwing transport failures", async () => {

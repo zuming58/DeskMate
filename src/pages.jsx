@@ -906,6 +906,7 @@ export function AgentsPage({ notify, embedded = false }) {
   const mapping = state.agentExpressionMapping;
   const control = normalizeAgentControl(state.agentControl);
   const [sendState, setSendState] = useState({ status: "idle", label: "尚未发送" });
+  const [codexStatus, setCodexStatus] = useState({ receiver: "starting", connected: false, state: "idle", delivery: "not-received" });
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
   const eventLabel = { idle: "待命", listening: "倾听中", thinking: "思考中", working: "工作中", waiting_user: "等待用户", completed: "已完成", error: "异常" };
   const updateMapping = (agentId, value) => {
@@ -913,6 +914,25 @@ export function AgentsPage({ notify, embedded = false }) {
     if (state.aiEvent.type === "working" && state.aiEvent.agent?.toLowerCase().includes(agentId === "claude" ? "claude" : agentId)) event({ ...state.aiEvent });
   };
   const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
+  useEffect(() => {
+    let active = true;
+    void voiceAdapters.desktop.setActiveAgentProvider(control.agentId).then((result) => {
+      if (active && result?.status) setCodexStatus(result.status);
+    });
+    void voiceAdapters.desktop.getCodexAgentStatus().then((result) => { if (active && result) setCodexStatus(result); });
+    return () => { active = false; };
+  }, [control.agentId]);
+  useEffect(() => voiceAdapters.desktop.onCodexAgentState((payload) => {
+    if (!payload || payload.provider !== "codex") return;
+    setCodexStatus(payload);
+    if (control.agentId !== "codex" || !payload.connected) return;
+    const stateId = payload.state === "waiting" ? "waiting_user" : payload.state;
+    const selected = manualAgentState(stateId);
+    patch({ agentControl: normalizeAgentControl({ ...control, state: stateId }) });
+    event({ type: stateId, agent: "Codex", progress: stateId === "completed" ? 100 : stateId === "idle" ? 0 : state.aiEvent.progress, detail: `Codex Hook · ${selected.label}` });
+    const deliveryLabel = payload.delivery === "voice-workflow-active" ? "语音流程优先，未发送到小智" : payload.delivery === "not-selected" ? "Codex 当前未选中" : `Codex 自动 · ${selected.label}`;
+    setSendState({ status: payload.delivery === "sent" || payload.delivery === "suppressed" ? "success" : "idle", label: deliveryLabel });
+  }), [control.agentId, control.customName, event, patch, state.aiEvent.progress]);
   const sendManualState = async () => {
     const selected = manualAgentState(control.state);
     const agentName = manualAgentName(control);
@@ -933,17 +953,17 @@ export function AgentsPage({ notify, embedded = false }) {
   };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把运行状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("自动 Agent 适配器将在后续阶段开放")}>添加适配器</Button>} />}
-      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>手动选择当前 Agent，并通过真实三端链路控制小智表情。</p></div><Button icon={Plus} onClick={() => notify("自动 Agent 适配器将在后续阶段开放")}>添加适配器</Button></div>}
-      <Notice tone="info" title="当前采用手动 Agent 状态">先选择正在使用的 Agent，再选择状态并发送。Agent 名称只保留在电脑端；小智只接收七种状态。自动识别多个 Agent 暂未启用，语音输入进行时由语音流程优先控制表情。</Notice>
+      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把真实或手动工作状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>Codex 已支持真实生命周期；其他 Agent 暂用手动状态。</p></div><Button icon={Plus} onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button></div>}
+      <Notice tone="info" title="Codex 真实状态已接入">选择 Codex 后，官方 Hook 会把开始任务、工具执行、等待授权/输入和任务结束映射为表情；不会读取或上传提示词、回复正文、工具参数、工作目录或对话记录。WorkBuddy、Hermes 与 Claude Code 目前仍需手动发送；语音输入始终优先。</Notice>
       <Card className="manual-agent-control">
-        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="手动状态通过现有 Desktop → EasyInput → 小智链路发送。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
+        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="Codex 可自动更新；七个按钮继续保留为人工校验和其他 Agent 的手动入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
         <div className="manual-agent-control__agent">
           <label>当前 Agent<Select value={control.agentId} onChange={(agentId) => { updateControl({ agentId }); setSendState({ status: "idle", label: "尚未发送" }); }} ariaLabel="当前 Agent">{MANUAL_AGENT_OPTIONS.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</Select></label>
           {control.agentId === "custom" && <label>Agent 名称<input maxLength={48} value={control.customName} onChange={(changeEvent) => updateControl({ customName: changeEvent.target.value })} placeholder="例如 Cursor、OpenCode" /></label>}
         </div>
         <div className="manual-agent-state-grid" aria-label="选择 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} key={item.id} onClick={() => { updateControl({ state: item.id }); setSendState({ status: "idle", label: "待发送" }); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
-        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>身份不发送到硬件；当前只发送状态码和有效期。</small></div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={sendManualState}>{sendState.status === "sending" ? "发送中…" : "发送到小智"}</Button></div>
+        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{control.agentId === "codex" ? (codexStatus.connected ? `Codex Hook 已连接 · 最近事件 ${codexStatus.event || "未知"}` : codexStatus.receiver === "listening" ? "DeskMate 正在等待 Codex Hook 的首个真实事件" : "Codex Hook 接收器不可用") : "当前 Agent 尚无自动适配器；可使用上方状态按钮"}</small></div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={sendManualState}>{sendState.status === "sending" ? "发送中…" : "手动发送到小智"}</Button></div>
       </Card>
       <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <div className="agent-grid">{agents.map((agent) => {
@@ -958,7 +978,7 @@ export function AgentsPage({ notify, embedded = false }) {
           <Button icon={active ? Check : Refresh} variant={active ? "soft" : "secondary"} onClick={() => { updateControl({ agentId: agent.id }); setSendState({ status: "idle", label: "待发送" }); }}>{active ? "当前 Agent" : "切换到此 Agent"}</Button>
         </Card>;
       })}</div>
-      <Card><SectionTitle index="03" title="状态来源边界" description="当前人工选择；未来接入各 Agent 适配器后仍统一为同一套七状态。" /><div className="state-flow"><span>手动选择 / 未来适配器</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
+      <Card><SectionTitle index="03" title="状态来源边界" description="Codex 使用官方生命周期 Hook；其他 Agent 仍为人工选择，最终统一为同一套七状态。" /><div className="state-flow"><span>Codex Hook / 手动状态</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
     </div>
   );
 }
