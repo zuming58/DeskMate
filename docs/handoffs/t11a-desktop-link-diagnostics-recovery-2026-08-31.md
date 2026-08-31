@@ -45,4 +45,3 @@ No UI automation or hardware action was used. With the user present, open Device
 3. Re-sending the same manual expression creates a new EasyInput write result and advances the appropriate Link/Agent counters.
 4. Restarting Xiaozhi causes a visible Link transition and one valid-state recovery (or `idle` when the previous state expired).
 5. An unavailable or failed Link never displays `synced` or Xiaozhi acknowledgement.
-
