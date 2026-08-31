@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   setTriggerConfig: (value) => ipcRenderer.invoke("desktop:set-trigger-config", value),
   setVoiceRecording: (recording) => ipcRenderer.invoke("desktop:set-voice-recording", Boolean(recording)),
   setVoiceState: (value) => ipcRenderer.invoke("desktop:set-voice-state", value),
+  setManualAgentState: (value) => ipcRenderer.invoke("desktop:set-manual-agent-state", value),
   writeClipboard: (text) => ipcRenderer.invoke("desktop:clipboard-write", text),
   pasteActiveWindow: (text) => ipcRenderer.invoke("desktop:paste-active-window", text),
   keyDiagnostic: (event) => ipcRenderer.invoke("desktop:key-diagnostic", event),

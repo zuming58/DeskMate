@@ -58,6 +58,8 @@ import { BailianSttAdapter, BailianTextOrganizer, ConfigurableTextOrganizer, Htt
 import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
 import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, limitUtf8Bytes, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
+import { keyboardConfigReadMessage, readKeyboardConfigWithRetry } from "./domain/keyboardConfigRead.js";
+import { MANUAL_AGENT_OPTIONS, MANUAL_AGENT_STATES, manualAgentName, manualAgentState, normalizeAgentControl } from "./domain/agentControl.js";
 import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
@@ -175,7 +177,11 @@ function ApplicationPicker({ binding, onChange, notify }) {
     <div className="application-picker">
       {binding.appActionId && <div className="application-picker__selected"><AppWindow size={20} /><strong>{binding.appName || "已选择应用"}</strong><Button variant="ghost" onClick={test}>测试打开</Button></div>}
       <SearchField value={query} onChange={setQuery} placeholder={loading ? "正在读取应用…" : "搜索已安装应用"} />
-      <div className="application-picker__list">{filtered.map((app) => <button type="button" key={app.token} onClick={() => select(app.token)}><AppWindow size={17} /><span>{app.label}</span></button>)}</div>
+      <div className="application-picker__summary"><span>{query.trim() ? "搜索结果" : "已安装应用"}</span><small>{loading ? "读取中" : `${filtered.length} 项`}</small></div>
+      <div className="application-picker__list" role="listbox" aria-label="可选择的 Windows 应用">
+        {!loading && filtered.length === 0 && <div className="application-picker__empty">{query.trim() ? "没有匹配的应用" : "暂未发现可用应用"}</div>}
+        {filtered.map((app) => <button type="button" role="option" aria-selected={binding.appName === app.label} title={app.label} key={app.token} onClick={() => select(app.token)}><AppWindow size={16} /><span>{app.label}</span></button>)}
+      </div>
       <div className="application-picker__footer"><Button icon={FolderOpen} variant="ghost" onClick={choose}>选择其他应用</Button><Button variant="ghost" onClick={load}>刷新</Button></div>
     </div>
   );
@@ -725,31 +731,42 @@ export function KeymapPage({ notify }) {
   const [configConfirmation, setConfigConfirmation] = useState(null);
   const dirtyKeys = useRef(new Set());
   const dirtyEncoder = useRef(new Set());
+  const configReadEpoch = useRef(0);
+  const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
   const encoder = normalizeEncoder(state.encoder);
   const updateKey = (value) => { dirtyKeys.current.add(selectedInput.index); patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) }); };
   const updateEncoder = (value) => { Object.keys(value).forEach((key) => dirtyEncoder.current.add(key)); patch({ encoder: normalizeEncoder({ ...encoder, ...value }) }); };
-  useEffect(() => {
-    let active = true;
+  const loadKeyboardConfig = useCallback(async ({ announceFailure = false } = {}) => {
+    const epoch = ++configReadEpoch.current;
+    if (!boardConnected) {
+      setSyncState({ status: "idle", readStatus: "waiting", label: "等待 EasyInput 连接" });
+      return { ok: false, reason: "easyinput-not-connected" };
+    }
     setSyncState({ status: "syncing", readStatus: "syncing", label: "正在读取键盘配置…" });
-    voiceAdapters.desktop.readKeyboardConfig().then((result) => {
-      if (!active) return;
-      if (!result?.ok || !result.config) throw new Error(result?.reason || "读取配置失败");
+    const result = await readKeyboardConfigWithRetry({ read: () => voiceAdapters.desktop.readKeyboardConfig() });
+    if (epoch !== configReadEpoch.current) return { ok: false, reason: "config-read-superseded" };
+    if (result?.ok && result.config) {
       dirtyKeys.current.clear();
       dirtyEncoder.current.clear();
       patch({
-        keymap: Array.isArray(result.config.keymap) ? result.config.keymap.map((item) => normalizeKeyBinding(item)) : state.keymap,
+        ...(Array.isArray(result.config.keymap) ? { keymap: result.config.keymap.map((item) => normalizeKeyBinding(item)) } : {}),
         encoder: normalizeEncoder(result.config.encoder),
       });
       const sourceLabel = ["DeskMate NVS", "Maker NVS", "编译默认值", "安全恢复值"][result.source] || "未知来源";
       setSyncState({ status: "success", readStatus: "success", label: `${sourceLabel} · ${result.fingerprint || "已读取"}` });
-    }).catch((error) => {
-      if (!active) return;
-      setSyncState({ status: "error", readStatus: "error", label: "键盘配置读取失败" });
-      notify(`读取键盘配置失败：${error.message}`);
-    });
-    return () => { active = false; };
-  }, []);
+      return result;
+    }
+    const label = keyboardConfigReadMessage(result?.reason);
+    const waiting = ["easyinput-not-connected", "easyinput-disconnected", "input-bridge-unavailable", "input-bridge-restarting", "input-bridge-exited", "config-read-timeout"].includes(result?.reason);
+    setSyncState({ status: waiting ? "warning" : "error", readStatus: waiting ? "retry" : "error", label });
+    if (announceFailure) notify(`${label}，请确认设备连接后重试`);
+    return result;
+  }, [boardConnected, notify, patch]);
+  useEffect(() => {
+    void loadKeyboardConfig();
+    return () => { configReadEpoch.current += 1; };
+  }, [loadKeyboardConfig]);
   const syncKeyboard = async () => {
     setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在读取板上配置…" }));
     try {
@@ -810,7 +827,7 @@ export function KeymapPage({ notify }) {
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
       <div className="keymap-grid">
         <Card className="keymap-board">
-          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.readStatus === "success" ? "已读取" : syncState.readStatus === "syncing" ? "读取中" : syncState.readStatus === "pending" ? "待核对" : syncState.readStatus === "error" ? "读取失败" : "未读取"}</strong></span><span>同步结果 <strong className={syncState.status === "success" ? "success-text" : ["error", "warning"].includes(syncState.status) ? "warning-text" : ""}>{syncState.label}</strong></span></div>
+          <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.readStatus === "success" ? "已读取" : syncState.readStatus === "syncing" ? "读取中" : syncState.readStatus === "pending" ? "待核对" : syncState.readStatus === "waiting" ? "等待连接" : syncState.readStatus === "retry" ? "可重试" : syncState.readStatus === "error" ? "读取失败" : "未读取"}</strong></span><span className="device-line__result">同步结果 <strong className={syncState.status === "success" ? "success-text" : ["error", "warning"].includes(syncState.status) ? "warning-text" : ""}>{syncState.label}</strong>{["retry", "error"].includes(syncState.readStatus) && <button type="button" className="config-read-retry" disabled={syncState.status === "syncing"} onClick={() => void loadKeyboardConfig({ announceFailure: true })}><Refresh size={13} />重新读取</button>}</span></div>
           <div className="keyboard-visual">
             <div className="key-grid">{bindings.map((binding, index) => <button key={index} className={`hardware-key ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{actionLabel(binding)}</strong></button>)}</div>
             <button className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER</small></button>
@@ -887,37 +904,61 @@ export function ConnectionsPage({ notify, embedded = false }) {
 export function AgentsPage({ notify, embedded = false }) {
   const { state, patch, event } = useAppStore();
   const mapping = state.agentExpressionMapping;
+  const control = normalizeAgentControl(state.agentControl);
+  const [sendState, setSendState] = useState({ status: "idle", label: "尚未发送" });
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
   const eventLabel = { idle: "待命", listening: "倾听中", thinking: "思考中", working: "工作中", waiting_user: "等待用户", completed: "已完成", error: "异常" };
   const updateMapping = (agentId, value) => {
     patch({ agentExpressionMapping: { ...mapping, [agentId]: value } });
     if (state.aiEvent.type === "working" && state.aiEvent.agent?.toLowerCase().includes(agentId === "claude" ? "claude" : agentId)) event({ ...state.aiEvent });
   };
-  const simulateNextStatus = () => {
-    const sequence = ["working", "waiting_user", "thinking", "completed", "error", "idle"];
-    const next = sequence[(sequence.indexOf(state.aiEvent.type) + 1) % sequence.length];
-    event({ type: next, agent: "Codex", progress: next === "completed" ? 100 : next === "idle" ? 0 : state.aiEvent.progress, detail: `模拟状态：${eventLabel[next]}` });
-    notify(`Codex 已切换为“${eventLabel[next]}”`);
+  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
+  const sendManualState = async () => {
+    const selected = manualAgentState(control.state);
+    const agentName = manualAgentName(control);
+    if (control.agentId === "custom" && !control.customName.trim()) { notify("请先填写自定义 Agent 名称"); return; }
+    setSendState({ status: "sending", label: "正在发送…" });
+    const result = await voiceAdapters.desktop.setManualAgentState({ agentId: control.agentId, state: selected.transport });
+    if (!result?.ok) {
+      const reason = result?.reason === "voice-workflow-active" ? "语音流程正在使用表情，结束后再发送" : result?.reason === "easyinput-not-connected" ? "EasyInput 尚未连接" : result?.reason || "状态发送失败";
+      setSendState({ status: "error", label: reason });
+      notify(reason);
+      return;
+    }
+    const progress = control.state === "completed" ? 100 : control.state === "idle" ? 0 : state.aiEvent.progress;
+    event({ type: control.state, agent: agentName, progress, detail: `手动状态 · ${selected.label}` });
+    const expiry = ["completed", "error"].includes(control.state) ? "，10 秒后小智恢复待命" : "";
+    setSendState({ status: "success", label: `已发送 · ${selected.label}${expiry}` });
+    notify(`${agentName} 已切换为“${selected.label}”${expiry}`);
   };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="AI 联动" description="把编程助手的运行状态映射到桌宠灯效和表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("自定义适配器将在开发阶段开放")}>添加适配器</Button>} />}
-      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>保留原来的适配器、状态映射和模拟调试能力。</p></div><Button icon={Plus} onClick={() => notify("自定义适配器将在开发阶段开放")}>添加适配器</Button></div>}
-      <Notice tone="demo" title="适配器模拟数据">Codex、Claude Code、Hermes 和 Workbody 当前仅使用模拟状态；未连接真实 provider，也不会控制硬件。</Notice>
-      <Card><SectionTitle index="01" title="桌宠意图（模拟）" description="状态只转换为意图，不调用屏幕、灯、舵机或传感器。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
+      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把运行状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("自动 Agent 适配器将在后续阶段开放")}>添加适配器</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>手动选择当前 Agent，并通过真实三端链路控制小智表情。</p></div><Button icon={Plus} onClick={() => notify("自动 Agent 适配器将在后续阶段开放")}>添加适配器</Button></div>}
+      <Notice tone="info" title="当前采用手动 Agent 状态">先选择正在使用的 Agent，再选择状态并发送。Agent 名称只保留在电脑端；小智只接收七种状态。自动识别多个 Agent 暂未启用，语音输入进行时由语音流程优先控制表情。</Notice>
+      <Card className="manual-agent-control">
+        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="手动状态通过现有 Desktop → EasyInput → 小智链路发送。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
+        <div className="manual-agent-control__agent">
+          <label>当前 Agent<Select value={control.agentId} onChange={(agentId) => { updateControl({ agentId }); setSendState({ status: "idle", label: "尚未发送" }); }} ariaLabel="当前 Agent">{MANUAL_AGENT_OPTIONS.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</Select></label>
+          {control.agentId === "custom" && <label>Agent 名称<input maxLength={48} value={control.customName} onChange={(changeEvent) => updateControl({ customName: changeEvent.target.value })} placeholder="例如 Cursor、OpenCode" /></label>}
+        </div>
+        <div className="manual-agent-state-grid" aria-label="选择 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} key={item.id} onClick={() => { updateControl({ state: item.id }); setSendState({ status: "idle", label: "待发送" }); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
+        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>身份不发送到硬件；当前只发送状态码和有效期。</small></div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={sendManualState}>{sendState.status === "sending" ? "发送中…" : "发送到小智"}</Button></div>
+      </Card>
+      <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <div className="agent-grid">{agents.map((agent) => {
-        const isCodex = agent.id === "codex";
-        const displayState = isCodex ? eventLabel[state.aiEvent.type] : agent.state;
-        const displayProgress = isCodex ? state.aiEvent.progress : agent.progress;
-        return <Card key={agent.id} className={`agent-card agent-card--${agent.tone}`}>
-          <div className="agent-card__head"><span className="agent-icon"><Code size={24} /></span><StatusBadge tone={displayState === "工作中" || displayState === "已完成" ? "success" : displayState === "待命" ? "neutral" : "warning"}>{displayState}</StatusBadge></div>
-          <h3>{agent.name}</h3><p>{isCodex ? state.aiEvent.detail : agent.detail}</p>
+        const active = control.agentId === agent.id;
+        const displayState = active ? eventLabel[state.aiEvent.type] : "可选择";
+        const displayProgress = active ? state.aiEvent.progress : 0;
+        return <Card key={agent.id} className={`agent-card agent-card--${agent.tone} ${active ? "is-selected" : ""}`}>
+          <div className="agent-card__head"><span className="agent-icon"><Code size={24} /></span><StatusBadge tone={active ? "success" : "neutral"}>{displayState}</StatusBadge></div>
+          <h3>{agent.name}</h3><p>{active ? state.aiEvent.detail : "点击下方按钮切换为当前 Agent"}</p>
           {displayProgress > 0 && <div className="agent-progress"><span style={{ width: `${displayProgress}%` }} /><small>{displayProgress}%</small></div>}
-          <label>工作时表情<Select value={mapping[agent.id]} onChange={(value) => updateMapping(agent.id, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></label>
-          <Button icon={isCodex ? Refresh : agent.state === "未连接" || agent.state === "未配置" ? Settings2 : Eye} onClick={isCodex ? simulateNextStatus : () => notify(`${agent.name} 配置面板为演示状态`)}>{isCodex ? "模拟下一状态" : agent.state === "未连接" || agent.state === "未配置" ? "配置" : "查看状态"}</Button>
+          <label>软件预览工作表情<Select value={mapping[agent.id]} onChange={(value) => updateMapping(agent.id, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></label>
+          <Button icon={active ? Check : Refresh} variant={active ? "soft" : "secondary"} onClick={() => { updateControl({ agentId: agent.id }); setSendState({ status: "idle", label: "待发送" }); }}>{active ? "当前 Agent" : "切换到此 Agent"}</Button>
         </Card>;
       })}</div>
-      <Card><SectionTitle index="02" title="状态接收" description="桌宠 App 将把适配器状态统一为待命、工作、等待、完成和错误。" /><div className="state-flow"><span>AI 工具</span><ArrowRight /><span>本地适配器</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>表情 / 动作 / 灯效</span></div></Card>
+      <Card><SectionTitle index="03" title="状态来源边界" description="当前人工选择；未来接入各 Agent 适配器后仍统一为同一套七状态。" /><div className="state-flow"><span>手动选择 / 未来适配器</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
     </div>
   );
 }

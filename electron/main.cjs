@@ -581,6 +581,14 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:set-trigger-config", (value) => ({ ok: true, config: inputBridge?.configure(value || {}) || { boardF22: true, rightAlt: false } }));
   handleTrusted("desktop:set-voice-recording", (recording) => { voiceSessionRecording = Boolean(recording); refreshTrayMenu(); return { ok: true, recording: voiceSessionRecording }; });
   handleTrusted("desktop:set-voice-state", (value) => updateVoiceState(value));
+  handleTrusted("desktop:set-manual-agent-state", async (value = {}) => {
+    const agentId = typeof value.agentId === "string" && /^[a-z0-9-]{1,32}$/.test(value.agentId) ? value.agentId : "";
+    const state = typeof value.state === "string" ? value.state : "";
+    if (!agentId || !["idle", "listening", "thinking", "working", "waiting", "completed", "error"].includes(state)) return { ok: false, reason: "manual-agent-request-invalid" };
+    if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ok: false, reason: "voice-workflow-active" };
+    const result = await agentStatePublisher.publishManualState({ source: "manual-agent-control", state });
+    return result?.ok ? { ok: true, agentId, state } : { ok: false, reason: result?.reason || "agent-state-send-failed" };
+  });
   handleTrusted("desktop:clipboard-write", (value) => { const text = String(value || ""); if (text.length > 100000) return { ok: false, reason: "text-too-long" }; clipboard.writeText(text); return { ok: true, mode: "clipboard" }; });
   handleTrusted("desktop:paste-active-window", (text) => pasteIntoCapturedWindow(text));
   handleTrusted("desktop:key-diagnostic", (value) => ({ ok: true, event: value }));

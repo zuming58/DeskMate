@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Keep Agent identity separate from the hardware state vocabulary
+
+- Symptom: a product may support Codex, Workbody, Hermes and other Agents, but the existing device contract intentionally carries only seven coarse states. Sending provider names or guessing the active provider from windows/processes would widen the privacy boundary and behave ambiguously when several Agents are open.
+- Practice: keep the selected Agent identity and custom label local to the desktop, normalize all providers to the frozen state vocabulary, and expose a manual selector until real provider adapters and ownership rules exist. Let active voice work take priority over manual display requests.
+- Rule: adding a provider must not create a new firmware state machine or leak provider identity to hardware. Identity selection, state inference and device rendering are separate responsibilities.
+
 ## Reference motion code is behavior evidence, not calibration evidence
 
 - Symptom: the Xiaozhi reference contains nominal centers, ranges, GPIOs and direct LEDC initialization, so copying it would make a new product image move both servos immediately even though the real supply path, direction and mechanical limits remain unverified.

@@ -1,5 +1,12 @@
 # Decisions
 
+## D036 - Manual Agent identity stays local while hardware receives only frozen state
+
+- Date: 2026-08-31
+- Decision: DeskMate v1 uses an explicit desktop selection for Codex, Workbody, Hermes, Claude Code or a bounded custom Agent. The renderer requests only a validated local Agent ID and one of the seven T09 states; Electron main publishes the existing `0x12` report. Agent names never cross into HID or DeskMate Link.
+- Priority: an active VoiceWorkflow owns the visible state and rejects manual overrides. Automatic multi-Agent detection is deferred until each provider has a privacy-safe adapter and concurrent ownership policy.
+- Display boundary: Xiaozhi OLED represents Agent work state. EasyInput's five WS2812 LEDs remain key/encoder input feedback and are not repurposed in this slice.
+
 ## D035 - Link health crosses the native boundary only as enumerated diagnostics
 
 - Date: 2026-08-30

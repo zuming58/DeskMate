@@ -4,9 +4,10 @@ import { AI_EVENT_TYPES } from "../adapters/index.js";
 import { legacyState } from "../domain/aiStatus.js";
 import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding } from "../domain/keymap.js";
 import { mapAiStateToPetIntent } from "../domain/petIntent.js";
+import { normalizeAgentControl } from "../domain/agentControl.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 function normalizeHistoryEntry(item) {
   const text = String(item?.text || "");
@@ -28,6 +29,7 @@ export const defaultState = {
   runtime: { inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" }, lastTrigger: null },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
   agentExpressionMapping: { codex: "focus", claude: "listen", hermes: "think", workbody: "happy" },
+  agentControl: { agentId: "codex", customName: "", state: "idle" },
   currentExpression: "focus",
   expressionEditor: { eyeSize: 72, eyeGap: 58, brightness: 80, blink: true, color: "cyan" },
   motion: { preset: "attentive", speed: 45, range: 55 },
@@ -47,6 +49,7 @@ function mergeDefaults(value) {
     settings: { ...defaultState.settings, ...(value.settings || {}), operation: "toggle" },
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
+    agentControl: normalizeAgentControl(value.agentControl),
     expressionEditor: { ...defaultState.expressionEditor, ...(value.expressionEditor || {}) },
     motion: { ...defaultState.motion, ...(value.motion || {}) },
     sensors: { ...defaultState.sensors, ...(value.sensors || {}) },
@@ -62,6 +65,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 4) raw = { ...raw, settings: { ...(raw.settings || {}), formatting: "raw" } };
   if ((raw.schemaVersion ?? 0) < 5) raw = { ...raw, history: Array.isArray(raw.history) ? raw.history.map(normalizeHistoryEntry) : raw.history };
   if ((raw.schemaVersion ?? 0) < 6) raw = { ...raw, keymap: Array.isArray(raw.keymap) ? raw.keymap.map((item, index) => normalizeKeyBinding(item, DEFAULT_KEYMAP[index])) : raw.keymap, encoder: normalizeEncoder(raw.encoder), settings: { ...(raw.settings || {}), activeWindowOutputEnabled: true } };
+  if ((raw.schemaVersion ?? 0) < 7) raw = { ...raw, agentControl: normalizeAgentControl(raw.agentControl) };
   return mergeDefaults(raw);
 }
 
@@ -111,6 +115,11 @@ export function validateConfig(value) {
   };
   checkExpressionMap(value.expressionMapping, "状态表情映射");
   checkExpressionMap(value.agentExpressionMapping, "AI 工具表情映射");
+  if (value.agentControl !== undefined) {
+    if (!value.agentControl || typeof value.agentControl !== "object" || Array.isArray(value.agentControl)) throw new Error("AI 手动控制配置无效");
+    const normalizedAgentControl = normalizeAgentControl(value.agentControl);
+    if (normalizedAgentControl.agentId !== value.agentControl.agentId || normalizedAgentControl.state !== value.agentControl.state || normalizedAgentControl.customName !== String(value.agentControl.customName || "")) throw new Error("AI 手动控制配置无效");
+  }
   if (value.currentExpression !== undefined && !expressionIds.has(value.currentExpression)) throw new Error("当前表情不存在");
   if (value.aiEvent !== undefined && (!value.aiEvent || typeof value.aiEvent !== "object" || !AI_EVENT_TYPES.includes(value.aiEvent.type))) throw new Error("AI 状态事件格式无效");
   if (value.expressionEditor !== undefined && (!value.expressionEditor || typeof value.expressionEditor !== "object")) throw new Error("表情编辑参数格式无效");

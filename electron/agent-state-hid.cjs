@@ -6,6 +6,7 @@ const AGENT_STATE_PAYLOAD_BYTES = 16;
 const WINDOWS_FEATURE_REPORT_BYTES = 64;
 const MAX_TTL_MS = 600000;
 const VOICE_WORKFLOW_SOURCE_HASH = 0x7c89f35a;
+const MANUAL_AGENT_SOURCE_HASH = 0x4d414e55;
 
 const AGENT_STATES = Object.freeze({
   idle: 0,
@@ -110,6 +111,21 @@ class AgentStatePublisher {
     });
     return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
   }
+
+  publishManualState(value = {}) {
+    if (value.source !== "manual-agent-control") return Promise.resolve({ ok: false, ignored: true, reason: "manual-agent-source-invalid" });
+    const state = String(value.state || "");
+    if (!Object.hasOwn(AGENT_STATES, state)) return Promise.resolve({ ok: false, ignored: true, reason: "manual-agent-state-invalid" });
+    this.liveStreamInterrupted = true;
+    this.lastLiveAgentState = null;
+    const report = encodeAgentStateFeatureReport({
+      state,
+      transitionId: this.nextTransitionId(),
+      ttlMs: STATE_TTL_MS[state],
+      sourceHash: MANUAL_AGENT_SOURCE_HASH,
+    });
+    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+  }
 }
 
 module.exports = {
@@ -118,6 +134,7 @@ module.exports = {
   AGENT_STATE_PROTOCOL_VERSION,
   AGENT_STATE_REPORT_ID,
   MAX_TTL_MS,
+  MANUAL_AGENT_SOURCE_HASH,
   STATE_TTL_MS,
   VOICE_STATE_MAP,
   WINDOWS_FEATURE_REPORT_BYTES,

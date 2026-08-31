@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const {
   AgentStatePublisher,
+  MANUAL_AGENT_SOURCE_HASH,
   createTransitionSequence,
   encodeAgentStateFeatureReport,
 } = require("../electron/agent-state-hid.cjs");
@@ -71,6 +72,30 @@ test("simulation and mock sources never emit a HID feature report", async () => 
   assert.equal(reports.length, 2, "a new live stream after simulation is a fresh transition");
 });
 
+test("manual Agent control publishes only frozen states with an opaque source", async () => {
+  const reports = [];
+  const publisher = new AgentStatePublisher({ send: async (report) => { reports.push(report); return { ok: true }; }, nextTransitionId: createTransitionSequence(21) });
+
+  assert.equal((await publisher.publishManualState({ source: "manual-agent-control", state: "waiting" })).ok, true);
+  assert.equal((await publisher.publishManualState({ source: "manual-agent-control", state: "completed" })).ok, true);
+  assert.equal((await publisher.publishManualState({ source: "manual-agent-control", state: "unknown" })).ignored, true);
+  assert.equal((await publisher.publishManualState({ source: "simulation", state: "working" })).ignored, true);
+
+  assert.equal(reports.length, 2);
+  assert.deepEqual(reports.map((report) => report[2]), [4, 5]);
+  assert.deepEqual(reports.map((report) => report.readUInt32LE(9)), [600000, 10000]);
+  assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [MANUAL_AGENT_SOURCE_HASH, MANUAL_AGENT_SOURCE_HASH]);
+});
+
+test("manual publication interrupts voice duplicate suppression without replaying an old state", async () => {
+  const reports = [];
+  const publisher = new AgentStatePublisher({ send: async (report) => { reports.push(report); return { ok: true }; }, nextTransitionId: createTransitionSequence(1) });
+  await publisher.publishVoiceState({ source: "voice-workflow", state: "recording" });
+  await publisher.publishManualState({ source: "manual-agent-control", state: "waiting" });
+  await publisher.publishVoiceState({ source: "voice-workflow", state: "recording" });
+  assert.deepEqual(reports.map((report) => report[2]), [1, 4, 1]);
+});
+
 test("publisher fails closed without logging or throwing transport failures", async () => {
   const publisher = new AgentStatePublisher({ send: async () => { throw new Error("private-device-path"); }, nextTransitionId: createTransitionSequence(1) });
   assert.deepEqual(await publisher.publishVoiceState({ source: "voice-workflow", state: "error" }), { ok: false, reason: "agent-state-send-failed" });
@@ -84,5 +109,7 @@ test("renderer labels mock and simulator flows while main owns HID publication",
   assert.match(pages, /event\.source === "simulator" \? "simulation" : "voice-workflow"/);
   assert.match(main, /new AgentStatePublisher/);
   assert.match(main, /publishVoiceState\(\{ state, source: value\.source \}\)/);
+  assert.match(main, /desktop:set-manual-agent-state/);
+  assert.match(main, /voice-workflow-active/);
   assert.doesNotMatch(pages, /encodeAgentStateFeatureReport/);
 });

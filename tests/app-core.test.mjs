@@ -22,6 +22,13 @@ test("migrates history schema v4 to raw and organized text fields", () => {
   assert.equal(result.history[0].organizer.mode, "raw");
 });
 
+test("migrates and validates the local manual Agent selection", () => {
+  const migrated = migrateState({ schemaVersion: 6, agentControl: { agentId: "hermes", state: "waiting_user" } });
+  assert.deepEqual(migrated.agentControl, { agentId: "hermes", customName: "", state: "waiting_user" });
+  assert.throws(() => validateConfig({ agentControl: { agentId: "unknown", state: "idle" } }), /AI 手动控制/);
+  assert.throws(() => validateConfig({ agentControl: { agentId: "codex", state: "made-up" } }), /AI 手动控制/);
+});
+
 test("rejects malformed imported configurations", () => {
   assert.throws(() => validateConfig({ keymap: ["only-one"] }), /8 项/);
   assert.throws(() => validateConfig({ schemaVersion: "1" }), /数字/);
