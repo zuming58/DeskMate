@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-08-31 - T10E real onboard-microphone audio is non-zero after timeout fix
+
+- Normal-boot HIL: after the user power-cycled the newly flashed EasyInput normally, the latest T11A desktop microphone test showed a live level that moved with speech and peaked below 10%. This confirms the real GPIO8 microphone power lease, I2S0 capture, PCM conversion, single-endpoint UDP uplink and desktop receiver are all carrying non-zero board audio.
+- Interpretation: the earlier persistent 0% result is closed as the double-converted `i2s_channel_read` timeout defect fixed by implementation commit `72fe912`. The current sub-10% level is a sensitivity/gain-quality observation, not a transport failure; no microphone-source switch is justified before controlled speech/noise testing.
+- Status and next: `NORMAL_BOOT_CONFIRMED / NONZERO_AUDIO_HIL_CONFIRMED / T10E_PRESSURE_REGRESSION_PENDING`. Next run repeated start/stop, concurrent key/encoder/LED/Link regression and one bounded network-interruption recovery test before locking T10E. No new firmware, Flash/NVS, eFuse or Xiaozhi operation occurred.
+
 ## 2026-08-31 - T10E I2S timeout repair flashed and exactly read back
 
 - Authorized gate: the sole USB candidate was identified as an ESP32-S3 with 16 MiB Flash. The authorized old app range `0x010000..0x0E099F` was read in full and exactly matched SHA-256 `3FBAF210F30E8BF468C3FBAEF085BAFC07F111495155AB58A330F300930599B7`; any mismatch would have stopped before writing.
