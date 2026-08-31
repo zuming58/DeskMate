@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EasyInput 音频设置</title>
+    <link rel="stylesheet" href="audio-setup.css" />
+  </head>
+  <body>
+    <main>
+      <header><span>DESKMATE AUDIO</span><h1>EasyInput 音频设置</h1><p>凭据只在这个隔离窗口内提交给 Electron 主进程，不进入主界面、日志或诊断。</p></header>
+      <section class="status" id="status">正在读取板上配置…</section>
+      <form id="setup-form" autocomplete="off">
+        <label>Wi-Fi 名称<input id="ssid" maxlength="32" required autocomplete="off" /></label>
+        <label>Wi-Fi 密码<input id="password" type="password" maxlength="64" autocomplete="new-password" /></label>
+        <label>电脑接收网卡<select id="adapter" required></select></label>
+        <label>音频端口<input id="port" type="number" min="1024" max="65535" value="17333" required /></label>
+        <p class="hint">不会扫描局域网，也不会自动更换被占用的端口。请确保 EasyInput 和所选网卡位于同一网络。</p>
+        <div class="actions"><button type="button" class="secondary" id="cancel">取消</button><button type="submit" id="preview">预览修改</button></div>
+      </form>
+      <section class="confirm" id="confirm" hidden><h2>确认写入</h2><ul id="diff"></ul><p>确认后只修改网络与音频的四个字段，并立即回读校验。确认令牌 60 秒后失效。</p><div class="actions"><button type="button" class="secondary" id="back">返回</button><button type="button" id="commit">确认写入并回读</button></div></section>
+    </main>
+    <script src="audio-setup-renderer.js"></script>
+  </body>
+</html>

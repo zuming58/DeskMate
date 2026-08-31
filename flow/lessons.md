@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A device microphone test should prove transport without creating user data
+
+- Symptom: replaying or recording a sample makes microphone troubleshooting convenient, but it creates voice artifacts and widens the renderer/privacy boundary before the production conversation path is ready.
+- Practice: validate the frozen frame, session and source in Electron main; calculate a short-lived numeric level; expose only state, counters and that level; automatically stop the test after a bounded duration.
+- Rule: microphone transport evidence does not require storing, replaying or rendering PCM. A source test also cannot stand in for a missing speaker sink or full conversation HIL.
+
 ## An unavailable hardware adapter must be explicit, not replaced by a convenient fallback
 
 - Symptom: a desktop conversation UI can appear complete when it silently captures the computer microphone, even though the product contract says EasyInput is the only V1 audio endpoint.

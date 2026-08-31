@@ -67,8 +67,8 @@ test("raw smart custom organizers degrade without losing transcription", async (
 });
 
 test("diagnostics export removes secrets and content", () => {
-  const report = createDiagnosticReport({ schemaVersion: 99, generatedAt: "forged", token: "secret", wifiPassword: "secret", transcript: "spoken", localPath: "private", serialNumber: "serial-secret", windowTitle: "private-window", ipAddress: "192.168.1.4", runtime: "web", nested: { apiKey: "secret", status: "ok" } });
-  const serialized = JSON.stringify(report); assert.doesNotMatch(serialized, /secret|spoken|private|192\.168/); assert.equal(report.nested.status, "ok"); assert.equal(report.lanAudio.status, "protocol-unconfirmed");
+  const report = createDiagnosticReport({ schemaVersion: 99, generatedAt: "forged", token: "secret", wifiPassword: "secret", transcript: "spoken", localPath: "private", serialNumber: "serial-secret", windowTitle: "private-window", ipAddress: "192.168.1.4", runtime: "web", nested: { apiKey: "secret", status: "ok" }, lanAudio: { status: "streaming", configured: true, networkReady: true, heartbeat: true, micTest: true, audioHost: "192.168.1.4", counters: { audioFrames: 12, sequenceGaps: 2 } } });
+  const serialized = JSON.stringify(report); assert.doesNotMatch(serialized, /secret|spoken|private|192\.168/); assert.equal(report.nested.status, "ok"); assert.equal(report.lanAudio.status, "streaming"); assert.equal(report.lanAudio.counters.audioFrames, 12); assert.equal(report.lanAudio.counters.sequenceGaps, 2);
   assert.equal(report.schemaVersion, 1); assert.notEqual(report.generatedAt, "forged");
 });
 

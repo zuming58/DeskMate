@@ -15,7 +15,9 @@ const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
-const { UnavailableCompanionAudioSink, UnavailableCompanionAudioSource } = require("./companion-audio.cjs");
+const { UnavailableCompanionAudioSink } = require("./companion-audio.cjs");
+const { EasyInputLanAudioSource } = require("./easyinput-audio-source.cjs");
+const { EasyInputAudioManager } = require("./easyinput-audio-manager.cjs");
 const { DoubaoRealtimeSession } = require("./doubao-realtime.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
@@ -54,6 +56,10 @@ let bailianStore;
 let aiServiceStore;
 let companionMemoryStore;
 let companionConversationController;
+let easyInputAudioSource;
+let easyInputAudioManager;
+let audioSetupWindow;
+let easyInputAudioBoardConnected = false;
 let foregroundSessionState = initialForegroundSession();
 let activeDictationSession = null;
 let appActionStore;
@@ -85,6 +91,7 @@ function releaseForegroundSession(session) {
 
 async function beginDictationForeground() {
   if (companionIsActive()) await companionConversationController.stop("dictation-preempted");
+  if (easyInputAudioManager?.status?.().micTest) await easyInputAudioManager.stopMicTest("dictation-preempted");
   if (activeDictationSession) return activeDictationSession;
   const sessionId = `dictation-${randomUUID()}`;
   const started = startForegroundSession(foregroundSessionState, { mode: "dictation", sessionId });
@@ -222,6 +229,19 @@ function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
 }
 
+function isAudioSetupSender(event) {
+  const senderUrl = event.senderFrame?.url || event.sender?.getURL?.() || "";
+  try { return fileURLToPath(new URL(senderUrl)) === path.join(__dirname, "audio-setup.html"); }
+  catch { return false; }
+}
+
+function handleAudioSetup(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isAudioSetupSender(event) || event.sender !== audioSetupWindow?.webContents) throw new Error("拒绝非音频设置窗口调用配置能力");
+    return handler(...args);
+  });
+}
+
 function runPowershell(script, timeoutMs = 3000, environment = {}) {
   return new Promise((resolve) => {
     const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true, env: { ...process.env, ...environment } });
@@ -276,6 +296,34 @@ async function captureVoiceEditSelection(targetWindow) {
 
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+function createAudioSetupWindow() {
+  if (audioSetupWindow && !audioSetupWindow.isDestroyed()) { audioSetupWindow.focus(); return audioSetupWindow; }
+  audioSetupWindow = new BrowserWindow({
+    width: 560,
+    height: 720,
+    minWidth: 520,
+    minHeight: 640,
+    parent: mainWindow,
+    modal: true,
+    show: false,
+    title: "EasyInput 音频设置",
+    webPreferences: { preload: path.join(__dirname, "audio-setup-preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true },
+  });
+  audioSetupWindow.loadFile(path.join(__dirname, "audio-setup.html"));
+  audioSetupWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  audioSetupWindow.webContents.on("will-navigate", (event) => event.preventDefault());
+  audioSetupWindow.once("ready-to-show", () => audioSetupWindow?.show());
+  audioSetupWindow.on("closed", () => { audioSetupWindow = null; });
+  return audioSetupWindow;
+}
+
+async function openEasyInputAudioSetup() {
+  const refreshed = await easyInputAudioManager.refreshConfiguration();
+  if (!refreshed.ok && !["easyinput-audio-not-configured"].includes(refreshed.reason)) return refreshed;
+  createAudioSetupWindow();
+  return { ok: true };
 }
 
 function sanitizedCodexHookStatus() {
@@ -347,6 +395,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
 async function emitVoiceCancel(source = "keyboard") {
   if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) {
     if (companionIsActive()) return companionConversationController.stop(source === "keyboard" ? "escape" : source);
+    if (easyInputAudioManager?.status?.().micTest) return easyInputAudioManager.stopMicTest(source === "keyboard" ? "escape" : source);
     return { ignored: true, reason: "voice-idle" };
   }
   voiceSessionRecording = false;
@@ -539,7 +588,14 @@ function startInputBridge() {
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => {
     sendToMain("input-bridge-status", value);
-    if (value?.boardConnected === false && companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
+    const boardConnected = value?.boardConnected === true;
+    const newlyConnected = boardConnected && !easyInputAudioBoardConnected;
+    easyInputAudioBoardConnected = boardConnected;
+    if (newlyConnected) void easyInputAudioManager?.refreshConfiguration();
+    if (value?.boardConnected === false) {
+      if (companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
+      void easyInputAudioManager?.suspend("easyinput-device-disconnected");
+    }
   });
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
   inputBridge.on("trigger", (event) => {
@@ -627,6 +683,7 @@ async function startCompanionConversation() {
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
   }
+  if (easyInputAudioManager?.status?.().micTest) return { ok: false, reason: "easyinput-mic-test-active", status: companionConversationStatus() };
   if (!aiServiceStore?.status?.().realtime?.configured) return { ok: false, reason: "realtime-service-not-configured", status: companionConversationStatus() };
   if (companionIsActive()) return { ok: false, reason: "companion-session-active", status: companionConversationStatus() };
   const sessionId = `companion-${randomUUID()}`;
@@ -648,9 +705,18 @@ app.whenReady().then(async () => {
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
+  easyInputAudioSource = new EasyInputLanAudioSource();
+  easyInputAudioManager = new EasyInputAudioManager({
+    source: easyInputAudioSource,
+    readConfig: () => inputBridge?.readConfig?.() || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    syncConfig: (value) => inputBridge?.syncConfig?.(value) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    fingerprint: configFingerprint,
+    networkInterfaces: () => os.networkInterfaces(),
+    emit: (event) => sendToMain("easyinput-audio-event", event),
+  });
   companionConversationController = new CompanionConversationController({
     providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: aiServiceStore.loadRealtimeSecret(), onEvent }),
-    audioSource: new UnavailableCompanionAudioSource(),
+    audioSource: easyInputAudioSource,
     audioSink: new UnavailableCompanionAudioSink(),
     commitTurn: (turn) => companionMemoryStore.commitConversationTurn(turn),
     publishState: (value) => agentStatePublisher.publishCompanionState(value),
@@ -669,6 +735,18 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
   handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
+  handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
+  handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
+  handleTrusted("desktop:start-easyinput-mic-test", () => easyInputAudioManager.startMicTest({ canStart: () => {
+    if (companionIsActive()) return { ok: false, reason: "companion-conversation-active" };
+    if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ok: false, reason: "voice-workflow-active" };
+    return { ok: true };
+  } }));
+  handleTrusted("desktop:stop-easyinput-mic-test", () => easyInputAudioManager.stopMicTest("user"));
+  handleAudioSetup("audio-setup:load", () => easyInputAudioManager.setupSnapshot());
+  handleAudioSetup("audio-setup:preview", (value) => easyInputAudioManager.previewSetup(value || {}));
+  handleAudioSetup("audio-setup:commit", (token) => easyInputAudioManager.commitSetup(String(token || "")));
+  handleAudioSetup("audio-setup:close", () => { audioSetupWindow?.close(); return { ok: true }; });
   handleTrusted("desktop:register-shortcut", (value) => registerShortcut(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
   handleTrusted("desktop:list-applications", () => appActionStore.discover());
@@ -821,6 +899,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

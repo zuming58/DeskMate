@@ -3,6 +3,11 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktopBridge", {
   getCapabilities: () => ipcRenderer.invoke("desktop:get-capabilities"),
   getNetworkSummary: () => ipcRenderer.invoke("desktop:get-network-summary"),
+  getEasyInputAudioStatus: () => ipcRenderer.invoke("desktop:get-easyinput-audio-status"),
+  openEasyInputAudioSetup: () => ipcRenderer.invoke("desktop:open-easyinput-audio-setup"),
+  startEasyInputMicTest: () => ipcRenderer.invoke("desktop:start-easyinput-mic-test"),
+  stopEasyInputMicTest: () => ipcRenderer.invoke("desktop:stop-easyinput-mic-test"),
+  onEasyInputAudioEvent: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("easyinput-audio-event", handler); return () => ipcRenderer.removeListener("easyinput-audio-event", handler); },
   registerShortcut: (shortcut) => ipcRenderer.invoke("desktop:register-shortcut", shortcut),
   setShortcutCapture: (active) => ipcRenderer.invoke("desktop:set-shortcut-capture", Boolean(active)),
   listApplications: () => ipcRenderer.invoke("desktop:list-applications"),

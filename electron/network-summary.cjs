@@ -8,6 +8,6 @@ function summarizeNetworkInterfaces(interfaces = {}) {
     else if (/ethernet|lan|以太网/i.test(name)) categories.add("ethernet");
     else categories.add("unknown");
   }
-  return { available, transports: [...categories], lanAudio: "protocol-unconfirmed", sameLanPossible: available };
+  return { available, transports: [...categories], lanAudio: "easyinput-audio-capture-v1", sameLanPossible: available };
 }
 module.exports = { summarizeNetworkInterfaces };

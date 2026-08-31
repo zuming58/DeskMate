@@ -1,5 +1,12 @@
 # Decisions
 
+## D038 - EasyInput audio credentials use an isolated configuration renderer
+
+- Date: 2026-08-31
+- Decision: T11A accepts SSID/password only inside a dedicated sandboxed local BrowserWindow and applies them in Electron main through the T05 read-preview-confirm-write-readback transaction. The main React renderer receives only opaque adapter labels, readiness, volume and named counters.
+- Reason: network credentials and the selected host IP are required to configure the board but must not enter normal UI state, logs, SQLite, diagnostics or the companion conversation event stream.
+- Boundary: only four top-level fields may change. Speaker playback remains unavailable and no computer audio fallback is permitted.
+
 ## D038 - Companion dialogue has one foreground owner and an explicit EasyInput audio boundary
 
 - Date: 2026-08-31

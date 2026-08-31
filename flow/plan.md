@@ -6,6 +6,8 @@
 
 ### Current execution point
 
+- T11A Windows EasyInput audio uplink is implemented on `codex/t11a-desktop-easyinput-audio-uplink`: strict `EIHB/EICC/EICA/EIAU` UDP reception, production `EasyInputLanAudioSource`, a sandboxed four-field T05 configuration transaction and a no-recording microphone-level diagnostic. The main renderer receives no credentials, IP or PCM. Software tests/build may close the code gate, but T10E hardware capture and the later EasyInput speaker downlink remain required before full realtime conversation can be accepted.
+
 - T11 Windows realtime companion core is implemented on `codex/t11-desktop-realtime-companion`: one foreground session controller, Doubao binary adapter, finite reconnect, explicit EasyInput audio source/sink boundary, compact live capsule, T09 expression ownership, and transactional exactly-once local turns. Contract: [`T11_DESKTOP_REALTIME_COMPANION_V1_FROZEN`](../docs/contracts/t11-desktop-realtime-companion-v1.md). Real audio/network/HIL remains blocked on the separate T10E EasyInput adapter and user-present acceptance; this software branch does not touch firmware or hardware.
 
 - T10 Codex real status v1 is implemented as the first privacy-safe provider adapter: repository-local official lifecycle Hooks feed a bounded local named pipe; only the explicitly selected Codex provider can publish into the existing T09 state path, and active VoiceWorkflow remains higher priority. WorkBuddy, Hermes and Claude Code remain manual; no process/window guessing or transcript inspection is allowed. Contract: [`CODEX_REAL_STATUS_V1_FROZEN`](../docs/contracts/t10-codex-real-status-v1.md).

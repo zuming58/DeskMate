@@ -37,7 +37,11 @@ import { EasyInputLanAudioAdapter } from "./easyInputLanAudioAdapter.js";
 export class DesktopBridgeAdapter {
   constructor(bridge = globalThis.window?.desktopBridge) { this.bridge = bridge; }
   async capabilities() { return this.bridge?.getCapabilities ? this.bridge.getCapabilities() : { supported: false, platform: "web" }; }
-  async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "protocol-unconfirmed", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
+  async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
+  async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
+  async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async startEasyInputMicTest() { return this.bridge?.startEasyInputMicTest ? this.bridge.startEasyInputMicTest() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async stopEasyInputMicTest() { return this.bridge?.stopEasyInputMicTest ? this.bridge.stopEasyInputMicTest() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async registerShortcut(shortcut) { return this.bridge?.registerShortcut ? this.bridge.registerShortcut(shortcut) : { registered: false, shortcut, reason: "desktop-bridge-unavailable" }; }
   async setShortcutCapture(active) { return this.bridge?.setShortcutCapture ? this.bridge.setShortcutCapture(active) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async listApplications() { return this.bridge?.listApplications ? this.bridge.listApplications() : []; }
@@ -74,6 +78,7 @@ export class DesktopBridgeAdapter {
   onHostActionResult(listener) { return this.bridge?.onHostActionResult ? this.bridge.onHostActionResult(listener) : () => {}; }
   onCodexAgentState(listener) { return this.bridge?.onCodexAgentState ? this.bridge.onCodexAgentState(listener) : () => {}; }
   onCompanionConversationEvent(listener) { return this.bridge?.onCompanionConversationEvent ? this.bridge.onCompanionConversationEvent(listener) : () => {}; }
+  onEasyInputAudioEvent(listener) { return this.bridge?.onEasyInputAudioEvent ? this.bridge.onEasyInputAudioEvent(listener) : () => {}; }
   onNavigate(listener) { return this.bridge?.onNavigate ? this.bridge.onNavigate(listener) : () => {}; }
 }
 

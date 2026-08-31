@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+
+const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
+const preload = fs.readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+const setupPreload = fs.readFileSync(new URL("../electron/audio-setup-preload.cjs", import.meta.url), "utf8");
+const setupHtml = fs.readFileSync(new URL("../electron/audio-setup.html", import.meta.url), "utf8");
+const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
+
+test("production companion uses EasyInput source while speaker remains explicitly unavailable", () => {
+  assert.match(main, /audioSource:\s*easyInputAudioSource/);
+  assert.match(main, /audioSink:\s*new UnavailableCompanionAudioSink\(\)/);
+  assert.doesNotMatch(main, /new UnavailableCompanionAudioSource\(\)/);
+  assert.match(pages, /EasyInput 扬声器播放适配器尚未接入/);
+});
+
+test("main renderer receives only sanitized audio APIs and never setup secrets", () => {
+  for (const method of ["getEasyInputAudioStatus", "openEasyInputAudioSetup", "startEasyInputMicTest", "stopEasyInputMicTest", "onEasyInputAudioEvent"]) assert.match(preload, new RegExp(method));
+  assert.doesNotMatch(preload, /wifi_ssid|wifi_password|audio_host|rawPcm|pcm/i);
+  assert.doesNotMatch(pages, /wifi_password|audio_host|192\.168\.|raw PCM/);
+});
+
+test("credential window is isolated and has a strict local CSP", () => {
+  assert.match(main, /audio-setup-preload\.cjs[\s\S]*nodeIntegration:\s*false[\s\S]*contextIsolation:\s*true[\s\S]*sandbox:\s*true/);
+  assert.match(setupPreload, /audio-setup:preview/);
+  assert.doesNotMatch(setupPreload, /desktop:get|companion:|bailian:/);
+  assert.match(setupHtml, /default-src 'self'/);
+  assert.match(setupHtml, /connect-src 'none'/);
+});
+
+test("dictation preempts mic diagnostic and all foreground audio owners are mutually exclusive", () => {
+  assert.match(main, /stopMicTest\("dictation-preempted"\)/);
+  assert.match(main, /voice-workflow-active/);
+  assert.match(main, /companion-conversation-active/);
+  assert.match(main, /easyinput-mic-test-active/);
+});

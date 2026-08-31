@@ -39,7 +39,7 @@ test("LAN audio AbortSignal closes stream and prevents later reconnect", async (
 
 test("network summary only exposes categories and never addresses", () => {
   const summary = summarizeNetworkInterfaces({ Ethernet: [{ address: "192.168.1.2", internal: false }], WiFi: [{ address: "fe80::1", internal: false, mac: "AA:BB" }], Loopback: [{ address: "127.0.0.1", internal: true }] });
-  const serialized = JSON.stringify(summary); assert.equal(summary.available, true); assert.deepEqual(summary.transports.sort(), ["ethernet", "wifi"]); assert.doesNotMatch(serialized, /192\.168|fe80|AA:BB|Loopback/); assert.equal(summary.lanAudio, "protocol-unconfirmed");
+  const serialized = JSON.stringify(summary); assert.equal(summary.available, true); assert.deepEqual(summary.transports.sort(), ["ethernet", "wifi"]); assert.doesNotMatch(serialized, /192\.168|fe80|AA:BB|Loopback/); assert.equal(summary.lanAudio, "easyinput-audio-capture-v1");
 });
 
 test("AI status engine rejects invalid, duplicate, stale and old-session events", () => {

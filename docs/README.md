@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11A desktop EasyInput audio uplink frozen contract](contracts/t11a-desktop-easyinput-audio-uplink-v1.md)
+- [EasyInput audio capture v1 frozen contract](contracts/easyinput-audio-capture-v1.md)
+- [T11A desktop EasyInput audio task](../flow/tasks/T11A-desktop-easyinput-audio-uplink.md)
+- [T11A EasyInput audio reference audit](provenance/t11a-easyinput-audio-reference-audit.md)
 - [T11 desktop realtime companion frozen contract](contracts/t11-desktop-realtime-companion-v1.md)
 - [T11 desktop realtime companion task](../flow/tasks/T11-desktop-realtime-companion.md)
 - [T11 desktop realtime companion handoff](handoffs/t11-desktop-realtime-companion-2026-08-31.md)
