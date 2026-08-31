@@ -357,13 +357,18 @@ export function CompanionPage({ notify, navigate }) {
 function MemoryManagementPage({ notify }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [forget, setForget] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [memoryStatus, setMemoryStatus] = useState({ ready: false, storage: "unavailable", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0 });
+  const [knowledgeBaseStatus, setKnowledgeBaseStatus] = useState({ configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "pending" });
   const [memoryItems, setMemoryItems] = useState([]);
   const refreshMemory = useCallback(async () => {
     try {
-      const [status, items] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, query, limit: 100 })]);
+      const [status, items, knowledgeBase] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.()]);
       if (status) setMemoryStatus(status);
       setMemoryItems(Array.isArray(items) ? items : []);
+      if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
     } catch { setMemoryStatus((current) => ({ ...current, ready: false, storage: "unavailable" })); }
   }, [filter, query]);
   useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); return () => window.clearTimeout(timer); }, [refreshMemory]);
@@ -375,13 +380,63 @@ function MemoryManagementPage({ notify }) {
       await refreshMemory();
     } catch (error) { notify(`记忆审核失败：${error.message}`); }
   };
+  const saveCandidate = async () => {
+    const summary = String(editing?.summary || "").trim();
+    if (!summary) { notify("记忆内容不能为空"); return; }
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.updateMemoryCandidate?.({ id: editing.id, summary });
+      if (!result?.ok) throw new Error(result?.reason || "memory-update-failed");
+      setEditing(null);
+      notify("记忆内容已纠正");
+      await refreshMemory();
+    } catch (error) { notify(`记忆纠正失败：${error.message}`); }
+    finally { setBusy(false); }
+  };
+  const prepareForget = async (target) => {
+    try {
+      const result = await globalThis.desktopBridge?.prepareMemoryForget?.(target);
+      if (!result?.ok) throw new Error(result?.reason || "memory-confirmation-failed");
+      setForget({ ...target, token: result.token, label: target.scope === "all" ? "全部本地陪伴记忆、原始回合与事务队列" : target.label });
+    } catch (error) { notify(`无法准备删除：${error.message}`); }
+  };
+  const confirmForget = async () => {
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.confirmMemoryForget?.({ token: forget?.token });
+      if (!result?.ok) throw new Error(result?.reason || "memory-forget-failed");
+      notify(forget?.scope === "all" ? "已彻底忘记全部本地陪伴记忆" : "已永久删除这条记忆");
+      setEditing(null);
+      setForget(null);
+      await refreshMemory();
+    } catch (error) { setForget(null); notify(`删除失败：${error.message}`); }
+    finally { setBusy(false); }
+  };
+  const exportReviewed = async () => {
+    try {
+      const result = await globalThis.desktopBridge?.exportReviewedMemories?.();
+      if (result?.cancelled) return;
+      if (!result?.ok) throw new Error(result?.reason || "memory-export-failed");
+      notify(`已导出 ${result.dailySummaries} 天摘要和 ${result.longTermMemories} 条长期记忆`);
+    } catch (error) { notify(`记忆导出失败：${error.message}`); }
+  };
+  const chooseKnowledgeBase = async () => {
+    try {
+      const result = await globalThis.desktopBridge?.chooseKnowledgeBaseLocation?.();
+      if (result?.cancelled) return;
+      if (!result?.ok) throw new Error(result?.reason || "knowledge-base-location-invalid");
+      setKnowledgeBaseStatus(result.status);
+      notify(`知识库位置已保存：${result.status?.label || "已配置"}`);
+    } catch (error) { notify(`知识库位置保存失败：${error.message}`); }
+  };
   return (
     <div className="companion-embedded memory-management">
       <div className="embedded-heading">
         <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话接通后自动进入这条流水线。</p></div>
-        <StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge>
+        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
-      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆仓已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `已建立 SQLite WAL 事务库，现有 ${memoryStatus.turns} 条真实会话事件。T11 逐轮落盘已经接通；自动摘要和记忆候选留到 T12，不会提前伪造。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件。可以审核、纠正、导出或永久删除；导出不包含原始对话、待审核/已忽略候选、向量或数据库路径。自动摘要生成留到 T12B。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择未来保存 Markdown 双链笔记的本地知识库；T12A 只保存位置，不读取或写入目录。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button></div></SettingRow><Notice tone="info" title="双链与向量边界">T12B 将用稳定记忆 ID 生成 Markdown 与 [[双向链接]]；T12C 才对已审核切片生成可重建 embedding。SQLite 始终是唯一真相源。</Notice></Card>
       <div className="memory-metrics">
         <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
         <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />
@@ -394,18 +449,19 @@ function MemoryManagementPage({ notify }) {
       </Card>
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；每日摘要、人工确认和长期记忆候选将在 T12 接入。" action={<Button variant="soft" onClick={() => notify("T11 只保存真实逐轮对话；T12 才生成可管理的摘要与候选")}>查看当前边界</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : "记忆候选"}</span><time>{item.day}</time></div><p>{item.content}</p>{item.type === "candidate" && item.state === "pending" && <div className="button-row"><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></div>}</article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；T12B 才会通过明确的模型任务生成摘要与候选，不会使用演示数据填充。" action={<Button variant="soft" onClick={() => notify("当前只展示真实本地数据，不生成演示记忆")}>查看当前边界</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}</span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
         </Card>
         <Card>
-          <SectionTitle index="01" title="计划中的记忆流水线" description="先可靠落盘，再异步总结；异常退出后可从未整理候选恢复。" />
+          <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />
           <div className="memory-pipeline">
             <div><span><History size={18} /></span><strong>会话事件即时落盘</strong><small>每轮对话先进入本地 SQLite 事务日志，不等待每日总结。</small></div>
             <div><span><Book2 size={18} /></span><strong>每日摘要与候选箱</strong><small>空闲时和每日收尾生成摘要；未审核候选不会静默变成长记忆。</small></div>
             <div><span><Brain size={18} /></span><strong>关键词 + 向量检索</strong><small>原文、结构化事实和 embedding 分层保存，更换模型不丢来源。</small></div>
-            <div><span><Lock size={18} /></span><strong>可查看、纠正与忘记</strong><small>人物隔离、敏感信息默认排除，并提供导出、备份和彻底删除。</small></div>
+            <div><span><Lock size={18} /></span><strong>可查看、纠正与忘记</strong><small>当前已支持已审核导出、单条永久删除和全库事务清空；人物隔离留到 T13。</small></div>
           </div>
         </Card>
       </div>
+      <ConfirmationDialog open={Boolean(forget)} eyebrow="PRIVACY CONTROL" title={forget?.scope === "all" ? "彻底忘记全部陪伴记忆？" : "永久删除这条记忆？"} description={forget?.scope === "all" ? "这会删除原始对话、摘要、候选、长期记忆、向量和事务队列，无法撤销。" : "这会删除当前显示条目；如果是长期记忆，其向量记录也会同时删除。"} paths={forget ? [forget.label] : []} summaryLabel="本次永久删除" notice="确认令牌仅有效 60 秒且只能使用一次；数据库在确认前发生变化时会拒绝删除。DeskMate 不创建云端副本。" confirmLabel="确认永久删除" confirmVariant="danger" busyLabel="正在永久删除…" busy={busy} onCancel={() => setForget(null)} onConfirm={confirmForget} />
     </div>
   );
 }

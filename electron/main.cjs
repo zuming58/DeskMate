@@ -14,6 +14,8 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
+const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
+const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
 const { UnavailableCompanionAudioSink } = require("./companion-audio.cjs");
 const { EasyInputLanAudioSource } = require("./easyinput-audio-source.cjs");
@@ -58,6 +60,8 @@ let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
 let aiServiceStore;
 let companionMemoryStore;
+let companionMemoryControl;
+let knowledgeBaseSettings;
 let companionConversationController;
 let easyInputAudioSource;
 let easyInputAudioManager;
@@ -787,6 +791,8 @@ app.whenReady().then(async () => {
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
+  companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
+  knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   easyInputAudioSource = new EasyInputLanAudioSource();
   easyInputAudioManager = new EasyInputAudioManager({
     source: easyInputAudioSource,
@@ -923,6 +929,25 @@ app.whenReady().then(async () => {
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
+  handleTrusted("memory:update-candidate", (value = {}) => companionMemoryStore.updateCandidate(value));
+  handleTrusted("memory:prepare-forget", (value = {}) => companionMemoryControl.prepareForget(value));
+  handleTrusted("memory:confirm-forget", (value = {}) => companionMemoryControl.confirmForget(value));
+  handleTrusted("memory:export-reviewed", async () => {
+    const payload = companionMemoryStore.exportReviewed();
+    const selection = await dialog.showSaveDialog(mainWindow, { title: "导出 DeskMate 已审核记忆", defaultPath: "deskmate-reviewed-memory.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    if (selection.canceled || !selection.filePath) return { ok: false, cancelled: true };
+    const target = path.extname(selection.filePath).toLowerCase() === ".json" ? selection.filePath : `${selection.filePath}.json`;
+    try { fs.writeFileSync(target, `${JSON.stringify(payload, null, 2)}\n`, "utf8"); }
+    catch { return { ok: false, reason: "memory-export-write-failed" }; }
+    return { ok: true, dailySummaries: payload.dailySummaries.length, longTermMemories: payload.longTermMemories.length };
+  });
+  handleTrusted("memory:get-knowledge-base-status", () => knowledgeBaseSettings.status());
+  handleTrusted("memory:choose-knowledge-base", async () => {
+    const selection = await dialog.showOpenDialog(mainWindow, { title: "选择 DeskMate 知识库目录", properties: ["openDirectory", "createDirectory"] });
+    if (selection.canceled || selection.filePaths.length !== 1) return { ok: false, cancelled: true, status: knowledgeBaseSettings.status() };
+    try { return { ok: true, status: knowledgeBaseSettings.saveRoot(selection.filePaths[0]) }; }
+    catch (error) { const reason = ["knowledge-base-secure-storage-unavailable", "knowledge-base-location-invalid", "knowledge-base-location-unavailable"].includes(error?.message) ? error.message : "knowledge-base-location-unavailable"; return { ok: false, reason, status: knowledgeBaseSettings.status() }; }
+  });
   handleTrusted("bailian:transcribe", async (value = {}) => {
     const secret = bailianStore.loadSecret();
     const audio = value.audio instanceof ArrayBuffer ? Buffer.from(value.audio) : Buffer.from(value.audio || []);
@@ -995,6 +1020,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

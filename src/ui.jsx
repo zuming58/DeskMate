@@ -58,7 +58,7 @@ export function Button({ children, icon: Icon, variant = "secondary", className 
   );
 }
 
-export function ConfirmationDialog({ open, title, description, paths = [], busy = false, onCancel, onConfirm }) {
+export function ConfirmationDialog({ open, title, description, paths = [], busy = false, eyebrow = "CONFIGURATION REVIEW", summaryLabel = "本次修改路径", notice = "只修改上面列出的已脱敏路径；网络、音频和未知字段保持原值。取消不会改变板上配置。", confirmLabel = "确认并同步", confirmVariant = "primary", busyLabel = "正在保存并核对…", onCancel, onConfirm }) {
   const titleId = useId();
   const descriptionId = useId();
   const cancelButtonRef = useRef(null);
@@ -90,21 +90,21 @@ export function ConfirmationDialog({ open, title, description, paths = [], busy 
         <div className="confirmation-dialog__header">
           <span className="confirmation-dialog__icon"><ShieldCheck size={24} stroke={1.75} /></span>
           <div>
-            <span className="confirmation-dialog__eyebrow">CONFIGURATION REVIEW</span>
+            <span className="confirmation-dialog__eyebrow">{eyebrow}</span>
             <h2 id={titleId}>{title}</h2>
             <p id={descriptionId}>{description}</p>
           </div>
         </div>
         <div className="confirmation-dialog__body">
           <div className="confirmation-dialog__summary">
-            <div><strong>本次修改路径</strong><span>{paths.length} 项</span></div>
+            <div><strong>{summaryLabel}</strong><span>{paths.length} 项</span></div>
             <ul>{paths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
           </div>
-          <div className="confirmation-dialog__notice"><ShieldCheck size={18} stroke={1.8} /><p>只修改上面列出的已脱敏路径；网络、音频和未知字段保持原值。取消不会改变板上配置。</p></div>
+          <div className="confirmation-dialog__notice"><ShieldCheck size={18} stroke={1.8} /><p>{notice}</p></div>
         </div>
         <div className="confirmation-dialog__footer">
           <button ref={cancelButtonRef} className="button button--ghost" disabled={busy} onClick={onCancel}><span>取消</span></button>
-          <Button variant="primary" disabled={busy} onClick={onConfirm}>{busy ? "正在保存并核对…" : "确认并同步"}</Button>
+          <Button variant={confirmVariant} disabled={busy} onClick={onConfirm}>{busy ? busyLabel : confirmLabel}</Button>
         </div>
       </section>
     </div>

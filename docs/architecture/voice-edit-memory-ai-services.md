@@ -34,6 +34,13 @@ The text model and realtime voice plane must remain separate. Realtime replies c
 
 The current slice implements step 1 end to end: each final provider event is written transactionally with a unique source event ID and a recoverable local outbox before the final UI event. The summary/candidate schema, status/search listing and candidate review remain available. Automatic summary scheduling, embedding generation, reminders and `F:\wiki` synchronization are intentionally not enabled yet. The SQLite database is the authoritative local source; a future wiki adapter may export reviewed Markdown summaries but must not become an untracked second source of truth.
 
+T12 is split so a user-selected knowledge base does not become an unsafe second database:
+
+1. T12A stores the selected root encrypted in Electron main and exposes only its final folder label. It does not scan or write the directory.
+2. T12B generates reviewed daily summaries/candidates, then projects stable memory IDs to Markdown. Filenames are derived from IDs/date, links use `[[double-link]]` syntax, and a manifest records the last exported revision so external edits cause a visible conflict instead of silent overwrite.
+3. T12C chunks only accepted memories, stores embeddings in the local SQLite index and records model/dimension/version. Embeddings are disposable and rebuildable; deletion starts from the structured memory ID and removes the vector plus projected Markdown.
+4. Retrieval ranks keyword/date matches, explicit double-link neighbours and vector similarity, then sends only a bounded, user-permitted context set to the model.
+
 ## Suligent reference study
 
 Read-only reference: `F:\Codex\suligent` on 2026-08-29. No files were copied.
