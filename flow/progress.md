@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - Codex global hook activation blocker traced to the long-lived app server
+
+- Observation and root cause: creating a new Codex task did not change the OLED because the desktop `ChatGPT.exe` and its `codex.exe app-server` were still the processes started at 11:12, while the global hook file was modified at 12:15. New tasks reused that pre-install app server, so the new hook definition had not been loaded or offered for trust review.
+- Independent path check: while DeskMate was running, the repository sender delivered a synthetic `UserPromptSubmit` event to `\\.\pipe\deskmate-codex-status-v1` and received `{\"ok\":true}`. This confirms the DeskMate named-pipe receiver path is healthy; it does not claim that the not-yet-restarted Codex process emitted a real lifecycle event.
+- Correct activation: fully exit Codex once, wait until both `ChatGPT.exe` and the Codex `app-server` stop, then reopen it and approve/review the changed user hook through the trust prompt or `/hooks`. Merely creating or reopening a task is insufficient for this initial reload. DeskMate does not need to be restarted, and no firmware or hardware action is involved.
+- Output: corrected `docs/handoffs/t10-codex-global-hook-install-2026-08-31.md`. Next verification is one real prompt after the full Codex restart while the DeskMate AI Link page has Codex selected; the page should report the latest real Hook event and the OLED should follow it.
+
 ## 2026-08-31 - Codex global lifecycle hook installed without replacing legacy hooks
 
 - What changed: on dedicated software branch `codex/t10-codex-global-status`, the already packaged Codex lifecycle adapter was installed into the user-level Codex hook boundary. `C:\Users\Administrator\.codex\hooks.json` now appends a bounded DeskMate handler to seven supported lifecycle events, using `C:\Users\Administrator\.codex\hooks\deskmate-codex-status-hook.cjs`. The existing EasyInput executable handlers remain first and unchanged; `SubagentStart` and `SubagentStop` were not modified.

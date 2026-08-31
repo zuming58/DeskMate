@@ -31,7 +31,7 @@ The global Codex configuration now forwards the seven supported lifecycle events
 
 ## Activation behavior
 
-Codex loads and trusts hooks when a task starts. Existing tasks do not hot-reload this installation. Close and reopen a Codex task once, approve the hook trust prompt if shown, and keep the latest DeskMate application running. This does not require creating a special DeskMate-only Codex task; every subsequently opened Codex task can publish lifecycle events through the same global hook.
+The Codex desktop app keeps one long-lived `codex.exe app-server` process. On this machine that process started at 11:12, before the global hook file changed at 12:15, and creating a new task reused the old process. After installing or changing the global hook, fully exit the Codex desktop app once and confirm both `ChatGPT.exe` and its `codex.exe` app-server stop. Reopen Codex, approve the hook trust prompt or review `/hooks` if shown, and keep the latest DeskMate application running. Opening another task alone is not sufficient for this first reload. After the one-time full restart, this does not require a special DeskMate-only task; every subsequently opened Codex task can publish lifecycle events through the same global hook.
 
 The current first version uses the most recent accepted event as the visible state. If several Codex tasks run concurrently, their events can therefore replace one another. Per-task aggregation is deliberately deferred until a privacy-safe ownership contract is frozen.
 
