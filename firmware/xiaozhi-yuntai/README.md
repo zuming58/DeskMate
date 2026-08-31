@@ -20,10 +20,16 @@ T08 的 Link framing、CRC、序列缓存、UART owner、引脚和分区合同�
 T09 消费冻结的 [`t09-agent-state-display-v1.md`](../../docs/contracts/t09-agent-state-display-v1.md)，新增：
 
 - 七状态到 `neutral/listening/thinking/focused/attention/happy/sad_error` 的纯逻辑映射；
-- 唯一 display owner、四项有界队列和 Host fake OLED；
+- 唯一 display owner、单槽 latest-wins mailbox 和 Host fake OLED；
 - DISPLAY capability 的初始化门禁，以及初始化/渲染失败后的 fail-closed 降级；
-- 重复状态、队列满、TTL 产生的实时 idle、断线、重连和对端重启处理；
+- 重复状态、latest-wins 合并、TTL 产生的实时 idle、断线、重连和对端重启处理；
 - SSD1306 128×64、I2C0、SDA GPIO41、SCL GPIO42、地址 `0x3c` 的新过程式单色场景渲染。
+
+独立 OLED 动画小包在不改变七状态合同的前提下补充：idle 采用
+3.6～6.4 秒有界伪随机间隔与 120 ms 闭眼帧；waiting 使用高眼形和底部
+三点等待标记，与 idle 明显区分。新的状态会抢占未完成的 blink，重复状态
+只确认而不重绘；EasyInput 的 TTL 到期 live-idle 被渲染后会重新开始自然
+眨眼。任何 OLED 帧失败仍只关闭 DISPLAY enabled，DeskMate Link 保持可用。
 
 Link endpoint 只向 display owner 入队，只有 owner 接受后才 ACK `SET_AGENT_STATE`。`angry` 不参与自动映射。MOTION 和 AUDIO 仍关闭；工程不初始化麦克风、功放、扬声器、I2S、LEDC、PWM 或舵机。参考审计见 [`t09-xiaozhi-agent-display-reference-audit.md`](../../docs/provenance/t09-xiaozhi-agent-display-reference-audit.md)。
 

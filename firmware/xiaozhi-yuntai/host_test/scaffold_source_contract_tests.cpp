@@ -170,9 +170,14 @@ int main() {
     CHECK(Contains(main_source, "AgentState::kError"));
     CHECK(!Contains(main_source, "uart_"));
 
-    CHECK(Contains(display_header, "kQueueCapacity = 4"));
+    CHECK(Contains(display_header, "kMailboxCapacity = 1"));
+    CHECK(Contains(display_header, "kBlinkMinIntervalMs = 3600"));
+    CHECK(Contains(display_header, "kBlinkMaxIntervalMs = 6400"));
+    CHECK(Contains(display_header, "kBlinkClosedMs = 120"));
     CHECK(Contains(display_header, "DisplayAcceptResult"));
     CHECK(Contains(display_source, "SelectAgentScene"));
+    CHECK(Contains(display_source, "AgentScene::kNeutralBlink"));
+    CHECK(Contains(display_source, "latest_replacements"));
     CHECK(Contains(display_source, "AgentScene::kAngry"));
     CHECK(!Contains(display_source,
                     "return {AgentScene::kAngry"));
@@ -182,11 +187,15 @@ int main() {
     CHECK(Contains(oled_source, "I2C_NUM_0"));
     CHECK(Contains(oled_source, "GPIO_NUM_41"));
     CHECK(Contains(oled_source, "GPIO_NUM_42"));
+    CHECK(!Contains(oled_source, "GPIO_NUM_11"));
+    CHECK(!Contains(oled_source, "GPIO_NUM_12"));
     CHECK(Contains(oled_source, "0x3c"));
     CHECK(Contains(oled_source, "esp_lcd_new_panel_ssd1306"));
     CHECK(Contains(oled_source, "esp_lcd_panel_mirror(panel_, true, true)"));
     CHECK(Occurrences(oled_source, "esp_lcd_panel_draw_bitmap(") == 1);
     CHECK(Occurrences(oled_source, "xTaskCreate(") == 1);
+    CHECK(Contains(oled_source, "WaitingIndicator"));
+    CHECK(Contains(oled_source, "AgentScene::kNeutralBlink"));
 
     const auto link_production = main_source + uart_source + model_header +
                             model_source + protocol_header + protocol_source +

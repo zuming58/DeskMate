@@ -235,7 +235,7 @@ void DisplayCapabilityAndFailureAreDynamic() {
     CHECK(display.Initialize());
     XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
-    CHECK(display.ServiceOne());
+    CHECK(!display.Service(0));
 
     LinkWireFrame response{};
     CHECK(endpoint.Handle(Hello(1, 0x11223344), 1, response));
@@ -252,7 +252,7 @@ void DisplayCapabilityAndFailureAreDynamic() {
     CHECK(endpoint.snapshot().diagnostics.duplicate_requests == 1);
 
     renderer.fail_next_render = true;
-    CHECK(display.ServiceOne());
+    CHECK(display.Service(5));
     CHECK(endpoint.snapshot().link_ready);
     CHECK(endpoint.Handle(Request(2, 4), 5, response));
     capabilities = Decode(response);
@@ -272,14 +272,14 @@ void DisplayCapabilityAndFailureAreDynamic() {
     CHECK(endpoint.snapshot().link_ready);
 }
 
-void QueueOverflowDisconnectAndRestartDoNotReplay() {
+void LatestWinsDisconnectAndRestartDoNotReplay() {
     using namespace deskmate::xiaozhi;
     test::FakeDisplayRenderer renderer;
     DisplayOwner display(renderer);
     CHECK(display.Initialize());
     XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
-    CHECK(display.ServiceOne());
+    CHECK(!display.Service(0));
     LinkWireFrame response{};
     CHECK(endpoint.Handle(Hello(1, 0x11111111), 1, response));
 
@@ -295,20 +295,20 @@ void QueueOverflowDisconnectAndRestartDoNotReplay() {
         CHECK(endpoint.Handle(Request(4, static_cast<std::uint32_t>(index + 2),
                                       payload),
                               static_cast<std::uint32_t>(index + 2), response));
-        if (index == states.size() - 1) {
-            const auto busy = Decode(response);
-            CHECK(busy.flag == LinkFrameFlag::kError);
-            CHECK(busy.payload[0] ==
-                  static_cast<std::uint8_t>(LinkErrorCode::kBusy));
-        }
+        CHECK(Decode(response).flag == LinkFrameFlag::kResponse);
     }
+    CHECK(display.snapshot().queued == DisplayOwner::kMailboxCapacity);
+    CHECK(display.snapshot().desired_state == AgentState::kCompleted);
+    CHECK(display.snapshot().diagnostics.latest_replacements == 4);
+    CHECK(display.Service(10));
+    CHECK(display.snapshot().current_state == AgentState::kCompleted);
 
     endpoint.OnLinkDisconnected();
     CHECK(!endpoint.snapshot().link_ready);
     CHECK(endpoint.snapshot().agent_state == AgentState::kIdle);
     CHECK(display.snapshot().desired_state == AgentState::kIdle);
     CHECK(display.snapshot().queued == 1);
-    CHECK(display.ServiceOne());
+    CHECK(display.Service(20));
     CHECK(display.snapshot().current_state == AgentState::kIdle);
 
     CHECK(endpoint.Handle(Hello(20, 0x22222222), 20, response));
@@ -321,7 +321,8 @@ void QueueOverflowDisconnectAndRestartDoNotReplay() {
     CHECK(endpoint.Handle(Hello(22, 0x33333333), 22, response));
     CHECK(endpoint.snapshot().agent_state == AgentState::kIdle);
     CHECK(display.snapshot().desired_state == AgentState::kIdle);
-    CHECK(display.snapshot().queued == 1);
+    CHECK(display.snapshot().queued == 0);
+    CHECK(!display.Service(22));
 }
 
 }  // namespace
@@ -332,7 +333,7 @@ int main() {
     DuplicateConflictAndControllerEpochAreDeterministic();
     LocalBootEpochChangesAcrossRestart();
     DisplayCapabilityAndFailureAreDynamic();
-    QueueOverflowDisconnectAndRestartDoNotReplay();
+    LatestWinsDisconnectAndRestartDoNotReplay();
     if (failures != 0) {
         std::cerr << "link_endpoint_tests: " << failures << " failure(s)\n";
         return 1;
