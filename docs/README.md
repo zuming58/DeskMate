@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T12A desktop memory controls handoff](handoffs/t12a-desktop-memory-controls-2026-09-01.md)
+- [T12A desktop memory controls frozen contract](contracts/t12a-desktop-memory-controls-v1.md)
+- [T12A desktop memory controls task](../flow/tasks/T12A-desktop-memory-controls.md)
+
 - [T11A desktop status truthfulness handoff](handoffs/t11a-desktop-status-truthfulness-2026-09-01.md)
 - [T11A desktop software final handoff](handoffs/t11a-desktop-software-final-2026-09-01.md)
 - [T11A expression and Link UX handoff](handoffs/t11a-expression-link-ux-2026-08-31.md)

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A knowledge-base folder must not become a second memory authority
+
+- Symptom: writing conversational notes directly into a user folder is easy, but later correction, deletion, duplicate files and embedding-version changes can leave SQLite, Markdown and vectors disagreeing about what DeskMate remembers.
+- Practice: keep reviewed local records and their stable IDs authoritative in SQLite. Treat Markdown double links and embeddings as versioned projections with a manifest and deterministic rebuild path. Store the full selected path only in Electron main, and expose only a bounded folder label to React.
+- Rule: a projection may improve human navigation and retrieval, but it never owns review state or deletion. Correct/forget the source first, then atomically refresh or remove every derived file and vector.
+
 ## A polished dashboard must not turn fixtures into telemetry
 
 - Symptom: fixed temperature, humidity, light, pose and “synced two seconds ago” copy looked like live hardware even when only EasyInput HID was present.

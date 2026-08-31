@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T12A local-memory controls and knowledge-base boundary complete
+
+- Role and base: Windows desktop software only. Branch `codex/t12a-desktop-memory-controls` was created from locked desktop HEAD `da0fe11ccc429f9f166ef4d1b9e4a3ba82ece01b`; implementation commit is `99ecbf6e4f0b5cb2d58113788aa7ba583d675465`.
+- What changed: the existing SQLite memory store now exposes correction, one-way candidate review, reviewed-only JSON export, single-item permanent deletion and whole-store transactional forgetting. Destructive actions use one-use 60-second tokens bound to an item/global revision so stale or replayed confirmations fail closed. Complete forgetting deletes turns, summaries, candidates, embeddings and the idempotent outbox.
+- Knowledge-base boundary: users can select an existing writable local folder through a native picker. Its full absolute path is encrypted with Electron `safeStorage` and remains main-process-only; React receives only readiness and the folder basename. T12A deliberately does not scan or write the folder. D043 fixes T12B as deterministic stable-ID Markdown/`[[double links]]` projection and T12C as model-versioned chunking, embeddings and rebuildable hybrid retrieval.
+- Verification: `npm ci --include=dev` passed; final `npm test` passed `198/198` with zero failure/skip/todo; `npm run build:desktop` passed native InputBridge Release publish, Vite production build and Electron Windows directory packaging. `git diff --check`, ASCII changed paths, differential secret and firmware-scope checks passed. Package evidence: `release/win-unpacked/DeskMate.exe`, 202,690,560 bytes, SHA-256 `C454A8C315F75D3A91A286766C15408DD7A67BAECCBF8FF6A79070A99D659F65`.
+- Safety and next: no app launch/UI automation, port/LAN/device/Flash access, firmware, microphone, OLED, servo or speaker action occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. Continue with T12B without waiting for hardware; the user may choose the real knowledge-base directory later. Detailed handoff: `docs/handoffs/t12a-desktop-memory-controls-2026-09-01.md`.
+
 ## 2026-09-01 - T11A Workbench status truthfulness package complete; hardware confirmation remains open
 
 - What changed: branch `codex/t11a-desktop-status-truthfulness` was created from locked Windows base `73057c92be7f631c19619bb8984b66504abbb046`; implementation commit `de105c0` removes production-looking fixtures from the Workbench. The face card is now an explicit software preview, the compact device summary comes from the existing sanitized DeskMate Link diagnostic, and missing temperature/humidity/light/servo integrations are shown as pending or disabled. The header date is local instead of fixed.

@@ -1,5 +1,13 @@
 # Decisions
 
+## D043 - SQLite owns memory; knowledge-base files and embeddings are rebuildable projections
+
+- Date: 2026-09-01
+- Decision: DeskMate's local SQLite database is the sole authority for conversation turns, reviewed summaries, memory candidates and review state. A user-selected knowledge-base directory is an optional export/projection target, never a second writable database.
+- Privacy and control: the selected absolute path stays encrypted in Electron main and React receives only a configured flag and folder label. T12A may remember the location but must not scan or write that directory. Exports contain reviewed summaries and accepted memories only; raw turns, rejected/pending candidates, vectors and source identifiers remain excluded.
+- Projection: T12B will give accepted memories stable IDs and produce deterministic Markdown with `[[double links]]`. T12C will chunk accepted material, create model-versioned embeddings and support deterministic index rebuild. Markdown and vectors are derived artifacts: correction, deletion or complete forgetting starts from SQLite and must invalidate or rebuild every derivative.
+- Deletion: an individual permanent delete and whole-store forget require one-use, revision-bound confirmation. Whole-store forget removes turns, summaries, candidates, outbox rows and embeddings in one transaction; an external projection may not silently preserve deleted memory.
+
 ## D042 - Workbench hardware claims require bounded runtime evidence
 
 - Date: 2026-09-01
