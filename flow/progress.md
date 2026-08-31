@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-08-31 - T10E repeated microphone and real voice-input HIL accepted
+
+- User acceptance: repeated board-microphone tests completed without returning to the stuck 0% condition, the live meter responded strongly enough for practical use, and a real S1 voice-input workflow transcribed successfully. This closes the functional capture/uplink defect fixed by `72fe912`; T10E core HIL is accepted.
+- Product choice: the user prefers the computer microphone for normal use because its capture quality is better, while retaining the now-working EasyInput onboard microphone as a selectable capability. D037 freezes computer microphone as the desktop default and EasyInput LAN audio as an optional source; this requires a desktop-only follow-up and no T10E firmware change.
+- Boundary and next: no desktop or Xiaozhi source was modified in this firmware window, and no further device operation occurred. Status is `T10E_CORE_HIL_CONFIRMED / USER_ACCEPTED`; extended Wi-Fi interruption/long-soak regression remains non-blocking release evidence. The desktop window should implement D037 before claiming source selection is available.
+
 ## 2026-08-31 - T10E real onboard-microphone audio is non-zero after timeout fix
 
 - Normal-boot HIL: after the user power-cycled the newly flashed EasyInput normally, the latest T11A desktop microphone test showed a live level that moved with speech and peaked below 10%. This confirms the real GPIO8 microphone power lease, I2S0 capture, PCM conversion, single-endpoint UDP uplink and desktop receiver are all carrying non-zero board audio.

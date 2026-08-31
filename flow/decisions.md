@@ -1,5 +1,13 @@
 # Decisions
 
+## D037 - Computer microphone is the default; EasyInput capture is selectable
+
+- Date: 2026-08-31
+- Decision: DeskMate desktop voice workflows default to the computer microphone. The verified EasyInput LAN microphone remains an optional user-selected source rather than the mandatory source for every recording.
+- Session behavior: the selected source is fixed for one recording session and never changes mid-recording. If the optional EasyInput source is unavailable before a session, the desktop may visibly fall back to the computer microphone; it must not claim that board audio is active.
+- Scope: T10E firmware and its LAN contract remain unchanged. This decision revises D036 only at the desktop source-selection layer: EasyInput remains the sole enabled external board-audio endpoint in V1, while the existing computer microphone adapter is also allowed. Bluetooth microphone capture remains unimplemented and must not be shown as available.
+- Follow-up: the desktop window must add the persisted source selector, make the computer microphone the default, preserve device selection for the computer source and update project-level product constraints when that software change lands.
+
 ## D036 - EasyInput is the only DeskMate V1 audio capture endpoint
 
 - Date: 2026-08-31
