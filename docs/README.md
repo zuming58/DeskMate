@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T11A microphone source selection handoff](handoffs/t11a-desktop-microphone-source-selection-2026-08-31.md)
 - [T11A desktop EasyInput audio uplink handoff](handoffs/t11a-desktop-easyinput-audio-uplink-2026-08-31.md)
 - [T11A desktop EasyInput audio uplink frozen contract](contracts/t11a-desktop-easyinput-audio-uplink-v1.md)
 - [EasyInput audio capture v1 frozen contract](contracts/easyinput-audio-capture-v1.md)
