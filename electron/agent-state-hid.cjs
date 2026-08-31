@@ -82,18 +82,43 @@ function createTransitionSequence(seed = randomBytes(4).readUInt32LE(0) || 1) {
 }
 
 class AgentStatePublisher {
-  constructor({ send, nextTransitionId = createTransitionSequence(), sourceHash = VOICE_WORKFLOW_SOURCE_HASH } = {}) {
+  constructor({ send, nextTransitionId = createTransitionSequence(), sourceHash = VOICE_WORKFLOW_SOURCE_HASH, now = () => Date.now() } = {}) {
     if (typeof send !== "function") throw new Error("agent-state-send-required");
     if (typeof nextTransitionId !== "function") throw new Error("agent-transition-source-required");
     this.send = send;
     this.nextTransitionId = nextTransitionId;
     this.sourceHash = normalizeUint32(sourceHash, "agent-source-hash");
+    this.now = now;
+    this.currentIntent = null;
     this.lastLiveAgentState = null;
     this.liveStreamInterrupted = false;
     this.lastProviderAgentState = null;
     this.providerStreamInterrupted = false;
     this.lastCompanionAgentState = null;
     this.companionStreamInterrupted = false;
+  }
+
+  publishState({ state, sourceHash }) {
+    const ttlMs = STATE_TTL_MS[state];
+    const issuedAt = this.now();
+    this.currentIntent = Object.freeze({ state, sourceHash, issuedAt, expiresAt: ttlMs === 0 ? null : issuedAt + ttlMs });
+    const report = encodeAgentStateFeatureReport({ state, transitionId: this.nextTransitionId(), ttlMs, sourceHash });
+    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+  }
+
+  recoverCurrentState() {
+    const now = this.now();
+    const intent = this.currentIntent;
+    const valid = Boolean(intent && (intent.expiresAt === null || intent.expiresAt > now));
+    const state = valid ? intent.state : "idle";
+    const sourceHash = valid ? intent.sourceHash : MANUAL_AGENT_SOURCE_HASH;
+    return this.publishState({ state, sourceHash });
+  }
+
+  currentStateSnapshot() {
+    const intent = this.currentIntent;
+    if (!intent) return Object.freeze({ state: "idle", valid: false, expiresAt: null });
+    return Object.freeze({ state: intent.state, valid: intent.expiresAt === null || intent.expiresAt > this.now(), expiresAt: intent.expiresAt });
   }
 
   publishVoiceState(value = {}) {
@@ -111,13 +136,7 @@ class AgentStatePublisher {
 
     this.liveStreamInterrupted = false;
     this.lastLiveAgentState = state;
-    const report = encodeAgentStateFeatureReport({
-      state,
-      transitionId: this.nextTransitionId(),
-      ttlMs: STATE_TTL_MS[state],
-      sourceHash: this.sourceHash,
-    });
-    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+    return this.publishState({ state, sourceHash: this.sourceHash });
   }
 
   publishManualState(value = {}) {
@@ -128,13 +147,7 @@ class AgentStatePublisher {
     this.lastLiveAgentState = null;
     this.providerStreamInterrupted = true;
     this.companionStreamInterrupted = true;
-    const report = encodeAgentStateFeatureReport({
-      state,
-      transitionId: this.nextTransitionId(),
-      ttlMs: STATE_TTL_MS[state],
-      sourceHash: MANUAL_AGENT_SOURCE_HASH,
-    });
-    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+    return this.publishState({ state, sourceHash: MANUAL_AGENT_SOURCE_HASH });
   }
 
   publishProviderState(value = {}) {
@@ -147,13 +160,7 @@ class AgentStatePublisher {
     this.companionStreamInterrupted = true;
     this.providerStreamInterrupted = false;
     this.lastProviderAgentState = state;
-    const report = encodeAgentStateFeatureReport({
-      state,
-      transitionId: this.nextTransitionId(),
-      ttlMs: STATE_TTL_MS[state],
-      sourceHash: CODEX_HOOK_SOURCE_HASH,
-    });
-    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+    return this.publishState({ state, sourceHash: CODEX_HOOK_SOURCE_HASH });
   }
 
   publishCompanionState(value = {}) {
@@ -167,13 +174,7 @@ class AgentStatePublisher {
     this.lastProviderAgentState = null;
     this.companionStreamInterrupted = false;
     this.lastCompanionAgentState = state;
-    const report = encodeAgentStateFeatureReport({
-      state,
-      transitionId: this.nextTransitionId(),
-      ttlMs: STATE_TTL_MS[state],
-      sourceHash: COMPANION_CONVERSATION_SOURCE_HASH,
-    });
-    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "agent-state-send-failed" }));
+    return this.publishState({ state, sourceHash: COMPANION_CONVERSATION_SOURCE_HASH });
   }
 }
 

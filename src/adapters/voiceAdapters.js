@@ -37,6 +37,7 @@ import { EasyInputLanAudioAdapter } from "./easyInputLanAudioAdapter.js";
 export class DesktopBridgeAdapter {
   constructor(bridge = globalThis.window?.desktopBridge) { this.bridge = bridge; }
   async capabilities() { return this.bridge?.getCapabilities ? this.bridge.getCapabilities() : { supported: false, platform: "web" }; }
+  async refreshLinkDiagnostics() { return this.bridge?.refreshLinkDiagnostics ? this.bridge.refreshLinkDiagnostics() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }

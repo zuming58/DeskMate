@@ -1,3 +1,5 @@
+import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "../domain/linkDiagnostics.js";
+
 const SECRET_KEYS = /token|api.?key|password|wifi|path|text|transcript|recording|audio|serial|window.?title|ip|address/i;
 const AUDIO_STATES = new Set(["not-configured", "binding", "waiting-heartbeat", "ready", "starting", "streaming", "ambiguous", "faulted", "unavailable", "desktop-bridge-unavailable"]);
 export function createDiagnosticReport(input = {}) {
@@ -12,5 +14,10 @@ export function createDiagnosticReport(input = {}) {
     micTest: Boolean(source.micTest),
     counters: Object.fromEntries(["heartbeats", "audioFrames", "droppedFrames", "sequenceGaps", "malformedPackets", "sourceRejects", "controlRetries", "controlTimeouts"].map((key) => [key, Number.isInteger(counters[key]) ? counters[key] : 0])),
   };
-  return { ...sanitize(input), schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio };
+  const bridge = input.inputBridge || {};
+  const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
+  const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
+  const safeInput = sanitize(input);
+  delete safeInput.inputBridge;
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, deskMateLink: link, agentStateDelivery };
 }

@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getCapabilities: () => ipcRenderer.invoke("desktop:get-capabilities"),
+  refreshLinkDiagnostics: () => ipcRenderer.invoke("desktop:refresh-link-diagnostics"),
   getNetworkSummary: () => ipcRenderer.invoke("desktop:get-network-summary"),
   getEasyInputAudioStatus: () => ipcRenderer.invoke("desktop:get-easyinput-audio-status"),
   openEasyInputAudioSetup: () => ipcRenderer.invoke("desktop:open-easyinput-audio-setup"),

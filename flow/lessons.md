@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A successful HID write is not proof of downstream device rendering
+
+- Symptom: EasyInput could appear connected and accept an Agent State Feature Report while the EasyInput-to-Xiaozhi Link was unavailable, leaving the OLED unchanged even though the desktop looked healthy.
+- Practice: display HID presence, Link state/counters and the latest write ACK separately. Refresh the existing bounded status report on reconnect; when Link becomes connected, reissue only the current unexpired intent and otherwise send idle. Serialize reconnect reads that share the native Feature Report slot.
+- Rule: never label a host write as downstream synchronization. End-to-end delivery needs evidence from each transport boundary, and recovery must use the single existing state owner rather than a parallel replay queue.
+
 ## A hardware shortcut and a global keyboard shortcut must not share authority by default
 
 - Symptom: `Ctrl+Shift+Space` was both the EasyInput firmware action and an Electron global shortcut. Any ordinary keyboard, input method or software-generated chord could therefore open the recorder and look like an unexplained hardware press.

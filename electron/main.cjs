@@ -29,6 +29,7 @@ const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capt
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
 const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 const { AgentStatePublisher } = require("./agent-state-hid.cjs");
+const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
@@ -76,12 +77,61 @@ let pendingEditShortcutTimer = null;
 let activeAgentProvider = "codex";
 let codexHookServer;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
+let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
+let linkStatusPollTimer = null;
+let linkStatusRefreshInFlight = false;
+const linkRecoveryGate = new LinkRecoveryGate();
 const activeBailianRequests = new Map();
 const activeBailianOrganizers = new Map();
 const activeRealtimeSessions = new Map();
+const AGENT_STATE_NAMES = ["idle", "listening", "thinking", "working", "waiting", "completed", "error"];
 const agentStatePublisher = new AgentStatePublisher({
-  send: (report) => inputBridge?.sendAgentState(report) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+  send: (report) => sendAgentStateReport(report),
 });
+
+function safeAgentStateReason(value) {
+  const reason = typeof value === "string" ? value : "agent-state-send-failed";
+  return /^[a-z0-9-]{1,80}$/.test(reason) ? reason : "agent-state-send-failed";
+}
+
+function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
+  const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null, linkDiagnostics: null };
+  return { ...bridge, agentStateDelivery: { ...agentStateDelivery } };
+}
+
+function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
+  sendToMain("input-bridge-status", inputBridgeSnapshot(value));
+}
+
+async function sendAgentStateReport(report) {
+  const targetState = AGENT_STATE_NAMES[Number(report?.[2])] || "idle";
+  agentStateDelivery = { status: "sending", targetState, at: new Date().toISOString(), reason: "" };
+  emitInputBridgeStatus();
+  const bridge = inputBridge?.snapshot();
+  let result;
+  if (!bridge?.boardConnected) result = { ok: false, reason: "easyinput-not-connected" };
+  else if (!bridge.linkDiagnostics) result = { ok: false, reason: "deskmatelink-unavailable" };
+  else if (bridge.linkDiagnostics.state !== "connected") result = { ok: false, reason: `deskmatelink-${bridge.linkDiagnostics.state}` };
+  else result = await inputBridge.sendAgentState(report);
+  agentStateDelivery = {
+    status: result?.ok ? "acknowledged" : "failed",
+    targetState,
+    at: new Date().toISOString(),
+    reason: result?.ok ? "" : safeAgentStateReason(result?.reason),
+  };
+  emitInputBridgeStatus();
+  return result;
+}
+
+async function refreshLinkDiagnostics() {
+  if (linkStatusRefreshInFlight || !inputBridge?.snapshot()?.boardConnected) return { ok: false, reason: "link-refresh-unavailable" };
+  linkStatusRefreshInFlight = true;
+  try {
+    return await inputBridge.readCapabilities();
+  } finally {
+    linkStatusRefreshInFlight = false;
+  }
+}
 
 function companionIsActive() {
   return Boolean(companionConversationController?.snapshot?.().active);
@@ -584,7 +634,7 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
-    sendToMain("input-bridge-status", inputBridge?.snapshot() || { available: false, process: "unsupported", boardConnected: false });
+    emitInputBridgeStatus();
     sendToMain("codex-agent-state", sanitizedCodexHookStatus());
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -605,11 +655,23 @@ function startInputBridge() {
   }
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => {
-    sendToMain("input-bridge-status", value);
+    emitInputBridgeStatus(value);
+    const linkAction = linkRecoveryGate.observe(value);
+    if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
     const boardConnected = value?.boardConnected === true;
     const newlyConnected = boardConnected && !easyInputAudioBoardConnected;
     easyInputAudioBoardConnected = boardConnected;
-    if (newlyConnected) void easyInputAudioManager?.refreshConfiguration();
+    if (newlyConnected) {
+      void (async () => {
+        // Both operations use the one native Feature Report read slot. Keep
+        // reconnect recovery serialized so Link diagnostics cannot make the
+        // existing audio configuration refresh fail with a synthetic busy.
+        if (linkAction.refresh) await refreshLinkDiagnostics();
+        await easyInputAudioManager?.refreshConfiguration();
+      })();
+    } else if (linkAction.refresh) {
+      void refreshLinkDiagnostics();
+    }
     if (value?.boardConnected === false) {
       if (companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
       if (easyInputVoiceRecorder?.status?.().recording) void easyInputVoiceRecorder.fail("easyinput-device-disconnected");
@@ -636,6 +698,7 @@ function startInputBridge() {
     sendToMain("host-action-result", { kind: "fixed-text", ...result, at: new Date().toISOString() });
   });
   inputBridge.start();
+  linkStatusPollTimer = setInterval(() => { void refreshLinkDiagnostics(); }, 5000);
 }
 
 async function runSmokeTest() {
@@ -756,7 +819,8 @@ app.whenReady().then(async () => {
   createOverlayWindow();
   createTray();
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
-  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridge?.snapshot() || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null }; return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
+  handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridgeSnapshot(); return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
+  handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
@@ -831,7 +895,7 @@ app.whenReady().then(async () => {
     if (companionIsActive()) return { ok: false, reason: "companion-conversation-active" };
     if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ok: false, reason: "voice-workflow-active" };
     const result = await agentStatePublisher.publishManualState({ source: "manual-agent-control", state });
-    return result?.ok ? { ok: true, agentId, state } : { ok: false, reason: result?.reason || "agent-state-send-failed" };
+    return result?.ok ? { ok: true, agentId, state, delivery: { ...agentStateDelivery } } : { ok: false, reason: result?.reason || "agent-state-send-failed", delivery: { ...agentStateDelivery } };
   });
   handleTrusted("desktop:set-active-agent-provider", (value) => {
     const provider = typeof value === "string" ? value : "";
@@ -931,6 +995,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

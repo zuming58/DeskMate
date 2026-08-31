@@ -25,7 +25,7 @@ test("desktop Agent UI keeps manual fallback and exposes the trusted Codex lifec
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
   assert.match(pages, /Codex 真实状态已接入/);
-  assert.match(pages, /手动发送到小智/);
+  assert.match(pages, /重新发送当前状态/);
   assert.doesNotMatch(pages, /simulateNextStatus/);
   assert.match(preload, /setManualAgentState/);
   assert.match(preload, /setActiveAgentProvider/);

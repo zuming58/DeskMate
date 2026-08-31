@@ -1,5 +1,12 @@
 # Decisions
 
+## D040 - HID presence, DeskMate Link health and Agent write ACK are distinct facts
+
+- Date: 2026-08-31
+- Decision: the desktop exposes EasyInput HID presence, the enumerated EasyInput-to-Xiaozhi Link state, and the latest HID Agent State write result as three separate facts. A successful native write is labelled only as an EasyInput write ACK; Xiaozhi delivery is corroborated by the frozen Link state and forwarding counters, never inferred from HID presence.
+- Recovery: application start, EasyInput reconnect and a Link transition to connected reread the existing capability/status report and reissue the single Agent publisher's current unexpired intent once. If the intent expired or never existed, the recovery state is idle. This creates a fresh transition and never replays expired listening, completed or error work.
+- Privacy and compatibility: only the already enumerated Link state and bounded counters cross into React and diagnostics. Raw reports, paths, identifiers, network data and content remain excluded. The existing T09 transport and state publisher remain authoritative; no protocol, firmware or second Agent state machine is introduced.
+
 ## D039 - Dictation locks one explicit microphone source and board shortcuts are device-scoped
 
 - Date: 2026-08-31
