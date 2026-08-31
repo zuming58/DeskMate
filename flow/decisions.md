@@ -1,5 +1,13 @@
 # Decisions
 
+## D036 - EasyInput is the only DeskMate V1 audio capture endpoint
+
+- Date: 2026-08-31
+- Decision: T10E uses the EasyInput onboard microphone through I2S0 on GPIO9/10/11 and the existing GPIO8 `KeyboardMic` lease. Audio is PCM S16LE, 16 kHz, mono, 20 ms frames over the frozen Maker-compatible LAN control and packet formats.
+- Configuration: firmware projects only the existing top-level `wifi_ssid`, `wifi_password`, `audio_host` and `audio_port` values. Incomplete configuration disables capture; it never triggers LAN scanning, broadcast or address guessing.
+- Scheduling and failure: capture and UDP sending are separate, joined by a 64-frame PSRAM queue that drops the oldest audio on overflow. Network, allocation and I2S failures are audio-local and cannot block input, LED, configuration, Host Action, Agent-state or DeskMate Link behavior.
+- Boundary: T10E does not add speaker playback, BLE, Xiaozhi audio, desktop code or a second GPIO8 owner. Speaker playback remains a later T11E slice.
+
 ## D035 - Link health crosses the native boundary only as enumerated diagnostics
 
 - Date: 2026-08-30

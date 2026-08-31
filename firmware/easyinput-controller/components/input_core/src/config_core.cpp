@@ -227,12 +227,13 @@ bool ConfigReadStream::mark_sent() { if (!pending_) return false; if (++next_chu
 void ConfigReadStream::abort() { document_ = {}; request_id_ = epoch_ = 0; next_chunk_ = total_chunks_ = 0; pending_ = false; }
 bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
                                  const LinkStatusSnapshot& link,
-                                 const AgentStateDiagnostics& agent) {
+                                 const AgentStateDiagnostics& agent,
+                                 const AudioCaptureDiagnostics& audio) {
   abort();
   if (!id || !epoch) return false;
   const int written = std::snprintf(
       json_.data(), json_.size(),
-      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true,"agent_state_bridge_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu},"agent_state":{"accepted":%lu,"malformed":%lu,"duplicates":%lu,"expired":%lu,"dropped_disconnected":%lu,"forwarded":%lu,"queue_drops":%lu}})",
+      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true,"agent_state_bridge_v1":true,"audio_capture_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu},"agent_state":{"accepted":%lu,"malformed":%lu,"duplicates":%lu,"expired":%lu,"dropped_disconnected":%lu,"forwarded":%lu,"queue_drops":%lu},"audio_capture":{"state":"%s","captured_frames":%lu,"sent_frames":%lu,"dropped_frames":%lu,"read_errors":%lu,"send_errors":%lu,"recoveries":%lu}})",
       link_controller_state_name(link.state),
       static_cast<unsigned long>(link.rx_frames),
       static_cast<unsigned long>(link.tx_frames),
@@ -252,7 +253,14 @@ bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
       static_cast<unsigned long>(agent.expired),
       static_cast<unsigned long>(agent.dropped_disconnected),
       static_cast<unsigned long>(agent.forwarded),
-      static_cast<unsigned long>(agent.queue_drops));
+      static_cast<unsigned long>(agent.queue_drops),
+      audio_capture_state_name(audio.state),
+      static_cast<unsigned long>(audio.captured_frames),
+      static_cast<unsigned long>(audio.sent_frames),
+      static_cast<unsigned long>(audio.dropped_frames),
+      static_cast<unsigned long>(audio.read_errors),
+      static_cast<unsigned long>(audio.send_errors),
+      static_cast<unsigned long>(audio.recoveries));
   if (written <= 0 || static_cast<size_t>(written) >= json_.size()) {
     abort();
     return false;
@@ -301,6 +309,56 @@ void ConfigStatusStream::abort() {
   pending_ = false;
 }
 bool parse_config_projection(std::string_view raw, ConfigProjection& out) { return projection_from_json(raw, out); }
+AudioConfigProjectionStatus parse_audio_capture_config(
+    std::string_view raw, AudioCaptureConfig& out) {
+  out = {};
+  if (raw.empty() || raw.size() > kConfigMaxJsonBytes || !valid_json(raw)) {
+    return AudioConfigProjectionStatus::Invalid;
+  }
+  std::optional<std::string_view> ssid, password, host, port;
+  if (!field_value(raw, "wifi_ssid", ssid) ||
+      !field_value(raw, "wifi_password", password) ||
+      !field_value(raw, "audio_host", host) ||
+      !field_value(raw, "audio_port", port)) {
+    return AudioConfigProjectionStatus::Invalid;
+  }
+  if (!ssid || !password || !host || !port) {
+    return AudioConfigProjectionStatus::ConfigIncomplete;
+  }
+  std::string parsed_ssid, parsed_password, parsed_host;
+  int parsed_port = 0;
+  if (!string_value(*ssid, parsed_ssid) ||
+      !string_value(*password, parsed_password) ||
+      !string_value(*host, parsed_host) ||
+      !integer_value(*port, parsed_port)) {
+    return AudioConfigProjectionStatus::Invalid;
+  }
+  const auto safe_text = [](const std::string& value) {
+    return std::none_of(value.begin(), value.end(), [](unsigned char c) {
+      return c == 0 || c < 0x20 || c == 0x7f;
+    });
+  };
+  const auto safe_host = [](const std::string& value) {
+    return !value.empty() &&
+           std::all_of(value.begin(), value.end(), [](unsigned char c) {
+             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '.' || c == '-';
+           });
+  };
+  if (parsed_ssid.empty() || parsed_ssid.size() >= out.wifi_ssid.size() ||
+      parsed_password.size() >= out.wifi_password.size() ||
+      parsed_host.size() >= out.audio_host.size() ||
+      !safe_text(parsed_ssid) || !safe_text(parsed_password) ||
+      !safe_host(parsed_host) || parsed_port < 1 || parsed_port > 65535) {
+    return AudioConfigProjectionStatus::Invalid;
+  }
+  std::copy(parsed_ssid.begin(), parsed_ssid.end(), out.wifi_ssid.begin());
+  std::copy(parsed_password.begin(), parsed_password.end(),
+            out.wifi_password.begin());
+  std::copy(parsed_host.begin(), parsed_host.end(), out.audio_host.begin());
+  out.audio_port = static_cast<uint16_t>(parsed_port);
+  return AudioConfigProjectionStatus::Ready;
+}
 const char* compiled_safe_config_json() { return R"({"schema":"ai_keyboard.v1","target_platform":"windows","profiles":[{"id":"default","keys":{"KEY1":{"press":"voice_ptt_hold"},"KEY2":{"press":{"hotkey":"Return"}},"KEY3":{"press":"edit_ptt_hold"},"KEY4":{"press":{"hotkey":"Backspace"}},"KEY5":{"press":"select_all"},"KEY6":{"press":"copy"},"KEY7":{"press":"paste"},"KEY8":{"press":"undo"}},"encoder":{"left":"disabled","right":"disabled","press":"scroll_axis_toggle","scroll":{"enabled":true,"mode":"scroll","axis":"vertical","speed":3,"windows_reverse_vertical":false,"windows_reverse_horizontal":false}}}]})"; }
 bool validate_config_record(const ConfigSlotRecord& r) { ConfigProjection p{}; return r.magic == kConfigRecordMagic && r.version == kConfigRecordVersion && r.length && r.length <= kConfigMaxJsonBytes && config_crc16_ccitt(r.bytes.data(), r.length) == r.crc16 && parse_config_projection({reinterpret_cast<const char*>(r.bytes.data()), r.length}, p); }
 void select_config_record(const ConfigSlotRecord* a, const ConfigSlotRecord* b, ConfigSlot marker, ConfigLoadResult& result) { result.document.bytes.fill(0); result.document.length=0; result.document.crc16=0; result.document.source=ConfigSource::Default; result.slot=ConfigSlot::Invalid; result.generation=0; result.recovered_marker=false; const bool va = a && validate_config_record(*a), vb = b && validate_config_record(*b); const ConfigSlotRecord* selected = nullptr; ConfigSlot slot = ConfigSlot::Invalid; if (marker == ConfigSlot::A && va) { selected = a; slot = ConfigSlot::A; } else if (marker == ConfigSlot::B && vb) { selected = b; slot = ConfigSlot::B; } else if (va || vb) { if (va && (!vb || a->generation >= b->generation)) { selected = a; slot = ConfigSlot::A; } else { selected = b; slot = ConfigSlot::B; } } result.slot = slot; result.recovered_marker = marker == ConfigSlot::Invalid ? (va || vb) : ((marker == ConfigSlot::A && !va) || (marker == ConfigSlot::B && !vb)); if (selected) { result.document.length = selected->length; result.document.crc16 = selected->crc16; result.document.source = result.recovered_marker ? ConfigSource::Recovery : ConfigSource::DeskMate; result.generation = selected->generation; std::copy_n(selected->bytes.begin(), selected->length, result.document.bytes.begin()); } }

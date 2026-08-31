@@ -8,6 +8,8 @@
 
 T08 EasyInput Link 总控已经完成双板握手、双向信号断开、重连和对端重启真机验收：UART0 使用 GPIO43/44，只有一个 owner 任务；UART 初始化失败只将 Link 标为 faulted，不影响既有输入、灯效、配置或 Host Action。T09 在该基线上增加冻结的 HID `0x12` 状态接收与 `SET_AGENT_STATE` 转发桥；EasyInput T09 app 已完成 app-only 烧录、精确回读、正常 HID 启动和八键/旋钮/灯效回归，小智 T09 OLED app 与完整三端状态链仍待单独烧录和真机验收。
 
+T10E 在三端 T09 验收基线上增加 EasyInput 板载麦克风上行：完整配置只投影 `wifi_ssid`、`wifi_password`、`audio_host`、`audio_port`，使用 I2S0 `GPIO9/10/11`、既有 GPIO8 `KeyboardMic` 租约、64 帧 PSRAM 队列和冻结的 `EIHB/EICC/EICA/EIAU` LAN 合同。S1/S3 只准备网络，录音必须由合法 `EICC start` 发起；音频失败保持 fail-soft。本包不实现扬声器、BLE 或小智音频，代码门通过也不代表已烧录或真机收音通过。
+
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 
 参考资料：
@@ -15,6 +17,8 @@ T08 EasyInput Link 总控已经完成双板握手、双向信号断开、重连�
 - [V1 hardware baseline](../../docs/architecture/deskmate-v1-hardware-baseline.md)
 - [EasyInput Maker technical map](../../docs/handoffs/easyinput-maker-technical-map-2026-08-23.md)
 - [Reference baselines](../../docs/provenance/reference-baselines-2026-08-24.md)
+- [T10E audio capture contract](../../docs/contracts/easyinput-audio-capture-v1.md)
+- [T10E Maker reference audit](../../docs/provenance/t10e-easyinput-audio-capture-reference-audit.md)
 - 本机只读参考：`F:\Codex\easyinput-wzm\easy-input-maker`
 
 不要把外部参考目录、其 `build/`、固件镜像、NVS、录音或本机设备信息复制到本目录。

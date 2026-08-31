@@ -2,6 +2,9 @@
 
 ## Current handoff
 
+- [T10E EasyInput audio capture frozen contract](contracts/easyinput-audio-capture-v1.md)
+- [T10E EasyInput audio capture task](../flow/tasks/T10E-easyinput-audio-capture.md)
+- [T10E Maker audio reference audit](provenance/t10e-easyinput-audio-capture-reference-audit.md)
 - [T09 agent-state display frozen contract](contracts/t09-agent-state-display-v1.md)
 - [T09C desktop agent-state sender task](../flow/tasks/T09C-desktop-agent-state-sender.md)
 - [T09C desktop agent-state sender handoff](handoffs/t09c-desktop-agent-state-sender-2026-08-30.md)

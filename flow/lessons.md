@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Optional network audio must retry configuration, not only reconnection
+
+- Symptom: an initial Wi-Fi configuration failure could leave a fail-soft audio task repeatedly calling reconnect without ever reapplying the rejected station configuration; successful first socket creation was also incorrectly counted as recovery.
+- Practice: track configuration application separately from link connectivity, retry the configured operation after failure, and increment recovery diagnostics only after a previously observed transport fault returns to service.
+- Rule: optional subsystem recovery counters must describe real recoveries, and each retry must repeat the operation that actually failed. A healthy first start is not a recovery and must not distort field diagnostics.
+
 ## Optional peripheral tasks must start after the transport baseline
 
 - Symptom: T08 UART Link passed on the real two-board wiring, but the integrated T09 image showed a healthy idle OLED while EasyInput transmitted requests and received zero frames. The new image had started OLED initialization and its background task before installing the previously proven UART transport, and discarded both startup results.

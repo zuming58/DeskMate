@@ -24,6 +24,7 @@
 - T02 输入基础已达到 `CODE_REVIEW_CONFIRMED` / `TEST_CONFIRMED` / `BUILD_CONFIRMED`，但仍未连接或访问硬件，不代表可烧录、HIL 或真机通过。
 - T03～T06 已锁定，T07 桌面基线已冻结。T08 EasyInput DeskMate Link 总控端已完成代码、Host 与构建门，状态为 `HIL_NOT_AUTHORIZED`；后续只能做审计、可恢复烧录准备和获授权的只读双板验收。不得开发 BLE、音频或小智固件，不得修改 T07 桌面。
 - T09 EasyInput 状态桥只接收冻结的 HID Feature `0x12`：业务 payload 固定 16 字节，同时兼容 Windows 顶层集合 64 字节报告产生的全零 transport padding；任何非零 padding 均拒绝。状态经独立最新状态邮箱、TTL/epoch/能力门转发既有 Link `SET_AGENT_STATE`；不得在本模块渲染 OLED、驱动舵机或补写桌面发送器。T09 代码、Host 和构建通过不等于可烧录或真机通过。
+- T10E 只实现冻结的 EasyInput 板载麦克风 LAN 上行：I2S0 `GPIO9/10/11`、既有 `KeyboardMic` 电源租约、64 帧 PSRAM 有界队列和 Maker 兼容 `EIHB/EICC/EICA/EIAU`。S1/S3 只能准备 Wi-Fi，合法 `EICC start` 才能启用 I2S；配置、网络或音频失败不得影响输入、灯效、Host Action、Agent 状态或 DeskMate Link。扬声器、BLE、小智音频和桌面改动不属于 T10E。
 - T03 冷启动、mount 全释放、transfer identity、GPIO40 生命周期和 DCD 重连候选均被真实 Ctrl 粘连证据否决。最终 `5c09880` 参考固定 Maker synthetic tap 结构清晰重实现：S1/S3 保持 held PTT，S2/S4/S5～S8 使用原子 press→restore tap；连续五次 Ctrl 断线矩阵、Host、ESP-IDF 构建和桌面组合回归均通过，原主电脑独立审计已确认，状态为 `T03_LOCKED`。当前实板 S8 仍为烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
 - T04 已锁定：5 颗 WS2812 使用 GPIO12，GPIO8 继续由唯一共享电源控制器写入，配置读写不得阻塞或重置输入灯效。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`；当前样机 S8 仍是既有硬件阻断，健康板补测前不改 GPIO48/八键合同。
 - T06 必须固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 Host Action、固定文字和唯一 USB endpoint owner 实现及 Host tests，并逐项核对 T06 reference audit。固件只发送规范 UUID 或有界固定文字；应用路径和文字注入只归 Windows 主进程/原生桥所有，renderer 不得获得路径或固定文字原文。
@@ -34,7 +35,9 @@
 ## Module entry points
 
 - 说明：`README.md`
-- 当前任务卡：`../../flow/tasks/T09-easyinput-agent-state-bridge.md`
+- 当前任务卡：`../../flow/tasks/T10E-easyinput-audio-capture.md`
+- T10E 冻结合同：`../../docs/contracts/easyinput-audio-capture-v1.md`
+- T10E Maker 参考审计：`../../docs/provenance/t10e-easyinput-audio-capture-reference-audit.md`
 - T09 冻结合同：`../../docs/contracts/t09-agent-state-display-v1.md`
 - T09 EasyInput 交接：`../../docs/handoffs/t09-easyinput-agent-state-bridge-2026-08-30.md`
 - T08 并行分工：`../../docs/handoffs/t08-parallel-firmware-split-2026-08-29.md`
