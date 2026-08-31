@@ -4,7 +4,7 @@
 
 - Branch: `codex/t11-desktop-realtime-companion`
 - Base: `62f2829fedf3e7f9a9855747133d3a1bdba008d7`
-- Final HEAD: fill from the pushed branch after commit.
+- Implementation commit: `1558ee5efaf76563fe632ccf3120e0754d435d43`
 
 ## Delivered
 
@@ -19,9 +19,9 @@
 ## Verification
 
 - `npm ci --include=dev`: passed.
-- `npm test`: final count recorded in `flow/progress.md`.
-- `npm run build:desktop`: final result recorded in `flow/progress.md`.
-- `git diff --check`, tracked-path, secret, and build-artifact checks: recorded after final validation.
+- `npm test`: 148/148 passed.
+- `npm run build:desktop`: passed, including native input bridge publish and Electron Windows unpacked package.
+- `git diff --check`, tracked-path, secret, and build-artifact checks: passed; generated `dist/`, `release/`, native publish output, and dependencies remain ignored.
 
 ## Deferred user-present acceptance
 
