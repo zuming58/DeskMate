@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T10E I2S timeout repair flashed and exactly read back
+
+- Authorized gate: the sole USB candidate was identified as an ESP32-S3 with 16 MiB Flash. The authorized old app range `0x010000..0x0E099F` was read in full and exactly matched SHA-256 `3FBAF210F30E8BF468C3FBAEF085BAFC07F111495155AB58A330F300930599B7`; any mismatch would have stopped before writing.
+- Authorized app-only write: implementation commit `72fe9129c10f2567df09ef0997613d69d8d2cec2`, 854,416-byte image, SHA-256 `743151933B24849BB182024750217FF4648CDB31A93531A91339C44256B0AEDC`, written only at `0x010000..0x0E098F`. The tool erased only the covering sectors through `0x0E0FFF` and verified the transfer hash.
+- Independent verification: a separate full readback of all 854,416 written bytes produced the same SHA-256. The Git-external recovery/receipt directory is `F:\Codex\deskmate-device-backups\easyinput\t10e-i2s-timeout-preflash-20260831T165209`; its privacy-safe manifest SHA-256 is `655A6E43215F7A72F2041858216C5C6C93B94D05CF0E808FE5CBD33568D45675`.
+- Safety and next: no whole-chip erase and no partition-table, bootloader, NVS, sound-bank, eFuse or Xiaozhi write occurred. The board remains in download mode, so status is `APP_FLASH_AND_EXACT_READBACK_CONFIRMED / NORMAL_BOOT_PENDING`. Power-cycle normally without pressing BOOT, then repeat the 30-second microphone test and require rising `audioFrames` plus non-zero live level while speaking.
+
 ## 2026-08-31 - T10E I2S read-timeout root cause fixed; replacement app ready
 
 - Fresh HIL evidence: after the single-UDP-endpoint repair and normal reboot, the desktop received 1,178 valid heartbeats with `networkReady=true`, no control retries/timeouts and no malformed packets, but still received zero audio frames. Five source rejections align with late best-effort stop acknowledgements across repeated tests and do not explain the continuing zero-frame result. This isolates the remaining failure to the board-side capture path rather than Ethernet/Wi-Fi routing or the control session.
