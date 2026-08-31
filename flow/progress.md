@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-08-31 - Codex real lifecycle status adapter implemented and packaged
+
+- 做了什么：在分支 `codex/t10-desktop-config-app-polish` 基于 `21580e51a2cc2947522ad2d520c07f8613c692b1` 完成首个真实 Agent 适配器，实现提交为 `28e9563eb1b2f316c618fa2a52511f72c7d7b4c3`。官方 Codex `SessionStart/UserPromptSubmit/PreToolUse/PermissionRequest/PostToolUse/Stop/SessionEnd` 生命周期经仓库 Hook、隐私最小化本机命名管道和 Electron 主进程进入既有 `0x12 -> EasyInput -> DeskMate Link -> Xiaozhi OLED` 状态链；界面保留人工七状态作为回退，并把显示名称纠正为 WorkBuddy（持久化兼容 ID 仍为 `workbody`）。
+- 为什么与怎么理解：进程存在、前台窗口或标题无法证明 Codex 是工作、等待还是完成，因此不能冒充真实状态。该切片只映射官方事件能证明的状态；当前稳定 Hook 没有通用失败事件，不读取回复正文时也无法识别所有自由文本提问，所以 `error` 和这类等待继续保留人工入口。当前手动选择的 Agent 是唯一所有者，只有选中 Codex 时事件才写硬件；VoiceWorkflow 优先，期间事件丢弃且不补发。
+- 隐私与合同：新增 `docs/contracts/t10-codex-real-status-v1.md`，状态为 `CODEX_REAL_STATUS_V1_FROZEN`。Hook 只转发版本、固定 provider、事件名和有界工具名；提示词、回复、工具输入/输出、会话/轮次 ID、transcript、cwd、模型和设备信息都不进入 DeskMate。消息严格限长/限键，DeskMate 不运行时 150 ms 内静默失败；为保持事件顺序没有使用可能乱序的后台 Hook。现有 Project Flow `Stop` Hook 被合并保留，没有覆盖。
+- 验证：定向 15/15、桌面全量 `npm test` 139/139；`npm run build:desktop` 通过。首次打包仅因运行中的旧候选锁定 `release/win-unpacked/icudtl.dat` 失败，精确关闭该隔离目录的 DeskMate 进程后重建成功。最新版 `F:\Codex\deskmate-t09-integration\release\win-unpacked\DeskMate.exe` 已启动；生产管道接受 `SessionStart` 以及测试用 `UserPromptSubmit -> Stop` 事件。`git diff --check`、ASCII 路径和差异密钥扫描通过。
+- 硬件边界：没有扫描端口、识别设备、读写 Flash/NVS、烧录、擦除、改分区或 eFuse，也没有舵机/音频动作。若界面当前选中 Codex，管道验收事件仅沿已经验收的状态链发送待命/思考/完成表情；它们明确是接收路径测试，不冒充本次 Codex 会话的真实自动验收。
+- 下一步：提交后重开一个位于本仓库、并已信任新 Hook 的 Codex 任务，再真实观察“提交问题 -> 工具工作 -> 授权/结构化输入等待 -> 完成”的表情和界面状态。当前活动任务不会热加载新 Hook。WorkBuddy、Hermes 与 Claude Code 仍为手动，不开始猜测性进程适配。
+
+
 ## 2026-08-31 - Desktop manual Agent selection and real seven-state publication complete
 
 - What changed: branch `codex/t10-desktop-config-app-polish` implementation `42a497756ef93c14535f65910aec3ee85d7849e6` adds a local selector for Codex, Workbody, Hermes, Claude Code and a bounded custom Agent, plus explicit controls for idle, listening, thinking, working, waiting for user, completed and error. A trusted preload/IPC path now publishes the existing frozen HID `0x12` Agent-state report; no firmware or framing changed. The same package also makes keyboard-config reads reconnect-aware with bounded retries/manual retry and replaces the oversized application picker with a compact accessible list.
