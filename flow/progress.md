@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-08-31 - T10E EasyInput app-only flash and exact readback confirmed
+
+- Authorized write: after a fresh read confirmed that the connected ESP32-S3/16 MiB EasyInput still contained the expected T09 app, the clean T10E image from source HEAD `77fabec3f2fed2e4d103c058140ccdaa7c97048a` was written only at `0x010000..0x0E099F`; the tool erased only the covering sectors through `0x0E0FFF`.
+- Verification: the write tool verified its transfer, and an independent readback of all 854,432 bytes produced SHA-256 `88D392070591E5E04862730A0DECB0CE7954E98BEF0650EF6744BBA96F95A642`, exactly matching the authorized image. Post-write reads also confirmed that the fixed partition table and complete NVS remained byte-for-byte unchanged; NVS contents were not parsed.
+- Recovery and safety: the updated Git-external recovery/flash manifest is `F:\Codex\deskmate-device-backups\easyinput\t10e-preflash-20260831T135352\manifest.json`, SHA-256 `A185377648E8D52F83D757CAACC672EEB4522F38D020D3D277DE95D78B051B49`. No whole-chip erase, partition/bootloader/NVS/sound-bank/eFuse write or Xiaozhi operation occurred.
+- Current state and next: the board was deliberately left in download mode, so status is `APP_FLASH_AND_EXACT_READBACK_CONFIRMED / NORMAL_BOOT_PENDING`. Power-cycle EasyInput normally without pressing BOOT, then run the T10E microphone HIL matrix while regressing all T03-T09 input, light and Link behavior.
+
 ## 2026-08-31 - T10E EasyInput pre-flash identity, recovery backup and final image confirmed
 
 - Authorized read-only preparation: the sole EasyInput candidate was identified as ESP32-S3 with 16 MiB Flash. Its existing T09 app was read from `0x010000..0x05DD2F` and exactly matched the user-provided SHA-256 `80A3D1B02768FEEB2271F9978594BD3FFA5458F32BE87BDDA1F26CD8765C5489`; any board-identity or app mismatch would have stopped the procedure.
