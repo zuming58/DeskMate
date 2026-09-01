@@ -1,7 +1,9 @@
 # T11F three-end integration audit
 
-Date: 2026-09-01  
-Integration branch: `codex/t11f-three-end-integration`  
+Date: 2026-09-01
+
+Integration branch: `codex/t11f-three-end-integration`
+
 Integrated code commit: `5544fb22d6d20a774bd653609b1e15b86574a4fa`
 
 ## Inputs
