@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T10B Xiaozhi motion hardware readiness reviewed; hardware remains locked
+
+- What was audited: branch `codex/xiaozhi-t10b-readiness-audit` starts from exact OLED-polish base `8d6af0cd38fb3fed85ceba03bcd99857dd1e552e`. T10A motion source is unchanged from `2e538d0c080aa9f908f6b374fce080b008ef11ae`, remains absent from `app_main`, and still has no PWM/LEDC/MCPWM/GPIO11/GPIO12/servo adapter. The OLED latest-wins animation owner and frozen DeskMate Link coexist independently.
+- Evidence and conclusion: fixed reference hashes/license and the source-side GPIO11 yaw/GPIO12 pitch map were rechecked. Real servo supply voltage/current, common ground/backfeed, installed connector/axis mapping, unloaded centers, directions, mechanical limits, rate, recenter and emergency-stop behavior remain on-site `UNKNOWN`. No safe firmware increment exists before those gates are closed, so state remains `T10B_READINESS_REVIEWED / MOTION_HARDWARE_LOCKED / HIL_NOT_AUTHORIZED`.
+- Verification: combined Xiaozhi Host CTest passed 9/9. The detailed audit is `docs/reviews/t10b-xiaozhi-motion-hardware-readiness-audit-2026-09-01.md`; the staged user-present card is `docs/testing/t10b-xiaozhi-motion-hil-acceptance-card.md`; handoff is `docs/handoffs/t10b-xiaozhi-motion-readiness-2026-09-01.md`.
+- Safety and next: no port/device/Flash/NVS/eFuse/flash/erase/monitor/wiring/OLED/audio/PWM/GPIO/servo operation occurred. Do not flash this documentation branch. With the user present, first review the card; a later disabled-by-default adapter candidate requires separate code/build review, exact-image disclosure and explicit authorization before Stage 3 or any motion.
+
 ## 2026-08-31 - Xiaozhi OLED animation polish ready for cross-audit
 
 - What changed: from exact base `origin/codex/t10a-motion-safety-core@2e538d0c080aa9f908f6b374fce080b008ef11ae`, branch `codex/xiaozhi-oled-animation-polish` adds bounded natural idle blinking, a visibly distinct waiting scene, and a one-slot latest-wins display mailbox. Repeated states no longer redraw, a new state preempts a blink, and an EasyInput TTL live-idle transition restarts blinking without changing the frozen Link payload.
