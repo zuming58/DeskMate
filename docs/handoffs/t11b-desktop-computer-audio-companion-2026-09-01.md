@@ -27,7 +27,7 @@ Date: 2026-09-01
 - `npm run build:desktop -- --config.directories.output=release-t11b-verify`: passed, including native InputBridge Release publish, Vite production build and Windows Electron directory packaging.
 - Package: `release-t11b-verify/win-unpacked/DeskMate.exe`, 202,690,560 bytes.
 - Package SHA-256: `1B8E46983C677B4FC432C36B9344D7D063952C133497154B2A4FABB71DCA3DF6`.
-- `git diff --check`, ASCII changed-path, differential secret, ignored-output and firmware-scope checks are required again immediately before push.
+- `git diff --check`, ASCII changed-path, differential secret, ignored-output and firmware-scope checks passed before the closure commit.
 
 ## Safety boundary
 
@@ -42,4 +42,3 @@ No application was started or controlled from this worktree. No port, device, ne
 5. Confirm live companion Agent states reach the physical Xiaozhi OLED.
 
 Do not call this full audio HIL complete until those observations are recorded. T11E EasyInput speaker work starts only after a separate downlink contract is frozen.
-
