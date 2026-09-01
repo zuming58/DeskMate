@@ -8,7 +8,7 @@ import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -39,7 +39,7 @@ export const defaultState = {
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
-    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, service: { configured: false, provider: "doubao" } },
+    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {} }, service: { configured: false, provider: "doubao" } },
     memory: { ready: false, storage: "unavailable" },
     lastTrigger: null,
   },
@@ -85,6 +85,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 8) raw = { ...raw, settings: { ...(raw.settings || {}), microphoneSource: normalizeMicrophoneSource(raw.settings?.microphoneSource), globalShortcutsEnabled: false } };
   if ((raw.schemaVersion ?? 0) < 9 && isLegacyDemoAiEvent(raw.aiEvent)) raw = { ...raw, aiEvent: { ...DEFAULT_AI_EVENT }, aiIntent: mapAiStateToPetIntent({ state: "idle" }) };
   if ((raw.schemaVersion ?? 0) < 10) raw = { ...raw, agentControl: normalizeAgentControl({ ...(raw.agentControl || {}), automaticStatusEnabled: raw.agentControl?.automaticStatusEnabled !== false }) };
+  if ((raw.schemaVersion ?? 0) < 11) raw = { ...raw, runtime: { ...(raw.runtime || {}), companion: { ...(raw.runtime?.companion || {}), audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null } } } };
   return mergeDefaults(raw);
 }
 

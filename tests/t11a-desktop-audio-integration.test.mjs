@@ -8,11 +8,14 @@ const setupPreload = fs.readFileSync(new URL("../electron/audio-setup-preload.cj
 const setupHtml = fs.readFileSync(new URL("../electron/audio-setup.html", import.meta.url), "utf8");
 const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
 
-test("production companion uses EasyInput source while speaker remains explicitly unavailable", () => {
-  assert.match(main, /audioSource:\s*easyInputAudioSource/);
-  assert.match(main, /audioSink:\s*new UnavailableCompanionAudioSink\(\)/);
+test("production companion uses locked selected input and computer speaker without guessing EasyInput downlink", () => {
+  assert.match(main, /new PrestartFallbackCompanionAudioSource/);
+  assert.match(main, /audioSource:\s*computerCompanionAudio\.source/);
+  assert.match(main, /audioSink:\s*computerCompanionAudio\.sink/);
+  assert.match(main, /companionSource === "easyinput"/);
   assert.doesNotMatch(main, /new UnavailableCompanionAudioSource\(\)/);
-  assert.match(pages, /EasyInput 扬声器播放适配器尚未接入/);
+  assert.match(pages, /EasyInput 扬声器.*待协议冻结/);
+  assert.doesNotMatch(main, /EISD|EISA|speaker.*udp/i);
 });
 
 test("main renderer receives only sanitized audio APIs and never setup secrets", () => {

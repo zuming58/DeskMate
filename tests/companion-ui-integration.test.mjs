@@ -60,6 +60,7 @@ test("natural blinking is bounded and respects reduced-motion preference", async
 });
 
 test("companion UI is a real main-process session entry and does not create a renderer microphone workflow", async () => {
+  const app = await source("src/App.jsx");
   const pages = await source("src/pages.jsx");
   const preload = await source("electron/preload.cjs");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("export function DashboardPage"));
@@ -68,7 +69,9 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.doesNotMatch(companion, /T10E 待接入|等待 T10E 音频/);
   assert.match(companion, /startCompanionConversation/);
   assert.match(companion, /唯一前台会话仲裁器/);
-  assert.match(preload, /startCompanionConversation: \(\) => ipcRenderer\.invoke\("companion:start"\)/);
+  assert.match(preload, /startCompanionConversation: \(value\) => ipcRenderer\.invoke\("companion:start", value\)/);
+  assert.match(preload, /interruptCompanionConversation/);
+  assert.match(app, /createComputerCompanionAudioEngine/);
   assert.match(preload, /onCompanionConversationEvent/);
   assert.doesNotMatch(companion, /getUserMedia|MediaRecorder|useRecorder/);
   assert.match(pages, /未发送到小智舵机/);

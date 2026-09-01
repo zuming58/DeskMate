@@ -7,7 +7,7 @@ import path from "node:path";
 import { EventEmitter } from "node:events";
 
 const require = createRequire(import.meta.url);
-const { SimulatedCompanionAudioSink, SimulatedCompanionAudioSource } = require("../electron/companion-audio.cjs");
+const { PrestartFallbackCompanionAudioSource, SimulatedCompanionAudioSink, SimulatedCompanionAudioSource } = require("../electron/companion-audio.cjs");
 const { CompanionConversationController } = require("../electron/companion-conversation.cjs");
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
@@ -199,5 +199,154 @@ test("runtime connection loss reconnects without replaying stale audio", async (
   assert.equal(providers[0].closed, true);
   assert.equal(providers[1].audio.length, 0);
   assert.equal(controller.snapshot().state, "listening");
+  await controller.stop();
+});
+
+test("transport errors use the same finite reconnect path while provider errors fail closed", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "transport-error", generation: 4 });
+  providers[0].emit({ type: "error", message: "doubao-connection-error" });
+  await controller.eventChain;
+  await new Promise((resolve) => setImmediate(resolve));
+  if (controller.reconnecting) await controller.reconnecting;
+  assert.equal(providers.length, 2);
+  assert.equal(controller.snapshot().state, "listening");
+  providers[1].emit({ type: "error", message: "provider leaked a private sentence" });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "error");
+  assert.equal(controller.snapshot().error, "companion-session-failed");
+});
+
+test("EasyInput source can fall back only before start and stays locked afterward", async () => {
+  const primary = { status: () => ({ available: false, reason: "easyinput-audio-heartbeat-timeout" }), start: async () => ({ ok: false }), stop: async () => ({ ok: true }) };
+  const computer = new SimulatedCompanionAudioSource();
+  const selections = [];
+  const source = new PrestartFallbackCompanionAudioSource({ primary, fallback: computer, onSelection: (value) => selections.push(value) });
+  let runtimeError = "";
+  const result = await source.start({ onError: (error) => { runtimeError = error.message; } });
+  assert.equal(result.ok, true);
+  assert.equal(result.fallback.reason, "easyinput-audio-heartbeat-timeout");
+  assert.equal(source.status().activeSource, "computer");
+  computer.fail("computer-microphone-disconnected");
+  assert.equal(runtimeError, "computer-microphone-disconnected");
+  assert.equal(selections.length, 1);
+  await source.stop();
+});
+
+test("the conversation controller enters the pre-start fallback instead of rejecting an unavailable preferred source", async () => {
+  const primary = { status: () => ({ available: false, reason: "easyinput-audio-heartbeat-timeout" }), start: async () => ({ ok: false }), stop: async () => ({ ok: true }) };
+  const computer = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const source = new PrestartFallbackCompanionAudioSource({ primary, fallback: computer });
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => new FakeProvider(onEvent),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "easyinput", activeSource: "" } });
+  const result = await controller.start({ sessionId: "fallback-controller", generation: 1 });
+  assert.equal(result.ok, true);
+  assert.equal(result.status.audioSelection.activeSource, "computer");
+  assert.equal(result.status.audioSelection.fallback.reason, "easyinput-audio-heartbeat-timeout");
+  await controller.stop();
+});
+
+test("an active EasyInput source failure ends the session instead of switching to computer audio", async () => {
+  let primaryHandlers;
+  let fallbackStarts = 0;
+  const primary = {
+    status: () => ({ available: true, kind: "easyinput-lan" }),
+    start: async (handlers) => { primaryHandlers = handlers; return { ok: true }; },
+    stop: async () => ({ ok: true }),
+  };
+  const fallback = {
+    status: () => ({ available: true, kind: "computer" }),
+    start: async () => { fallbackStarts += 1; return { ok: true }; },
+    stop: async () => ({ ok: true }),
+  };
+  const sink = new SimulatedCompanionAudioSink();
+  const source = new PrestartFallbackCompanionAudioSource({ primary, fallback });
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => new FakeProvider(onEvent),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "easyinput", activeSource: "easyinput" } });
+  assert.equal((await controller.start({ sessionId: "easyinput-runtime-failure", generation: 1 })).ok, true);
+  assert.equal(controller.snapshot().audioSelection.activeSource, "easyinput");
+  primaryHandlers.onError(new Error("easyinput-audio-heartbeat-timeout"));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.snapshot().state, "error");
+  assert.equal(controller.snapshot().error, "easyinput-audio-heartbeat-timeout");
+  assert.equal(fallbackStarts, 0);
+});
+
+test("manual response interruption clears playback and ignores late response frames until tts end", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let provider;
+  const states = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    publishState: async ({ state }) => { states.push(state); return { ok: true }; },
+    wait: async () => {},
+  });
+  assert.equal(controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } }).ok, true);
+  await controller.start({ sessionId: "interrupt-session", generation: 2 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  await controller.eventChain;
+  assert.equal(sink.chunks.length, 1);
+  assert.equal((await controller.interrupt("user")).ok, true);
+  assert.equal(provider.interruptions, 1);
+  provider.emit({ type: "audio", audio: Buffer.from([3, 4]) });
+  provider.emit({ type: "chat.final", text: "迟到回复" });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.equal(sink.chunks.length, 0);
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(states.at(-1), "listening");
+  await controller.stop();
+});
+
+test("a confirmed user utterance during playback drops the old response and preserves the new thinking turn", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const replies = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    onEvent: (event) => { if (event.type === "reply.partial") replies.push(event.text); },
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "spoken-interrupt", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  await controller.eventChain;
+  provider.emit({ type: "asr.final", text: "先停一下" });
+  provider.emit({ type: "audio", audio: Buffer.from([3, 4]) });
+  provider.emit({ type: "chat.partial", text: "旧", fullText: "旧回答" });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.equal(sink.chunks.length, 0);
+  assert.deepEqual(replies, []);
+  assert.equal(controller.snapshot().state, "thinking");
+  provider.emit({ type: "chat.partial", text: "新", fullText: "新回答" });
+  await controller.eventChain;
+  assert.deepEqual(replies, ["新回答"]);
   await controller.stop();
 });

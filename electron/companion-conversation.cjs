@@ -14,6 +14,12 @@ function availability(adapter, fallbackReason) {
   } catch { return { available: false, reason: fallbackReason }; }
 }
 
+function safeErrorReason(value) {
+  const reason = boundedText(value, 240);
+  if (/^[a-z0-9-]{1,120}$/.test(reason)) return reason;
+  return "companion-session-failed";
+}
+
 class CompanionConversationController {
   constructor({
     providerFactory,
@@ -41,19 +47,44 @@ class CompanionConversationController {
     this.eventChain = Promise.resolve();
     this.reconnecting = null;
     this.lastError = "";
+    this.audioSelection = Object.freeze({ requestedSource: "", activeSource: "", output: "", fallback: null });
+    this.discardResponseUntilTtsEnd = false;
+    this.postInterruptState = "";
   }
 
   snapshot() {
+    const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     return Object.freeze({
       active: Boolean(this.active),
       state: this.state,
       sessionId: this.active?.sessionId || "",
       generation: this.active?.generation || 0,
       provider: "doubao",
-      audioSource: availability(this.audioSource, "audio-source-unavailable"),
+      audioSource: sourceStatus,
       audioSink: availability(this.audioSink, "audio-sink-unavailable"),
+      audioSelection: Object.freeze({
+        ...this.audioSelection,
+        activeSource: sourceStatus.activeSource || this.audioSelection.activeSource,
+        fallback: sourceStatus.fallback || this.audioSelection.fallback,
+      }),
       error: this.lastError,
     });
+  }
+
+  configureAudio({ audioSource, audioSink, selection = {} } = {}) {
+    if (this.active) return { ok: false, reason: "companion-session-active" };
+    if (!audioSource?.status || !audioSource?.start || !audioSource?.stop || !audioSink?.status || !audioSink?.start || !audioSink?.write || !audioSink?.interrupt || !audioSink?.stop) {
+      return { ok: false, reason: "companion-audio-adapter-invalid" };
+    }
+    this.audioSource = audioSource;
+    this.audioSink = audioSink;
+    this.audioSelection = Object.freeze({
+      requestedSource: ["computer", "easyinput"].includes(selection.requestedSource) ? selection.requestedSource : "computer",
+      activeSource: ["computer", "easyinput"].includes(selection.activeSource) ? selection.activeSource : "",
+      output: "computer",
+      fallback: selection.fallback && typeof selection.fallback === "object" ? Object.freeze({ from: "easyinput", to: "computer", reason: safeErrorReason(selection.fallback.reason) }) : null,
+    });
+    return { ok: true, status: this.snapshot() };
   }
 
   async transition(state, detail = {}) {
@@ -76,6 +107,8 @@ class CompanionConversationController {
     this.active = Object.freeze({ sessionId: boundedText(sessionId, 128), generation: Math.max(1, Number(generation) || 1), token: Symbol("companion-session") });
     this.turnSequence = 0;
     this.lastError = "";
+    this.discardResponseUntilTtsEnd = false;
+    this.postInterruptState = "";
     await this.transition("connecting");
     const token = this.active.token;
     try {
@@ -160,13 +193,25 @@ class CompanionConversationController {
   async handleProviderEvent(event = {}, token) {
     if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
     if (event.type === "connection.closed") { void this.reconnect(token); return { ok: true }; }
-    if (event.type === "error") { await this.fail(event.message || "companion-provider-error", token); return { ok: false }; }
-    if (event.type === "audio") { await this.audioSink.write(event.audio); return { ok: true }; }
+    if (event.type === "error") {
+      if (["doubao-connection-error", "doubao-connection-closed"].includes(event.message)) { void this.reconnect(token); return { ok: true, reconnecting: true }; }
+      await this.fail(event.message || "companion-provider-error", token);
+      return { ok: false };
+    }
+    if (event.type === "audio") {
+      if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
+      await this.audioSink.write(event.audio);
+      return { ok: true };
+    }
     if (event.type === "asr.partial") {
       this.onEvent({ type: "transcript.partial", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true };
     }
     if (event.type === "asr.final") {
+      if (this.state === "speaking" || this.discardResponseUntilTtsEnd) {
+        this.discardResponseUntilTtsEnd = true;
+        this.postInterruptState = "thinking";
+      }
       await this.audioSink.interrupt();
       this.provider?.interrupt?.();
       if (await this.commitFinalTurn("user", event.text, token)) {
@@ -177,19 +222,32 @@ class CompanionConversationController {
       return { ok: true };
     }
     if (event.type === "chat.partial") {
+      if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       if (this.state !== "thinking") await this.transition("thinking");
       this.onEvent({ type: "reply.partial", text: boundedText(event.fullText || event.text), sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true };
     }
     if (event.type === "chat.final") {
+      if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       if (await this.commitFinalTurn("assistant", event.text, token)) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.assistant-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
       }
       return { ok: true };
     }
-    if (event.type === "tts.start") { await this.transition("speaking"); return { ok: true }; }
+    if (event.type === "tts.start") {
+      if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
+      await this.transition("speaking");
+      return { ok: true };
+    }
     if (event.type === "tts.end") {
+      if (this.discardResponseUntilTtsEnd) {
+        const nextState = this.postInterruptState || "listening";
+        this.discardResponseUntilTtsEnd = false;
+        this.postInterruptState = "";
+        if (this.isCurrent(token) && this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
+        return { ok: true, interrupted: true };
+      }
       await this.transition("completed");
       await this.wait(0);
       if (this.isCurrent(token)) await this.transition("listening");
@@ -210,7 +268,9 @@ class CompanionConversationController {
     const session = this.active;
     const provider = this.provider;
     this.active = null;
-    this.lastError = boundedText(reason, 240) || "companion-session-failed";
+    this.lastError = safeErrorReason(reason);
+    this.discardResponseUntilTtsEnd = false;
+    this.postInterruptState = "";
     await this.cleanup(provider);
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
@@ -227,11 +287,25 @@ class CompanionConversationController {
     const provider = this.provider;
     await this.transition("stopping", { reason });
     this.active = null;
+    this.discardResponseUntilTtsEnd = false;
+    this.postInterruptState = "";
     await this.cleanup(provider);
     this.state = "idle";
     this.lastError = "";
     this.onEvent({ type: "state", state: "idle", reason, sessionId: session.sessionId, generation: session.generation });
     await this.publishState({ source: "companion-conversation-v1", state: "idle" });
+    return { ok: true, status: this.snapshot() };
+  }
+
+  async interrupt(reason = "user") {
+    if (!this.active) return { ok: false, reason: "companion-session-inactive", status: this.snapshot() };
+    if (!['thinking', 'speaking', 'completed'].includes(this.state)) return { ok: false, reason: "companion-response-not-active", status: this.snapshot() };
+    this.discardResponseUntilTtsEnd = true;
+    this.postInterruptState = "listening";
+    await this.audioSink.interrupt();
+    this.provider?.interrupt?.();
+    await this.transition("listening", { reason: safeErrorReason(reason) });
+    this.onEvent({ type: "response.interrupted", sessionId: this.active.sessionId, generation: this.active.generation });
     return { ok: true, status: this.snapshot() };
   }
 }

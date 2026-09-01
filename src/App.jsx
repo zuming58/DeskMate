@@ -22,6 +22,7 @@ import { mockAdapters } from "./adapters/index.js";
 import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
 import { formatDashboardDate } from "./domain/dashboardStatus.js";
+import { createComputerCompanionAudioEngine } from "./domain/computerCompanionAudio.js";
 import {
   AgentsPage,
   CompanionPage,
@@ -233,6 +234,18 @@ function AppContent() {
     return () => { active = false; unsubscribe?.(); };
   }, [patch]);
   useEffect(() => {
+    const bridge = globalThis.desktopBridge;
+    if (!bridge?.onCompanionComputerAudioCommand || !bridge?.sendCompanionComputerAudioEvent) return undefined;
+    const engine = createComputerCompanionAudioEngine({ bridge });
+    const unsubscribe = bridge.onCompanionComputerAudioCommand((command) => { void engine.handleCommand(command); });
+    void bridge.setCompanionComputerAudioReady?.(true);
+    return () => {
+      unsubscribe?.();
+      void bridge.setCompanionComputerAudioReady?.(false);
+      void engine.close();
+    };
+  }, []);
+  useEffect(() => {
     let active = true;
     globalThis.desktopBridge?.getMemoryStatus?.().then((memory) => {
       if (!active || !memory) return;
@@ -253,9 +266,14 @@ function AppContent() {
         next.sessionId = value.sessionId || next.sessionId || "";
         next.generation = Number(value.generation) || next.generation || 0;
         next.error = value.error || (next.state === "error" ? next.error : "");
+        if (value.audioSource) next.audioSource = value.audioSource;
+        if (value.audioSink) next.audioSink = value.audioSink;
+        if (value.audioSelection) next.audioSelection = value.audioSelection;
+        if (value.computerAudio) next.computerAudio = value.computerAudio;
         if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
       } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
       else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
+      else if (value.type === "audio.selection") next.audioSelection = { requestedSource: value.requestedSource || "computer", activeSource: value.activeSource || "computer", output: "computer", fallback: value.fallback || null };
       else Object.assign(next, value);
       patch({ runtime: { ...runtime, companion: next } });
     };

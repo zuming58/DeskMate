@@ -61,8 +61,9 @@ export class DesktopBridgeAdapter {
   async setManualAgentState(value) { return this.bridge?.setManualAgentState ? this.bridge.setManualAgentState(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setActiveAgentProvider(provider) { return this.bridge?.setActiveAgentProvider ? this.bridge.setActiveAgentProvider(provider) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getCodexAgentStatus() { return this.bridge?.getCodexAgentStatus ? this.bridge.getCodexAgentStatus() : { provider: "codex", receiver: "unavailable", connected: false, state: "idle" }; }
-  async startCompanionConversation() { return this.bridge?.startCompanionConversation ? this.bridge.startCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async startCompanionConversation(value) { return this.bridge?.startCompanionConversation ? this.bridge.startCompanionConversation(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async stopCompanionConversation() { return this.bridge?.stopCompanionConversation ? this.bridge.stopCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async interruptCompanionConversation() { return this.bridge?.interruptCompanionConversation ? this.bridge.interruptCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getCompanionConversationStatus() { return this.bridge?.getCompanionConversationStatus ? this.bridge.getCompanionConversationStatus() : { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "desktop-bridge-unavailable" }, audioSink: { available: false, reason: "desktop-bridge-unavailable" }, service: { configured: false } }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async editSelectedText(instruction, { signal } = {}) {

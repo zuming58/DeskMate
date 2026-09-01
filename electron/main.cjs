@@ -17,7 +17,8 @@ const { CompanionMemoryStore } = require("./companion-memory.cjs");
 const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
-const { UnavailableCompanionAudioSink } = require("./companion-audio.cjs");
+const { PrestartFallbackCompanionAudioSource } = require("./companion-audio.cjs");
+const { ComputerCompanionAudioSession } = require("./companion-computer-audio.cjs");
 const { EasyInputLanAudioSource } = require("./easyinput-audio-source.cjs");
 const { EasyInputAudioManager } = require("./easyinput-audio-manager.cjs");
 const { EasyInputVoiceRecorder } = require("./easyinput-voice-recorder.cjs");
@@ -63,6 +64,7 @@ let companionMemoryStore;
 let companionMemoryControl;
 let knowledgeBaseSettings;
 let companionConversationController;
+let computerCompanionAudio;
 let easyInputAudioSource;
 let easyInputAudioManager;
 let easyInputVoiceRecorder;
@@ -183,8 +185,10 @@ function updateCompanionOverlay(event = {}) {
 }
 
 function handleCompanionConversationEvent(event = {}) {
-  sendToMain("companion-conversation-event", event);
-  updateCompanionOverlay(event);
+  const snapshot = companionConversationController?.snapshot?.();
+  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, computerAudio: computerCompanionAudio?.diagnostics?.() } : event;
+  sendToMain("companion-conversation-event", payload);
+  updateCompanionOverlay(payload);
   if (event.type === "state" && ["idle", "error"].includes(event.state) && foregroundSessionState.active?.mode === "companion") {
     releaseForegroundSession({ sessionId: event.sessionId, generation: event.generation });
   }
@@ -284,6 +288,10 @@ function assertTrustedSender(event) {
 
 function handleTrusted(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
+}
+
+function onTrusted(channel, handler) {
+  ipcMain.on(channel, (event, ...args) => { assertTrustedSender(event); handler(...args); });
 }
 
 function isAudioSetupSender(event) {
@@ -677,7 +685,8 @@ function startInputBridge() {
       void refreshLinkDiagnostics();
     }
     if (value?.boardConnected === false) {
-      if (companionIsActive()) void companionConversationController.stop("easyinput-device-disconnected");
+      const companionSource = companionConversationController?.snapshot?.().audioSelection?.activeSource;
+      if (companionIsActive() && companionSource === "easyinput") void companionConversationController.stop("easyinput-device-disconnected");
       if (easyInputVoiceRecorder?.status?.().recording) void easyInputVoiceRecorder.fail("easyinput-device-disconnected");
       void easyInputAudioManager?.suspend("easyinput-device-disconnected");
     }
@@ -760,12 +769,19 @@ async function runBailianOrganizerTest(text) {
 }
 
 function companionConversationStatus() {
-  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, error: "" };
+  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, error: "" };
   const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
-  return { ...snapshot, service, foregroundMode: foregroundSessionState.active?.mode || null };
+  return { ...snapshot, service, foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" } };
 }
 
-async function startCompanionConversation() {
+function normalizeCompanionStartOptions(value = {}) {
+  return {
+    microphoneSource: value?.microphoneSource === "easyinput" ? "easyinput" : "computer",
+    microphoneId: typeof value?.microphoneId === "string" ? value.microphoneId.slice(0, 512) : "",
+  };
+}
+
+async function startCompanionConversation(value = {}) {
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
   }
@@ -776,6 +792,24 @@ async function startCompanionConversation() {
   const started = startForegroundSession(foregroundSessionState, { mode: "companion", sessionId });
   foregroundSessionState = started.state;
   const lease = { sessionId, generation: foregroundSessionState.active.generation };
+  const options = normalizeCompanionStartOptions(value);
+  const prepared = computerCompanionAudio.prepare({ ...lease, deviceId: options.microphoneId });
+  if (!prepared.ok) { releaseForegroundSession(lease); return { ok: false, reason: prepared.reason, status: companionConversationStatus() }; }
+  let audioSource = computerCompanionAudio.source;
+  if (options.microphoneSource === "easyinput") {
+    audioSource = new PrestartFallbackCompanionAudioSource({
+      primary: easyInputAudioSource,
+      fallback: computerCompanionAudio.source,
+      requestedSource: "easyinput",
+      onSelection: (status) => handleCompanionConversationEvent({ type: "audio.selection", requestedSource: "easyinput", activeSource: status.activeSource, fallback: status.fallback }),
+    });
+  }
+  const configured = companionConversationController.configureAudio({
+    audioSource,
+    audioSink: computerCompanionAudio.sink,
+    selection: { requestedSource: options.microphoneSource, activeSource: options.microphoneSource === "computer" ? "computer" : "", output: "computer" },
+  });
+  if (!configured.ok) { releaseForegroundSession(lease); return { ok: false, reason: configured.reason, status: companionConversationStatus() }; }
   const result = await companionConversationController.start(lease);
   if (!result.ok) releaseForegroundSession(lease);
   return { ...result, status: companionConversationStatus() };
@@ -783,6 +817,11 @@ async function startCompanionConversation() {
 
 async function stopCompanionConversation(reason = "user") {
   const result = await companionConversationController.stop(reason);
+  return { ...result, status: companionConversationStatus() };
+}
+
+async function interruptCompanionConversation(reason = "user") {
+  const result = await companionConversationController.interrupt(reason);
   return { ...result, status: companionConversationStatus() };
 }
 
@@ -806,10 +845,14 @@ app.whenReady().then(async () => {
     source: easyInputAudioSource,
     emit: (event) => sendToMain("easyinput-voice-recording-event", event),
   });
+  computerCompanionAudio = new ComputerCompanionAudioSession({
+    sendCommand: (event) => sendToMain("companion-computer-audio-command", event),
+    onError: (reason) => { if (companionIsActive()) void companionConversationController.fail(reason); },
+  });
   companionConversationController = new CompanionConversationController({
     providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: aiServiceStore.loadRealtimeSecret(), onEvent }),
-    audioSource: easyInputAudioSource,
-    audioSink: new UnavailableCompanionAudioSink(),
+    audioSource: computerCompanionAudio.source,
+    audioSink: computerCompanionAudio.sink,
     commitTurn: (turn) => companionMemoryStore.commitConversationTurn(turn),
     publishState: (value) => agentStatePublisher.publishCompanionState(value),
     onEvent: handleCompanionConversationEvent,
@@ -924,8 +967,11 @@ app.whenReady().then(async () => {
   handleTrusted("ai-services:save-realtime", (value) => aiServiceStore.saveRealtime(value || {}));
   handleTrusted("ai-services:clear-realtime", () => aiServiceStore.clearRealtime());
   handleTrusted("companion:get-status", () => companionConversationStatus());
-  handleTrusted("companion:start", () => startCompanionConversation());
+  handleTrusted("companion:start", (value) => startCompanionConversation(value));
   handleTrusted("companion:stop", () => stopCompanionConversation("user"));
+  handleTrusted("companion:interrupt", () => interruptCompanionConversation("user"));
+  handleTrusted("companion:set-computer-audio-ready", (ready) => computerCompanionAudio.setRendererReady(Boolean(ready)));
+  onTrusted("companion:computer-audio-event", (value) => { computerCompanionAudio.handleRendererEvent(value); });
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));

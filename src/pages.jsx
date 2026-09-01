@@ -265,6 +265,9 @@ export function CompanionPage({ notify, navigate }) {
   const [section, setSection] = useState("overview");
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
   const sessionActive = Boolean(conversation.active);
+  const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
+  const activeCompanionSource = conversation.audioSelection?.activeSource || (sessionActive ? preferredCompanionSource : "");
+  const companionSourceLabel = activeCompanionSource === "easyinput" ? "EasyInput 板载麦克风" : activeCompanionSource === "computer" ? "电脑麦克风" : preferredCompanionSource === "easyinput" ? "EasyInput（开始前可回退）" : "电脑麦克风";
   const conversationExpression = { connecting: "listen", listening: "listen", thinking: "think", speaking: "focus", completed: "happy", error: "alert", stopping: "sleep" }[conversation.state];
   const expression = conversationExpression || state.currentExpression;
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
@@ -286,22 +289,36 @@ export function CompanionPage({ notify, navigate }) {
     "easyinput-audio-heartbeat-timeout": "未收到 EasyInput 音频心跳，请检查同一局域网和板上配置",
     "multiple-easyinput-audio-sources": "检测到多个 EasyInput 音频来源，已拒绝自动选择",
     "easyinput-audio-sink-pending": "EasyInput 扬声器播放适配器尚未接入",
+    "easyinput-speaker-contract-not-frozen": "EasyInput 扬声器下行协议尚未冻结，本次使用电脑扬声器",
+    "computer-audio-renderer-unavailable": "电脑音频桥尚未就绪，请重新打开 DeskMate",
+    "computer-microphone-permission-denied": "电脑麦克风权限被拒绝",
+    "computer-microphone-not-found": "没有找到可用的电脑麦克风",
+    "computer-microphone-device-unavailable": "已选择的电脑麦克风不可用",
+    "computer-speaker-start-failed": "电脑扬声器无法启动",
     "voice-workflow-active": "文字语音输入或语音编辑正在使用音频，请先结束",
     "desktop-bridge-unavailable": "请使用 DeskMate 桌面版启动陪伴对话",
   };
   const toggleSession = async () => {
     try {
-      const result = sessionActive ? await globalThis.desktopBridge?.stopCompanionConversation?.() : await globalThis.desktopBridge?.startCompanionConversation?.();
+      const result = sessionActive ? await globalThis.desktopBridge?.stopCompanionConversation?.() : await globalThis.desktopBridge?.startCompanionConversation?.({ microphoneSource: preferredCompanionSource, microphoneId: state.settings.microphoneId || "" });
       if (!result?.ok) return notify(blockerCopy[result?.reason] || `陪伴对话未启动：${result?.reason || "服务不可用"}`);
-      notify(sessionActive ? "陪伴对话已安全结束" : "陪伴对话已开始");
+      const fallback = result.status?.audioSelection?.fallback || result.status?.audioSource?.fallback;
+      if (fallback) notify(`${microphoneSourceFailureMessage(fallback.reason)}，本次陪伴会话已回退电脑麦克风`);
+      else notify(sessionActive ? "陪伴对话已安全结束" : `陪伴对话已开始 · ${preferredCompanionSource === "easyinput" ? "EasyInput 麦克风" : "电脑麦克风"} + 电脑扬声器`);
     } catch (error) { notify(`陪伴对话失败：${error.message}`); }
+  };
+  const interruptResponse = async () => {
+    try {
+      const result = await globalThis.desktopBridge?.interruptCompanionConversation?.();
+      notify(result?.ok ? "已打断当前回答，继续倾听" : blockerCopy[result?.reason] || "当前没有可打断的回答");
+    } catch (error) { notify(`打断失败：${error.message}`); }
   };
   return (
     <div className="page page--companion">
       <PageIntro
         title="AI 陪伴"
         description="陪伴对话、记忆提醒、AI 联动、表情与动作的统一入口"
-        actions={<StatusBadge tone={sessionActive ? "success" : serviceStatus.microphone.tone}>{sessionActive ? "实时陪伴中" : `板载麦克风 · ${serviceStatus.microphone.label}`}</StatusBadge>}
+        actions={<StatusBadge tone={sessionActive ? "success" : conversation.service?.configured ? "neutral" : "demo"}>{sessionActive ? `实时陪伴中 · ${companionSourceLabel}` : `输入 · ${companionSourceLabel}`}</StatusBadge>}
       />
       <Segmented
         value={section}
@@ -321,7 +338,9 @@ export function CompanionPage({ notify, navigate }) {
           <div className="card-heading"><div><strong>DeskMate 实时陪伴</strong><small>WINDOWS · DOUBAO REALTIME</small></div><StatusBadge tone={conversation.state === "error" ? "warning" : sessionActive ? "success" : "neutral"}>{sessionActive ? ({ connecting: "连接中", listening: "聆听中", thinking: "思考中", speaking: "播报中", completed: "本轮完成", stopping: "结束中" }[conversation.state] || "会话中") : selectedPreset.name}</StatusBadge></div>
           <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
           <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
-          <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴对话" : "开始陪伴对话"}</Button>
+          <div className="button-row companion-dialogue-actions"><Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴对话" : conversation.state === "error" ? "重新开始陪伴对话" : "开始陪伴对话"}</Button>{sessionActive && ["thinking", "speaking", "completed"].includes(conversation.state) && <Button icon={PlayerPause} variant="ghost" onClick={interruptResponse}>打断回答并继续听</Button>}</div>
+          <div className="companion-session-evidence"><span><small>本次输入</small><strong>{companionSourceLabel}</strong></span><span><small>本次输出</small><strong>电脑扬声器</strong></span><span><small>服务连接</small><strong>{sessionActive ? "会话已连接" : conversation.service?.configured ? "凭据已配置 · 尚未连接" : "待配置"}</strong></span></div>
+          {conversation.audioSelection?.fallback && <Notice tone="warning" title="本轮已明确回退">{microphoneSourceFailureMessage(conversation.audioSelection.fallback.reason)}；保存的首选来源没有改变，本轮实际使用电脑麦克风。</Notice>}
           <div className="companion-preview-relocated"><span><strong>当前为 Windows 软件画面</strong><small>本地表情预览已移到“表情库”，不会控制小智。</small></span><Button variant="ghost" onClick={() => setSection("expressions")}>打开软件表情库</Button></div>
         </Card>
         <div className="companion-side-stack">
@@ -338,7 +357,10 @@ export function CompanionPage({ notify, navigate }) {
               <div><span><Keyboard size={18} />EasyInput HID</span><StatusBadge tone={serviceStatus.easyInput.tone}>{serviceStatus.easyInput.label}</StatusBadge></div>
               <div><span><Robot size={18} />小智 DeskMate Link</span><StatusBadge tone={serviceStatus.xiaozhi.tone}>{serviceStatus.xiaozhi.label}</StatusBadge></div>
               <div><span><Microphone2 size={18} />豆包实时对话</span><StatusBadge tone={serviceStatus.realtime.tone}>{serviceStatus.realtime.label}</StatusBadge></div>
-              <div><span><Microphone2 size={18} />EasyInput 板载麦克风</span><StatusBadge tone={serviceStatus.microphone.tone}>{serviceStatus.microphone.label}</StatusBadge></div>
+               <div><span><Microphone2 size={18} />EasyInput 板载麦克风</span><StatusBadge tone={serviceStatus.microphone.tone}>{serviceStatus.microphone.label}</StatusBadge></div>
+               <div><span><Microphone2 size={18} />当前陪伴输入</span><StatusBadge tone={sessionActive ? "success" : "neutral"}>{companionSourceLabel}</StatusBadge></div>
+               <div><span><Music size={18} />当前陪伴输出</span><StatusBadge tone="success">电脑扬声器</StatusBadge></div>
+               <div><span><Music size={18} />EasyInput 扬声器</span><StatusBadge tone="demo">待协议冻结</StatusBadge></div>
               <div><span><Link size={18} />逐轮本地记忆</span><StatusBadge tone={serviceStatus.memory.tone}>{serviceStatus.memory.label}</StatusBadge></div>
             </div>
           </Card>
@@ -1307,7 +1329,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const clearTextService = async () => { try { const value = await globalThis.desktopBridge?.clearTextModelService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify(bailianStatus.configured ? "已移除自定义文本模型，将回退到百炼 qwen3.7-flash" : "文本大模型配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const saveRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.saveRealtimeVoiceService?.(realtimeService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setRealtimeService((current) => ({ ...current, accessKey: "", appKey: "" })); notify("实时语音凭据已加密保存；只有开始陪伴会话时才会联网"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.clearRealtimeVoiceService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify("实时语音配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
-  const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
+  const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const companion = state.runtime?.companion || {}; const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, conversation: { state: companion.state, serviceConfigured: companion.service?.configured, connected: companion.active, input: companion.audioSelection?.activeSource || companion.audioSelection?.requestedSource, fallback: Boolean(companion.audioSelection?.fallback), error: companion.error, counters: companion.computerAudio?.counters }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
   const downloadConfig = () => { const blob = new Blob([exportConfig()], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-config.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 0); notify("配置 JSON 已导出"); };
   const importConfig = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { replace(JSON.parse(reader.result)); notify("配置已导入"); } catch (error) { notify(`导入失败：${error.message}`); } }; reader.readAsText(file); event.target.value = ""; };
   const sttDiagnostic = state.settings.sttMode === "bailian" ? { label: "千问 ASR", value: bailianStatus.configured ? "已配置" : "缺少密钥", tone: bailianStatus.configured ? "success" : "demo" } : state.settings.sttMode === "mock" ? { label: "Mock STT", value: "模拟", tone: "demo" } : state.settings.sttMode === "http" ? { label: "HTTP STT 端点", value: "待验证", tone: "demo" } : { label: "语音转写服务", value: "未配置", tone: "demo" };
@@ -1351,7 +1373,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
                 <SettingRow title="服务商" description="首个适配目标为豆包实时语音；自定义服务需要另写协议适配器"><select value={realtimeService.provider} onChange={(event) => setRealtimeService((current) => ({ ...current, provider: event.target.value }))}><option value="doubao">豆包实时语音</option><option value="custom">自定义 WebSocket</option></select></SettingRow>
                 <label className="field-label">WebSocket 地址<input value={realtimeService.endpoint} onChange={(event) => setRealtimeService((current) => ({ ...current, endpoint: event.target.value }))} placeholder="wss://..." /></label>
                 <div className="service-config-grid"><label className="field-label">App ID<input value={realtimeService.appId} onChange={(event) => setRealtimeService((current) => ({ ...current, appId: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "重新保存时请填写" : "App ID"} /></label><label className="field-label">Access Key<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.accessKey} onChange={(event) => setRealtimeService((current) => ({ ...current, accessKey: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "已加密保存；重新保存时请填写" : "Access Key"} /></label><label className="field-label">App Key（可选）<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.appKey} onChange={(event) => setRealtimeService((current) => ({ ...current, appKey: event.target.value }))} placeholder="留空则由适配器使用服务默认值" /></label><label className="field-label">Resource ID<input value={realtimeService.resourceId} onChange={(event) => setRealtimeService((current) => ({ ...current, resourceId: event.target.value }))} /></label><label className="field-label">模型版本<input value={realtimeService.model} onChange={(event) => setRealtimeService((current) => ({ ...current, model: event.target.value }))} /></label><label className="field-label">女性音色<input value={realtimeService.voice} onChange={(event) => setRealtimeService((current) => ({ ...current, voice: event.target.value }))} /></label></div>
-                <Notice tone="warning" title="尚未启用">当前只加密保存接口参数，不会建立连接。待陪伴状态机、打断仲裁和 Bridge 合同完成后才启用实时会话。</Notice>
+                <Notice tone="info" title="按需连接">凭据保存后仍不会后台联网；只有用户点击“开始陪伴对话”才建立会话。当前生产音频闭环使用所选麦克风和电脑扬声器，连接状态会在陪伴页明确显示。</Notice>
                 <div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!realtimeService.appId.trim() || !realtimeService.accessKey.trim() || !realtimeService.endpoint.trim()} onClick={saveRealtimeService}>加密保存实时语音</Button>{aiServiceStatus.realtime?.configured && <Button variant="ghost" icon={Trash} onClick={clearRealtimeService}>删除实时语音配置</Button>}</div>
               </section>
             </div>
