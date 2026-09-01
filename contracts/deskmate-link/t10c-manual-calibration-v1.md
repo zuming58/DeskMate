@@ -9,8 +9,10 @@ enable normal motion, prove a servo power path, or authorize hardware use.
 
 ## Safety boundary
 
-- The Xiaozhi endpoint remains locked after startup, reconnect, either peer's
-  boot change and emergency-stop clear. Those transitions emit no servo output.
+- The Xiaozhi endpoint remains motion-blocked after startup, reconnect, either
+  peer's boot change and emergency-stop clear. With no pre-existing latched
+  stop/fault it returns to locked; a controller restart or disconnect cannot
+  clear an existing stop/fault latch. Those transitions emit no servo output.
 - Every possible output requires an axis selection followed by a one-time,
   volatile arm token. An output consumes the token. The lease is 1000..5000 ms.
 - Arm requires all four user attestations: user present, linkage unloaded,

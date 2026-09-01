@@ -198,6 +198,10 @@ void TestEmergencyStopPriorityLatchAndClearRequiresFreshRecenter() {
     assert(owner.snapshot().emergency_stop_latched);
     assert(owner.Execute(Stop(1, ManualCalibrationOperation::kEmergencyStop),
                          3) == ManualCalibrationResult::kDuplicate);
+    owner.OnLinkDisconnected();
+    assert(owner.snapshot().emergency_stop_latched);
+    owner.StartSession(kSession);
+    assert(owner.snapshot().emergency_stop_latched);
     assert(owner.Execute(Select(101, 0), 4) ==
            ManualCalibrationResult::kEmergencyStopped);
     assert(owner.Execute(
