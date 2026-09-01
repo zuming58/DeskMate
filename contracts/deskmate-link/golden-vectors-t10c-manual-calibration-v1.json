@@ -1,0 +1,22 @@
+{
+  "schema": "deskmate.link.golden-vectors.t10c-manual-calibration.v1",
+  "contract": "T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN",
+  "base_contract": "DESKMATE_LINK_V1_FROZEN",
+  "encoding": "uppercase hexadecimal without separators",
+  "vectors": [
+    {"name":"select_request","expect":"frame","hex":"444D4C4B0101200020000000130044332211010000000000000001000000000000A46A"},
+    {"name":"select_response","expect":"frame","hex":"444D4C4B0102200020000000130044332211010000000000000000010024000A00ADE8"},
+    {"name":"arm_request","expect":"frame","hex":"444D4C4B0101200021000000130044332211020000008877665500000000B80B0F37C7"},
+    {"name":"arm_response","expect":"frame","hex":"444D4C4B0102200021000000130044332211020000000000000000020025000A0068F6"},
+    {"name":"provisional_center_request","expect":"frame","hex":"444D4C4B0101200022000000130044332211030000008877665502000000000000BFBD"},
+    {"name":"provisional_center_response","expect":"frame","hex":"444D4C4B0102200022000000130044332211030000000100000000030026000A007D90"},
+    {"name":"rearm_request","expect":"frame","hex":"444D4C4B0101200023000000130044332211040000008977665500000000B80B0F7D42"},
+    {"name":"rearm_response","expect":"frame","hex":"444D4C4B0102200023000000130044332211040000000100000000020027000A004A9E"},
+    {"name":"single_step_request","expect":"frame","hex":"444D4C4B0101200024000000130044332211050000008977665503000100000000342C"},
+    {"name":"single_step_response","expect":"frame","hex":"444D4C4B0102200024000000130044332211050000000200000000030026000A0075B3"},
+    {"name":"status_request","expect":"frame","hex":"444D4C4B01012100250000000000ED2F"},
+    {"name":"status_response","expect":"frame","hex":"444D4C4B01022100250000001200443322110500000002000000030026000A002A3C"},
+    {"name":"emergency_stop_request","expect":"frame","hex":"444D4C4B0101200026000000130044332211060000000000000005FF0000000000D30A"},
+    {"name":"emergency_stop_response","expect":"frame","hex":"444D4C4B010220002600000013004433221106000000020000000004002E000A00BA96"}
+  ]
+}

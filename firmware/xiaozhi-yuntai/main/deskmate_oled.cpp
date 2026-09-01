@@ -5,6 +5,7 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -191,11 +192,21 @@ private:
         }
     }
 
+    void WaitingIndicator() noexcept {
+        FillRoundedRect(51, 56, 6, 5, 2);
+        FillRoundedRect(61, 56, 6, 5, 2);
+        FillRoundedRect(71, 56, 6, 5, 2);
+    }
+
     void DrawScene(AgentScene scene) noexcept {
         switch (scene) {
             case AgentScene::kNeutral:
                 FillRoundedRect(18, 13, 40, 40, 9);
                 FillRoundedRect(70, 13, 40, 40, 9);
+                break;
+            case AgentScene::kNeutralBlink:
+                FillRoundedRect(18, 29, 40, 6, 3);
+                FillRoundedRect(70, 29, 40, 6, 3);
                 break;
             case AgentScene::kListening:
                 FillRoundedRect(23, 9, 28, 46, 8);
@@ -210,8 +221,9 @@ private:
                 FocusedEye(72, false);
                 break;
             case AgentScene::kAttention:
-                FillRoundedRect(20, 10, 36, 44, 10);
-                FillRoundedRect(72, 10, 36, 44, 10);
+                FillRoundedRect(22, 7, 32, 43, 9);
+                FillRoundedRect(74, 7, 32, 43, 9);
+                WaitingIndicator();
                 break;
             case AgentScene::kHappy:
                 HappyEye(38);
@@ -245,7 +257,9 @@ TaskHandle_t g_display_task_handle{};
 
 void DisplayTask(void*) {
     for (;;) {
-        if (!g_display_owner.ServiceOne()) {
+        const auto now_ms =
+            static_cast<std::uint32_t>(esp_timer_get_time() / 1000);
+        if (!g_display_owner.Service(now_ms)) {
             vTaskDelay(pdMS_TO_TICKS(5));
         } else {
             vTaskDelay(1);

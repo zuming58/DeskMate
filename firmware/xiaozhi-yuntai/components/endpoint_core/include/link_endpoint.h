@@ -2,6 +2,7 @@
 
 #include "display_owner.h"
 #include "link_protocol.h"
+#include "manual_calibration_owner.h"
 
 #include <array>
 #include <cstddef>
@@ -36,8 +37,11 @@ struct LinkEndpointSnapshot {
 
 class XiaozhiLinkEndpoint {
 public:
-    explicit XiaozhiLinkEndpoint(DisplayOwner& display_owner) noexcept
-        : display_owner_(display_owner) {}
+    explicit XiaozhiLinkEndpoint(
+        DisplayOwner& display_owner,
+        ManualCalibrationOwner* manual_calibration_owner = nullptr) noexcept
+        : display_owner_(display_owner),
+          manual_calibration_owner_(manual_calibration_owner) {}
 
     void Start(std::uint32_t peer_boot_id, std::uint32_t now_ms) noexcept;
     void OnLinkDisconnected() noexcept;
@@ -84,6 +88,7 @@ private:
     static constexpr std::size_t kCacheEntries = 8;
     std::array<CacheEntry, kCacheEntries> cache_{};
     DisplayOwner& display_owner_;
+    ManualCalibrationOwner* manual_calibration_owner_{};
     std::size_t cache_cursor_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t controller_boot_id_{};

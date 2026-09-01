@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A safety lease must expire before duplicate classification and status reporting
+
+- Symptom: a one-use ARM token can appear active beyond its lease if expiry is checked only when a new non-duplicate output arrives; repeated ARM traffic or status polling would otherwise preserve stale UI state.
+- Practice: advance the lease clock before action-id deduplication and before emitting the independent status snapshot. Expiry clears only volatile authorization and never creates output.
+- Rule: time-bounded actuator authorization is state, not a request-side validation detail. Every externally observable owner path must first make expiry effective, while emergency stop remains independently executable at highest priority.
+
+## Reference motion code is behavior evidence, not calibration evidence
+
+- Symptom: a reference project contains nominal centers, ranges, GPIOs and direct LEDC initialization, but copying them would move real servos before the installed supply path, direction and mechanical limits are verified.
+- Practice: reuse only bounded behavior such as per-axis limits, small steps and recenter semantics. Keep power, common ground, center, direction and limits behind explicit product gates, and keep the first motion package disconnected from PWM.
+- Rule: source-confirmed servo constants cannot become device-confirmed calibration. A production call site and physical adapter require separate user-present electrical and mechanical evidence.
+
 ## A test-only state machine is not runtime evidence
 
 - Symptom: an early speaker package contained a detailed playback lifecycle class that only Host tests called, while the production service used a separate atomic state path.

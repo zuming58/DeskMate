@@ -2,6 +2,12 @@
 
 ## Current handoff
 
+- [T10C Xiaozhi manual calibration frozen contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)
+- [T10C Xiaozhi manual calibration golden vectors](../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json)
+- [T10C Xiaozhi manual calibration handoff](handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)
+- [T10C Xiaozhi manual calibration provenance](provenance/t10c-xiaozhi-manual-calibration-provenance.md)
+- [Xiaozhi OLED animation polish handoff](handoffs/xiaozhi-oled-animation-polish-2026-08-31.md)
+
 - [T11E-A EasyInput local speaker output handoff](handoffs/t11e-a-easyinput-speaker-output-2026-09-01.md)
 - [T11E-A EasyInput speaker output frozen contract](contracts/easyinput-speaker-output-v1.md)
 - [T11E-A Maker speaker reference audit](provenance/t11e-a-easyinput-speaker-reference-audit.md)

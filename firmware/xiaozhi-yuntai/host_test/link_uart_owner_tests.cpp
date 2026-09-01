@@ -164,7 +164,7 @@ void TransportDisconnectClearsDisplayStateBeforeReconnect() {
     CHECK(display.Initialize());
     XiaozhiLinkEndpoint endpoint(display);
     endpoint.Start(0xaabbccdd, 0);
-    CHECK(display.ServiceOne());
+    CHECK(!display.Service(0));
     LinkUartOwner owner(transport, endpoint);
 
     transport.FeedReceive(Bytes(Hello(1)));
@@ -179,6 +179,8 @@ void TransportDisconnectClearsDisplayStateBeforeReconnect() {
                                         state_payload)));
     owner.Service(2);
     CHECK(display.snapshot().desired_state == AgentState::kCompleted);
+    CHECK(display.Service(2));
+    CHECK(display.snapshot().current_state == AgentState::kCompleted);
     transport.TakeSent();
 
     transport.SetOpen(false);
@@ -193,7 +195,7 @@ void TransportDisconnectClearsDisplayStateBeforeReconnect() {
     owner.Service(4);
     CHECK(endpoint.snapshot().link_ready);
     CHECK(display.snapshot().desired_state == AgentState::kIdle);
-    CHECK(display.ServiceOne());
+    CHECK(display.Service(5));
     CHECK(display.snapshot().current_state == AgentState::kIdle);
 }
 

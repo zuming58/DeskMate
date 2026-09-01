@@ -6,6 +6,9 @@
 
 ### Current execution point
 
+- T10C 小智手动校准候选已进入 code-only 交付门：冻结 additive [`T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN`](../contracts/deskmate-link/t10c-manual-calibration-v1.md) 和黄金向量，只在注入 fake adapter 的 Host 路径验证选择轴、短租约一次性 ARM、固定 1.0° 单步、回中、急停、幂等与三层证据。生产 `app_main` 不注入 owner，`MOTION` capability 仍关闭，没有 LEDC/PWM/GPIO/实体 adapter；Windows/EasyInput 转发仍是后续独立切片，所以当前不可进行舵机真动验收。
+- 小智 OLED 动画优化已合并：待机眨眼、区分等待场景和 latest-wins 显示邮箱通过 Host/构建门，但尚未形成新的真机烧录授权。
+
 - T11E-A EasyInput 本地扬声器硬件底座已按 [`EASYINPUT_SPEAKER_OUTPUT_V1_FROZEN`](../docs/contracts/easyinput-speaker-output-v1.md) 完成代码与构建门：I2S1 固定 GPIO14/13/15、48 kHz/16-bit/mono-left，复用 GPIO8 `Speaker` 租约，以一次低音量合成开机双提示音作为后续真机门，并用 generation 仲裁保证 T10E 麦克风绝对优先。Host 12/12 与 ESP-IDF v5.5.5 固定 16 MiB 分区构建通过；当前仍为 `HIL_NOT_AUTHORIZED`，实时桌面扬声器下行仍未冻结。
 - T10E EasyInput 板载麦克风已按 [`EASYINPUT_AUDIO_CAPTURE_V1_FROZEN`](../docs/contracts/easyinput-audio-capture-v1.md) 完成并经真机验证。电脑麦克风按 D054 作为软件默认输入，EasyInput LAN 麦克风作为可选来源；当前集成不触发新烧录。
 

@@ -1,5 +1,17 @@
 # Progress log
 
+## 2026-09-01 - T10C Xiaozhi manual calibration candidate complete, motion remains locked
+
+- What changed: branch `codex/xiaozhi-t10c-manual-calibration` freezes the additive `T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN` contract and adds a pure C++ manual owner, disabled/fake servo adapters and optional simulated endpoint injection. Base framing/CRC/UART and existing messages are unchanged.
+- Safety semantics: output requires selected axis plus a volatile one-use ARM token; only adapter-local provisional center, fixed 1.0-degree direction step and recenter exist. Emergency stop is highest priority and idempotent. Expiry, disconnect and peer restart disarm without replay.
+- Production boundary: `app_main` injects no owner, the real adapter is absent, and MOTION capability stays disabled. Windows/EasyInput forwarding is not implemented. Installed mapping, supply/current/common ground, center, direction, limits and cutoff remain unknown.
+- Verification: final branch HEAD `b83ce886ec8efd1fea288a65e0127d2a887d5883`; Xiaozhi Host CTest `11/11`; exact ESP-IDF v5.5.3 fixed-16-MiB build passed. No device/Flash/NVS/eFuse/OLED/audio/PWM/GPIO/servo operation occurred; this is not a flash candidate.
+
+## 2026-08-31 - Xiaozhi OLED animation polish merged as code-only evidence
+
+- Bounded idle blinking, a distinct waiting scene and a one-slot latest-wins display mailbox were added without activating motion or Xiaozhi audio. OLED failure remains fail-soft for the Link baseline.
+- Host and exact ESP-IDF v5.5.3 build gates passed in the source branch; this integration does not authorize a new image write or claim OLED HIL.
+
 ## 2026-09-01 - T11E-A EasyInput local speaker code and independent audit complete
 
 - Implementation: I2S1 uses GPIO14/13/15 at 48 kHz, 16-bit mono-left with one synthesized low-volume startup probe. The existing GPIO8 controller remains the sole physical power writer through its `Speaker` lease; no sound-bank, desktop, HID, UDP or DeskMate Link audio trigger was added.

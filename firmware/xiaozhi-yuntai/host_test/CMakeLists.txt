@@ -12,7 +12,10 @@ set(CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_endpoint.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_uart_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
 )
 
 add_executable(motion_safety_core_tests
@@ -28,6 +31,39 @@ else()
     )
 endif()
 add_test(NAME motion_safety_core_tests COMMAND motion_safety_core_tests)
+
+add_executable(manual_calibration_owner_tests
+    manual_calibration_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
+)
+target_include_directories(manual_calibration_owner_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(MSVC)
+    target_compile_options(manual_calibration_owner_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(manual_calibration_owner_tests PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+    )
+endif()
+add_test(NAME manual_calibration_owner_tests
+    COMMAND manual_calibration_owner_tests
+)
+
+add_executable(manual_calibration_link_tests
+    manual_calibration_link_tests.cpp ${CORE_SOURCES}
+)
+target_include_directories(manual_calibration_link_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_compile_definitions(manual_calibration_link_tests PRIVATE
+    T10C_GOLDEN_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json"
+)
+add_test(NAME manual_calibration_link_tests
+    COMMAND manual_calibration_link_tests
+)
 
 add_executable(display_owner_tests
     display_owner_tests.cpp
@@ -88,6 +124,12 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     DISPLAY_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
     MOTION_HEADER_PATH="${CORE_INCLUDE_DIR}/motion_safety_core.h"
     MOTION_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    MANUAL_OWNER_HEADER_PATH="${CORE_INCLUDE_DIR}/manual_calibration_owner.h"
+    MANUAL_OWNER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
+    MANUAL_PROTOCOL_HEADER_PATH="${CORE_INCLUDE_DIR}/manual_calibration_protocol.h"
+    MANUAL_PROTOCOL_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_protocol.cpp"
+    SERVO_ADAPTER_HEADER_PATH="${CORE_INCLUDE_DIR}/servo_adapter.h"
+    SERVO_ADAPTER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
     OLED_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.h"
     OLED_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"
@@ -96,5 +138,7 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/v1.md"
     LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-v1.json"
+    T10C_LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/t10c-manual-calibration-v1.md"
+    T10C_LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json"
 )
 add_test(NAME scaffold_source_contract_tests COMMAND scaffold_source_contract_tests)

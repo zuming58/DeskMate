@@ -40,6 +40,8 @@ const char* ToString(AgentScene scene) noexcept {
     switch (scene) {
         case AgentScene::kNeutral:
             return "neutral";
+        case AgentScene::kNeutralBlink:
+            return "neutral_blink";
         case AgentScene::kListening:
             return "listening";
         case AgentScene::kThinking:
@@ -58,19 +60,50 @@ const char* ToString(AgentScene scene) noexcept {
     return "unknown";
 }
 
-DisplayOwner::DisplayOwner(DisplayRenderer& renderer) noexcept
-    : renderer_(renderer) {}
+DisplayOwner::DisplayOwner(DisplayRenderer& renderer,
+                           std::uint32_t animation_seed) noexcept
+    : renderer_(renderer),
+      animation_prng_state_(animation_seed == 0 ? 0x6d2b79f5u
+                                                : animation_seed) {}
 
-void DisplayOwner::ClearQueueLocked() noexcept {
-    queue_head_ = 0;
-    queue_tail_ = 0;
-    queue_size_ = 0;
+void DisplayOwner::ClearMailboxLocked() noexcept {
+    mailbox_ = {};
+    mailbox_pending_ = false;
 }
 
-void DisplayOwner::PushLocked(const Command& command) noexcept {
-    queue_[queue_tail_] = command;
-    queue_tail_ = (queue_tail_ + 1u) % queue_.size();
-    ++queue_size_;
+bool DisplayOwner::TimeReached(std::uint32_t now_ms,
+                               std::uint32_t deadline_ms) noexcept {
+    return static_cast<std::int32_t>(now_ms - deadline_ms) >= 0;
+}
+
+std::uint32_t DisplayOwner::NextBlinkDelayLocked() noexcept {
+    auto value = animation_prng_state_;
+    value ^= value << 13u;
+    value ^= value >> 17u;
+    value ^= value << 5u;
+    animation_prng_state_ = value;
+    constexpr auto kRange = kBlinkMaxIntervalMs - kBlinkMinIntervalMs + 1u;
+    return kBlinkMinIntervalMs + (value % kRange);
+}
+
+void DisplayOwner::ScheduleNextBlinkLocked(std::uint32_t now_ms) noexcept {
+    blink_closed_ = false;
+    blink_scheduled_ = true;
+    next_animation_ms_ = now_ms + NextBlinkDelayLocked();
+}
+
+bool DisplayOwner::RenderLocked(AgentScene scene) noexcept {
+    if (renderer_.Render(scene)) {
+        current_scene_ = scene;
+        IncrementSaturated(diagnostics_.rendered);
+        return true;
+    }
+    enabled_ = false;
+    ClearMailboxLocked();
+    blink_closed_ = false;
+    blink_scheduled_ = false;
+    IncrementSaturated(diagnostics_.render_failures);
+    return false;
 }
 
 bool DisplayOwner::Initialize() noexcept {
@@ -122,12 +155,24 @@ DisplayAcceptResult DisplayOwner::Accept(std::uint32_t transition_id,
         IncrementSaturated(diagnostics_.accepted);
         return DisplayAcceptResult::kAccepted;
     }
-    if (queue_size_ == queue_.size()) {
-        IncrementSaturated(diagnostics_.queue_overflows);
-        return DisplayAcceptResult::kBusy;
+
+    if (state == current_state_) {
+        if (mailbox_pending_) {
+            IncrementSaturated(diagnostics_.latest_replacements);
+        }
+        ClearMailboxLocked();
+        desired_state_ = state;
+        last_transition_id_ = transition_id;
+        last_transition_valid_ = true;
+        IncrementSaturated(diagnostics_.accepted);
+        return DisplayAcceptResult::kAccepted;
     }
 
-    PushLocked(Command{transition_id, session_epoch_, state});
+    if (mailbox_pending_) {
+        IncrementSaturated(diagnostics_.latest_replacements);
+    }
+    mailbox_ = Command{transition_id, session_epoch_, state};
+    mailbox_pending_ = true;
     desired_state_ = state;
     last_transition_id_ = transition_id;
     last_transition_valid_ = true;
@@ -135,36 +180,61 @@ DisplayAcceptResult DisplayOwner::Accept(std::uint32_t transition_id,
     return DisplayAcceptResult::kAccepted;
 }
 
-bool DisplayOwner::ServiceOne() noexcept {
-    Command command{};
-    {
-        std::lock_guard<std::mutex> guard(mutex_);
-        if (!enabled_ || queue_size_ == 0) {
-            return false;
-        }
-        command = queue_[queue_head_];
-        queue_head_ = (queue_head_ + 1u) % queue_.size();
-        --queue_size_;
-    }
-
-    const auto selection = SelectAgentScene(
-        command.state, renderer_.Supports(AgentScene::kFocused));
-    const bool rendered = renderer_.Render(selection.scene);
-
+bool DisplayOwner::Service(std::uint32_t now_ms) noexcept {
     std::lock_guard<std::mutex> guard(mutex_);
-    if (!rendered) {
-        enabled_ = false;
-        ClearQueueLocked();
-        IncrementSaturated(diagnostics_.render_failures);
+    if (!enabled_) {
+        return false;
+    }
+
+    if (mailbox_pending_) {
+        const auto command = mailbox_;
+        ClearMailboxLocked();
+        if (command.session_epoch != session_epoch_) {
+            IncrementSaturated(diagnostics_.stale_discards);
+            return true;
+        }
+
+        const auto selection = SelectAgentScene(
+            command.state, renderer_.Supports(AgentScene::kFocused));
+        if (!RenderLocked(selection.scene)) {
+            return true;
+        }
+        current_state_ = command.state;
+        if (command.state == AgentState::kIdle) {
+            ScheduleNextBlinkLocked(now_ms);
+        } else {
+            blink_closed_ = false;
+            blink_scheduled_ = false;
+        }
         return true;
     }
-    if (command.session_epoch != session_epoch_) {
-        IncrementSaturated(diagnostics_.stale_discards);
+
+    if (current_state_ != AgentState::kIdle) {
+        return false;
+    }
+
+    if (!blink_scheduled_) {
+        ScheduleNextBlinkLocked(now_ms);
+        return false;
+    }
+    if (!TimeReached(now_ms, next_animation_ms_)) {
+        return false;
+    }
+
+    if (!blink_closed_) {
+        if (!RenderLocked(AgentScene::kNeutralBlink)) {
+            return true;
+        }
+        blink_closed_ = true;
+        next_animation_ms_ = now_ms + kBlinkClosedMs;
         return true;
     }
-    current_state_ = command.state;
-    current_scene_ = selection.scene;
-    IncrementSaturated(diagnostics_.rendered);
+
+    if (!RenderLocked(AgentScene::kNeutral)) {
+        return true;
+    }
+    IncrementSaturated(diagnostics_.completed_blinks);
+    ScheduleNextBlinkLocked(now_ms);
     return true;
 }
 
@@ -174,20 +244,25 @@ void DisplayOwner::ResetSession() noexcept {
     if (session_epoch_ == 0) {
         session_epoch_ = 1;
     }
-    ClearQueueLocked();
+    ClearMailboxLocked();
     desired_state_ = AgentState::kIdle;
     last_transition_id_ = 0;
     last_transition_valid_ = false;
     IncrementSaturated(diagnostics_.session_resets);
-    if (enabled_) {
-        PushLocked(Command{0, session_epoch_, AgentState::kIdle});
+    blink_scheduled_ = false;
+    if (enabled_ &&
+        (current_state_ != AgentState::kIdle || blink_closed_)) {
+        mailbox_ = Command{0, session_epoch_, AgentState::kIdle};
+        mailbox_pending_ = true;
     }
 }
 
 void DisplayOwner::Disable() noexcept {
     std::lock_guard<std::mutex> guard(mutex_);
     enabled_ = false;
-    ClearQueueLocked();
+    ClearMailboxLocked();
+    blink_closed_ = false;
+    blink_scheduled_ = false;
 }
 
 DisplayOwnerSnapshot DisplayOwner::snapshot() const noexcept {
@@ -195,7 +270,9 @@ DisplayOwnerSnapshot DisplayOwner::snapshot() const noexcept {
     return DisplayOwnerSnapshot{
         initialized_,       implemented_,     enabled_,
         current_state_,     desired_state_,   current_scene_,
-        queue_size_,        session_epoch_,   diagnostics_,
+        mailbox_pending_ ? kMailboxCapacity : 0u,
+        blink_closed_,      blink_scheduled_, next_animation_ms_,
+        session_epoch_,     diagnostics_,
     };
 }
 
