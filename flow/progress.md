@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T11B Doubao real-frame interoperability repair complete; live dialogue HIL pending
+
+- Role and identity: Windows desktop software only. Branch `codex/t11b-doubao-real-frame-repair` was created from exact T11B base `fe91dafcfd9c3a12c2c62491aa5a28849a6c4b42`; implementation commit is `80dac2e98ca462a781ff8ecf14d6bafcffdecd02`.
+- Root cause and repair: live `doubao-frame-invalid` came from three provider-contract gaps hidden by a self-generated fake server: the required fixed App Key could be omitted, StartSession was sent before ConnectionStarted, and the parser rejected documented sequence, identifier and gzip layouts. The adapter now follows official page `1594356`, uses its fixed protocol constant, completes the two-stage handshake, covers bounded flags `0..4`/connection/session/gzip/error layouts and exposes only enumerated redacted failure stages.
+- Compatibility: old saved empty App Key values continue to work and the UI no longer asks the user for that provider constant. The one companion controller, persisted computer/EasyInput source, computer speaker, foreground arbitration, SQLite turn ordering and Agent state path are unchanged. No second state machine or firmware contract was introduced.
+- Verification: `npm ci --include=dev` passed; targeted companion tests passed `17/17`; final `npm test` passed `214/214`; `npm run build:desktop -- --config.directories.output=release-t11b-doubao-repair-verify` passed. Package `DeskMate.exe` is 202,690,560 bytes with SHA-256 `B750B098A662507D776C6D28872BFA28FF9F92AD1D94A0BF6802CEB79FB0F0D4`. Official StartConnection/StartSession arrays are external golden tests. `git diff --check`, ASCII path, ignored-output, firmware-scope and redacted-data checks passed.
+- Safety and next: no app launch/control, saved-credential read/export, port/device/Flash/audio/network-service access, firmware, OLED or servo operation occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / LIVE_HIL_PENDING`. The only next gate is one user-present packaged-app conversation using the existing saved App ID/Access Key. Detailed handoff: `docs/handoffs/t11b-doubao-real-frame-repair-2026-09-01.md`.
+
 ## 2026-09-01 - T11B computer-audio continuous companion software complete
 
 - Role and identity: Windows desktop software only. Branch `codex/t11b-desktop-computer-audio-companion` was created from exact cumulative software base `544fa54a482a8dca06674916644f042b069f446d`; implementation commit is `371f1189765aecebc198a655c9a6425b1469390a` and implementation/documentation delivery commit is `9f2531485e012b281fbfe4ca642447b93004ae1e`.
