@@ -2,6 +2,8 @@
 
 Status: `CODEX_REAL_STATUS_V1_FROZEN`
 
+Source version: `codex-hook-v1`
+
 ## Purpose
 
 When the user explicitly selects Codex in DeskMate, stable Codex lifecycle hooks drive the existing seven-state Desktop -> EasyInput -> Xiaozhi path. This adapter reports real lifecycle events; it does not infer activity from a process, foreground window, title, transcript or timer.
@@ -19,7 +21,9 @@ When the user explicitly selects Codex in DeskMate, stable Codex lifecycle hooks
 | `Stop` | `completed` | The root turn ended; the existing 10-second TTL returns the display to idle |
 | `SessionEnd` | `idle` | The Codex session ended |
 
-The stable hook set has no general failure event. `error` therefore remains manual in this slice. A final free-form question that does not use `request_user_input` is not classified as waiting because doing so would require reading response text.
+The official hook set has no general turn-failure event. `error` therefore remains manual in this slice. A final free-form question that does not use `request_user_input` is not classified as waiting because doing so would require reading response text. `listening` remains owned by the real VoiceWorkflow rather than Codex.
+
+The release behavior reference is the official [Codex Hooks documentation](https://developers.openai.com/codex/hooks/). The adapter may only add another automatic state when that page defines a stable event and a privacy-safe metadata field that proves the transition. It must not inspect `prompt`, `last_assistant_message`, `tool_input`, `tool_response`, window titles or process text to manufacture a state.
 
 ## Privacy and transport
 
@@ -35,6 +39,7 @@ The named pipe trusts local same-user processes only for a low-impact display st
 ## Ownership and priority
 
 - The desktop selector is authoritative. Codex events update hardware only while `codex` is selected; other selected Agents remain unaffected.
+- The user may explicitly disable Codex automatic status while leaving Codex selected. Disabled events remain diagnostic-only and are never replayed when automation is re-enabled.
 - An active DeskMate VoiceWorkflow has higher priority. Codex events observed during voice work are visible as blocked and are not replayed later.
 - Switching back to Codex does not replay the last event. Only a new lifecycle event may change hardware.
 - Repeated identical Codex states are suppressed until another source interrupts the stream.
@@ -52,4 +57,5 @@ This repository-local slice observes Codex tasks opened in this repository. A fu
 - Extra keys, malformed JSON, oversized data and unsupported events are rejected.
 - Sender absence is fail-soft and bounded.
 - Renderer receives only the sanitized status and never receives raw hook input.
-- Voice priority, explicit provider ownership, no replay and existing manual fallback remain intact.
+- Renderer diagnostics identify the source as `codex-hook-v1` and expose whether automatic ownership is selected.
+- Voice priority, explicit provider ownership, explicit disable, duplicate suppression, no replay and existing manual fallback remain intact.

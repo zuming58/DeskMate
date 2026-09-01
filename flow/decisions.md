@@ -1,5 +1,13 @@
 # Decisions
 
+## D044 - Companion surfaces share one runtime truth and Codex automation remains explicitly owned
+
+- Date: 2026-09-01
+- Decision: the companion overview, device connections and system diagnostics derive EasyInput HID, DeskMate Link, EasyInput LAN microphone, realtime service and memory labels from one bounded runtime presentation model. A page may choose layout, but it may not maintain a second subscription or hard-coded readiness label for the same capability.
+- Expression boundary: Windows expression preview lives in the expression library and never publishes hardware state. The above-the-fold Xiaozhi work-state test continues to use the single existing Agent State publisher and keeps EasyInput ACK separate from downstream Link evidence.
+- Codex ownership: `codex-hook-v1` is versioned and may be selected or explicitly disabled. Only documented lifecycle metadata maps automatically. The official hook surface currently has no general turn-failure event, so `error` remains a manual state; prompt/output text, window titles and process content are never used as substitutes.
+- Recovery: repeated identical automatic events are suppressed, voice/companion ownership wins, and events dropped while disabled, displaced or disconnected are not replayed later.
+
 ## D043 - SQLite owns memory; knowledge-base files and embeddings are rebuildable projections
 
 - Date: 2026-09-01

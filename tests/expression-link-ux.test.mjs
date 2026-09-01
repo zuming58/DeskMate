@@ -65,9 +65,15 @@ test("companion page visually separates preview from real hardware state testing
     readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
   ]);
   const companion = pages.slice(pages.indexOf("function AgentStateTestPanel"), pages.indexOf("export function DashboardPage"));
-  for (const label of ["Windows 软件表情预览", "只改变本页画面，不控制小智", "小智工作状态测试", "EasyInput 写入", "小智 DeskMate Link", "EasyInput ACK 只证明写入被总控接受", "查看系统诊断"]) assert.match(companion, new RegExp(label));
+  const companionOverview = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
+  const expressionLibrary = pages.slice(pages.indexOf("export function ExpressionsPage"), pages.indexOf("export function ExpressionEditorPage"));
+  for (const label of ["小智工作状态测试", "EasyInput 写入", "小智 DeskMate Link", "EasyInput ACK 只证明写入被总控接受", "查看系统诊断"]) assert.match(companion, new RegExp(label));
+  assert.match(companionOverview, /<AgentStateTestPanel[\s\S]*<div className="companion-overview">/);
+  assert.match(companionOverview, /本地表情预览已移到“表情库”，不会控制小智/);
+  assert.doesNotMatch(companionOverview, /aria-label="Windows 软件表情预览"/);
+  for (const label of ["Windows 软件表情预览库", "只做软件预览", "不会发送 Agent State", "不会控制小智 OLED"]) assert.match(expressionLibrary, new RegExp(label));
   assert.match(companion, /requestManualAgentState/);
-  assert.match(companion, /previewSoftwareExpression/);
+  assert.match(expressionLibrary, /previewSoftwareExpression/);
   assert.match(companion, /navigate\?\.\("settings\/diagnostics"\)/);
   assert.match(app, /page\.split\("\/"\)\[0\]/);
   assert.doesNotMatch(companion, /已同步到小智/);

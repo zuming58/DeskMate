@@ -38,7 +38,7 @@ test("migrates history schema v4 to raw and organized text fields", () => {
 
 test("migrates and validates the local manual Agent selection", () => {
   const migrated = migrateState({ schemaVersion: 6, agentControl: { agentId: "hermes", state: "waiting_user" } });
-  assert.deepEqual(migrated.agentControl, { agentId: "hermes", customName: "", state: "waiting_user" });
+  assert.deepEqual(migrated.agentControl, { agentId: "hermes", customName: "", state: "waiting_user", automaticStatusEnabled: true });
   assert.throws(() => validateConfig({ agentControl: { agentId: "unknown", state: "idle" } }), /AI 手动控制/);
   assert.throws(() => validateConfig({ agentControl: { agentId: "codex", state: "made-up" } }), /AI 手动控制/);
 });

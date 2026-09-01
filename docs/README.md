@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T11A companion and Agent status closure handoff](handoffs/t11a-companion-agent-status-closure-2026-09-01.md)
+
 - [T12A desktop memory controls handoff](handoffs/t12a-desktop-memory-controls-2026-09-01.md)
 - [T12A desktop memory controls frozen contract](contracts/t12a-desktop-memory-controls-v1.md)
 - [T12A desktop memory controls task](../flow/tasks/T12A-desktop-memory-controls.md)

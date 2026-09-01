@@ -23,7 +23,8 @@ export function normalizeAgentControl(value = {}) {
   const agentId = AGENT_IDS.has(value.agentId) ? value.agentId : "codex";
   const state = STATE_IDS.has(value.state) ? value.state : "idle";
   const customName = String(value.customName || "").replace(/[\u0000-\u001f]/g, "").slice(0, 48);
-  return { agentId, customName, state };
+  const automaticStatusEnabled = value.automaticStatusEnabled !== false;
+  return { agentId, customName, state, automaticStatusEnabled };
 }
 
 export function manualAgentName(control = {}) {

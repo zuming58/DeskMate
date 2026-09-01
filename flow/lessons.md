@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Capability labels must be projections of runtime facts, not page-owned copy
+
+- Symptom: the diagnostic page could show the EasyInput-to-Xiaozhi Link as connected while the companion page still said “pending”; an accepted board microphone could also be described as not integrated merely because the computer microphone was currently selected.
+- Practice: normalize each bounded runtime capability once, distinguish integrated/selected/active/unavailable, and let every page render the same presentation model. Keep host write ACK and downstream Link health as separate facts.
+- Rule: a React route must not open a second subscription or invent a static label for a capability already represented in application runtime state.
+
 ## A knowledge-base folder must not become a second memory authority
 
 - Symptom: writing conversational notes directly into a user folder is easy, but later correction, deletion, duplicate files and embedding-version changes can leave SQLite, Markdown and vectors disagreeing about what DeskMate remembers.

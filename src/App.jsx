@@ -222,6 +222,26 @@ function AppContent() {
     return voiceAdapters.desktop.onInputBridgeStatus(updateBridge);
   }, [patch]);
   useEffect(() => {
+    let active = true;
+    const updateAudio = (value = {}) => {
+      if (!active) return;
+      const runtime = runtimeRef.current || {};
+      patch({ runtime: { ...runtime, easyInputAudio: { ...(runtime.easyInputAudio || {}), ...value } } });
+    };
+    voiceAdapters.desktop.getEasyInputAudioStatus().then(updateAudio).catch(() => updateAudio({ available: false, configured: false, state: "desktop-bridge-unavailable", reason: "desktop-bridge-unavailable" }));
+    const unsubscribe = voiceAdapters.desktop.onEasyInputAudioEvent(updateAudio);
+    return () => { active = false; unsubscribe?.(); };
+  }, [patch]);
+  useEffect(() => {
+    let active = true;
+    globalThis.desktopBridge?.getMemoryStatus?.().then((memory) => {
+      if (!active || !memory) return;
+      const runtime = runtimeRef.current || {};
+      patch({ runtime: { ...runtime, memory } });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [patch]);
+  useEffect(() => {
     if (!globalThis.desktopBridge) return undefined;
     const updateCompanion = (value = {}) => {
       const runtime = runtimeRef.current || {};

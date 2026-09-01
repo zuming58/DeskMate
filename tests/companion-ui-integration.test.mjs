@@ -63,7 +63,9 @@ test("companion UI is a real main-process session entry and does not create a re
   const pages = await source("src/pages.jsx");
   const preload = await source("electron/preload.cjs");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("export function DashboardPage"));
-  assert.match(companion, /T11 软件核心 · 等待 T10E 音频/);
+  assert.match(companion, /deviceServiceStatus/);
+  assert.match(companion, /serviceStatus\.microphone\.label/);
+  assert.doesNotMatch(companion, /T10E 待接入|等待 T10E 音频/);
   assert.match(companion, /startCompanionConversation/);
   assert.match(companion, /唯一前台会话仲裁器/);
   assert.match(preload, /startCompanionConversation: \(\) => ipcRenderer\.invoke\("companion:start"\)/);

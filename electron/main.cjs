@@ -384,7 +384,7 @@ async function openEasyInputAudioSetup() {
 }
 
 function sanitizedCodexHookStatus() {
-  return { provider: "codex", selected: activeAgentProvider === "codex", ...codexHookStatus };
+  return { provider: "codex", sourceVersion: "codex-hook-v1", selected: activeAgentProvider === "codex", ...codexHookStatus };
 }
 
 async function handleCodexHookState(value) {
@@ -905,7 +905,7 @@ app.whenReady().then(async () => {
   });
   handleTrusted("desktop:set-active-agent-provider", (value) => {
     const provider = typeof value === "string" ? value : "";
-    if (!["codex", "workbody", "hermes", "claude", "custom"].includes(provider)) return { ok: false, reason: "agent-provider-invalid" };
+    if (!["disabled", "codex", "workbody", "hermes", "claude", "custom"].includes(provider)) return { ok: false, reason: "agent-provider-invalid" };
     activeAgentProvider = provider;
     const status = sanitizedCodexHookStatus();
     sendToMain("codex-agent-state", status);

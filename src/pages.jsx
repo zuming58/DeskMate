@@ -67,6 +67,7 @@ import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicroph
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "./domain/linkDiagnostics.js";
 import { agentStateEvidence, manualAgentStateFailureMessage, previewSoftwareExpression, requestManualAgentState } from "./domain/expressionLinkUx.js";
 import { dashboardHardwareStatus } from "./domain/dashboardStatus.js";
+import { deviceServiceStatus } from "./domain/deviceServiceStatus.js";
 import { createDiagnosticReport } from "./services/diagnostics.js";
 import { processVoiceRecording } from "./services/voicePipeline.js";
 import { mapAiStateToPetIntent } from "./domain/petIntent.js";
@@ -267,7 +268,7 @@ export function CompanionPage({ notify, navigate }) {
   const conversationExpression = { connecting: "listen", listening: "listen", thinking: "think", speaking: "focus", completed: "happy", error: "alert", stopping: "sleep" }[conversation.state];
   const expression = conversationExpression || state.currentExpression;
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
-  const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
+  const serviceStatus = deviceServiceStatus({ inputBridge: state.runtime?.inputBridge, audioStatus: state.runtime?.easyInputAudio, preferredMicrophoneSource: state.settings.microphoneSource, companion: conversation, memory: state.runtime?.memory });
   const conversationCopy = {
     idle: ["你好，我在这里", "按一下进入连续对话；文字语音输入会优先中断陪伴会话。"],
     connecting: ["正在连接…", "正在建立豆包实时对话会话。"],
@@ -300,7 +301,7 @@ export function CompanionPage({ notify, navigate }) {
       <PageIntro
         title="AI 陪伴"
         description="陪伴对话、记忆提醒、AI 联动、表情与动作的统一入口"
-        actions={<StatusBadge tone={sessionActive ? "success" : "demo"}>{sessionActive ? "实时陪伴中" : "T11 软件核心 · 等待 T10E 音频"}</StatusBadge>}
+        actions={<StatusBadge tone={sessionActive ? "success" : serviceStatus.microphone.tone}>{sessionActive ? "实时陪伴中" : `板载麦克风 · ${serviceStatus.microphone.label}`}</StatusBadge>}
       />
       <Segmented
         value={section}
@@ -313,16 +314,15 @@ export function CompanionPage({ notify, navigate }) {
           { value: "agents", label: "AI 联动" },
         ]}
       />
-      {section === "overview" && <div className="companion-overview">
+      {section === "overview" && <>
+        <AgentStateTestPanel notify={notify} navigate={navigate} index="01" />
+        <div className="companion-overview">
         <Card className="companion-stage">
           <div className="card-heading"><div><strong>DeskMate 实时陪伴</strong><small>WINDOWS · DOUBAO REALTIME</small></div><StatusBadge tone={conversation.state === "error" ? "warning" : sessionActive ? "success" : "neutral"}>{sessionActive ? ({ connecting: "连接中", listening: "聆听中", thinking: "思考中", speaking: "播报中", completed: "本轮完成", stopping: "结束中" }[conversation.state] || "会话中") : selectedPreset.name}</StatusBadge></div>
           <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
           <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
           <Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" onClick={toggleSession}>{sessionActive ? "结束陪伴对话" : "开始陪伴对话"}</Button>
-          <div className="companion-expression-preview-heading"><strong>Windows 软件表情预览</strong><small>只改变本页画面，不控制小智</small></div>
-          <div className="companion-expression-strip" aria-label="Windows 软件表情预览">
-            {expressionPresets.map((preset) => <ExpressionTile key={preset.id} compact preset={preset} selected={!sessionActive && state.currentExpression === preset.id} onClick={() => previewSoftwareExpression({ patch, notify, preset, sessionActive })} />)}
-          </div>
+          <div className="companion-preview-relocated"><span><strong>当前为 Windows 软件画面</strong><small>本地表情预览已移到“表情库”，不会控制小智。</small></span><Button variant="ghost" onClick={() => setSection("expressions")}>打开软件表情库</Button></div>
         </Card>
         <div className="companion-side-stack">
           <Card>
@@ -335,17 +335,16 @@ export function CompanionPage({ notify, navigate }) {
           <Card>
             <SectionTitle index="02" title="设备与服务" description="真实状态与待接入状态分开显示。" />
             <div className="companion-status-list">
-              <div><span><Keyboard size={18} />EasyInput</span><StatusBadge tone={boardConnected ? "success" : "demo"}>{boardConnected ? "已连接" : "等待设备"}</StatusBadge></div>
-              <div><span><Robot size={18} />小智云台</span><StatusBadge tone="warning">待接入</StatusBadge></div>
-              <div><span><Microphone2 size={18} />豆包实时对话</span><StatusBadge tone={conversation.service?.configured ? "success" : "demo"}>{conversation.service?.configured ? "凭据已配置" : "待配置"}</StatusBadge></div>
-              <div><span><Microphone2 size={18} />EasyInput 麦克风</span><StatusBadge tone={conversation.audioSource?.available ? "success" : "demo"}>{conversation.audioSource?.available ? "已接入" : "T10E 待接入"}</StatusBadge></div>
-              <div><span><Link size={18} />逐轮本地记忆</span><StatusBadge tone="success">SQLite 已接入</StatusBadge></div>
+              <div><span><Keyboard size={18} />EasyInput HID</span><StatusBadge tone={serviceStatus.easyInput.tone}>{serviceStatus.easyInput.label}</StatusBadge></div>
+              <div><span><Robot size={18} />小智 DeskMate Link</span><StatusBadge tone={serviceStatus.xiaozhi.tone}>{serviceStatus.xiaozhi.label}</StatusBadge></div>
+              <div><span><Microphone2 size={18} />豆包实时对话</span><StatusBadge tone={serviceStatus.realtime.tone}>{serviceStatus.realtime.label}</StatusBadge></div>
+              <div><span><Microphone2 size={18} />EasyInput 板载麦克风</span><StatusBadge tone={serviceStatus.microphone.tone}>{serviceStatus.microphone.label}</StatusBadge></div>
+              <div><span><Link size={18} />逐轮本地记忆</span><StatusBadge tone={serviceStatus.memory.tone}>{serviceStatus.memory.label}</StatusBadge></div>
             </div>
           </Card>
           <Notice tone="info" title="语音互斥边界">陪伴会话与文字语音输入共用唯一前台会话仲裁器；启动语音输入或语音编辑会立即结束陪伴会话，结束后不会自动恢复。</Notice>
         </div>
-        <AgentStateTestPanel notify={notify} navigate={navigate} />
-      </div>}
+      </div></>}
       {section === "memory" && <MemoryManagementPage notify={notify} />}
       {section === "expressions" && <ExpressionsPage notify={notify} embedded />}
       {section === "motion" && <MotionPage notify={notify} embedded />}
@@ -1051,22 +1050,22 @@ export function ConnectionsPage({ notify, embedded = false }) {
   const setStartupSound = (value) => patch({ settings: { ...state.settings, startupSound: value } });
   const [transportCaps, setTransportCaps] = useState(null);
   const [networkSummary, setNetworkSummary] = useState(null);
-  const [audioStatus, setAudioStatus] = useState({ configured: false, state: "not-configured", setup: {}, micTest: false, level: 0, counters: {} });
   const [desktopCaps, setDesktopCaps] = useState({ supported: false });
   const [lastTrigger, setLastTrigger] = useState(null);
   useEffect(() => { mockAdapters.device.discoverTransports().then(setTransportCaps).catch(() => setTransportCaps({})); }, []);
   useEffect(() => { voiceAdapters.desktop.networkSummary().then(setNetworkSummary).catch(() => setNetworkSummary({ available: false, transports: [], lanAudio: "desktop-bridge-unavailable" })); }, []);
-  useEffect(() => { voiceAdapters.desktop.getEasyInputAudioStatus().then(setAudioStatus).catch(() => setAudioStatus({ configured: false, state: "desktop-bridge-unavailable", setup: {}, micTest: false, level: 0, counters: {} })); return voiceAdapters.desktop.onEasyInputAudioEvent((event) => setAudioStatus((current) => ({ ...current, ...event }))); }, []);
   useEffect(() => { voiceAdapters.desktop.capabilities().then(setDesktopCaps).catch(() => setDesktopCaps({ supported: false, shortcutRegistered: false })); }, [state.settings.voiceShortcut]);
   useEffect(() => deviceEventBus.subscribe((event) => { if (event.type === "voice-toggle" || event.type === "key-diagnostic") setLastTrigger({ source: event.source, key: event.payload.key || event.payload.shortcut || "", at: event.at }); }), []);
   const bridge = state.runtime?.inputBridge || desktopCaps.inputBridge || {};
+  const audioStatus = state.runtime?.easyInputAudio || {};
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
+  const sharedStatus = deviceServiceStatus({ inputBridge: bridge, audioStatus, preferredMicrophoneSource: state.settings.microphoneSource, companion: state.runtime?.companion, memory: state.runtime?.memory });
   const qwenReady = state.settings.sttMode === "bailian";
   const outputReady = state.settings.outputMode === "history" || desktopCaps.supported;
   const audioReady = Boolean(audioStatus.setup?.configured && ["ready", "streaming"].includes(audioStatus.state));
-  const audioStateLabel = ({ "not-configured": "未配置", binding: "正在监听", "waiting-heartbeat": "等待心跳", ready: "麦克风就绪", starting: "正在启动", streaming: "正在收音", ambiguous: "检测到多个来源", faulted: "监听失败", unavailable: "板载音频不可用" })[audioStatus.state] || "等待设备";
-  const linkStateLabel = ({ connected: "已连接", waiting: "等待小智", faulted: "链路故障", disabled: "未启用", unavailable: "不可读取" })[link.status];
+  const audioStateLabel = sharedStatus.microphone.label;
+  const linkStateLabel = sharedStatus.xiaozhi.label;
   const refreshConnections = async () => {
     const result = await voiceAdapters.desktop.refreshLinkDiagnostics();
     const caps = await voiceAdapters.desktop.capabilities().catch(() => ({ supported: false }));
@@ -1077,7 +1076,6 @@ export function ConnectionsPage({ notify, embedded = false }) {
     const result = audioStatus.micTest ? await voiceAdapters.desktop.stopEasyInputMicTest() : await voiceAdapters.desktop.startEasyInputMicTest();
     if (!result?.ok) notify(`板载麦克风测试失败：${result?.reason || "unknown-error"}`);
     else notify(audioStatus.micTest ? "板载麦克风测试已停止" : "板载麦克风测试已开始，最长 30 秒");
-    if (result?.status) setAudioStatus(result.status);
   };
   return (
     <div className={embedded ? "connections-embedded" : "page"}>
@@ -1086,12 +1084,12 @@ export function ConnectionsPage({ notify, embedded = false }) {
       <Segmented value={tab} onChange={setTab} options={[{ value: "overview", label: "连接概览" }, { value: "microphone", label: "麦克风" }, { value: "network", label: "Wi-Fi 与蓝牙" }, { value: "sound", label: "提示音" }]} />
       {tab === "overview" && <><Notice tone={bridge.boardConnected ? "success" : "warning"} title={bridge.boardConnected ? "EasyInput 真机语音桥已连接" : "等待 EasyInput USB 设备"}>{bridge.boardConnected ? "Raw Input 桥只接受 EasyInput 设备发出的语音与语音编辑组合键，并调用与页面按钮相同的 VoiceWorkflow；普通键盘全局快捷键默认关闭。" : "连接开发板后，Raw Input 桥只读识别 VID 303A / PID 1006 的语音组合键和 F22 兼容路径，不读取文字、序列号，也不会向板子写输入数据。"}</Notice><div className="connection-cards">
         <Card interactive><div className="connection-icon"><Link size={28} /></div><div><strong>EasyInput HID</strong><p>{lastTrigger ? `最后触发：${lastTrigger.key || "语音切换"} · ${lastTrigger.source}` : "语音键由 EasyInput 原生来源识别；普通键盘快捷键默认关闭"}</p></div><StatusBadge tone={bridge.boardConnected ? "success" : "demo"}>{bridge.boardConnected ? "已连接" : bridge.process === "running" ? "监听中" : "桥未运行"}</StatusBadge></Card>
-        <Card className="link-diagnostics-card"><div className="connection-icon"><Robot size={28} /></div><div><strong>小智云台 / DeskMate Link</strong><p>状态来自 EasyInput 的冻结 Link 状态报告；EasyInput HID 已连接不等于小智已连接。</p></div><StatusBadge tone={link.status === "connected" ? "success" : "demo"}>{linkStateLabel}</StatusBadge><div className="link-diagnostics-grid">{[["接收帧", link.counters.rxFrames], ["发送帧", link.counters.txFrames], ["请求超时", link.counters.requestTimeouts], ["重试", link.counters.retries], ["对端重启", link.counters.peerRestarts], ["Agent accepted", link.counters.agentAccepted], ["Agent forwarded", link.counters.agentForwarded], ["断线丢弃", link.counters.agentDroppedDisconnected], ["队列丢弃", link.counters.agentQueueDrops]].map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div><div className="agent-delivery-line"><span>最近 Agent State</span><strong>{agentDelivery.status === "acknowledged" ? "EasyInput 写入 ACK 成功" : agentDelivery.status === "failed" ? `失败 · ${agentDelivery.reason || "unknown"}` : agentDelivery.status === "sending" ? "请求中" : "尚未发送"}</strong><small>{agentDelivery.targetState}{agentDelivery.at ? ` · ${new Date(agentDelivery.at).toLocaleTimeString()}` : ""}</small></div></Card>
-        <Card interactive><div className="connection-icon"><Microphone2 size={28} /></div><div><strong>EasyInput 板载麦克风</strong><p>通过冻结的局域网 PCM 合同接收；原始音频只停留在 Electron 主进程内存</p></div><StatusBadge tone={audioReady ? "success" : "demo"}>{audioStateLabel}</StatusBadge></Card>
+        <Card className="link-diagnostics-card"><div className="connection-icon"><Robot size={28} /></div><div><strong>小智云台 / DeskMate Link</strong><p>状态来自 EasyInput 的冻结 Link 状态报告；EasyInput HID 已连接不等于小智已连接。</p></div><StatusBadge tone={sharedStatus.xiaozhi.tone}>{linkStateLabel}</StatusBadge><div className="link-diagnostics-grid">{[["接收帧", link.counters.rxFrames], ["发送帧", link.counters.txFrames], ["请求超时", link.counters.requestTimeouts], ["重试", link.counters.retries], ["对端重启", link.counters.peerRestarts], ["Agent accepted", link.counters.agentAccepted], ["Agent forwarded", link.counters.agentForwarded], ["断线丢弃", link.counters.agentDroppedDisconnected], ["队列丢弃", link.counters.agentQueueDrops]].map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div><div className="agent-delivery-line"><span>最近 Agent State</span><strong>{agentDelivery.status === "acknowledged" ? "EasyInput 写入 ACK 成功" : agentDelivery.status === "failed" ? `失败 · ${agentDelivery.reason || "unknown"}` : agentDelivery.status === "sending" ? "请求中" : "尚未发送"}</strong><small>{agentDelivery.targetState}{agentDelivery.at ? ` · ${new Date(agentDelivery.at).toLocaleTimeString()}` : ""}</small></div></Card>
+        <Card interactive><div className="connection-icon"><Microphone2 size={28} /></div><div><strong>EasyInput 板载麦克风</strong><p>通过冻结的局域网 PCM 合同接收；原始音频只停留在 Electron 主进程内存</p></div><StatusBadge tone={sharedStatus.microphone.tone}>{audioStateLabel}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Brain size={28} /></div><div><strong>千问语音识别</strong><p>停止录音后调用 qwen3-asr-flash</p></div><StatusBadge tone={qwenReady ? "success" : "demo"}>{qwenReady ? "已启用" : "待配置"}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Copy size={28} /></div><div><strong>文字输出</strong><p>先保存历史，再写入原窗口；失败时自动回退剪贴板</p></div><StatusBadge tone={outputReady ? "success" : "demo"}>{outputReady ? "就绪" : "Web 仅历史"}</StatusBadge></Card>
       </div><Card className="transport-readiness"><SectionTitle index="02" title="浏览器通信能力" description="这里只表示当前浏览器支持哪些接口，不代表硬件已经连接。" /><div className="chips">{transportCaps ? Object.entries(transportCaps).map(([name, supported]) => <span className={`chip chip--status ${supported ? "is-supported" : ""}`} key={name}>{name} · {supported ? "可用" : "不可用"}</span>) : <span>正在检测…</span>}</div></Card></>}
-      {tab === "microphone" && <Card><SectionTitle index="01" title="EasyInput 板载麦克风" description="V1 唯一启用的麦克风端点；诊断不会启动豆包对话，也不会保存录音。" /><Notice tone={audioReady ? "success" : "warning"} title={audioStateLabel}>{audioStatus.micTest ? `实时音量 ${audioStatus.level || 0}% · 丢包 ${audioStatus.counters?.sequenceGaps || 0}` : audioStatus.setup?.configured ? "已配置局域网接收。测试时只把音量等级发送到页面，PCM 不离开主进程。" : "请先在 Wi-Fi 与蓝牙页完成 EasyInput 音频设置。"}</Notice><div className="audio-level" aria-label={`板载麦克风音量 ${audioStatus.level || 0}%`}><span style={{ width: `${Math.max(0, Math.min(100, audioStatus.level || 0))}%` }} /></div><div className="button-row"><Button icon={Microphone2} variant="primary" disabled={!audioStatus.setup?.configured} onClick={toggleMicTest}>{audioStatus.micTest ? "停止麦克风测试" : "测试板载麦克风"}</Button><span className="muted-copy">自动测试最长 30 秒，可提前停止。</span></div></Card>}
+      {tab === "microphone" && <Card><SectionTitle index="01" title="EasyInput 板载麦克风" description="已接入的可选外部麦克风；诊断不会启动豆包对话，也不会保存录音。" /><Notice tone={audioReady ? "success" : "warning"} title={audioStateLabel}>{audioStatus.micTest ? `实时音量 ${audioStatus.level || 0}% · 丢包 ${audioStatus.counters?.sequenceGaps || 0}` : audioStatus.setup?.configured ? "已配置局域网接收。测试时只把音量等级发送到页面，PCM 不离开主进程。" : "请先在 Wi-Fi 与蓝牙页完成 EasyInput 音频设置。"}</Notice><div className="audio-level" aria-label={`板载麦克风音量 ${audioStatus.level || 0}%`}><span style={{ width: `${Math.max(0, Math.min(100, audioStatus.level || 0))}%` }} /></div><div className="button-row"><Button icon={Microphone2} variant="primary" disabled={!audioStatus.setup?.configured} onClick={toggleMicTest}>{audioStatus.micTest ? "停止麦克风测试" : "测试板载麦克风"}</Button><span className="muted-copy">自动测试最长 30 秒，可提前停止。</span></div></Card>}
       {tab === "network" && <div className="two-column"><Card><SectionTitle index="01" title="网络与音频接收" description="只绑定你明确选择的非回环 IPv4 网卡，不扫描局域网。" /><Notice tone="info" title={networkSummary?.available ? "电脑网络可用" : "等待网络"}>{networkSummary?.available ? `检测到网络类别：${networkSummary.transports.join(" / ") || "unknown"}。` : "未检测到可用网络接口。"}</Notice><Notice tone={audioStatus.setup?.configured ? "success" : "warning"} title={audioStatus.setup?.configured ? "EasyInput 音频已配置" : "EasyInput 音频尚未配置"}>{audioStatus.setup?.configured ? `${audioStatus.setup.adapterLabel || "所选网卡"} · 端口 ${audioStatus.setup.port} · ${audioStateLabel}` : "在隔离设置窗口中填写网络信息；主页面不会接触 Wi-Fi 密码或真实 IP。"}</Notice><Button icon={Send} variant="primary" onClick={async () => { const result = await voiceAdapters.desktop.openEasyInputAudioSetup(); if (!result?.ok) notify(`无法打开音频设置：${result?.reason || "unknown-error"}`); }}>打开 EasyInput 音频设置</Button></Card><Card><SectionTitle index="02" title="蓝牙功能" /><SettingRow icon={Bluetooth} title="蓝牙 HID 输入" description="用于按键和旋钮，不用于传输麦克风音频"><Toggle checked onChange={() => notify("蓝牙状态为模拟能力")}/></SettingRow><Notice tone="info" title="隐私边界">页面只接收状态、音量等级和计数；不接收 PCM、密码、IP、SSID 或设备路径。</Notice></Card></div>}
       {tab === "sound" && <Card><SectionTitle index="03" title="开机提示音" description="选择内置音效或导入最长 8 秒的音频。" /><div className="sound-grid">{["WaytoAGI", "来 WaytoAGI 学 AI 硬件", "又来写 bug 了", "晶亮启动", "柔和启动", "极简启动"].map((name, index) => <button key={name} className={index === 0 ? "is-selected" : ""} onClick={() => notify(`已试听“${name}”`)}><Music size={22} /><strong>{name}</strong><small>{["1.7", "2.8", "2.1", "0.6", "0.8", "0.3"][index]} 秒</small></button>)}</div><SettingRow title="开机音效" description="完整开机时播放已选音效"><Toggle checked={startupSound} onChange={setStartupSound} /></SettingRow></Card>}
     </div>
@@ -1113,23 +1111,24 @@ export function AgentsPage({ notify, embedded = false }) {
   const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
   useEffect(() => {
     let active = true;
-    void voiceAdapters.desktop.setActiveAgentProvider(control.agentId).then((result) => {
+    const selectedProvider = control.automaticStatusEnabled ? control.agentId : "disabled";
+    void voiceAdapters.desktop.setActiveAgentProvider(selectedProvider).then((result) => {
       if (active && result?.status) setCodexStatus(result.status);
     });
     void voiceAdapters.desktop.getCodexAgentStatus().then((result) => { if (active && result) setCodexStatus(result); });
     return () => { active = false; };
-  }, [control.agentId]);
+  }, [control.agentId, control.automaticStatusEnabled]);
   useEffect(() => voiceAdapters.desktop.onCodexAgentState((payload) => {
     if (!payload || payload.provider !== "codex") return;
     setCodexStatus(payload);
-    if (control.agentId !== "codex" || !payload.connected) return;
+    if (control.agentId !== "codex" || !control.automaticStatusEnabled || !payload.connected) return;
     const stateId = payload.state === "waiting" ? "waiting_user" : payload.state;
     const selected = manualAgentState(stateId);
     patch({ agentControl: normalizeAgentControl({ ...control, state: stateId }) });
     event({ type: stateId, agent: "Codex", progress: stateId === "completed" ? 100 : stateId === "idle" ? 0 : state.aiEvent.progress, detail: `Codex Hook · ${selected.label}` });
     const deliveryLabel = payload.delivery === "voice-workflow-active" ? "语音流程优先，未发送到小智" : payload.delivery === "not-selected" ? "Codex 当前未选中" : `Codex 自动 · ${selected.label}`;
     setSendState({ status: payload.delivery === "sent" || payload.delivery === "suppressed" ? "success" : "idle", label: deliveryLabel });
-  }), [control.agentId, control.customName, event, patch, state.aiEvent.progress]);
+  }), [control.agentId, control.automaticStatusEnabled, control.customName, event, patch, state.aiEvent.progress]);
   const sendManualState = async (requestedState = control.state) => {
     const selected = manualAgentState(requestedState);
     const agentName = manualAgentName(control);
@@ -1153,15 +1152,16 @@ export function AgentsPage({ notify, embedded = false }) {
     <div className={embedded ? "companion-embedded" : "page"}>
       {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把真实或手动工作状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button>} />}
       {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>Codex 已支持真实生命周期；其他 Agent 暂用手动状态。</p></div><Button icon={Plus} onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button></div>}
-      <Notice tone="info" title="Codex 真实状态已接入">选择 Codex 后，官方 Hook 会把开始任务、工具执行、等待授权/输入和任务结束映射为表情；不会读取或上传提示词、回复正文、工具参数、工作目录或对话记录。WorkBuddy、Hermes 与 Claude Code 目前仍需手动发送；语音输入始终优先。</Notice>
+      <Notice tone="info" title="Codex 真实状态已接入">选择 Codex 并启用自动状态后，官方 Hook 会把开始任务、工具执行、等待授权/输入和任务结束映射为表情；不会读取或上传提示词、回复正文、工具参数、工作目录或对话记录。官方生命周期暂不提供可靠的整轮失败事件，因此“遇到问题”继续保留人工发送。语音输入始终优先。</Notice>
       <Card className="manual-agent-control">
         <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="Codex 可自动更新；七个按钮继续保留为人工校验和其他 Agent 的手动入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
         <div className="manual-agent-control__agent">
           <label>当前 Agent<Select value={control.agentId} onChange={(agentId) => { updateControl({ agentId }); setSendState({ status: "idle", label: "尚未发送" }); }} ariaLabel="当前 Agent">{MANUAL_AGENT_OPTIONS.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</Select></label>
           {control.agentId === "custom" && <label>Agent 名称<input maxLength={48} value={control.customName} onChange={(changeEvent) => updateControl({ customName: changeEvent.target.value })} placeholder="例如 Cursor、OpenCode" /></label>}
+          {control.agentId === "codex" && <SettingRow title="Codex 自动状态" description={control.automaticStatusEnabled ? "使用 codex-hook-v1；语音与陪伴会话优先" : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>}
         </div>
         <div className="manual-agent-state-grid" aria-label="选择并发送 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={sendState.status === "sending"} key={item.id} onClick={() => { void sendManualState(item.id); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
-        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{control.agentId === "codex" ? (codexStatus.connected ? `Codex Hook 已连接 · 最近事件 ${codexStatus.event || "未知"}` : codexStatus.receiver === "listening" ? "DeskMate 正在等待 Codex Hook 的首个真实事件" : "Codex Hook 接收器不可用") : "点击任意状态会立即发送；重复点击当前状态可在小智重启后重新发送"}</small></div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
+        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{control.agentId === "codex" ? !control.automaticStatusEnabled ? "Codex 自动状态已禁用" : codexStatus.connected ? `Codex Hook 已连接 · ${codexStatus.sourceVersion || "codex-hook-v1"} · 最近事件 ${codexStatus.event || "未知"}` : codexStatus.receiver === "listening" ? "DeskMate 正在等待 Codex Hook 的首个真实事件" : "Codex Hook 接收器不可用" : "点击任意状态会立即发送；重复点击当前状态可在小智重启后重新发送"}</small></div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
       </Card>
       <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <div className="agent-grid">{agents.map((agent) => {
@@ -1291,7 +1291,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const [textService, setTextService] = useState({ provider: "deepseek", endpoint: "https://api.deepseek.com/chat/completions", model: "deepseek-v4-flash", apiKey: "" });
   const [realtimeService, setRealtimeService] = useState({ provider: "doubao", endpoint: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", appId: "", accessKey: "", appKey: "", resourceId: "volc.speech.dialog", model: "1.2.1.1", voice: "zh_female_vv_jupiter_bigtts" });
   const [settingsDesktopCaps, setSettingsDesktopCaps] = useState({ supported: false, editShortcutRegistered: false });
-  const [settingsAudioStatus, setSettingsAudioStatus] = useState({ configured: false, state: "not-configured", networkReady: false, heartbeat: false, micTest: false, counters: {} });
+  const settingsAudioStatus = state.runtime?.easyInputAudio || {};
   const format = state.settings.formatting;
   const theme = state.settings.theme;
   const floating = state.settings.floating;
@@ -1301,7 +1301,6 @@ export function SettingsPage({ notify, initialSection = "" }) {
   useEffect(() => { refreshBailianStatus(); }, [refreshBailianStatus]);
   useEffect(() => { refreshAiServiceStatus(); }, [refreshAiServiceStatus]);
   useEffect(() => { voiceAdapters.desktop.capabilities().then(setSettingsDesktopCaps).catch(() => setSettingsDesktopCaps({ supported: false, editShortcutRegistered: false })); }, [state.settings.globalShortcutsEnabled, state.settings.voiceShortcut]);
-  useEffect(() => { voiceAdapters.desktop.getEasyInputAudioStatus().then(setSettingsAudioStatus).catch(() => setSettingsAudioStatus({ configured: false, state: "desktop-bridge-unavailable", counters: {} })); return voiceAdapters.desktop.onEasyInputAudioEvent((event) => setSettingsAudioStatus((current) => ({ ...current, ...event }))); }, []);
   const saveBailian = async () => { try { const value = await globalThis.desktopBridge?.saveBailianCredentials?.({ apiKey: bailianKey, workspaceId: bailianWorkspace }); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setBailianKey(""); setBailianStatus(value); updateSettings({ sttMode: "bailian", sttEndpoint: "" }); notify("千问语音识别账号已使用 Windows 加密保存"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearBailian = async () => { try { const value = await globalThis.desktopBridge?.clearBailianCredentials?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setBailianStatus(value); updateSettings({ sttMode: "unconfigured" }); notify("本机千问 API Key 已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const saveTextService = async () => { try { const value = await globalThis.desktopBridge?.saveTextModelService?.(textService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setTextService((current) => ({ ...current, apiKey: "" })); notify("文本大模型接口已加密保存，智能整理与语音编辑将使用该服务"); } catch (error) { notify(`保存失败：${error.message}`); } };
@@ -1316,9 +1315,9 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const activeTextModel = aiServiceStatus.text?.configured ? aiServiceStatus.text.model : bailianStatus.configured ? "qwen3.7-flash" : "未配置";
   const organizerDiagnostic = state.settings.formatting === "raw" ? { label: "文字整理", value: "本地原样输出", tone: "success" } : { label: "文本模型整理", value: !textModelReady ? "缺少密钥" : state.diagnostics?.organizer?.fallback ? "上次已回退原文" : state.diagnostics?.organizer?.status === "success" ? `正常 · ${state.diagnostics.organizer.durationMs} ms` : activeTextModel, tone: textModelReady && !state.diagnostics?.organizer?.fallback ? "success" : "demo" };
   const inputBridge = state.runtime?.inputBridge || {};
-  const settingsLink = normalizeLinkDiagnostics(inputBridge.linkDiagnostics);
   const settingsAgentDelivery = normalizeAgentDelivery(inputBridge.agentStateDelivery);
-  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: inputBridge.boardConnected ? "已连接" : "未连接", tone: inputBridge.boardConnected ? "success" : "demo" }, { label: "小智 DeskMate Link", value: ({ connected: "已连接", waiting: "等待连接", faulted: "故障", disabled: "未启用", unavailable: "不可读取" })[settingsLink.status], tone: settingsLink.status === "connected" ? "success" : "demo" }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: settingsAudioStatus.state === "streaming" ? "正在收音" : settingsAudioStatus.setup?.configured ? "已配置，真机收音已验收" : "未配置", tone: settingsAudioStatus.state === "streaming" || settingsAudioStatus.setup?.configured ? "success" : "demo" }];
+  const sharedStatus = deviceServiceStatus({ inputBridge, audioStatus: settingsAudioStatus, preferredMicrophoneSource: state.settings.microphoneSource, companion: state.runtime?.companion, memory: state.runtime?.memory });
+  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: sharedStatus.easyInput.label, tone: sharedStatus.easyInput.tone }, { label: "小智 DeskMate Link", value: sharedStatus.xiaozhi.label, tone: sharedStatus.xiaozhi.tone }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: sharedStatus.microphone.label, tone: sharedStatus.microphone.tone }];
   return (
     <div className="page">
       <PageIntro title="设置与诊断" description="管理快捷键、输入方式、外观和系统诊断" actions={<><Button icon={Upload} onClick={() => document.getElementById("config-import").click()}>导入配置</Button><input id="config-import" type="file" accept="application/json" hidden onChange={importConfig} /><Button icon={Download} onClick={downloadConfig}>导出配置</Button><Button icon={Refresh} onClick={() => { reset(); notify("设置已恢复为默认值"); }}>恢复默认</Button></>} />

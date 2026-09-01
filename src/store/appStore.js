@@ -8,7 +8,7 @@ import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -38,12 +38,14 @@ export const defaultState = {
   settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
+    easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
     companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, reason: "easyinput-audio-source-pending" }, audioSink: { available: false, reason: "easyinput-audio-sink-pending" }, service: { configured: false, provider: "doubao" } },
+    memory: { ready: false, storage: "unavailable" },
     lastTrigger: null,
   },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
   agentExpressionMapping: { codex: "focus", claude: "listen", hermes: "think", workbody: "happy" },
-  agentControl: { agentId: "codex", customName: "", state: "idle" },
+  agentControl: { agentId: "codex", customName: "", state: "idle", automaticStatusEnabled: true },
   currentExpression: "focus",
   expressionEditor: { eyeSize: 72, eyeGap: 58, brightness: 80, blink: true, color: "cyan" },
   motion: { preset: "attentive", speed: 45, range: 55 },
@@ -67,7 +69,7 @@ function mergeDefaults(value) {
     expressionEditor: { ...defaultState.expressionEditor, ...(value.expressionEditor || {}) },
     motion: { ...defaultState.motion, ...(value.motion || {}) },
     sensors: { ...defaultState.sensors, ...(value.sensors || {}) },
-    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) }, companion: { ...defaultState.runtime.companion, ...(value.runtime?.companion || {}) } },
+    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) }, easyInputAudio: { ...defaultState.runtime.easyInputAudio, ...(value.runtime?.easyInputAudio || {}) }, companion: { ...defaultState.runtime.companion, ...(value.runtime?.companion || {}) }, memory: { ...defaultState.runtime.memory, ...(value.runtime?.memory || {}) } },
     aiEvent: { ...defaultState.aiEvent, ...(value.aiEvent || {}) },
     aiIntent: value.aiIntent || defaultState.aiIntent,
   };
@@ -82,6 +84,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 7) raw = { ...raw, agentControl: normalizeAgentControl(raw.agentControl) };
   if ((raw.schemaVersion ?? 0) < 8) raw = { ...raw, settings: { ...(raw.settings || {}), microphoneSource: normalizeMicrophoneSource(raw.settings?.microphoneSource), globalShortcutsEnabled: false } };
   if ((raw.schemaVersion ?? 0) < 9 && isLegacyDemoAiEvent(raw.aiEvent)) raw = { ...raw, aiEvent: { ...DEFAULT_AI_EVENT }, aiIntent: mapAiStateToPetIntent({ state: "idle" }) };
+  if ((raw.schemaVersion ?? 0) < 10) raw = { ...raw, agentControl: normalizeAgentControl({ ...(raw.agentControl || {}), automaticStatusEnabled: raw.agentControl?.automaticStatusEnabled !== false }) };
   return mergeDefaults(raw);
 }
 
@@ -135,6 +138,7 @@ export function validateConfig(value) {
   checkExpressionMap(value.agentExpressionMapping, "AI 工具表情映射");
   if (value.agentControl !== undefined) {
     if (!value.agentControl || typeof value.agentControl !== "object" || Array.isArray(value.agentControl)) throw new Error("AI 手动控制配置无效");
+    if (value.agentControl.automaticStatusEnabled !== undefined && typeof value.agentControl.automaticStatusEnabled !== "boolean") throw new Error("AI 自动状态设置无效");
     const normalizedAgentControl = normalizeAgentControl(value.agentControl);
     if (normalizedAgentControl.agentId !== value.agentControl.agentId || normalizedAgentControl.state !== value.agentControl.state || normalizedAgentControl.customName !== String(value.agentControl.customName || "")) throw new Error("AI 手动控制配置无效");
   }

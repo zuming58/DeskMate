@@ -15,7 +15,8 @@ test("manual Agent model keeps identity local and maps waiting_user to the froze
   assert.deepEqual(MANUAL_AGENT_STATES.map((item) => item.id), ["idle", "listening", "thinking", "working", "waiting_user", "completed", "error"]);
   assert.equal(manualAgentState("waiting_user").transport, "waiting");
   assert.equal(manualAgentName({ agentId: "custom", customName: "  Cursor  ", state: "idle" }), "Cursor");
-  assert.deepEqual(normalizeAgentControl({ agentId: "invalid", state: "invalid", customName: "x\u0000y" }), { agentId: "codex", customName: "xy", state: "idle" });
+  assert.deepEqual(normalizeAgentControl({ agentId: "invalid", state: "invalid", customName: "x\u0000y" }), { agentId: "codex", customName: "xy", state: "idle", automaticStatusEnabled: true });
+  assert.equal(normalizeAgentControl({ agentId: "codex", state: "idle", automaticStatusEnabled: false }).automaticStatusEnabled, false);
 });
 
 test("desktop Agent UI keeps manual fallback and exposes the trusted Codex lifecycle adapter", async () => {
@@ -26,6 +27,8 @@ test("desktop Agent UI keeps manual fallback and exposes the trusted Codex lifec
   ]);
   assert.match(pages, /Codex 真实状态已接入/);
   assert.match(pages, /重新发送当前状态/);
+  assert.match(pages, /Codex 自动状态/);
+  assert.match(pages, /官方生命周期暂不提供可靠的整轮失败事件/);
   assert.doesNotMatch(pages, /simulateNextStatus/);
   assert.match(preload, /setManualAgentState/);
   assert.match(preload, /setActiveAgentProvider/);
@@ -33,5 +36,7 @@ test("desktop Agent UI keeps manual fallback and exposes the trusted Codex lifec
   assert.match(main, /desktop:set-manual-agent-state/);
   assert.match(main, /desktop:set-active-agent-provider/);
   assert.match(main, /new CodexHookStateServer/);
+  assert.match(main, /sourceVersion: "codex-hook-v1"/);
+  assert.match(main, /"disabled"/);
   assert.match(main, /voice-workflow-active/);
 });
