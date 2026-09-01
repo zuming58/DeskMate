@@ -345,8 +345,46 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("T11D.5 package exposes an explicit half-duplex keep-alive build identity", () => {
+test("T11D.6 package exposes an explicit turn-cancellation diagnostic build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t11d5-half-duplex-keepalive-ui-v1/);
+  assert.match(main, /t11d6-turn-cancel-diagnostics-v1/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
+});
+
+test("turn and sink cancellation diagnostics are bounded and contain no conversation content", () => {
+  const report = createDiagnosticReport({ conversation: {
+    state: "listening",
+    turnLifecycle: {
+      ttsTurnStarted: 4,
+      ttsTurnCompleted: 3,
+      ttsTurnAbandoned: 1,
+      ttsImplicitStarts: 1,
+      ttsStartsWhileOpen: 2,
+      ttsEndsWithoutStart: 0,
+      chatFinals: 4,
+      chatFinalTtsEndPairs: 3,
+      chatFinalsWithoutTtsEnd: 1,
+      asrFinalsAccepted: 2,
+      asrFinalsSuppressed: 5,
+      lastAsrFinalArrivalPhase: "draining",
+      lastTtsTurnOutcome: "manual",
+      asrFinalArrivalPhases: { listening: 2, thinking: 1, speaking: 3, draining: 1, privatePhase: 99 },
+      transcript: "private user sentence",
+      replyText: "private assistant sentence",
+    },
+    sinkCancelReasons: { manual: 7, stop: 1, renderer: 2, provider: 3, "asr-final": 0, privateReason: 88 },
+    lastSinkCancelReason: "manual",
+    echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, phase: "listening", uplinkAllowed: true },
+  } });
+  assert.equal(report.conversation.turnLifecycle.ttsTurnStarted, 4);
+  assert.equal(report.conversation.turnLifecycle.ttsTurnCompleted, 3);
+  assert.equal(report.conversation.turnLifecycle.ttsTurnAbandoned, 1);
+  assert.equal(report.conversation.turnLifecycle.asrFinalArrivalPhases.speaking, 3);
+  assert.equal(report.conversation.turnLifecycle.asrFinalArrivalPhases.draining, 1);
+  assert.equal(report.conversation.turnLifecycle.lastTtsTurnOutcome, "manual");
+  assert.equal(report.conversation.sinkCancellation.reasons.manual, 7);
+  assert.equal(report.conversation.sinkCancellation.reasons["asr-final"], 0);
+  assert.equal(report.conversation.sinkCancellation.lastReason, "manual");
+  assert.deepEqual(report.conversation.echoGuard, { policy: "computer-speaker-echo-guard-v1", active: false, phase: "listening", uplinkAllowed: true, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } });
+  assert.doesNotMatch(JSON.stringify(report), /private user|private assistant|privatePhase|privateReason/);
 });

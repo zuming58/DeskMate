@@ -75,7 +75,7 @@ test("diagnostics export removes secrets and content", () => {
   assert.equal(report.conversation.stopLifecycle.result, "unknown");
   assert.equal(report.conversation.providerLifecycle.events, 0);
   assert.deepEqual(report.conversation.counters, { sourceChunks: 8, sinkChunks: 9, rejectedEvents: 0, interruptions: 0, queueDrops: 1, drainRequests: 0, drains: 0, drainTimeouts: 0, sinkAccepted: 0, sinkPlayed: 0, sinkCancelled: 0, backpressureWaits: 0, backpressureTimeouts: 0, bufferedAudioHighWaterMs: 0 });
-  assert.deepEqual(report.conversation.echoGuard, { policy: "computer-speaker-echo-guard-v1", active: true, counters: { echoGuardDroppedChunks: 3, ignoredAsrDuringPlayback: 2, playbackDrainTimeouts: 0, teardownTimeouts: 0 } });
+  assert.deepEqual(report.conversation.echoGuard, { policy: "computer-speaker-echo-guard-v1", active: true, phase: "idle", uplinkAllowed: false, counters: { echoGuardDroppedChunks: 3, ignoredAsrDuringPlayback: 2, playbackDrainTimeouts: 0, teardownTimeouts: 0 } });
 });
 
 test("smart organizer returns structured metadata and uses pre-applied rules", async () => {

@@ -668,3 +668,107 @@ test("the first real TTS audio frame enters working even if the provider omits t
   assert.equal(states.at(-1), "working");
   await controller.stop();
 });
+
+test("synchronous arrival phase closes the event-chain race before tts start is handled", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => commits.push(turn),
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "arrival-race", generation: 1 });
+
+  provider.emit({ type: "tts.start" });
+  assert.equal(source.push(Buffer.from([1, 2])), true);
+  provider.emit({ type: "asr.final", text: "reflected-provider-audio" });
+  await controller.eventChain;
+
+  assert.equal(controller.snapshot().state, "speaking");
+  assert.equal(provider.audio.length, 0);
+  assert.equal(provider.interruptions, 0);
+  assert.equal(sink.interruptions, 0);
+  assert.deepEqual(commits, []);
+  assert.equal(controller.snapshot().turnLifecycle.asrFinalsSuppressed, 1);
+  assert.equal(controller.snapshot().turnLifecycle.asrFinalArrivalPhases.speaking, 1);
+
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  await controller.stop();
+});
+
+test("thinking blocks uplink and late ASR without cancelling the provider or speaker", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => commits.push(turn),
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "thinking-gate", generation: 1 });
+
+  provider.emit({ type: "asr.final", text: "real-user-turn" });
+  assert.equal(source.push(Buffer.from([3, 4])), true);
+  provider.emit({ type: "asr.final", text: "late-asr-copy" });
+  provider.emit({ type: "chat.final", text: "one sentence is a complete provider answer" });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([5, 6]) });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+
+  assert.deepEqual(commits.map((turn) => turn.content), ["real-user-turn", "one sentence is a complete provider answer"]);
+  assert.equal(provider.audio.length, 0);
+  assert.equal(provider.interruptions, 0);
+  assert.equal(sink.interruptions, 0);
+  const lifecycle = controller.snapshot().turnLifecycle;
+  assert.equal(lifecycle.asrFinalsAccepted, 1);
+  assert.equal(lifecycle.asrFinalsSuppressed, 1);
+  assert.equal(lifecycle.asrFinalArrivalPhases.listening, 1);
+  assert.equal(lifecycle.asrFinalArrivalPhases.thinking, 1);
+  assert.equal(lifecycle.ttsTurnStarted, 1);
+  assert.equal(lifecycle.ttsTurnCompleted, 1);
+  assert.equal(lifecycle.ttsTurnAbandoned, 0);
+  assert.equal(lifecycle.chatFinalTtsEndPairs, 1);
+  assert.equal(lifecycle.lastTtsTurnOutcome, "completed");
+  await controller.stop();
+});
+
+test("only explicit interruption abandons an open TTS turn", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "explicit-interrupt-only", generation: 1 });
+  provider.emit({ type: "chat.final", text: "provider answer" });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([7, 8]) });
+  await controller.eventChain;
+
+  assert.equal((await controller.interrupt("user")).ok, true);
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  const lifecycle = controller.snapshot().turnLifecycle;
+  assert.equal(provider.interruptions, 1);
+  assert.equal(lifecycle.ttsTurnStarted, 1);
+  assert.equal(lifecycle.ttsTurnCompleted, 0);
+  assert.equal(lifecycle.ttsTurnAbandoned, 1);
+  assert.equal(lifecycle.lastTtsTurnOutcome, "manual");
+  assert.equal(lifecycle.chatFinalTtsEndPairs, 1);
+  await controller.stop();
+});

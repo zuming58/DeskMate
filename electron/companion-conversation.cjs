@@ -5,6 +5,8 @@ const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", list
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
+const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
+const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const PROVIDER_EVENT_NAMES = new Set([
   "none", "audio", "tts-start", "tts-end", "session-ready", "session-finished",
   "session-failed", "connection-started", "connection-failed", "connection-finished",
@@ -117,7 +119,18 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.halfDuplexPhase = "idle";
+    this.activeTtsTurn = null;
+    this.pendingChatFinals = 0;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
+    this.turnLifecycle = {
+      ttsTurnStarted: 0, ttsTurnCompleted: 0, ttsTurnAbandoned: 0,
+      ttsImplicitStarts: 0, ttsStartsWhileOpen: 0, ttsEndsWithoutStart: 0,
+      chatFinals: 0, chatFinalsSuppressed: 0, chatFinalTtsEndPairs: 0, chatFinalsWithoutTtsEnd: 0,
+      asrFinalsAccepted: 0, asrFinalsSuppressed: 0,
+      lastAsrFinalArrivalPhase: "idle", lastTtsTurnOutcome: "none",
+      asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, 0])),
+    };
     this.providerLifecycle = {
       connectAttempts: 0, connections: 0, closes: 0, reconnects: 0, events: 0,
       audioEvents: 0, ttsStarts: 0, ttsEnds: 0, providerErrors: 0,
@@ -134,20 +147,87 @@ class CompanionConversationController {
   }
 
   echoGuardActive() {
-    return this.audioSelection.output === "computer" && this.state === "speaking";
+    return this.audioSelection.output === "computer" && Boolean(this.active) && !this.microphoneUplinkAllowed();
+  }
+
+  microphoneUplinkAllowed() {
+    return Boolean(this.active) && this.halfDuplexPhase === "listening" && !this.playbackDraining && !this.stopPromise;
+  }
+
+  setHalfDuplexPhase(phase) {
+    this.halfDuplexPhase = HALF_DUPLEX_PHASES.has(phase) ? phase : "idle";
+    return this.halfDuplexPhase;
+  }
+
+  syncHalfDuplexPhaseFromState(state) {
+    const mapped = state === "connecting" && this.reconnecting ? "reconnecting" : state;
+    if (HALF_DUPLEX_PHASES.has(mapped) && mapped !== "draining") this.setHalfDuplexPhase(mapped);
+  }
+
+  beginTtsTurn({ implicit = false } = {}) {
+    if (this.activeTtsTurn) {
+      if (!implicit) this.turnLifecycle.ttsStartsWhileOpen += 1;
+      return this.activeTtsTurn;
+    }
+    this.activeTtsTurn = { interruption: "none" };
+    this.turnLifecycle.ttsTurnStarted += 1;
+    if (implicit) this.turnLifecycle.ttsImplicitStarts += 1;
+    return this.activeTtsTurn;
+  }
+
+  markTtsTurnInterrupted(reason) {
+    if (!this.activeTtsTurn) return false;
+    const outcome = TTS_TURN_OUTCOMES.has(reason) && reason !== "completed" && reason !== "none" ? reason : "provider";
+    if (this.activeTtsTurn.interruption === "none") this.activeTtsTurn.interruption = outcome;
+    return true;
+  }
+
+  finishTtsTurn() {
+    if (!this.activeTtsTurn) {
+      this.turnLifecycle.ttsEndsWithoutStart += 1;
+    } else if (this.activeTtsTurn.interruption !== "none") {
+      this.turnLifecycle.ttsTurnAbandoned += 1;
+      this.turnLifecycle.lastTtsTurnOutcome = this.activeTtsTurn.interruption;
+    } else {
+      this.turnLifecycle.ttsTurnCompleted += 1;
+      this.turnLifecycle.lastTtsTurnOutcome = "completed";
+    }
+    this.activeTtsTurn = null;
+  }
+
+  abandonOpenTurn(reason = "provider") {
+    if (this.activeTtsTurn) {
+      this.markTtsTurnInterrupted(reason);
+      this.turnLifecycle.ttsTurnAbandoned += 1;
+      this.turnLifecycle.lastTtsTurnOutcome = this.activeTtsTurn.interruption;
+      this.activeTtsTurn = null;
+    }
+    if (this.pendingChatFinals > 0) {
+      this.turnLifecycle.chatFinalsWithoutTtsEnd += this.pendingChatFinals;
+      this.pendingChatFinals = 0;
+    }
+  }
+
+  turnLifecycleSnapshot() {
+    return Object.freeze({
+      ...this.turnLifecycle,
+      asrFinalArrivalPhases: Object.freeze({ ...this.turnLifecycle.asrFinalArrivalPhases }),
+    });
   }
 
   echoGuardSnapshot() {
     return Object.freeze({
       policy: ECHO_GUARD_POLICY,
       active: this.echoGuardActive(),
+      phase: this.halfDuplexPhase,
+      uplinkAllowed: this.microphoneUplinkAllowed(),
       counters: Object.freeze({ ...this.echoGuardCounters }),
     });
   }
 
   forwardSourceAudio(chunk, token) {
     if (!this.isCurrent(token)) return false;
-    if (this.echoGuardActive()) {
+    if (!this.microphoneUplinkAllowed()) {
       this.echoGuardCounters.echoGuardDroppedChunks += 1;
       return false;
     }
@@ -171,6 +251,7 @@ class CompanionConversationController {
         fallback: sourceStatus.fallback || this.audioSelection.fallback,
       }),
       echoGuard: this.echoGuardSnapshot(),
+      turnLifecycle: this.turnLifecycleSnapshot(),
       providerLifecycle: Object.freeze({ ...this.providerLifecycle }),
       stopLifecycle: Object.freeze({ ...this.stopLifecycle }),
       error: this.lastError,
@@ -196,6 +277,7 @@ class CompanionConversationController {
   async transition(state, detail = {}) {
     if (!STATES.includes(state)) throw new Error("companion-state-invalid");
     this.state = state;
+    this.syncHalfDuplexPhaseFromState(state);
     if (state !== "error") this.lastError = "";
     const payload = Object.freeze({ type: "state", state, sessionId: this.active?.sessionId || detail.sessionId || "", generation: this.active?.generation || detail.generation || 0, ...detail });
     this.onEvent(payload);
@@ -234,6 +316,9 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.activeTtsTurn = null;
+    this.pendingChatFinals = 0;
+    this.setHalfDuplexPhase("connecting");
     await this.transition("connecting");
     const token = this.active.token;
     try {
@@ -267,6 +352,7 @@ class CompanionConversationController {
   recordProviderArrival(event = {}) {
     const sequence = this.providerLifecycle.providerEventSequence + 1;
     const phase = this.providerArrivalPhase();
+    const asrArrivalPhase = this.halfDuplexPhase;
     const previousProviderEvent = this.providerLifecycle.lastProviderEvent;
     const providerEvent = providerEventName(event);
     const terminalEvent = terminalEventName(event, providerEvent);
@@ -304,7 +390,23 @@ class CompanionConversationController {
       this.providerLifecycle.lastFailureBucket = failureBucket;
       this.providerLifecycle.terminalExpected = Boolean(this.stopPromise || this.state === "stopping");
     }
-    return Object.freeze({ sequence, phase, providerEvent, terminalEvent });
+    if (event?.type === "chat.final") {
+      this.turnLifecycle.chatFinals += 1;
+      this.pendingChatFinals += 1;
+      if (this.discardResponseUntilTtsEnd) this.turnLifecycle.chatFinalsSuppressed += 1;
+    } else if (event?.type === "tts.end" && this.pendingChatFinals > 0) {
+      this.pendingChatFinals -= 1;
+      this.turnLifecycle.chatFinalTtsEndPairs += 1;
+    }
+    const isAsr = ["asr.partial", "asr.final"].includes(event?.type);
+    const suppressAsr = isAsr && asrArrivalPhase !== "listening";
+    if (["transport-error", "transport-close"].includes(providerEvent)) this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "reconnecting");
+    else if (event?.type === "error") this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "error");
+    else if (event?.type === "asr.final" && !suppressAsr) this.setHalfDuplexPhase("thinking");
+    else if (["chat.partial", "chat.final"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("thinking");
+    else if (["tts.start", "audio"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("speaking");
+    else if (event?.type === "tts.end" && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("draining");
+    return Object.freeze({ sequence, phase, providerEvent, terminalEvent, asrArrivalPhase, suppressAsr });
   }
 
   createProvider(token) {
@@ -314,7 +416,6 @@ class CompanionConversationController {
       const arrival = Object.freeze({
         ...providerArrival,
         providerEpoch,
-        suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining),
       });
       this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
     } });
@@ -353,7 +454,9 @@ class CompanionConversationController {
     this.reconnecting = (async () => {
       await this.audioSource.stop();
       if (!this.isCurrent(token)) return cancelled();
-      await this.audioSink.interrupt();
+      this.abandonOpenTurn("provider");
+      this.setHalfDuplexPhase("reconnecting");
+      await this.audioSink.interrupt("provider");
       if (!this.isCurrent(token)) return cancelled();
       this.provider?.close?.();
       this.provider = null;
@@ -394,12 +497,20 @@ class CompanionConversationController {
       await this.fail(event.message || "companion-provider-error", token);
       return { ok: false };
     }
-    if (["asr.partial", "asr.final"].includes(event.type) && (arrival.suppressAsr || this.echoGuardActive())) {
+    if (event.type === "asr.final") {
+      const phase = HALF_DUPLEX_PHASES.has(arrival.asrArrivalPhase) ? arrival.asrArrivalPhase : "idle";
+      this.turnLifecycle.lastAsrFinalArrivalPhase = phase;
+      this.turnLifecycle.asrFinalArrivalPhases[phase] += 1;
+      if (arrival.suppressAsr) this.turnLifecycle.asrFinalsSuppressed += 1;
+      else this.turnLifecycle.asrFinalsAccepted += 1;
+    }
+    if (["asr.partial", "asr.final"].includes(event.type) && arrival.suppressAsr) {
       this.echoGuardCounters.ignoredAsrDuringPlayback += 1;
       return { ignored: true, reason: "companion-playback-echo-guard" };
     }
     if (event.type === "audio") {
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
+      this.beginTtsTurn({ implicit: true });
       if (this.state !== "speaking") await this.transition("speaking", { reason: "tts-audio" });
       let written;
       try { written = await this.audioSink.write(event.audio); }
@@ -415,12 +526,6 @@ class CompanionConversationController {
       return { ok: true };
     }
     if (event.type === "asr.final") {
-      if (this.state === "speaking" || this.discardResponseUntilTtsEnd) {
-        this.discardResponseUntilTtsEnd = true;
-        this.postInterruptState = "thinking";
-      }
-      await this.audioSink.interrupt();
-      this.provider?.interrupt?.();
       if (await this.commitFinalTurn("user", event.text, token)) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
@@ -444,11 +549,13 @@ class CompanionConversationController {
     }
     if (event.type === "tts.start") {
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
+      this.beginTtsTurn();
       await this.transition("speaking");
       return { ok: true };
     }
     if (event.type === "tts.end") {
       if (this.discardResponseUntilTtsEnd) {
+        this.finishTtsTurn();
         const nextState = this.postInterruptState || "listening";
         this.discardResponseUntilTtsEnd = false;
         this.postInterruptState = "";
@@ -459,6 +566,7 @@ class CompanionConversationController {
       const drained = await this.boundedOperation(() => this.audioSink.drain(), this.drainTimeoutMs, "companion-audio-drain-timeout");
       if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
       if (this.discardResponseUntilTtsEnd) {
+        this.finishTtsTurn();
         const nextState = this.postInterruptState || "listening";
         this.discardResponseUntilTtsEnd = false;
         this.postInterruptState = "";
@@ -469,8 +577,10 @@ class CompanionConversationController {
       const drainResult = drained.ok ? drained.value : { ok: false, reason: drained.reason };
       if (!drainResult?.ok) {
         this.echoGuardCounters.playbackDrainTimeouts += 1;
-        await this.boundedOperation(() => this.audioSink.interrupt(), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
+        this.markTtsTurnInterrupted("drain-timeout");
+        await this.boundedOperation(() => this.audioSink.interrupt("drain-timeout"), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
       }
+      this.finishTtsTurn();
       this.playbackDraining = false;
       await this.transition("listening", { reason: drainResult?.ok ? "tts-playback-drained" : "tts-playback-drain-timeout" });
       return { ok: true, drained: Boolean(drainResult?.ok) };
@@ -478,7 +588,7 @@ class CompanionConversationController {
     return { ignored: true, reason: "companion-event-unmapped" };
   }
 
-  async cleanup(provider = this.provider) {
+  async cleanup(provider = this.provider, cancellationReason = "stop") {
     const bounded = async (operation, reason) => {
       const result = await this.boundedOperation(operation, this.teardownStepTimeoutMs, reason);
       if (result.timedOut) this.echoGuardCounters.teardownTimeouts += 1;
@@ -487,8 +597,8 @@ class CompanionConversationController {
     await Promise.all([
       bounded(() => this.audioSource?.stop?.(), "companion-audio-source-stop-timeout"),
       (async () => {
-        await bounded(() => this.audioSink?.interrupt?.(), "companion-audio-sink-interrupt-timeout");
-        await bounded(() => this.audioSink?.stop?.(), "companion-audio-sink-stop-timeout");
+        await bounded(() => this.audioSink?.interrupt?.(cancellationReason), "companion-audio-sink-interrupt-timeout");
+        await bounded(() => this.audioSink?.stop?.(cancellationReason), "companion-audio-sink-stop-timeout");
       })(),
       bounded(() => provider?.close?.(), "companion-provider-close-timeout"),
     ]);
@@ -506,10 +616,12 @@ class CompanionConversationController {
     const provider = this.provider;
     this.active = null;
     this.lastError = safeErrorReason(reason);
+    this.abandonOpenTurn("provider");
+    this.setHalfDuplexPhase("error");
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
-    await this.cleanup(provider);
+    await this.cleanup(provider, "provider");
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
     await this.publishTerminalState("error");
@@ -539,11 +651,13 @@ class CompanionConversationController {
     const provider = this.provider;
     await this.transition("stopping", { reason });
     this.active = null;
+    this.abandonOpenTurn("stop");
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
-    await this.cleanup(provider);
+    await this.cleanup(provider, "stop");
     this.state = "idle";
+    this.setHalfDuplexPhase("idle");
     this.lastError = "";
     this.onEvent({ type: "state", state: "idle", reason, sessionId: session.sessionId, generation: session.generation });
     await this.publishTerminalState("idle");
@@ -557,7 +671,8 @@ class CompanionConversationController {
     if (!['thinking', 'speaking', 'completed'].includes(this.state)) return { ok: false, reason: "companion-response-not-active", status: this.snapshot() };
     this.discardResponseUntilTtsEnd = true;
     this.postInterruptState = "listening";
-    await this.audioSink.interrupt();
+    this.markTtsTurnInterrupted("manual");
+    await this.audioSink.interrupt("manual");
     this.provider?.interrupt?.();
     await this.transition("listening", { reason: safeErrorReason(reason) });
     this.onEvent({ type: "response.interrupted", sessionId: this.active.sessionId, generation: this.active.generation });

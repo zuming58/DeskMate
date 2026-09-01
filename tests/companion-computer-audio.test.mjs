@@ -195,3 +195,24 @@ test("speaker backpressure true limit fails explicitly instead of dropping queue
   assert.equal(session.diagnostics().counters.queueDrops, 0);
   await session.sink.interrupt();
 });
+
+test("speaker diagnostics attribute cancelled blocks to a closed reason", async () => {
+  let session;
+  session = new ComputerCompanionAudioSession({
+    sendCommand: (command) => {
+      if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+      if (command.type === "sink.audio") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.accepted", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence }));
+    },
+  });
+  session.setRendererReady(true);
+  session.prepare({ sessionId: "cancel-reason", generation: 1 });
+  await session.sink.start();
+  assert.equal(await session.sink.write(Buffer.alloc(960)), true);
+  await session.sink.interrupt("manual");
+  const diagnostics = session.diagnostics();
+  assert.equal(diagnostics.counters.sinkCancelled, 1);
+  assert.equal(diagnostics.sinkCancelReasons.manual, 1);
+  assert.equal(diagnostics.sinkCancelReasons["asr-final"], 0);
+  assert.equal(diagnostics.lastSinkCancelReason, "manual");
+  await session.sink.stop("stop");
+});

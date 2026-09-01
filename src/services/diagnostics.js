@@ -9,6 +9,9 @@ const TERMINAL_PHASES = new Set(["none", "starting", "active", "draining", "stop
 const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"]);
 const DIALOG_ERROR_STATUS_CLASSES = new Set(["none", "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"]);
 const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacent"]);
+const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
+const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
+const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -31,6 +34,9 @@ export function createDiagnosticReport(input = {}) {
   const buildSource = conversationSource.build || {};
   const stopSource = conversationSource.stopLifecycle || {};
   const providerSource = conversationSource.providerLifecycle || {};
+  const turnSource = conversationSource.turnLifecycle || {};
+  const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
+  const sinkCancelSource = conversationSource.sinkCancelReasons || {};
   const mainStateSource = conversationSource.mainState || {};
   const conversation = {
     state: CONVERSATION_STATES.has(conversationSource.state) ? conversationSource.state : "idle",
@@ -64,10 +70,22 @@ export function createDiagnosticReport(input = {}) {
       lastDialogErrorStatusClass: DIALOG_ERROR_STATUS_CLASSES.has(providerSource.lastDialogErrorStatusClass) ? providerSource.lastDialogErrorStatusClass : "none",
       lastDialogErrorAdjacency: DIALOG_ERROR_ADJACENCY.has(providerSource.lastDialogErrorAdjacency) ? providerSource.lastDialogErrorAdjacency : "none",
     },
+    turnLifecycle: {
+      ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
+      lastAsrFinalArrivalPhase: HALF_DUPLEX_PHASES.has(turnSource.lastAsrFinalArrivalPhase) ? turnSource.lastAsrFinalArrivalPhase : "idle",
+      lastTtsTurnOutcome: TTS_TURN_OUTCOMES.has(turnSource.lastTtsTurnOutcome) ? turnSource.lastTtsTurnOutcome : "none",
+      asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, Math.max(0, Number(asrPhaseSource[phase]) || 0)])),
+    },
+    sinkCancellation: {
+      reasons: Object.fromEntries(SINK_CANCEL_REASONS.map((reason) => [reason, Math.max(0, Number(sinkCancelSource[reason]) || 0)])),
+      lastReason: SINK_CANCEL_REASONS.includes(conversationSource.lastSinkCancelReason) ? conversationSource.lastSinkCancelReason : "none",
+    },
     counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops", "drainRequests", "drains", "drainTimeouts", "sinkAccepted", "sinkPlayed", "sinkCancelled", "backpressureWaits", "backpressureTimeouts", "bufferedAudioHighWaterMs"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
     echoGuard: {
       policy: echoGuardSource.policy === "computer-speaker-echo-guard-v1" ? echoGuardSource.policy : "unavailable",
       active: Boolean(echoGuardSource.active),
+      phase: HALF_DUPLEX_PHASES.has(echoGuardSource.phase) ? echoGuardSource.phase : "idle",
+      uplinkAllowed: Boolean(echoGuardSource.uplinkAllowed),
       counters: Object.fromEntries(["echoGuardDroppedChunks", "ignoredAsrDuringPlayback", "playbackDrainTimeouts", "teardownTimeouts"].map((key) => [key, Number.isInteger(echoGuardCounters[key]) ? echoGuardCounters[key] : 0])),
     },
   };

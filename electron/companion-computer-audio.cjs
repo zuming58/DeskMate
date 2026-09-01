@@ -6,6 +6,7 @@ const DEFAULT_ACCEPT_TIMEOUT_MS = 1500;
 const DEFAULT_BACKPRESSURE_TIMEOUT_MS = 6000;
 const MAX_BUFFERED_AUDIO_MS = 3000;
 const SINK_SAMPLE_RATE = 24000;
+const SINK_CANCEL_REASONS = new Set(["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"]);
 
 function safeContext(value = {}) {
   const sessionId = String(value.sessionId || "").slice(0, 128);
@@ -41,6 +42,8 @@ class ComputerCompanionAudioSession {
     this.creditWaiters = new Set();
     this.sequence = 0;
     this.counters = { sourceChunks: 0, sinkChunks: 0, rejectedEvents: 0, interruptions: 0, queueDrops: 0, drainRequests: 0, drains: 0, drainTimeouts: 0, sinkAccepted: 0, sinkPlayed: 0, sinkCancelled: 0, backpressureWaits: 0, backpressureTimeouts: 0, bufferedAudioHighWaterMs: 0 };
+    this.sinkCancelReasons = Object.fromEntries([...SINK_CANCEL_REASONS].map((reason) => [reason, 0]));
+    this.lastSinkCancelReason = "none";
     this.source = Object.freeze({
       status: () => this.sourceStatus(),
       start: (handlers) => this.startSource(handlers),
@@ -51,8 +54,8 @@ class ComputerCompanionAudioSession {
       start: () => this.startSink(),
       write: (value) => this.writeSink(value),
       drain: () => this.drainSink(),
-      interrupt: () => this.interruptSink(),
-      stop: () => this.stopSink(),
+      interrupt: (reason) => this.interruptSink(reason),
+      stop: (reason) => this.stopSink(reason),
     });
   }
 
@@ -62,7 +65,7 @@ class ComputerCompanionAudioSession {
       this.settle("source.started", { ok: false, reason: "computer-audio-renderer-unavailable" });
       this.settle("sink.started", { ok: false, reason: "computer-audio-renderer-unavailable" });
       this.settleWhere((key) => key.startsWith("sink.drained:"), { ok: false, reason: "computer-audio-renderer-unavailable" });
-      this.cancelPlayback("computer-audio-renderer-unavailable");
+      this.cancelPlayback("computer-audio-renderer-unavailable", "renderer");
       if (this.sourceActive) this.sourceHandlers?.onError?.(new Error("computer-audio-renderer-unavailable"));
       else if (this.sinkActive) this.onError("computer-audio-renderer-unavailable");
     }
@@ -84,7 +87,7 @@ class ComputerCompanionAudioSession {
   }
 
   diagnostics() {
-    return Object.freeze({ ready: this.rendererReady, sourceActive: this.sourceActive, sinkActive: this.sinkActive, counters: Object.freeze({ ...this.counters }) });
+    return Object.freeze({ ready: this.rendererReady, sourceActive: this.sourceActive, sinkActive: this.sinkActive, counters: Object.freeze({ ...this.counters }), sinkCancelReasons: Object.freeze({ ...this.sinkCancelReasons }), lastSinkCancelReason: this.lastSinkCancelReason });
   }
 
   command(type, extra = {}) {
@@ -209,10 +212,25 @@ class ComputerCompanionAudioSession {
     return true;
   }
 
-  cancelPlayback(reason = "computer-audio-sink-stopped") {
+  normalizeSinkCancelReason(reason) {
+    return SINK_CANCEL_REASONS.has(reason) ? reason : "other";
+  }
+
+  recordSinkCancellation(reason, count = 1) {
+    const normalized = this.normalizeSinkCancelReason(reason);
+    this.sinkCancelReasons[normalized] += Math.max(0, Number(count) || 0);
+    this.lastSinkCancelReason = normalized;
+  }
+
+  cancelPlayback(reason = "computer-audio-sink-stopped", cancellationReason = "other") {
+    let cancelled = 0;
     for (const sequence of [...this.playback.keys()]) {
-      if (this.releasePlayback(sequence, "cancelled", false)) this.counters.sinkCancelled += 1;
+      if (this.releasePlayback(sequence, "cancelled", false)) {
+        this.counters.sinkCancelled += 1;
+        cancelled += 1;
+      }
     }
+    if (cancelled > 0) this.recordSinkCancellation(cancellationReason, cancelled);
     this.flushCreditWaiters(reason);
   }
 
@@ -234,7 +252,7 @@ class ComputerCompanionAudioSession {
     const played = await this.waitForPlaybackEmpty(this.drainTimeoutMs);
     if (!played.ok) {
       this.counters.drainTimeouts += 1;
-      await this.interruptSink();
+      await this.interruptSink("drain-timeout");
       return played;
     }
     const requestSequence = ++this.sequence;
@@ -252,18 +270,18 @@ class ComputerCompanionAudioSession {
     });
   }
 
-  async interruptSink() {
+  async interruptSink(reason = "other") {
     this.counters.interruptions += 1;
     if (this.context) this.command("sink.interrupt");
-    this.cancelPlayback("computer-audio-playback-interrupted");
+    this.cancelPlayback("computer-audio-playback-interrupted", reason);
     return { ok: true };
   }
 
-  async stopSink() {
+  async stopSink(reason = "stop") {
     if (this.context) this.command("sink.stop");
     this.settle("sink.started", { ok: false, reason: "computer-audio-sink-stopped" });
     this.settleWhere((key) => key.startsWith("sink.drained:"), { ok: false, reason: "computer-audio-sink-stopped" });
-    this.cancelPlayback("computer-audio-sink-stopped");
+    this.cancelPlayback("computer-audio-sink-stopped", reason);
     this.sinkActive = false;
     return { ok: true };
   }
@@ -294,7 +312,10 @@ class ComputerCompanionAudioSession {
         return { ok: this.settle(`sink.accepted:${audioSequence}`, { ok: true }) };
       }
       if (event.type === "sink.played") this.counters.sinkPlayed += 1;
-      else this.counters.sinkCancelled += 1;
+      else {
+        this.counters.sinkCancelled += 1;
+        this.recordSinkCancellation("renderer");
+      }
       this.releasePlayback(audioSequence, event.type === "sink.played" ? "played" : "cancelled");
       return { ok: true };
     }
@@ -338,4 +359,4 @@ class ComputerCompanionAudioSession {
   }
 }
 
-module.exports = { COMMAND_VERSION, ComputerCompanionAudioSession, MAX_AUDIO_CHUNK_BYTES, MAX_BUFFERED_AUDIO_MS, safeContext };
+module.exports = { COMMAND_VERSION, ComputerCompanionAudioSession, MAX_AUDIO_CHUNK_BYTES, MAX_BUFFERED_AUDIO_MS, SINK_CANCEL_REASONS, safeContext };
