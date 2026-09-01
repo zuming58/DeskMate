@@ -65,7 +65,7 @@ private:
     int open_control_socket();
     void stop_capture(std::uint64_t session_id);
     bool start_microphone();
-    void stop_microphone();
+    bool stop_microphone();
     void set_state(AudioCaptureState state);
     void increment(std::atomic<std::uint32_t>& counter,
                    std::uint32_t amount = 1);
@@ -77,6 +77,7 @@ private:
     esp_event_handler_instance_t wifi_handler_{};
     esp_event_handler_instance_t ip_handler_{};
     i2s_chan_handle_t mic_rx_{};
+    bool microphone_channel_enabled_{};
     std::uint32_t microphone_generation_{};
     std::uint32_t microphone_generation_counter_{};
 

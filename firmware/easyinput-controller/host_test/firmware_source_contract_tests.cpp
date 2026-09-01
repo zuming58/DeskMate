@@ -415,6 +415,16 @@ int main() {
     CHECK(contains(audio_service_source, "arbiter_->request_microphone"));
     CHECK(contains(audio_service_source, "arbiter_->speaker_active()"));
     CHECK(contains(audio_service_source, "arbiter_->mark_microphone_ready"));
+    CHECK(contains(audio_service_source,
+                   "if (!stop_microphone()) {\n"
+                   "                set_state(AudioCaptureState::Faulted);"));
+    CHECK(contains(audio_service_source,
+                   "if (cleanup_succeeded && arbiter_ != nullptr"));
+    CHECK(contains(audio_service_source,
+                   "arbiter_->finish_microphone(microphone_generation_)"));
+    CHECK(contains(audio_service_header, "bool stop_microphone();"));
+    CHECK(contains(audio_service_source,
+                   "bool AudioCaptureService::stop_microphone()"));
     CHECK(!contains(
         audio_service_source,
         "if (error != ESP_OK) {\n"

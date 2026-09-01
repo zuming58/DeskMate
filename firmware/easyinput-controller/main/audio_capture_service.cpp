@@ -445,6 +445,14 @@ void AudioCaptureService::stop_capture(std::uint64_t session_id) {
 
 bool AudioCaptureService::start_microphone() {
     if (power_ == nullptr || arbiter_ == nullptr) return false;
+    // A previous teardown that could not prove ownership release leaves the
+    // service fail-closed. Never create a second channel or generation on top
+    // of hardware that may still be active.
+    if (mic_rx_ != nullptr || microphone_channel_enabled_ ||
+        microphone_generation_ != 0 ||
+        power_->held(PeripheralPowerOwner::KeyboardMic)) {
+        return false;
+    }
     if (++microphone_generation_counter_ == 0) {
         microphone_generation_counter_ = 1;
     }
@@ -492,7 +500,10 @@ bool AudioCaptureService::start_microphone() {
     };
     standard.slot_cfg.slot_mask = I2S_STD_SLOT_RIGHT;
     error = i2s_channel_init_std_mode(mic_rx_, &standard);
-    if (error == ESP_OK) error = i2s_channel_enable(mic_rx_);
+    if (error == ESP_OK) {
+        error = i2s_channel_enable(mic_rx_);
+        microphone_channel_enabled_ = error == ESP_OK;
+    }
     if (error != ESP_OK) {
         stop_microphone();
         return false;
@@ -504,20 +515,36 @@ bool AudioCaptureService::start_microphone() {
     return true;
 }
 
-void AudioCaptureService::stop_microphone() {
-    if (mic_rx_ != nullptr) {
-        (void)i2s_channel_disable(mic_rx_);
-        (void)i2s_del_channel(mic_rx_);
-        mic_rx_ = nullptr;
+bool AudioCaptureService::stop_microphone() {
+    bool cleanup_succeeded = true;
+    if (microphone_channel_enabled_) {
+        if (mic_rx_ != nullptr && i2s_channel_disable(mic_rx_) == ESP_OK) {
+            microphone_channel_enabled_ = false;
+        } else {
+            cleanup_succeeded = false;
+        }
     }
-    if (power_ != nullptr &&
-        power_->held(PeripheralPowerOwner::KeyboardMic)) {
-        (void)power_->release_consumer(PeripheralPowerOwner::KeyboardMic);
+    if (cleanup_succeeded && mic_rx_ != nullptr) {
+        if (i2s_del_channel(mic_rx_) == ESP_OK) {
+            mic_rx_ = nullptr;
+        } else {
+            cleanup_succeeded = false;
+        }
     }
-    if (arbiter_ != nullptr && microphone_generation_ != 0) {
-        (void)arbiter_->finish_microphone(microphone_generation_);
-        microphone_generation_ = 0;
+    if (cleanup_succeeded && power_ != nullptr &&
+        power_->held(PeripheralPowerOwner::KeyboardMic) &&
+        !power_->release_consumer(PeripheralPowerOwner::KeyboardMic)) {
+        cleanup_succeeded = false;
     }
+    if (cleanup_succeeded && arbiter_ != nullptr &&
+        microphone_generation_ != 0) {
+        if (arbiter_->finish_microphone(microphone_generation_)) {
+            microphone_generation_ = 0;
+        } else {
+            cleanup_succeeded = false;
+        }
+    }
+    return cleanup_succeeded;
 }
 
 void AudioCaptureService::capture_loop() {
@@ -530,7 +557,9 @@ void AudioCaptureService::capture_loop() {
             continue;
         }
         if (command.kind != CaptureCommandKind::Start) {
-            stop_microphone();
+            if (!stop_microphone()) {
+                set_state(AudioCaptureState::Faulted);
+            }
             continue;
         }
         xQueueReset(frame_queue_);
@@ -559,7 +588,11 @@ void AudioCaptureService::capture_loop() {
                 const AudioReadRecoveryDecision recovery =
                     recovery_policy.on_failure();
                 if (recovery == AudioReadRecoveryDecision::Continue) continue;
-                stop_microphone();
+                if (!stop_microphone()) {
+                    running = false;
+                    set_state(AudioCaptureState::Faulted);
+                    break;
+                }
                 if (recovery == AudioReadRecoveryDecision::Fault) {
                     running = false;
                     set_state(AudioCaptureState::Faulted);
@@ -590,7 +623,10 @@ void AudioCaptureService::capture_loop() {
             }
             increment(captured_frames_);
         }
-        stop_microphone();
+        if (!stop_microphone()) {
+            running = false;
+            set_state(AudioCaptureState::Faulted);
+        }
         if (!running) {
             CaptureResult failure{command.session_id, false};
             (void)xQueueSend(capture_result_queue_, &failure, 0);

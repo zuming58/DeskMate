@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11E-A independent EasyInput audit closes microphone teardown gap
+
+- Audit and repair: independent review found that speaker teardown already failed closed, but microphone teardown ignored I2S disable/delete and GPIO8 `KeyboardMic` lease failures before releasing its arbiter generation. `AudioCaptureService` now refuses a second start over any unresolved channel/lease/generation, tracks whether I2S0 is enabled, and releases the microphone generation only after channel deletion and shared-power lease release are proven. Any unproven teardown faults capture closed instead of admitting I2S1 playback over possibly live microphone hardware.
+- Verification: EasyInput Host CTest passes `12/12`; exact ESP-IDF v5.5.5, target `esp32s3`, Minimal Build and the fixed 16 MiB partition build pass. The dirty audit image is `0xD1660` bytes with 73% of the 3 MiB factory partition free; it is build evidence only and is not an authorized image. `git diff --check` passes.
+- Parallel boundary: the T10C read-only gap audit confirms EasyInput cannot yet implement manual-servo forwarding. Current frozen DeskMate Link supports only Agent State, T09 rejects the `MOTION` capability, and there is no Host→EasyInput→Xiaozhi calibration command/result route. Xiaozhi must first freeze the versioned calibration message/session, three-layer ACK, status and e-stop priority contract; only then may EasyInput implement a strict translator. No message IDs or wire values were guessed.
+- Safety and next: no port scan, device identification, Flash/NVS/eFuse access, erase, monitor, sound-bank, Xiaozhi or servo operation occurred. T11E-A remains `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`; after a clean commit/rebuild, the next EasyInput gate is a separately authorized app-only speaker/microphone-preemption HIL. Motion forwarding remains blocked on `T10C_*_FROZEN` and hardware gates.
+
 ## 2026-09-01 - T11E-A fixed-reference safety review closed; final code gate rerun
 
 - Review: the fixed Maker speaker implementation at `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` was fully audited for I2S1, GPIO8 ownership, microphone arbitration, playback cleanup, Host failure vectors and the separate A/B EIAD asset path. It confirms there is no real-time desktop speaker PCM/TTS wire to reuse, so T11E-A remains local-output-only and does not guess a downlink or touch either sound bank.
