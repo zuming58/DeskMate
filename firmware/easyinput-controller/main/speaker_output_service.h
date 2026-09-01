@@ -28,9 +28,15 @@ private:
         std::uint32_t generation{};
     };
 
+    struct ProbeRunResult {
+        bool playback_succeeded{};
+        bool cancelled_for_microphone{};
+        bool ownership_released{};
+    };
+
     static void worker_entry(void* context);
     void worker_loop();
-    bool run_probe(std::uint32_t generation, bool& cancelled);
+    ProbeRunResult run_probe(std::uint32_t generation);
     bool write_frame(const std::int16_t* samples, std::size_t count);
     void set_state(SpeakerOutputState state);
     void increment(std::atomic<std::uint32_t>& counter);

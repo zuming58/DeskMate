@@ -12,11 +12,16 @@ desktop audio downlink. The implementation is isolated on
   no direct GPIO8 write.
 - A single low-volume synthesized two-pulse startup probe is the only playback
   producer. No desktop, HID, UDP or DeskMate Link command can play audio.
+- TX DMA uses auto-clear so an underrun cannot replay stale PCM.
 - The T10E microphone has absolute priority. Its exact generation blocks new
   speaker admission, cancels active playback, waits for I2S1 cleanup, then
   acquires the existing `KeyboardMic` lease and starts I2S0.
 - Speaker failure is fail-soft for keys, encoder, LEDs, USB HID, configuration,
   Host Action, microphone capture, Agent state and DeskMate Link.
+- A review against the fixed Maker source closed two false-success paths:
+  cleanup failure now overrides playback completion/cancellation, and a failed
+  microphone I2S allocation releases its lease and exact generation instead of
+  permanently blocking later audio.
 - Sanitized configuration status adds only the speaker capability, state and
   bounded numeric counters.
 
@@ -27,8 +32,8 @@ desktop audio downlink. The implementation is isolated on
   layout passed before final delivery; a final clean-HEAD rebuild is required
   before any image identity or later flash authorization is issued.
 - Source-contract checks keep one GPIO8 writer, reject network/sound-bank access
-  from the speaker service, preserve the partition layout and require the
-  microphone-priority handoff.
+  from the speaker service, preserve the partition layout, require TX
+  auto-clear and require the microphone-priority handoff.
 - `git diff --check`, ASCII-path, source/license, privacy and ignored-artifact
   checks are required at closure.
 
@@ -43,3 +48,9 @@ produce one short two-pulse tone; the probe must not repeat. Keys, encoder,
 LEDs, HID, Link and the optional board microphone must continue to work. This
 does not prove a real-time desktop speaker path; that remains a separate frozen
 contract after the local hardware gate is accepted.
+
+For the microphone race, begin the board-microphone test immediately after
+cold boot and repeat it at least 20 times. The speaker must stop, microphone
+audio must become non-zero, and diagnostics must show no stuck generation,
+power lease or cleanup error. A deliberately unavailable/faulted speaker must
+leave all non-audio functions operating and must not be reported as completed.

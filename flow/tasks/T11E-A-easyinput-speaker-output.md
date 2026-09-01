@@ -17,6 +17,9 @@ speaker without a speculative network protocol or sound-bank operation.
 - Add host-testable playback generations and audio ownership arbitration.
 - Integrate T10E microphone start/stop with the arbiter.
 - Add sanitized speaker status to the existing config-status stream.
+- Fail closed when I2S, shared-power or exact-generation cleanup cannot be
+  proven, and release a failed microphone initialization generation so audio
+  can recover.
 - Preserve T02-T10E, the fixed 16 MiB partition table and both sound banks.
 
 ## Gates
@@ -36,7 +39,11 @@ After a separately authorized final-image app-only flash:
 3. Starting a board-microphone test during playback cancels speaker output and
    produces non-zero microphone audio without a stuck power or I2S owner.
 4. Repeat boot and mic-start races; speaker failures must remain fail-soft.
+5. Export sanitized diagnostics and confirm one completed or
+   microphone-cancelled terminal count per request, with no cleanup errors.
+6. If any cleanup error is injected or observed, require `faulted`, reject
+   further audio admission and keep keys, encoder, LEDs, HID and Link alive;
+   never count that request as completed.
 
 Only after this gate passes may a separate package freeze a real-time desktop
 speaker-downlink protocol. Sound-bank reads/writes remain independent gates.
-

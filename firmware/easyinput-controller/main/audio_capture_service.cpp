@@ -471,7 +471,10 @@ bool AudioCaptureService::start_microphone() {
     channel.dma_frame_num = kAudioFrameSamples;
     esp_err_t error = i2s_new_channel(&channel, nullptr, &mic_rx_);
     if (error != ESP_OK) {
-        power_->release_consumer(PeripheralPowerOwner::KeyboardMic);
+        // Release both the shared-power lease and this exact microphone
+        // generation. Leaving the generation active would permanently block
+        // later microphone recovery and every speaker request.
+        stop_microphone();
         return false;
     }
     i2s_std_config_t standard{

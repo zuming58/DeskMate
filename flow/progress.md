@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11E-A fixed-reference safety review closed; final code gate rerun
+
+- Review: the fixed Maker speaker implementation at `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` was fully audited for I2S1, GPIO8 ownership, microphone arbitration, playback cleanup, Host failure vectors and the separate A/B EIAD asset path. It confirms there is no real-time desktop speaker PCM/TTS wire to reuse, so T11E-A remains local-output-only and does not guess a downlink or touch either sound bank.
+- Repairs: I2S TX now explicitly enables DMA auto-clear. Completion and microphone-cancel counters are emitted only after I2S deletion, the `Speaker` lease and exact arbiter generation are all released; any unproven cleanup faults audio closed. A failed microphone I2S allocation now releases its shared-power lease and exact microphone generation instead of permanently blocking later microphone/speaker recovery.
+- Verification: EasyInput Host CTest and exact ESP-IDF v5.5.5 `esp32s3` fixed-partition build were rerun after the review; final counts and clean-HEAD image identity are recorded in the delivery result. Contract/source checks cover stale generations, duplicate microphone requests, cleanup overriding terminal success, one GPIO8 writer, TX auto-clear, no network/sound-bank access and sanitized diagnostics.
+- Safety and next: no port scan, device identification, Flash/NVS/eFuse access, erase, monitor, sound-bank, desktop or Xiaozhi operation occurred. Status remains `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`. The next gate is a separately authorized app-only HIL for one non-repeating two-pulse boot probe, microphone-preemption races and complete non-audio regression; it does not authorize a real-time speaker downlink.
+
 ## 2026-09-01 - T11E-A EasyInput local speaker code gate complete; HIL not authorized
 
 - Implementation: `codex/t11e-easyinput-speaker-downlink` starts from accepted T10E firmware `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4` and implements only `EASYINPUT_SPEAKER_OUTPUT_V1_FROZEN`. I2S1 uses GPIO14/13/15 at 48 kHz, 16-bit mono-left with one synthesized low-volume startup probe. The existing GPIO8 controller remains the sole physical power writer through its `Speaker` lease; no sound-bank, desktop, HID, UDP or DeskMate Link audio trigger was added.

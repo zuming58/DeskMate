@@ -13,6 +13,7 @@ audio protocol and it does not authorize sound-bank access.
 - Pins: BCLK/WS/DOUT are GPIO14/13/15.
 - PCM: signed 16-bit, 48 kHz, mono left slot, Philips framing.
 - DMA: four descriptors, 10 ms / 480-sample frames.
+- TX uses `auto_clear_after_cb`; an underrun cannot replay stale PCM.
 - Shared rail: GPIO8 remains exclusively owned by
   `PeripheralPowerController`; playback acquires the existing `Speaker`
   lease and never writes GPIO8 itself.
@@ -46,6 +47,10 @@ audio protocol and it does not authorize sound-bank access.
 - Speaker allocation, I2S, write and cleanup failures are fail-soft: input,
   LEDs, USB HID, configuration, Host Action, T10E capture, Agent state and
   DeskMate Link continue.
+- A request is counted as completed or microphone-cancelled only after I2S1,
+  the `Speaker` lease and the exact arbiter generation are all released. If
+  safe I2S cleanup cannot be proved, the speaker enters `faulted` and audio
+  admission fails closed; non-audio functions remain available.
 - Sanitized status exposes only capability, state and numeric request,
   completion, microphone-cancel, busy, init, write and cleanup counters.
 - Diagnostics contain no PCM, recording, text, network value, credential,
@@ -57,4 +62,3 @@ audio protocol and it does not authorize sound-bank access.
 - EIAD/Opus/IMA decoding and sound-bank reads.
 - Sound A/B synchronization, erase or write.
 - BLE audio, Xiaozhi audio, deep sleep, eFuse and any servo behavior.
-

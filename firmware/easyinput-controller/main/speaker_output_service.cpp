@@ -128,29 +128,48 @@ void SpeakerOutputService::worker_loop() {
             set_state(SpeakerOutputState::Ready);
             continue;
         }
-        bool cancelled = false;
-        const bool success = run_probe(command.generation, cancelled);
-        if (!arbiter_->finish_speaker(command.generation)) {
+        ProbeRunResult result = run_probe(command.generation);
+        if (result.ownership_released &&
+            !arbiter_->finish_speaker(command.generation)) {
             increment(cleanup_errors_);
+            result.ownership_released = false;
         }
-        if (cancelled) {
-            increment(cancelled_for_microphone_);
-            set_state(SpeakerOutputState::Ready);
-        } else if (success) {
-            increment(completed_);
-            set_state(SpeakerOutputState::Ready);
-        } else {
-            set_state(SpeakerOutputState::Faulted);
+        switch (resolve_speaker_probe_terminal(
+            result.playback_succeeded,
+            result.cancelled_for_microphone,
+            result.ownership_released)) {
+            case SpeakerProbeTerminal::Completed:
+                increment(completed_);
+                set_state(SpeakerOutputState::Ready);
+                break;
+            case SpeakerProbeTerminal::CancelledForMicrophone:
+                increment(cancelled_for_microphone_);
+                set_state(SpeakerOutputState::Ready);
+                break;
+            case SpeakerProbeTerminal::Faulted:
+                set_state(SpeakerOutputState::Faulted);
+                break;
         }
     }
 }
 
-bool SpeakerOutputService::run_probe(std::uint32_t generation,
-                                     bool& cancelled) {
-    cancelled = false;
+SpeakerOutputService::ProbeRunResult SpeakerOutputService::run_probe(
+    std::uint32_t generation) {
+    ProbeRunResult result{};
+    if (arbiter_->microphone_requested()) {
+        result.cancelled_for_microphone = true;
+        result.ownership_released = true;
+        return result;
+    }
+
     if (!power_->acquire_consumer(PeripheralPowerOwner::Speaker)) {
-        increment(init_errors_);
-        return false;
+        if (arbiter_->microphone_requested()) {
+            result.cancelled_for_microphone = true;
+        } else {
+            increment(init_errors_);
+        }
+        result.ownership_released = true;
+        return result;
     }
 
     bool channel_enabled = false;
@@ -158,44 +177,64 @@ bool SpeakerOutputService::run_probe(std::uint32_t generation,
         I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
     channel.dma_desc_num = kSpeakerDmaDescriptorCount;
     channel.dma_frame_num = kSpeakerFrameSamples;
-    esp_err_t error = i2s_new_channel(&channel, &tx_, nullptr);
+    channel.auto_clear_after_cb = true;
+    esp_err_t error = ESP_OK;
+    if (arbiter_->microphone_requested()) {
+        result.cancelled_for_microphone = true;
+    } else {
+        error = i2s_new_channel(&channel, &tx_, nullptr);
+    }
     if (error == ESP_OK) {
-        i2s_std_config_t standard{
-            .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(kSpeakerSampleRate),
-            .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
-                I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
-            .gpio_cfg = {
-                .mclk = I2S_GPIO_UNUSED,
-                .bclk = static_cast<gpio_num_t>(kSpeakerI2sBclkGpio),
-                .ws = static_cast<gpio_num_t>(kSpeakerI2sWsGpio),
-                .dout = static_cast<gpio_num_t>(kSpeakerI2sDoutGpio),
-                .din = I2S_GPIO_UNUSED,
-                .invert_flags = {},
-            },
-        };
-        standard.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
-        error = i2s_channel_init_std_mode(tx_, &standard);
+        if (result.cancelled_for_microphone ||
+            arbiter_->microphone_requested()) {
+            result.cancelled_for_microphone = true;
+        } else {
+            i2s_std_config_t standard{
+                .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(kSpeakerSampleRate),
+                .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+                    I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+                .gpio_cfg = {
+                    .mclk = I2S_GPIO_UNUSED,
+                    .bclk = static_cast<gpio_num_t>(kSpeakerI2sBclkGpio),
+                    .ws = static_cast<gpio_num_t>(kSpeakerI2sWsGpio),
+                    .dout = static_cast<gpio_num_t>(kSpeakerI2sDoutGpio),
+                    .din = I2S_GPIO_UNUSED,
+                    .invert_flags = {},
+                },
+            };
+            standard.slot_cfg.slot_mask = I2S_STD_SLOT_LEFT;
+            error = i2s_channel_init_std_mode(tx_, &standard);
+        }
     }
 
     std::array<std::int16_t, kSpeakerFrameSamples> frame{};
-    if (error == ESP_OK) {
-        std::size_t loaded = 0;
-        error = i2s_channel_preload_data(
-            tx_, frame.data(), frame.size() * sizeof(frame[0]), &loaded);
-        if (error == ESP_OK && loaded != frame.size() * sizeof(frame[0])) {
-            error = ESP_ERR_INVALID_SIZE;
+    if (error == ESP_OK && !result.cancelled_for_microphone) {
+        if (arbiter_->microphone_requested()) {
+            result.cancelled_for_microphone = true;
+        } else {
+            std::size_t loaded = 0;
+            error = i2s_channel_preload_data(
+                tx_, frame.data(), frame.size() * sizeof(frame[0]), &loaded);
+            if (error == ESP_OK &&
+                loaded != frame.size() * sizeof(frame[0])) {
+                error = ESP_ERR_INVALID_SIZE;
+            }
         }
     }
-    if (error == ESP_OK) {
-        error = i2s_channel_enable(tx_);
-        channel_enabled = error == ESP_OK;
+    if (error == ESP_OK && !result.cancelled_for_microphone) {
+        if (arbiter_->microphone_requested()) {
+            result.cancelled_for_microphone = true;
+        } else {
+            error = i2s_channel_enable(tx_);
+            channel_enabled = error == ESP_OK;
+        }
     }
     if (error != ESP_OK) {
         increment(init_errors_);
-    } else {
+    } else if (!result.cancelled_for_microphone) {
         for (std::size_t index = 0; index < kProbeFrameCount; ++index) {
             if (arbiter_->microphone_requested()) {
-                cancelled = true;
+                result.cancelled_for_microphone = true;
                 break;
             }
             fill_probe_frame(frame, index);
@@ -206,12 +245,12 @@ bool SpeakerOutputService::run_probe(std::uint32_t generation,
             }
             if (index == 0) set_state(SpeakerOutputState::Playing);
         }
-        if (error == ESP_OK && !cancelled) {
+        if (error == ESP_OK && !result.cancelled_for_microphone) {
             frame.fill(0);
             for (std::size_t index = 0;
                  index < kSpeakerNormalDrainZeroFrames; ++index) {
                 if (arbiter_->microphone_requested()) {
-                    cancelled = true;
+                    result.cancelled_for_microphone = true;
                     break;
                 }
                 if (!write_frame(frame.data(), frame.size())) {
@@ -223,18 +262,34 @@ bool SpeakerOutputService::run_probe(std::uint32_t generation,
         }
     }
 
-    if (channel_enabled && i2s_channel_disable(tx_) != ESP_OK) {
-        increment(cleanup_errors_);
+    bool cleanup_succeeded = true;
+    if (channel_enabled) {
+        const esp_err_t disable_error = i2s_channel_disable(tx_);
+        if (disable_error != ESP_OK) {
+            increment(cleanup_errors_);
+            cleanup_succeeded = false;
+        }
     }
-    if (tx_ != nullptr) {
-        if (i2s_del_channel(tx_) != ESP_OK) increment(cleanup_errors_);
-        tx_ = nullptr;
+    if (cleanup_succeeded && tx_ != nullptr) {
+        if (i2s_del_channel(tx_) == ESP_OK) {
+            tx_ = nullptr;
+        } else {
+            increment(cleanup_errors_);
+            cleanup_succeeded = false;
+        }
     }
-    if (!power_->release_consumer(PeripheralPowerOwner::Speaker)) {
-        increment(cleanup_errors_);
+    if (cleanup_succeeded) {
+        if (!power_->release_consumer(PeripheralPowerOwner::Speaker)) {
+            increment(cleanup_errors_);
+            cleanup_succeeded = false;
+        }
     }
+    result.playback_succeeded = error == ESP_OK;
+    result.ownership_released = cleanup_succeeded;
+    // The worker acquired this exact generation before entering run_probe;
+    // only worker_loop may release it after this result proves cleanup.
     (void)generation;
-    return error == ESP_OK || cancelled;
+    return result;
 }
 
 bool SpeakerOutputService::write_frame(const std::int16_t* samples,

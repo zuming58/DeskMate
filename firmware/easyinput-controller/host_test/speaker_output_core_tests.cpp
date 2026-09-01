@@ -23,5 +23,18 @@ int main() {
           "playing");
     CHECK(std::string(speaker_output_state_name(SpeakerOutputState::Faulted)) ==
           "faulted");
+
+    CHECK(resolve_speaker_probe_terminal(true, false, true) ==
+          SpeakerProbeTerminal::Completed);
+    CHECK(resolve_speaker_probe_terminal(true, true, true) ==
+          SpeakerProbeTerminal::CancelledForMicrophone);
+    CHECK(resolve_speaker_probe_terminal(false, false, true) ==
+          SpeakerProbeTerminal::Faulted);
+    CHECK(resolve_speaker_probe_terminal(false, true, true) ==
+          SpeakerProbeTerminal::CancelledForMicrophone);
+    CHECK(resolve_speaker_probe_terminal(true, false, false) ==
+          SpeakerProbeTerminal::Faulted);
+    CHECK(resolve_speaker_probe_terminal(true, true, false) ==
+          SpeakerProbeTerminal::Faulted);
     std::cout << "speaker output core tests passed\n";
 }

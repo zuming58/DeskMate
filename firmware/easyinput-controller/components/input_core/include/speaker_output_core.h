@@ -28,6 +28,25 @@ enum class SpeakerOutputState : std::uint8_t {
     Faulted,
 };
 
+enum class SpeakerProbeTerminal : std::uint8_t {
+    Completed,
+    CancelledForMicrophone,
+    Faulted,
+};
+
+constexpr SpeakerProbeTerminal resolve_speaker_probe_terminal(
+    bool playback_succeeded, bool cancelled_for_microphone,
+    bool ownership_released) {
+    // A cancellation is safe only after I2S and the shared-power lease have
+    // been released. Cleanup failure must never be reported as completion.
+    if (!ownership_released) return SpeakerProbeTerminal::Faulted;
+    if (cancelled_for_microphone) {
+        return SpeakerProbeTerminal::CancelledForMicrophone;
+    }
+    return playback_succeeded ? SpeakerProbeTerminal::Completed
+                              : SpeakerProbeTerminal::Faulted;
+}
+
 const char* speaker_output_state_name(SpeakerOutputState state);
 
 struct SpeakerOutputDiagnostics {

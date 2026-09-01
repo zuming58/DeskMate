@@ -402,6 +402,7 @@ int main() {
     CHECK(contains(speaker_core_source, "speaker_output_state_name"));
     CHECK(contains(speaker_service_header, "request_startup_probe"));
     CHECK(contains(speaker_service_source, "I2S_NUM_1"));
+    CHECK(contains(speaker_service_source, "auto_clear_after_cb = true"));
     CHECK(contains(speaker_service_source, "I2S_STD_SLOT_LEFT"));
     CHECK(contains(speaker_service_source, "kWriteTimeoutMs)"));
     CHECK(!contains(speaker_service_source, "pdMS_TO_TICKS(kWriteTimeoutMs)"));
@@ -409,9 +410,15 @@ int main() {
                    "PeripheralPowerOwner::Speaker"));
     CHECK(contains(speaker_service_source,
                    "arbiter_->microphone_requested()"));
+    CHECK(contains(speaker_service_source,
+                   "result.ownership_released"));
     CHECK(contains(audio_service_source, "arbiter_->request_microphone"));
     CHECK(contains(audio_service_source, "arbiter_->speaker_active()"));
     CHECK(contains(audio_service_source, "arbiter_->mark_microphone_ready"));
+    CHECK(!contains(
+        audio_service_source,
+        "if (error != ESP_OK) {\n"
+        "        power_->release_consumer(PeripheralPowerOwner::KeyboardMic);"));
     CHECK(!contains(speaker_service_source, "gpio_set_level"));
     CHECK(!contains(speaker_service_source, "socket("));
     CHECK(!contains(speaker_service_source, "sound_a"));
