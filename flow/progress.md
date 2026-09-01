@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T12B packaged renderer white-screen hotfix complete
+
+- Scope and root cause: Windows software only on `codex/t12b-companion-layout-timing-settings`. The packaged window reached Electron but React failed on its first render because the new companion-preference hydration effect called the App Store `patch` action without selecting that action from `useAppStore`. This was a renderer runtime reference error, not a missing asset, hardware or firmware fault.
+- Repair and regression gate: hotfix commit `c2aa8b6f7fd48d6a18cbdbcd67688062a46aa2bf` restores the single existing App Store action. T12B tests now check the hydration binding and run the actual `App` first render through Vite SSR/React server rendering, so the exact undeclared-reference white screen fails automation rather than surviving a bundle-only check.
+- Verification: focused T12B passed `9/9`; full `npm test` passed `269/269`; `npm run build:desktop` passed; `git diff --check` passed. Rebuilt `DeskMate.exe` is `202690560` bytes / SHA-256 `A02519A277F9676D3AB8DA1E118804B75CB8E487681324BEC252796CDDB49AC0`; `app.asar` is `112679856` bytes / SHA-256 `142F769D5F228ED3C330E2D7F97365E4BD87EA04C72FE7DF2A1BDA260A3E0181`.
+- Safety and next: no device, port, credential, text, audio, firmware or hardware access occurred. The user-visible packaged launch remains a software acceptance step; T12B timing and real-conversation HIL gates remain unchanged.
+
 ## 2026-09-01 - T12B Companion layout, explicit timing settings and runtime evidence complete
 
 - Scope and base: Windows software only on `codex/t12b-companion-layout-timing-settings`, isolated from the exact T12A base `7555d4161b90df000aae600a098ea336e198c743`. Implementation and verification commit is `c1c35cd4ce74b78e1d9d690ab6bc3b81ec4f3599`. Build identity is `t12b-companion-layout-timing-settings-v1`; no firmware, HID, Link or hardware behavior changed.

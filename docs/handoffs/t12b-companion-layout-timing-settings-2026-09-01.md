@@ -7,6 +7,7 @@
 - Branch: `codex/t12b-companion-layout-timing-settings`
 - Exact base: `7555d4161b90df000aae600a098ea336e198c743`
 - Implementation and verification commit: `c1c35cd4ce74b78e1d9d690ab6bc3b81ec4f3599`
+- Packaged renderer startup hotfix: `c2aa8b6f7fd48d6a18cbdbcd67688062a46aa2bf`
 - Build ID: `t12b-companion-layout-timing-settings-v1`
 - Final implementation HEAD: report the pushed branch tip; a commit cannot contain its own hash.
 
@@ -28,6 +29,15 @@
 - `DeskMate.exe`: `202690560` bytes; SHA-256 `8C53F101492C35B279DCEB6BE7AF75108A5CB098E3BEA28A2C74D4248C5811A3`.
 - `app.asar`: `112679861` bytes; SHA-256 `5ED1632252AB8DB287FE2EC67FC058ECC379DD497760243EA0B7EC3A56C92271`.
 - `git diff --check`, ASCII tracked paths and firmware/native source boundary checks passed.
+
+## Packaged renderer startup hotfix
+
+- First packaged launch exposed a white window: Electron loaded, but React failed on its first render because `AppContent` used the existing App Store `patch` action in companion-preference hydration without selecting that action from `useAppStore`.
+- The fix adds the missing selector only; no state machine, preference contract, firmware or hardware behavior changed.
+- A real first-render smoke test now loads `src/App.jsx` through Vite SSR and renders the shell with React. It covers the exact runtime reference failure that a successful Vite bundle did not detect.
+- Final focused T12B tests: `9/9`; final full tests: `269/269`; final Windows packaging: passed.
+- Rebuilt `DeskMate.exe`: `202690560` bytes; SHA-256 `A02519A277F9676D3AB8DA1E118804B75CB8E487681324BEC252796CDDB49AC0`.
+- Rebuilt `app.asar`: `112679856` bytes; SHA-256 `142F769D5F228ED3C330E2D7F97365E4BD87EA04C72FE7DF2A1BDA260A3E0181`.
 
 ## Safety
 

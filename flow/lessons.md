@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A successful renderer bundle is not a successful first render
+
+- Symptom: Electron opens a normal window and loads packaged assets, but React leaves a white content area because a store action referenced during render is undeclared.
+- Practice: keep the existing bundle and source-contract tests, then also load the real App module and execute its first render in an automated browser-neutral smoke test. Verify at least one stable shell marker.
+- Rule: packaging proves that modules and assets can be assembled; it does not prove that render-time identifiers, hook dependencies or initial state reads are valid.
+
 ## Saved settings are not active-session evidence
 
 - Symptom: a UI could show a newly selected pause value while the already connected provider still used the value captured when its session started. A flat diagnostic copied from renderer settings therefore presented preference as runtime fact.
