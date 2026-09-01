@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T11D companion stop, drain and capsule handoff](handoffs/t11d-companion-stop-drain-capsule-2026-09-01.md)
 - [T11D companion playback drain and bounded stop contract](contracts/t11d-companion-playback-drain-stop-v1.md)
 - [T11C follow-up HIL rejection evidence](testing/t11c-companion-followup-hil-2026-09-01.md)
 

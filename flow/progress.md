@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-01 - T11D played-boundary, bounded stop and Companion layout repair complete
+
+- Role and identity: Windows desktop software only. Branch `codex/t11d-companion-stop-drain-capsule` was created from exact T11C base `fb17123f01f812de0ef2d3fe6b5fdd06c429898c`; implementation/documentation commit is `7a138e53c3d8c017a8f54eec9efd1267866af98e`.
+- HIL fact and cause: the user completed several real T11C turns, so the provider/computer-microphone/computer-speaker main chain remains accepted. The run rejected one prematurely ended answer, a stop action stuck in `listening`, an over-wide in-app live bar and a left Companion card that ended above the right stack. Code evidence showed that network `tts.end` released the guard before queued Web Audio ended and that teardown had no bounds.
+- Playback and lifecycle repair: a request-sequence and session/generation-bound AudioSink drain now holds `speaking/working`, microphone suppression and reflected-ASR rejection through the last scheduled sample. Four-second drain timeout clears playback and fails soft. Stop is one idempotent in-flight operation with bounded source, sink, provider and Agent-state teardown; repeat controls disable immediately, idle/foreground release is guaranteed, and late events cannot revive the session. Diagnostics add counts only.
+- Product surface: the bottom live bar is a compact content-width capsule with narrow-window contraction. Desktop Companion columns stretch to one row bottom, and extra left-card height expands the face container without distorting the expression image. Below the desktop breakpoint both columns return to natural height.
+- Verification: `npm ci --include=dev` passed; targeted controller/computer-audio/UI tests passed `32/32`; final `npm test` passed `222/222`; isolated Windows packaging passed. `DeskMate.exe` is 202,690,560 bytes with SHA-256 `45480D7E2C624B0449E6E962FB8550109BC8B2020D70C75C5633CEEA069E279B`. `git diff --check`, ASCII path, differential secret, ignored-output and firmware/native-source boundary checks passed.
+- Safety and next: no application launch/control, user audio, credential, transcript, window title, port/device/Flash, firmware, OLED or servo access occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / MAIN_CHAIN_HIL_CONFIRMED / T11D_HIL_PENDING`. Next user-present gate is one long answer, stop from listening, stop during playback, manual interrupt, compact capsule and desktop/single-column layout confirmation. Handoff: `docs/handoffs/t11d-companion-stop-drain-capsule-2026-09-01.md`.
+
 ## 2026-09-01 - T11C companion strict half-duplex and layout closure complete; acoustic HIL pending
 
 - Role and identity: Windows desktop software only. Branch `codex/t11c-companion-layout-echo-guard` was created from exact repaired baseline `e77195edc4743fdd461860e9999acf60a30be95d`; implementation commit is `9f23b3a325cb66d75f5433ec61cb873c3120477e`.
