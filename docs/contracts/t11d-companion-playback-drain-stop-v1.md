@@ -2,6 +2,8 @@
 
 Status: `T11D_COMPANION_PLAYBACK_DRAIN_STOP_V1_FROZEN`
 
+Implementation acceptance: `T11D_HIL_FAILED`. The frozen intent remains valid, but the 2026-09-01 user-present run proved that the implementation does not satisfy audible continuity or renderer stop convergence. A fixed three-second backlog clears scheduled nodes, and renderer runtime updates can restore stale state after main terminal idle. See `docs/reviews/t11d-companion-stop-drain-hil-failure-audit-2026-09-01.md`. Do not treat the frozen contract name as HIL acceptance.
+
 ## Accepted baseline and rejected follow-up
 
 The user-present T11C follow-up proved that the repaired Doubao session can complete several real spoken turns. It also rejected three details: one answer could still end early, the explicit stop action could remain in `listening`, and the global in-app voice bar was wider than the compact capsule requirement. This contract changes Windows software only. It does not change EasyInput KEY1 ownership, firmware, HID, DeskMate Link, OLED, servo or board audio.

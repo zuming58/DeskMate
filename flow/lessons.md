@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A bounded queue must not turn overload into silent success
+
+- Symptom: a real answer ended early while the diagnostic showed speaker queue drops and no reflected ASR. The renderer's fixed backlog cap stopped every scheduled node, then accepted newer audio and later allowed the normal drain path to continue.
+- Practice: bound queued time/bytes with acknowledgement or backpressure. If the bound is exceeded, end the current session with one explicit sanitized error; never discard audible history and continue as though the full answer played. Track accepted, played, rejected and high-water counts separately.
+- Rule: `AudioScheduledSourceNode.ended` also follows explicit `stop()`. A stopped node or resolved drain waiter is not proof that the user heard its full buffer.
+
+## Shared nested runtime state needs atomic slice ownership
+
+- Symptom: main completed stop and acknowledged terminal idle, but the renderer remained in stopping while high-frequency device events continued. Multiple effects copied one render's `runtimeRef.current` and shallow-replaced the whole nested runtime, so the last callback could restore another slice's stale value.
+- Practice: update companion, input bridge and audio through separate reducer actions/functional nested merges. Add session/generation plus a monotonic event sequence; reconcile IPC results/status without allowing an older snapshot to overwrite a newer event.
+- Rule: refs make an old snapshot accessible; they do not make concurrent whole-object updates atomic. A lifecycle is not debuggable until IPC requests/results, main terminal state and renderer acceptance are independently observable through privacy-safe enums/counters.
+
 ## A network TTS end event is not an audible-playback boundary
 
 - Symptom: strict half-duplex still released near the tail of a real answer, and speaker feedback could be accepted while Web Audio had queued samples left.

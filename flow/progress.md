@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T11D user-present gate failed; queue/state audit complete and repair paused
+
+- Exact evidence: the running processes were independently verified to come from the exact T11D package, excluding an old package. A stuck-state sanitized export reported renderer `stopping/connected`, `queueDrops=3`, `ignoredAsrDuringPlayback=0`, while terminal Agent `idle` had already been acknowledged 13 seconds earlier. The diagnostic file itself was not committed.
+- Root causes and candidates: the current three-second renderer backlog policy stops all scheduled nodes and silently continues with newer audio, directly explaining audible truncation. Companion, InputBridge and EasyInput-audio effects also replace the entire nested `runtime` from the same render snapshot; frequent Link updates can therefore overwrite a newer companion idle with stale stopping. Both behaviors are reproduced in two non-production characterization tests. Server VAD remains under-instrumented but is not required to explain this run.
+- Package audit: `DeskMate.exe` remains 202,690,560 bytes / `45480D7E2C624B0449E6E962FB8550109BC8B2020D70C75C5633CEEA069E279B`; `app.asar` is `CAC299F816EA364C04F4EB67AEC6FBB8F624216E196406D104B441373B2A9C5B`. Packaged controller SHA matches source `AD839A11FD3E7117D475C9CF6730A5869ACA3272AC5D6ACB3CC4FE0F228522A8`, proving T11D stop/drain code is present. The package still lacks visible build identity.
+- Verification: clean `npm ci --include=dev` passed; the two new failure-characterization vectors passed `2/2`; controller/audio plus characterization tests passed `29/29`; full `npm test` passed `224/224`; `git diff --check` passed. No new Windows package was produced because this package is an audit, not a repair.
+- Status and scope: `T11D_HIL_FAILED / AUDIT_COMPLETE / PRODUCTION_REPAIR_NOT_STARTED`. No production code, package, application, credential, audio, device, port, firmware, OLED or servo was changed/accessed. The next package must replace silent queue clearing with bounded continuous playback/backpressure or explicit failure, make runtime slices atomic and ordered, unify awaited stop/reconciliation, and add build/stop/provider/audio lifecycle diagnostics. Audit: `docs/reviews/t11d-companion-stop-drain-hil-failure-audit-2026-09-01.md`; HIL: `docs/testing/t11d-companion-followup-hil-2026-09-01.md`.
+
 ## 2026-09-01 - T11D played-boundary, bounded stop and Companion layout repair complete
 
 - Role and identity: Windows desktop software only. Branch `codex/t11d-companion-stop-drain-capsule` was created from exact T11C base `fb17123f01f812de0ef2d3fe6b5fdd06c429898c`; implementation/documentation commit is `7a138e53c3d8c017a8f54eec9efd1267866af98e`.

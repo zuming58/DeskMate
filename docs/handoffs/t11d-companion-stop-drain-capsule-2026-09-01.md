@@ -7,7 +7,11 @@ Date: 2026-09-01
 - Branch: `codex/t11d-companion-stop-drain-capsule`
 - Exact base: `fb17123f01f812de0ef2d3fe6b5fdd06c429898c`
 - Implementation and documentation commit: `7a138e53c3d8c017a8f54eec9efd1267866af98e`
-- Status: `TEST_CONFIRMED / BUILD_CONFIRMED / MAIN_CHAIN_HIL_CONFIRMED / T11D_HIL_PENDING`
+- Status: `TEST_CONFIRMED / BUILD_CONFIRMED / MAIN_CHAIN_HIL_CONFIRMED / T11D_HIL_FAILED`
+
+## Superseding HIL result
+
+The exact package below failed the next user-present gate. The answer was still truncated and both visible stop controls left the renderer in `stopping`. A sanitized stuck-state export recorded `queueDrops=3`, `ignoredAsrDuringPlayback=0`, and a successful terminal Agent `idle` ACK before the renderer snapshot. Characterization tests prove the current renderer clears all scheduled nodes beyond a three-second backlog and that whole-runtime stale snapshot replacement can restore stopping after idle. Production repair is intentionally not included in this handoff. See `docs/testing/t11d-companion-followup-hil-2026-09-01.md` and `docs/reviews/t11d-companion-stop-drain-hil-failure-audit-2026-09-01.md`.
 
 ## User-present evidence and cause
 
