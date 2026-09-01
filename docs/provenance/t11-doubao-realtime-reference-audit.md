@@ -31,3 +31,9 @@ This is a behavior-derived implementation, not a source-code port.
 ## 2026-09-01 interoperability repair
 
 The first T11 implementation used the same local encoder for both client and fake-server tests. That self-consistency test did not prove compatibility with provider frames and missed three live defects: the fixed App Key could be omitted, StartSession was sent before the connection acknowledgement, and the decoder rejected documented identifier/sequence/gzip layouts. The repair derives behavior from the official wire examples and the fixed product reference, while copying no unlicensed reference source.
+
+## 2026-09-01 DialogCommonError follow-up
+
+The official linked Python sample creates one WebSocket/session for continuous turns. Event `359` completes a TTS turn and, for microphone mode, releases the initial greeting gate once; it does not start another session. Session and connection finish requests occur only during explicit close. The documented event `599` payload is `DialogCommonError` with `status_code` and `message`.
+
+The fixed product reference also distinguishes `tts.end` from `dialog.error`, but its raw provider reporting violates DeskMate's diagnostic boundary. T11D.4 therefore independently keeps event `359` as the same-session turn boundary and maps only the official `status_code` to a closed class. No source from the unlicensed reference was copied.

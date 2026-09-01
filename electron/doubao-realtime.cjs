@@ -26,8 +26,20 @@ function providerFailureBucket(value) {
   return "unknown-provider-error";
 }
 
-function diagnostic(providerEvent, terminalEvent = "none", failureBucket = "none") {
-  return Object.freeze({ providerEvent, terminalEvent, failureBucket });
+function dialogErrorStatusClass(value) {
+  if (value === undefined || value === null || value === "") return "missing";
+  if ((typeof value === "number" && Number.isSafeInteger(value)) || (typeof value === "string" && /^-?\d{1,10}$/.test(value))) {
+    return providerFailureBucket(value);
+  }
+  return "invalid";
+}
+
+function diagnostic(providerEvent, terminalEvent = "none", failureBucket = "none", detail = {}) {
+  const result = { providerEvent, terminalEvent, failureBucket };
+  if (["missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"].includes(detail.dialogErrorStatusClass)) {
+    result.dialogErrorStatusClass = detail.dialogErrorStatusClass;
+  }
+  return Object.freeze(result);
 }
 
 function boundedText(value, max = 4096) {
@@ -77,7 +89,15 @@ function translateFrame(frame, state) {
   if (name === "connection.finished") return { type: name, diagnostic: diagnostic("connection-finished", "connection-finished") };
   if (name === "session.finished") return { type: name, diagnostic: diagnostic("session-finished", "session-finished") };
   if (name === "session.failed") return { type: "error", message: "doubao-session-service-error", diagnostic: diagnostic("session-failed", "session-failed", "unknown-provider-error") };
-  if (name === "dialog.error") return { type: "error", message: "doubao-service-error", diagnostic: diagnostic("dialog-error", "dialog-error", "unknown-provider-error") };
+  if (name === "dialog.error") {
+    const statusClass = dialogErrorStatusClass(payload.status_code);
+    const failureBucket = ["missing", "invalid"].includes(statusClass) ? "unknown-provider-error" : statusClass;
+    return {
+      type: "error",
+      message: "doubao-service-error",
+      diagnostic: diagnostic("dialog-error", "dialog-error", failureBucket, { dialogErrorStatusClass: statusClass }),
+    };
+  }
   return { type: name, diagnostic: diagnostic(name) };
 }
 
@@ -205,4 +225,4 @@ class DoubaoRealtimeSession {
   }
 }
 
-module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, providerFailureBucket, translateFrame, validateConfig };
+module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame, validateConfig };

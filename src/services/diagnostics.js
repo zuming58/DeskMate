@@ -7,7 +7,8 @@ const PROVIDER_EVENTS = new Set(["none", "audio", "tts-start", "tts-end", "sessi
 const TERMINAL_EVENTS = new Set(["none", "session-finished", "session-failed", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close"]);
 const TERMINAL_PHASES = new Set(["none", "starting", "active", "draining", "stopping", "reconnecting", "idle"]);
 const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"]);
-const POST_TTS_DIALOG_RECOVERY_RESULTS = new Set(["never", "in-progress", "succeeded", "failed", "limited", "cancelled"]);
+const DIALOG_ERROR_STATUS_CLASSES = new Set(["none", "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"]);
+const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacent"]);
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -54,13 +55,14 @@ export function createDiagnosticReport(input = {}) {
       completed: Math.max(0, Number(stopSource.completed) || 0),
     },
     providerLifecycle: {
-      ...Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors", "errorFrames", "dialogErrors", "sessionFinished", "sessionFailed", "connectionFinished", "transportErrors", "transportCloses", "providerEventSequence", "lastTtsEndSequence", "lastTerminalEventSequence", "postTtsDialogRecoveryAttempts", "postTtsDialogRecoverySucceeded", "postTtsDialogRecoveryFailed", "postTtsDialogRecoveryLimited"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),
+      ...Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors", "errorFrames", "dialogErrors", "dialogErrorsAdjacentTtsEnd", "sessionFinished", "sessionFailed", "connectionFinished", "transportErrors", "transportCloses", "providerEventSequence", "lastTtsEndSequence", "lastTerminalEventSequence"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),
       lastProviderEvent: PROVIDER_EVENTS.has(providerSource.lastProviderEvent) ? providerSource.lastProviderEvent : "none",
       lastTerminalEvent: TERMINAL_EVENTS.has(providerSource.lastTerminalEvent) ? providerSource.lastTerminalEvent : "none",
       lastTerminalPhase: TERMINAL_PHASES.has(providerSource.lastTerminalPhase) ? providerSource.lastTerminalPhase : "none",
       lastFailureBucket: FAILURE_BUCKETS.has(providerSource.lastFailureBucket) ? providerSource.lastFailureBucket : "none",
       terminalExpected: Boolean(providerSource.terminalExpected),
-      lastPostTtsDialogRecoveryResult: POST_TTS_DIALOG_RECOVERY_RESULTS.has(providerSource.lastPostTtsDialogRecoveryResult) ? providerSource.lastPostTtsDialogRecoveryResult : "never",
+      lastDialogErrorStatusClass: DIALOG_ERROR_STATUS_CLASSES.has(providerSource.lastDialogErrorStatusClass) ? providerSource.lastDialogErrorStatusClass : "none",
+      lastDialogErrorAdjacency: DIALOG_ERROR_ADJACENCY.has(providerSource.lastDialogErrorAdjacency) ? providerSource.lastDialogErrorAdjacency : "none",
     },
     counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops", "drainRequests", "drains", "drainTimeouts", "sinkAccepted", "sinkPlayed", "sinkCancelled", "backpressureWaits", "backpressureTimeouts", "bufferedAudioHighWaterMs"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
     echoGuard: {

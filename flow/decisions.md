@@ -1,5 +1,12 @@
 # Decisions
 
+## D052 - DialogCommonError fails closed and TTS completion remains a same-session boundary
+
+- Date: 2026-09-01
+- Decision: provider event `359` drains the current TTS response and returns directly to listening on the same WebSocket/session. Provider event `599` is a terminal `DialogCommonError`, not an end-of-turn or transport-loss signal; it never creates a replacement provider/session.
+- Diagnostics: retain only a fixed `status_code` class, adjacency, arrival phase and bounded counts. Raw status code, message, payload, text, audio and identifiers remain forbidden.
+- Consequence: D051 and the T11D.3 post-TTS reconnect contract are rejected by user-present evidence and superseded. Real transport loss retains its separate finite reconnect policy. A future provider behavior change requires an exact-package sanitized status class, not event adjacency alone.
+
 ## D051 - Post-TTS dialog recovery requires consumed drain evidence and provider epoch ownership
 
 - Date: 2026-09-01
@@ -7,6 +14,7 @@
 - Bound: the existing finite reconnect path owns recovery. At most two recoveries occur without a new accepted user-final turn; a real user turn proves progress and resets the streak. Stop and generation changes always win, and neither PCM nor text is replayed.
 - UI: only the independent Electron overlay owns the floating live capsule. The React main window must not render a duplicate bottom bar.
 - Consequence: diagnostics add only four counters and one closed result enum. The policy is selected by T11D.2 HIL evidence and must not become a generic “ignore provider errors” rule.
+- Superseded: user-present T11D.3 evidence showed that this policy creates a new session, visible `connecting` and a replayed welcome. D052 replaces it.
 
 ## D050 - Provider terminal diagnostics preserve arrival order without provider content
 

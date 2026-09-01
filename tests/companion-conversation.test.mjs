@@ -13,7 +13,7 @@ const { CompanionConversationController } = require("../electron/companion-conve
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
 const { COMPRESSION, FLAGS, MAX_FRAME_BYTES, decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
-const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
+const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
 const { acceptsForegroundSessionEvent, emergencyStopForegroundSession, finishForegroundSession, initialForegroundSession, startForegroundSession } = require("../electron/foreground-session.cjs");
 
 function turn(eventId, text = "你好") {
@@ -102,6 +102,10 @@ test("Doubao codec accepts every documented flag layout, identifiers, gzip and f
     providerFailureBucket(45000001), providerFailureBucket(45000002), providerFailureBucket(45000151),
     providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
   ], ["request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
+  assert.deepEqual([
+    dialogErrorStatusClass(undefined), dialogErrorStatusClass(""), dialogErrorStatusClass({ private: true }),
+    dialogErrorStatusClass("45000002"), dialogErrorStatusClass(55000031), dialogErrorStatusClass(123),
+  ], ["missing", "missing", "invalid", "empty-audio", "server-busy", "unknown-provider-error"]);
   const malformed = Buffer.from(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
   malformed.writeInt32BE(999, 8);
   assert.throws(() => decodeFrame(malformed), /doubao-(connect-id|payload-size)-invalid/);

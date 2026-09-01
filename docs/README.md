@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11D.4 dialog-error root diagnostics handoff](handoffs/t11d4-dialog-error-root-diagnostics-2026-09-01.md)
+- [T11D.4 dialog-error root diagnostics contract](contracts/t11d4-dialog-error-root-diagnostics-v1.md)
+- [T11D.4 DialogCommonError root-cause audit](reviews/t11d4-dialog-error-root-cause-audit-2026-09-01.md)
+
 - [T11D.3 post-TTS dialog recovery handoff](handoffs/t11d3-post-tts-dialog-recovery-2026-09-01.md)
 - [T11D.3 post-TTS dialog recovery contract](contracts/t11d3-post-tts-dialog-recovery-v1.md)
 - [T11D.2 terminal diagnostics contract](contracts/t11d2-doubao-terminal-diagnostics-v1.md)

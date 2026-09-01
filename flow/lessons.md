@@ -1,10 +1,17 @@
 # Lessons learned
 
+## A reconnect can hide a provider error while breaking conversation continuity
+
+- Symptom: a long response plays fully, then the product shows `connecting` and repeats the welcome instead of accepting the next turn.
+- Practice: compare the lifecycle with the official continuous-session sample. Treat turn completion, provider error and transport loss as distinct boundaries; only the last one may select transport reconnect. Preserve an allowlisted error class before attempting any behavior repair.
+- Rule: when the product promise is one continuous session, a fresh connection is a failed recovery even if audio continues. Never label reconnection as success merely because an adjacent error followed audible playback.
+
 ## Recovery needs evidence ownership, not only event adjacency
 
 - Symptom: a provider may emit an error immediately after a fully audible answer, but the same event number can also represent an invalid frame, failed session or late callback from a replaced provider.
 - Practice: require successful local-drain evidence, consume it once, bind it to both conversation token and provider epoch, and preserve fail-closed handling for every other vector. Count recovery outcomes without retaining provider content.
 - Rule: a narrowly recoverable external-service quirk must be selected by independent HIL evidence and bounded by forward progress; matching two event names is not a recovery contract.
+- Superseded detail: T11D.3 proved that even tightly owned adjacency/drain evidence does not authorize a new session for provider event `599`; D052 now keeps it fail-closed.
 
 ## Serialized handling still needs pre-queue arrival evidence
 
