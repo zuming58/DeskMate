@@ -1,5 +1,11 @@
 # Progress log
 
+## 2026-09-02 - T12B.1 eight-second provider endpointing HIL rejected; stop speculative repair
+
+- Exact user-present result: after starting the T12B.1 package and a new conversation, the configured eight-second intra-utterance pause still did not control turn ending. Doubao began replying after roughly two seconds, before three seconds, matching its low-latency automatic endpoint rather than the requested duration.
+- Capability conclusion: Volcengine documents `end_smooth_window_ms`, and DeskMate now emits the minimal exact 8000 ms request, but the current end-to-end continuous `keep_alive` session does not honor it in live use. This is no longer a local save/readback/session-freeze defect and another unverified provider flag is not authorized.
+- Boundary and next: deterministic local control would require a separate local VAD plus the provider's explicit `push_to_talk`/EndASR path, changing latency, interruption and continuous-session behavior. Per user direction, that redesign is deferred and provider automatic endpointing remains the current behavior. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / ENDPOINTING_HIL_REJECTED`.
+
 ## 2026-09-02 - T12B.1 Doubao endpointing request repair built; user-present verification pending
 
 - Evidence and scope: Windows software only on `codex/t12b1-provider-endpointing-repair`, based on `bb0d29b4ce2ad7952fbac3bc6188593655107ab3`. The user's sanitized diagnostic proved the UI transaction and new-session snapshot both held revision `3` with `endSmoothWindowMs=8000` and recorded nine accepted user finals without a provider/transport/dialog error; the user separately observed replies beginning before three seconds. The setting store, readback and session-freeze path were therefore not the fault.

@@ -38,6 +38,12 @@
 5. Pass only if the provider does not start its reply during that pause.
 6. If it still replies early, stop and export one new sanitized diagnostic. Do not add another guessed provider switch and do not simulate success with a local response delay.
 
+## User-present result
+
+Rejected on 2026-09-02. With the setting at eight seconds and a new exact-package conversation, Doubao still began replying after roughly two seconds and before three seconds. The provider did not honor the exact minimal 8000 ms request in the current continuous `keep_alive` session.
+
+Do not add another speculative ASR flag. Deterministic client ownership would be a separate local-VAD plus `push_to_talk`/EndASR product slice, not a T12B.1 hotfix. The user directed that this timing feature be left alone if the provider could not honor it, so the redesign is deferred.
+
 ## Safety
 
 No application was launched or controlled. No credential, text, PCM, port/device, firmware, Flash/NVS, OLED, servo or hardware operation occurred. Build output is ignored and remains outside Git.
