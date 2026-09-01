@@ -1,5 +1,13 @@
 # Decisions
 
+## D051 - Post-TTS dialog recovery requires consumed drain evidence and provider epoch ownership
+
+- Date: 2026-09-01
+- Decision: event `599` is recoverable only for the current active provider epoch when its arrival immediately follows a `tts.end` that already completed local speaker drain. That evidence is consumed once. Every non-adjacent, pre-drain, failed-drain, stopping, stale-provider, error-frame or session-failure case stays fail-closed.
+- Bound: the existing finite reconnect path owns recovery. At most two recoveries occur without a new accepted user-final turn; a real user turn proves progress and resets the streak. Stop and generation changes always win, and neither PCM nor text is replayed.
+- UI: only the independent Electron overlay owns the floating live capsule. The React main window must not render a duplicate bottom bar.
+- Consequence: diagnostics add only four counters and one closed result enum. The policy is selected by T11D.2 HIL evidence and must not become a generic “ignore provider errors” rule.
+
 ## D050 - Provider terminal diagnostics preserve arrival order without provider content
 
 - Date: 2026-09-01

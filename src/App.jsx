@@ -120,32 +120,6 @@ const pages = {
   settings: SettingsPage,
 };
 
-const companionStateCopy = {
-  connecting: { label: "正在连接", message: "正在连接豆包实时对话…" },
-  listening: { label: "正在倾听", message: "请开始说话" },
-  thinking: { label: "正在思考", message: "DeskMate 正在组织回答" },
-  speaking: { label: "正在播报", message: "DeskMate 正在回答" },
-  stopping: { label: "正在结束", message: "正在释放会话与音频资源" },
-  completed: { label: "本轮完成", message: "准备继续倾听" },
-  error: { label: "对话异常", message: "陪伴会话已安全停止" },
-};
-
-function CompanionLiveBar({ conversation, stopCompanion }) {
-  if (!conversation || conversation.state === "idle") return null;
-  const copy = companionStateCopy[conversation.state] || companionStateCopy.connecting;
-  const text = conversation.state === "speaking" ? conversation.reply : conversation.transcript;
-  return (
-    <div className={`companion-live-bar is-${conversation.state}`} role="status" aria-live="polite">
-      <span className="companion-live-bar__dot" />
-      <Microphone2 size={17} stroke={1.8} />
-      <strong>{copy.label}</strong>
-      <span className="companion-live-bar__text">{text || conversation.error || copy.message}</span>
-      {conversation.active && <button disabled={conversation.stopLifecycle?.pending} onClick={() => { void stopCompanion("capsule"); }}>{conversation.stopLifecycle?.pending ? "结束中…" : conversation.stopLifecycle?.error ? "重试结束" : "结束"}</button>}
-      <small>Esc 结束</small>
-    </div>
-  );
-}
-
 function resolveHash() {
   const value = window.location.hash.replace("#/", "").replace("#", "");
   const page = value.split("/")[0];
@@ -300,7 +274,6 @@ function AppContent() {
         </div>
       </main>
       {toast && <div className="toast"><CircleCheck size={18} />{toast}</div>}
-      <CompanionLiveBar conversation={state.runtime?.companion} stopCompanion={stopCompanion} />
       <div className="demo-watermark"><Sparkles size={14} />{state.runtime?.inputBridge?.boardConnected ? "EasyInput 真机桥已连接" : "软件核心已就绪 · 等待板子"}</div>
     </div>
   );

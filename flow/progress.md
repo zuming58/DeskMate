@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-01 - T11D.3 evidence-selected post-TTS dialog recovery complete; HIL pending
+
+- Scope and identity: Windows software only on `codex/t11d3-post-tts-dialog-recovery`, created from exact T11D.2 base `c28a54e30f2d1afbe44c1b64e0b72af543eeeebd`. Build identity is `t11d3-post-tts-dialog-recovery-v1`.
+- HIL-selected behavior: the new T11D.2 evidence showed `tts.end` sequence `244`, successful speaker drain, then adjacent active-phase `dialog-error` sequence `245`, with no queue drop, drain timeout, error frame, reflected ASR or transport close. Only this current-token/current-provider-epoch vector consumes its successful-drain evidence and enters the existing finite reconnect path. It returns through `connecting -> listening` without replaying audio or text.
+- Failure and ownership boundary: non-adjacent, pre-drain, failed-drain, error-frame, session-failure, stopping and stale-provider events remain fail-closed. Two recoveries are allowed without a new accepted user-final turn; a new real user turn resets the streak. Stop/new generation wins. Four counts and one closed result enum provide proof without provider content or identifiers.
+- Product surface: the duplicate long React bottom live bar is removed. The independent 320x58 non-focus-stealing Electron overlay remains the sole floating capsule; the companion page keeps its face, status and controls. Seven-state face synchronization remains unimplemented and separate.
+- Verification: `npm ci --include=dev` passed; targeted controller/terminal/UI tests passed `46/46`; full `npm test` passed `250/250`; isolated Windows packaging passed. `DeskMate.exe` is `202690560` bytes / SHA-256 `F1837C3D1DC5507D2EC227709472F6CB21939FA2DBB4B5A51BD04C7C8ADAC5A1`; `app.asar` is `112643656` bytes / SHA-256 `B1376358FD45DC787ECDD7BC44F63DD522EC328B0C0B29BC5690019693568642`; read-only inspection confirmed the build identity. Differential privacy, ASCII path, ignored-output, firmware boundary and `git diff --check` checks passed.
+- Safety and next: no app launch/control, user diagnostic, credential, audio/text, device, port, Flash or firmware access occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. Run three real turns including one >10-second answer, then verify recovery counters, stop during listening/playback and the single overlay. Contract: `docs/contracts/t11d3-post-tts-dialog-recovery-v1.md`; handoff: `docs/handoffs/t11d3-post-tts-dialog-recovery-2026-09-01.md`.
+
 ## 2026-09-01 - T11D.2 Doubao terminal diagnostics complete; behavior repair awaits new HIL evidence
 
 - Scope and identity: Windows diagnostic-only branch `codex/t11d2-doubao-terminal-diagnostics` was created from exact T11D.1 base `1243570244133370c6de70dc241f208a23f6409d`; implementation commit is `355f8b2835f06e09c74c45a29f9f46aefdccc0d2`. Build identity is `t11d2-doubao-terminal-diagnostics-v1`.

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Recovery needs evidence ownership, not only event adjacency
+
+- Symptom: a provider may emit an error immediately after a fully audible answer, but the same event number can also represent an invalid frame, failed session or late callback from a replaced provider.
+- Practice: require successful local-drain evidence, consume it once, bind it to both conversation token and provider epoch, and preserve fail-closed handling for every other vector. Count recovery outcomes without retaining provider content.
+- Rule: a narrowly recoverable external-service quirk must be selected by independent HIL evidence and bounded by forward progress; matching two event names is not a recovery contract.
+
 ## Serialized handling still needs pre-queue arrival evidence
 
 - Symptom: an answer can finish audibly and only then show a provider error, while the actual terminal frame may have arrived earlier during an awaited local speaker drain. Handler completion order alone cannot explain the wire arrival order.

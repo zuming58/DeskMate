@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11D.3 post-TTS dialog recovery handoff](handoffs/t11d3-post-tts-dialog-recovery-2026-09-01.md)
+- [T11D.3 post-TTS dialog recovery contract](contracts/t11d3-post-tts-dialog-recovery-v1.md)
+- [T11D.2 terminal diagnostics contract](contracts/t11d2-doubao-terminal-diagnostics-v1.md)
+
 - [T11D companion stop, drain and capsule handoff](handoffs/t11d-companion-stop-drain-capsule-2026-09-01.md)
 - [T11D companion playback drain and bounded stop contract](contracts/t11d-companion-playback-drain-stop-v1.md)
 - [T11C follow-up HIL rejection evidence](testing/t11c-companion-followup-hil-2026-09-01.md)

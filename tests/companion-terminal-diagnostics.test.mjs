@@ -16,10 +16,11 @@ class FakeProvider {
     this.onEvent = onEvent;
     this.closeEvent = closeEvent;
     this.closed = false;
+    this.audio = [];
   }
 
   async connect() { return { ok: true }; }
-  sendAudio() { return true; }
+  sendAudio(value) { this.audio.push(Buffer.from(value)); return true; }
   interrupt() {}
   close() {
     this.closed = true;
@@ -118,6 +119,181 @@ test("dialog error remains distinguishable from an error frame after tts end", a
   assert.ok(lifecycle.lastTerminalEventSequence > lifecycle.lastTtsEndSequence);
 });
 
+test("a sequence-adjacent dialog error after successful playback drain recovers with a fresh provider and no audio replay", async () => {
+  const harness = createHarness();
+  const provider = await startHarness(harness, "post-tts-recovery");
+  harness.source.push(Buffer.from([1, 2, 3]));
+  provider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await harness.controller.eventChain;
+  provider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await harness.controller.eventChain;
+
+  assert.equal(harness.providers.length, 2);
+  assert.equal(provider.closed, true);
+  assert.equal(harness.providers[1].closed, false);
+  assert.equal(provider.audio.length, 1);
+  assert.equal(harness.controller.snapshot().state, "listening");
+  assert.equal(harness.controller.snapshot().error, "");
+  assert.deepEqual(harness.providers[1].audio, []);
+  assert.deepEqual({
+    attempts: harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts,
+    succeeded: harness.controller.snapshot().providerLifecycle.postTtsDialogRecoverySucceeded,
+    failed: harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryFailed,
+    limited: harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryLimited,
+    result: harness.controller.snapshot().providerLifecycle.lastPostTtsDialogRecoveryResult,
+  }, { attempts: 1, succeeded: 1, failed: 0, limited: 0, result: "succeeded" });
+  await harness.controller.stop();
+});
+
+test("dialog recovery remains fail-closed without a successful adjacent active-phase drain", async () => {
+  const nonAdjacent = createHarness();
+  const first = await startHarness(nonAdjacent, "non-adjacent");
+  first.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await nonAdjacent.controller.eventChain;
+  first.emit({ type: "session.ready", diagnostic: terminalDiagnostic("session-ready", "none") });
+  first.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await nonAdjacent.controller.eventChain;
+  assert.equal(nonAdjacent.controller.snapshot().state, "error");
+  assert.equal(nonAdjacent.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts, 0);
+
+  const sink = new SimulatedCompanionAudioSink();
+  sink.drain = async () => ({ ok: false, reason: "synthetic-drain-failure" });
+  const noDrain = createHarness({ sink });
+  const second = await startHarness(noDrain, "no-drain");
+  second.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await noDrain.controller.eventChain;
+  second.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await noDrain.controller.eventChain;
+  assert.equal(noDrain.controller.snapshot().state, "error");
+  assert.equal(noDrain.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts, 0);
+});
+
+test("error frames remain fail-closed after a successful drain", async () => {
+  const harness = createHarness();
+  const provider = await startHarness(harness, "error-frame-no-recovery");
+  provider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await harness.controller.eventChain;
+  provider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("error-frame", "error-frame", "server-internal") });
+  await harness.controller.eventChain;
+  assert.equal(harness.controller.snapshot().state, "error");
+  assert.equal(harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts, 0);
+});
+
+test("post-tts dialog recovery is bounded without a new user turn", async () => {
+  const harness = createHarness();
+  await startHarness(harness, "bounded-recovery");
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const provider = harness.providers.at(-1);
+    provider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+    await harness.controller.eventChain;
+    provider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+    await harness.controller.eventChain;
+  }
+  const snapshot = harness.controller.snapshot();
+  assert.equal(snapshot.state, "error");
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoveryAttempts, 2);
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoverySucceeded, 2);
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoveryLimited, 1);
+  assert.equal(snapshot.providerLifecycle.lastPostTtsDialogRecoveryResult, "limited");
+});
+
+test("a real new user turn resets the bounded post-tts recovery streak", async () => {
+  const harness = createHarness();
+  await startHarness(harness, "recovery-progress");
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    const provider = harness.providers.at(-1);
+    provider.emit({ type: "asr.final", text: `turn-${cycle}` });
+    provider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+    await harness.controller.eventChain;
+    provider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+    await harness.controller.eventChain;
+  }
+  const snapshot = harness.controller.snapshot();
+  assert.equal(snapshot.state, "listening");
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoveryAttempts, 3);
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoverySucceeded, 3);
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoveryLimited, 0);
+  await harness.controller.stop();
+});
+
+test("late events from the replaced provider cannot reuse recovery evidence", async () => {
+  const harness = createHarness();
+  const oldProvider = await startHarness(harness, "stale-provider");
+  oldProvider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await harness.controller.eventChain;
+  oldProvider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await harness.controller.eventChain;
+  assert.equal(harness.providers.length, 2);
+  const attempts = harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts;
+
+  oldProvider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  oldProvider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await harness.controller.eventChain;
+  assert.equal(harness.controller.snapshot().state, "listening");
+  assert.equal(harness.controller.snapshot().providerLifecycle.postTtsDialogRecoveryAttempts, attempts);
+  assert.equal(harness.providers.length, 2);
+  await harness.controller.stop();
+});
+
+test("stop during post-tts recovery cancels it without publishing a late listening state", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  let stopCalls = 0;
+  let releaseRecoveryStop;
+  source.stop = () => {
+    stopCalls += 1;
+    if (stopCalls === 1) return new Promise((resolve) => { releaseRecoveryStop = resolve; });
+    return Promise.resolve({ ok: true });
+  };
+  const providers = [];
+  const states = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: new SimulatedCompanionAudioSink(),
+    onEvent: (event) => { if (event.type === "state") states.push(event.state); },
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "stop-recovery", generation: 1 });
+  providers[0].emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await controller.eventChain;
+  providers[0].emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await new Promise((resolve) => setImmediate(resolve));
+  const stopped = controller.stop("user");
+  releaseRecoveryStop({ ok: true });
+  assert.equal((await stopped).ok, true);
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "idle");
+  assert.equal(controller.snapshot().providerLifecycle.lastPostTtsDialogRecoveryResult, "cancelled");
+  assert.equal(states.at(-1), "idle");
+});
+
+test("post-tts recovery connection failure terminates with a redacted error", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  let created = 0;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => {
+      created += 1;
+      const provider = new FakeProvider(onEvent);
+      if (created > 1) provider.connect = async () => { throw new Error("private-network-detail"); };
+      providers.push(provider);
+      return provider;
+    },
+    audioSource: source, audioSink: sink, wait: async () => {}, retryDelaysMs: [0, 0, 0],
+  });
+  await controller.start({ sessionId: "recovery-failure", generation: 1 });
+  providers[0].emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await controller.eventChain;
+  providers[0].emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "unknown-provider-error") });
+  await controller.eventChain;
+  const snapshot = controller.snapshot();
+  assert.equal(snapshot.state, "error");
+  assert.equal(snapshot.providerLifecycle.postTtsDialogRecoveryFailed, 1);
+  assert.equal(snapshot.providerLifecycle.lastPostTtsDialogRecoveryResult, "failed");
+  assert.doesNotMatch(snapshot.error, /private-network-detail/);
+});
+
 test("session and connection terminal events have independent counters without changing controller behavior", async () => {
   const finishedHarness = createHarness();
   const finishedProvider = await startHarness(finishedHarness, "finished");
@@ -194,6 +370,11 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
         lastTerminalPhase: "draining",
         lastFailureBucket: "server-internal",
         terminalExpected: false,
+        postTtsDialogRecoveryAttempts: 8,
+        postTtsDialogRecoverySucceeded: 7,
+        postTtsDialogRecoveryFailed: 1,
+        postTtsDialogRecoveryLimited: 2,
+        lastPostTtsDialogRecoveryResult: "succeeded",
         code: 55000123,
         message: "private-provider-message",
         payload: "private-provider-payload",
@@ -209,8 +390,11 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
     errorFrames: 1, dialogErrors: 2, sessionFinished: 3, sessionFailed: 4,
     connectionFinished: 5, transportErrors: 6, transportCloses: 7,
     providerEventSequence: 19, lastTtsEndSequence: 17, lastTerminalEventSequence: 19,
+    postTtsDialogRecoveryAttempts: 8, postTtsDialogRecoverySucceeded: 7,
+    postTtsDialogRecoveryFailed: 1, postTtsDialogRecoveryLimited: 2,
     lastProviderEvent: "error-frame", lastTerminalEvent: "error-frame",
     lastTerminalPhase: "draining", lastFailureBucket: "server-internal", terminalExpected: false,
+    lastPostTtsDialogRecoveryResult: "succeeded",
   });
   assert.doesNotMatch(JSON.stringify(report), /55000123|private-provider|private-session|private-connect|private-request/);
 
@@ -219,15 +403,17 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
     lastTerminalEvent: "private-terminal",
     lastTerminalPhase: "private-phase",
     lastFailureBucket: "private-bucket",
+    lastPostTtsDialogRecoveryResult: "private-result",
   } } }).conversation.providerLifecycle;
   assert.equal(rejected.lastProviderEvent, "none");
   assert.equal(rejected.lastTerminalEvent, "none");
   assert.equal(rejected.lastTerminalPhase, "none");
   assert.equal(rejected.lastFailureBucket, "none");
+  assert.equal(rejected.lastPostTtsDialogRecoveryResult, "never");
 });
 
-test("T11D.2 package exposes an explicit diagnostic build identity", () => {
+test("T11D.3 package exposes an explicit recovery build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t11d2-doubao-terminal-diagnostics-v1/);
+  assert.match(main, /t11d3-post-tts-dialog-recovery-v1/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

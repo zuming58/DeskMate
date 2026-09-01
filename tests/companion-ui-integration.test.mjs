@@ -81,20 +81,24 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.match(pages, /未发送到小智舵机/);
 });
 
-test("companion desktop layout aligns both overview columns and keeps the live bar compact", async () => {
+test("companion desktop layout keeps the overview aligned and only the independent Electron overlay owns the live capsule", async () => {
   const app = await source("src/App.jsx");
   const pages = await source("src/pages.jsx");
   const styles = await source("src/styles.css");
+  const main = await source("electron/main.cjs");
   assert.match(styles, /\.companion-overview \{[^}]*align-items: stretch/);
   assert.match(styles, /\.companion-stage \{[^}]*height: 100%/);
   assert.match(styles, /\.companion-stage__face \{[^}]*flex: 1 1 440px/);
   assert.match(styles, /\.companion-side-stack \{[^}]*height: 100%/);
   assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-stage \{ min-height: 0; height: auto; \}/);
-  assert.match(styles, /\.companion-live-bar \{[^}]*width: fit-content;[^}]*max-width: min\(620px/);
-  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.companion-live-bar \{ width: calc\(100vw - 28px\)/);
-  assert.match(app, /disabled=\{conversation\.stopLifecycle\?\.pending\}/);
+  assert.doesNotMatch(app, /CompanionLiveBar|companion-live-bar|stopCompanion\("capsule"\)/);
+  assert.doesNotMatch(styles, /\.companion-live-bar/);
+  assert.match(main, /function createOverlayWindow\(\)/);
+  assert.match(main, /width: 320,[\s\S]*height: 58/);
+  assert.match(main, /overlay-preload\.cjs/);
+  assert.match(main, /function updateCompanionOverlay\(event = \{\}\)/);
+  assert.match(main, /overlayWindow\.showInactive\(\)/);
   assert.match(pages, /disabled=\{conversation\.stopLifecycle\?\.pending\}/);
-  assert.match(app, /stopCompanion\("capsule"\)/);
   assert.match(app, /stopCompanion\("escape"\)/);
   assert.match(pages, /stopCompanion\?\.\("page"\)/);
 });

@@ -5,6 +5,7 @@ const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", list
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
+const MAX_POST_TTS_DIALOG_RECOVERIES_WITHOUT_USER_TURN = 2;
 const PROVIDER_EVENT_NAMES = new Set([
   "none", "audio", "tts-start", "tts-end", "session-ready", "session-finished",
   "session-failed", "connection-started", "connection-failed", "connection-finished",
@@ -98,6 +99,7 @@ class CompanionConversationController {
     this.state = "idle";
     this.active = null;
     this.provider = null;
+    this.providerEpoch = 0;
     this.turnSequence = 0;
     this.eventChain = Promise.resolve();
     this.reconnecting = null;
@@ -107,6 +109,8 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.lastSuccessfulTtsDrain = null;
+    this.postTtsDialogRecoveryStreak = 0;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
     this.providerLifecycle = {
       connectAttempts: 0, connections: 0, closes: 0, reconnects: 0, events: 0,
@@ -116,6 +120,9 @@ class CompanionConversationController {
       lastProviderEvent: "none", lastTerminalEvent: "none", lastTerminalPhase: "none",
       providerEventSequence: 0, lastTtsEndSequence: 0, lastTerminalEventSequence: 0,
       lastFailureBucket: "none", terminalExpected: false,
+      postTtsDialogRecoveryAttempts: 0, postTtsDialogRecoverySucceeded: 0,
+      postTtsDialogRecoveryFailed: 0, postTtsDialogRecoveryLimited: 0,
+      lastPostTtsDialogRecoveryResult: "never",
     };
     this.stopLifecycle = { requested: 0, duplicateRequests: 0, completed: 0, alreadyStopped: 0, lastResult: "never" };
   }
@@ -221,6 +228,8 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.lastSuccessfulTtsDrain = null;
+    this.postTtsDialogRecoveryStreak = 0;
     await this.transition("connecting");
     const token = this.active.token;
     try {
@@ -253,6 +262,7 @@ class CompanionConversationController {
 
   recordProviderArrival(event = {}) {
     const sequence = this.providerLifecycle.providerEventSequence + 1;
+    const phase = this.providerArrivalPhase();
     const providerEvent = providerEventName(event);
     const terminalEvent = terminalEventName(event, providerEvent);
     const failureBucket = failureBucketName(event);
@@ -278,19 +288,21 @@ class CompanionConversationController {
     }
     if (terminalEvent !== "none") {
       this.providerLifecycle.lastTerminalEvent = terminalEvent;
-      this.providerLifecycle.lastTerminalPhase = this.providerArrivalPhase();
+      this.providerLifecycle.lastTerminalPhase = phase;
       this.providerLifecycle.lastTerminalEventSequence = sequence;
       this.providerLifecycle.lastFailureBucket = failureBucket;
       this.providerLifecycle.terminalExpected = Boolean(this.stopPromise || this.state === "stopping");
     }
-    return Object.freeze({ sequence, providerEvent, terminalEvent });
+    return Object.freeze({ sequence, phase, providerEvent, terminalEvent });
   }
 
   createProvider(token) {
+    const providerEpoch = ++this.providerEpoch;
     return this.providerFactory({ onEvent: (event) => {
       const providerArrival = this.recordProviderArrival(event);
       const arrival = Object.freeze({
         ...providerArrival,
+        providerEpoch,
         suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining),
       });
       this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
@@ -323,29 +335,85 @@ class CompanionConversationController {
     throw lastError;
   }
 
-  async reconnect(token) {
-    if (!this.isCurrent(token)) return;
+  async reconnect(token, { reason = "provider-reconnect", failureReason = "companion-reconnect-failed", redactFailure = false, onConnected = null, onFailure = null, onCancelled = null } = {}) {
+    const cancelled = () => { onCancelled?.(); return { ok: false, ignored: true, reason: "companion-session-stale" }; };
+    if (!this.isCurrent(token)) return cancelled();
     if (this.reconnecting) return this.reconnecting;
     this.reconnecting = (async () => {
       await this.audioSource.stop();
-      if (!this.isCurrent(token)) return;
+      if (!this.isCurrent(token)) return cancelled();
       await this.audioSink.interrupt();
-      if (!this.isCurrent(token)) return;
+      if (!this.isCurrent(token)) return cancelled();
       this.provider?.close?.();
       this.provider = null;
-      if (!this.isCurrent(token)) return;
-      await this.transition("connecting", { reason: "provider-reconnect" });
+      if (!this.isCurrent(token)) return cancelled();
+      await this.transition("connecting", { reason });
       await this.connectWithRetry(token);
-      if (!this.isCurrent(token)) return;
+      if (!this.isCurrent(token)) return cancelled();
       const source = await this.audioSource.start({
         onAudio: (chunk) => { this.forwardSourceAudio(chunk, token); },
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
-      if (!this.isCurrent(token)) { await this.audioSource.stop(); return; }
-      await this.transition("listening");
-    })().catch((error) => this.fail(error?.message || "companion-reconnect-failed", token)).finally(() => { this.reconnecting = null; });
+      if (!this.isCurrent(token)) { await this.audioSource.stop(); return cancelled(); }
+      onConnected?.();
+      await this.transition("listening", { reason });
+      return { ok: true };
+    })().catch(async (error) => {
+      onFailure?.();
+      const failed = await this.fail(redactFailure ? failureReason : (error?.message || failureReason), token);
+      return failed?.ignored ? failed : { ok: false, reason: failed?.reason || failureReason };
+    }).finally(() => { this.reconnecting = null; });
     return this.reconnecting;
+  }
+
+  isRecoverablePostTtsDialogError(event, token, arrival = {}) {
+    const evidence = this.lastSuccessfulTtsDrain;
+    return this.isCurrent(token)
+      && event?.type === "error"
+      && arrival.providerEvent === "dialog-error"
+      && arrival.terminalEvent === "dialog-error"
+      && arrival.phase === "active"
+      && !this.stopPromise
+      && this.state === "listening"
+      && !this.reconnecting
+      && evidence?.token === token
+      && evidence.sequence > 0
+      && arrival.sequence === evidence.sequence + 1;
+  }
+
+  async recoverPostTtsDialogError(token) {
+    this.lastSuccessfulTtsDrain = null;
+    if (this.postTtsDialogRecoveryStreak >= MAX_POST_TTS_DIALOG_RECOVERIES_WITHOUT_USER_TURN) {
+      this.providerLifecycle.postTtsDialogRecoveryLimited += 1;
+      this.providerLifecycle.lastPostTtsDialogRecoveryResult = "limited";
+      return this.fail("doubao-service-error", token);
+    }
+    this.postTtsDialogRecoveryStreak += 1;
+    this.providerLifecycle.postTtsDialogRecoveryAttempts += 1;
+    this.providerLifecycle.lastPostTtsDialogRecoveryResult = "in-progress";
+    const recovered = await this.reconnect(token, {
+      reason: "post-tts-dialog-recovery",
+      failureReason: "companion-post-tts-dialog-recovery-failed",
+      redactFailure: true,
+      onConnected: () => {
+        this.providerLifecycle.postTtsDialogRecoverySucceeded += 1;
+        this.providerLifecycle.lastPostTtsDialogRecoveryResult = "succeeded";
+      },
+      onFailure: () => {
+        this.providerLifecycle.postTtsDialogRecoveryFailed += 1;
+        this.providerLifecycle.lastPostTtsDialogRecoveryResult = "failed";
+      },
+      onCancelled: () => { this.providerLifecycle.lastPostTtsDialogRecoveryResult = "cancelled"; },
+    });
+    if (recovered?.ignored) {
+      this.providerLifecycle.lastPostTtsDialogRecoveryResult = "cancelled";
+      return recovered;
+    }
+    if (recovered?.ok) {
+      return { ok: true, recovered: true };
+    }
+    return recovered;
   }
 
   async commitFinalTurn(role, text, token) {
@@ -359,10 +427,12 @@ class CompanionConversationController {
   }
 
   async handleProviderEvent(event = {}, token, arrival = {}) {
-    if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
+    if (!this.isCurrent(token) || arrival.providerEpoch !== this.providerEpoch) return { ignored: true, reason: "companion-event-stale" };
     if (event.type === "connection.closed") { void this.reconnect(token); return { ok: true }; }
     if (event.type === "error") {
       if (["doubao-connection-error", "doubao-connection-closed"].includes(event.message)) { void this.reconnect(token); return { ok: true, reconnecting: true }; }
+      if (this.isRecoverablePostTtsDialogError(event, token, arrival)) return this.recoverPostTtsDialogError(token);
+      this.lastSuccessfulTtsDrain = null;
       await this.fail(event.message || "companion-provider-error", token);
       return { ok: false };
     }
@@ -387,6 +457,7 @@ class CompanionConversationController {
       return { ok: true };
     }
     if (event.type === "asr.final") {
+      this.postTtsDialogRecoveryStreak = 0;
       if (this.state === "speaking" || this.discardResponseUntilTtsEnd) {
         this.discardResponseUntilTtsEnd = true;
         this.postInterruptState = "thinking";
@@ -415,6 +486,7 @@ class CompanionConversationController {
       return { ok: true };
     }
     if (event.type === "tts.start") {
+      this.lastSuccessfulTtsDrain = null;
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       await this.transition("speaking");
       return { ok: true };
@@ -445,6 +517,7 @@ class CompanionConversationController {
       }
       this.playbackDraining = false;
       await this.transition("listening", { reason: drainResult?.ok ? "tts-playback-drained" : "tts-playback-drain-timeout" });
+      this.lastSuccessfulTtsDrain = drainResult?.ok ? Object.freeze({ token, sequence: Number(arrival.sequence) || 0 }) : null;
       return { ok: true, drained: Boolean(drainResult?.ok) };
     }
     return { ignored: true, reason: "companion-event-unmapped" };
@@ -481,6 +554,7 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.lastSuccessfulTtsDrain = null;
     await this.cleanup(provider);
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
@@ -514,6 +588,7 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.lastSuccessfulTtsDrain = null;
     await this.cleanup(provider);
     this.state = "idle";
     this.lastError = "";
