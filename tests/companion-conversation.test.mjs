@@ -13,7 +13,7 @@ const { CompanionConversationController } = require("../electron/companion-conve
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
 const { COMPRESSION, FLAGS, MAX_FRAME_BYTES, decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
-const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, translateFrame } = require("../electron/doubao-realtime.cjs");
+const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
 const { acceptsForegroundSessionEvent, emergencyStopForegroundSession, finishForegroundSession, initialForegroundSession, startForegroundSession } = require("../electron/foreground-session.cjs");
 
 function turn(eventId, text = "你好") {
@@ -92,8 +92,16 @@ test("Doubao codec accepts every documented flag layout, identifiers, gzip and f
   const gzipFrame = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 150, sessionId: "s1", serialization: SERIALIZATION.JSON, compression: COMPRESSION.GZIP, payload: gzipSync(Buffer.from("{}")) });
   assert.deepEqual(decodeFrame(gzipFrame).payloadJson, {});
   const errorFrame = encodeFrame({ messageType: MESSAGE_TYPES.ERROR, flags: FLAGS.NO_SEQUENCE, code: 45000001, serialization: SERIALIZATION.JSON, payload: Buffer.from('{"message":"private provider content"}') });
-  assert.deepEqual(translateFrame(decodeFrame(errorFrame), { replyText: "" }), { type: "error", code: 45000001, message: "doubao-service-error" });
+  assert.deepEqual(translateFrame(decodeFrame(errorFrame), { replyText: "" }), {
+    type: "error",
+    message: "doubao-service-error",
+    diagnostic: { providerEvent: "error-frame", terminalEvent: "error-frame", failureBucket: "request-invalid" },
+  });
   assert.doesNotMatch(JSON.stringify(translateFrame(decodeFrame(errorFrame), { replyText: "" })), /private provider content/);
+  assert.deepEqual([
+    providerFailureBucket(45000001), providerFailureBucket(45000002), providerFailureBucket(45000151),
+    providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
+  ], ["request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
   const malformed = Buffer.from(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
   malformed.writeInt32BE(999, 8);
   assert.throws(() => decodeFrame(malformed), /doubao-(connect-id|payload-size)-invalid/);
@@ -146,7 +154,11 @@ test("Doubao adapter fails closed on an HTTP handshake rejection without reading
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" }, WebSocketImpl: RejectedSocket, onEvent: (event) => events.push(event) });
   await assert.rejects(() => session.connect(), /doubao-handshake-rejected/);
   assert.equal(resumed, 1);
-  assert.deepEqual(events, [{ type: "error", message: "doubao-handshake-rejected" }]);
+  assert.deepEqual(events, [{
+    type: "error",
+    message: "doubao-handshake-rejected",
+    diagnostic: { providerEvent: "transport-error", terminalEvent: "transport-error", failureBucket: "unknown-provider-error" },
+  }]);
 });
 
 test("Doubao settings identify the protocol App Key as fixed and expose redacted failure copy", () => {
@@ -311,10 +323,15 @@ test("transport errors use the same finite reconnect path while provider errors 
   if (controller.reconnecting) await controller.reconnecting;
   assert.equal(providers.length, 2);
   assert.equal(controller.snapshot().state, "listening");
+  assert.equal(controller.snapshot().providerLifecycle.transportErrors, 1);
+  assert.equal(controller.snapshot().providerLifecycle.reconnects, 1);
+  assert.equal(controller.snapshot().providerLifecycle.lastTerminalEvent, "transport-error");
   providers[1].emit({ type: "error", message: "provider leaked a private sentence" });
   await controller.eventChain;
   assert.equal(controller.snapshot().state, "error");
   assert.equal(controller.snapshot().error, "companion-session-failed");
+  assert.equal(controller.snapshot().providerLifecycle.lastTerminalEvent, "provider-error");
+  assert.equal(controller.snapshot().providerLifecycle.lastFailureBucket, "unknown-provider-error");
 });
 
 test("EasyInput source can fall back only before start and stays locked afterward", async () => {

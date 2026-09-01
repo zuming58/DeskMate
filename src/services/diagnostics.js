@@ -3,6 +3,10 @@ import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "../domain/link
 const SECRET_KEYS = /token|api.?key|password|wifi|path|text|transcript|recording|audio|serial|window.?title|ip|address/i;
 const AUDIO_STATES = new Set(["not-configured", "binding", "waiting-heartbeat", "ready", "starting", "streaming", "ambiguous", "faulted", "unavailable", "desktop-bridge-unavailable"]);
 const CONVERSATION_STATES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
+const PROVIDER_EVENTS = new Set(["none", "audio", "tts-start", "tts-end", "session-ready", "session-finished", "session-failed", "connection-started", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close", "other"]);
+const TERMINAL_EVENTS = new Set(["none", "session-finished", "session-failed", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close"]);
+const TERMINAL_PHASES = new Set(["none", "starting", "active", "draining", "stopping", "reconnecting", "idle"]);
+const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"]);
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -48,7 +52,14 @@ export function createDiagnosticReport(input = {}) {
       duplicateRequests: Math.max(0, Number(stopSource.duplicateRequests) || 0),
       completed: Math.max(0, Number(stopSource.completed) || 0),
     },
-    providerLifecycle: Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),
+    providerLifecycle: {
+      ...Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors", "errorFrames", "dialogErrors", "sessionFinished", "sessionFailed", "connectionFinished", "transportErrors", "transportCloses", "providerEventSequence", "lastTtsEndSequence", "lastTerminalEventSequence"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),
+      lastProviderEvent: PROVIDER_EVENTS.has(providerSource.lastProviderEvent) ? providerSource.lastProviderEvent : "none",
+      lastTerminalEvent: TERMINAL_EVENTS.has(providerSource.lastTerminalEvent) ? providerSource.lastTerminalEvent : "none",
+      lastTerminalPhase: TERMINAL_PHASES.has(providerSource.lastTerminalPhase) ? providerSource.lastTerminalPhase : "none",
+      lastFailureBucket: FAILURE_BUCKETS.has(providerSource.lastFailureBucket) ? providerSource.lastFailureBucket : "none",
+      terminalExpected: Boolean(providerSource.terminalExpected),
+    },
     counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops", "drainRequests", "drains", "drainTimeouts", "sinkAccepted", "sinkPlayed", "sinkCancelled", "backpressureWaits", "backpressureTimeouts", "bufferedAudioHighWaterMs"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
     echoGuard: {
       policy: echoGuardSource.policy === "computer-speaker-echo-guard-v1" ? echoGuardSource.policy : "unavailable",

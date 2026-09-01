@@ -5,6 +5,19 @@ const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", list
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
+const PROVIDER_EVENT_NAMES = new Set([
+  "none", "audio", "tts-start", "tts-end", "session-ready", "session-finished",
+  "session-failed", "connection-started", "connection-failed", "connection-finished",
+  "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close", "other",
+]);
+const TERMINAL_EVENT_NAMES = new Set([
+  "none", "session-finished", "session-failed", "connection-failed", "connection-finished",
+  "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close",
+]);
+const FAILURE_BUCKET_NAMES = new Set([
+  "none", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy",
+  "server-internal", "unknown-provider-error",
+]);
 
 function boundedText(value, max = 16384) {
   return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
@@ -21,6 +34,37 @@ function safeErrorReason(value) {
   const reason = boundedText(value, 240);
   if (/^[a-z0-9-]{1,120}$/.test(reason)) return reason;
   return "companion-session-failed";
+}
+
+function providerEventName(event = {}) {
+  const supplied = String(event?.diagnostic?.providerEvent || "");
+  if (PROVIDER_EVENT_NAMES.has(supplied)) return supplied;
+  const mapped = {
+    audio: "audio", "tts.start": "tts-start", "tts.end": "tts-end",
+    "session.ready": "session-ready", "session.finished": "session-finished",
+    "connection.started": "connection-started", "connection.finished": "connection-finished",
+    "connection.closed": "transport-close",
+  }[event.type];
+  if (mapped) return mapped;
+  if (event.type === "error") {
+    if (["doubao-connection-error", "doubao-connection-closed", "doubao-handshake-rejected"].includes(event.message)) return "transport-error";
+    if (event.message === "doubao-handshake-service-error") return "connection-failed";
+    if (event.message === "doubao-session-service-error") return "session-failed";
+    return "provider-error";
+  }
+  return "other";
+}
+
+function terminalEventName(event = {}, providerEvent) {
+  const supplied = String(event?.diagnostic?.terminalEvent || "");
+  if (TERMINAL_EVENT_NAMES.has(supplied)) return supplied;
+  return TERMINAL_EVENT_NAMES.has(providerEvent) ? providerEvent : "none";
+}
+
+function failureBucketName(event = {}) {
+  const supplied = String(event?.diagnostic?.failureBucket || "");
+  if (FAILURE_BUCKET_NAMES.has(supplied)) return supplied;
+  return event.type === "error" ? "unknown-provider-error" : "none";
 }
 
 class CompanionConversationController {
@@ -64,7 +108,15 @@ class CompanionConversationController {
     this.postInterruptState = "";
     this.playbackDraining = false;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
-    this.providerLifecycle = { connectAttempts: 0, connections: 0, closes: 0, reconnects: 0, events: 0, audioEvents: 0, ttsStarts: 0, ttsEnds: 0, providerErrors: 0 };
+    this.providerLifecycle = {
+      connectAttempts: 0, connections: 0, closes: 0, reconnects: 0, events: 0,
+      audioEvents: 0, ttsStarts: 0, ttsEnds: 0, providerErrors: 0,
+      errorFrames: 0, dialogErrors: 0, sessionFinished: 0, sessionFailed: 0,
+      connectionFinished: 0, transportErrors: 0, transportCloses: 0,
+      lastProviderEvent: "none", lastTerminalEvent: "none", lastTerminalPhase: "none",
+      providerEventSequence: 0, lastTtsEndSequence: 0, lastTerminalEventSequence: 0,
+      lastFailureBucket: "none", terminalExpected: false,
+    };
     this.stopLifecycle = { requested: 0, duplicateRequests: 0, completed: 0, alreadyStopped: 0, lastResult: "never" };
   }
 
@@ -191,15 +243,56 @@ class CompanionConversationController {
 
   isCurrent(token) { return Boolean(this.active && this.active.token === token); }
 
+  providerArrivalPhase() {
+    if (this.stopPromise || this.state === "stopping") return "stopping";
+    if (this.reconnecting) return "reconnecting";
+    if (this.playbackDraining) return "draining";
+    if (this.state === "connecting") return "starting";
+    return this.active ? "active" : "idle";
+  }
+
+  recordProviderArrival(event = {}) {
+    const sequence = this.providerLifecycle.providerEventSequence + 1;
+    const providerEvent = providerEventName(event);
+    const terminalEvent = terminalEventName(event, providerEvent);
+    const failureBucket = failureBucketName(event);
+    this.providerLifecycle.events += 1;
+    this.providerLifecycle.providerEventSequence = sequence;
+    this.providerLifecycle.lastProviderEvent = providerEvent;
+    if (providerEvent === "audio") this.providerLifecycle.audioEvents += 1;
+    else if (providerEvent === "tts-start") this.providerLifecycle.ttsStarts += 1;
+    else if (providerEvent === "tts-end") {
+      this.providerLifecycle.ttsEnds += 1;
+      this.providerLifecycle.lastTtsEndSequence = sequence;
+    }
+    if (event?.type === "error") this.providerLifecycle.providerErrors += 1;
+    if (providerEvent === "error-frame") this.providerLifecycle.errorFrames += 1;
+    else if (providerEvent === "dialog-error") this.providerLifecycle.dialogErrors += 1;
+    else if (providerEvent === "session-finished") this.providerLifecycle.sessionFinished += 1;
+    else if (providerEvent === "session-failed") this.providerLifecycle.sessionFailed += 1;
+    else if (providerEvent === "connection-finished") this.providerLifecycle.connectionFinished += 1;
+    else if (providerEvent === "transport-error") this.providerLifecycle.transportErrors += 1;
+    else if (providerEvent === "transport-close") {
+      this.providerLifecycle.closes += 1;
+      this.providerLifecycle.transportCloses += 1;
+    }
+    if (terminalEvent !== "none") {
+      this.providerLifecycle.lastTerminalEvent = terminalEvent;
+      this.providerLifecycle.lastTerminalPhase = this.providerArrivalPhase();
+      this.providerLifecycle.lastTerminalEventSequence = sequence;
+      this.providerLifecycle.lastFailureBucket = failureBucket;
+      this.providerLifecycle.terminalExpected = Boolean(this.stopPromise || this.state === "stopping");
+    }
+    return Object.freeze({ sequence, providerEvent, terminalEvent });
+  }
+
   createProvider(token) {
     return this.providerFactory({ onEvent: (event) => {
-      this.providerLifecycle.events += 1;
-      if (event?.type === "audio") this.providerLifecycle.audioEvents += 1;
-      else if (event?.type === "tts.start") this.providerLifecycle.ttsStarts += 1;
-      else if (event?.type === "tts.end") this.providerLifecycle.ttsEnds += 1;
-      else if (event?.type === "error") this.providerLifecycle.providerErrors += 1;
-      else if (event?.type === "connection.closed") this.providerLifecycle.closes += 1;
-      const arrival = Object.freeze({ suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining) });
+      const providerArrival = this.recordProviderArrival(event);
+      const arrival = Object.freeze({
+        ...providerArrival,
+        suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining),
+      });
       this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
     } });
   }
@@ -216,8 +309,10 @@ class CompanionConversationController {
         const result = await provider.connect();
         if (!result?.ok) throw new Error(result?.reason || "companion-connect-failed");
         if (!this.isCurrent(token)) { provider.close?.(); throw new Error("companion-session-stale"); }
+        const recoveredConnection = this.providerLifecycle.connections > 0 || attempt > 0;
         this.providerLifecycle.connections += 1;
-        if (attempt > 0) { this.providerLifecycle.reconnects += 1; this.onEvent({ type: "reconnected", attempt, sessionId: this.active.sessionId, generation: this.active.generation }); }
+        if (recoveredConnection) this.providerLifecycle.reconnects += 1;
+        if (attempt > 0) this.onEvent({ type: "reconnected", attempt, sessionId: this.active.sessionId, generation: this.active.generation });
         return result;
       } catch (error) {
         lastError = error;

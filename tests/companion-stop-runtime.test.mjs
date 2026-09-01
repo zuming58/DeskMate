@@ -84,5 +84,5 @@ test("companion diagnostics expose build and lifecycle proof without identities 
   assert.deepEqual(report.conversation.mainState, { active: false, state: "idle", generation: 7 });
   assert.equal(report.conversation.stopLifecycle.duplicateRequests, 1);
   assert.equal(report.conversation.counters.sinkPlayed, 11);
-  assert.doesNotMatch(JSON.stringify(report), /private|session|reply/i);
+  assert.doesNotMatch(JSON.stringify(report), /private-path|private-session|private reply/i);
 });

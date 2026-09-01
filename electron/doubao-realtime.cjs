@@ -12,6 +12,24 @@ const EVENT_NAMES = Object.freeze({
   550: "chat.delta", 553: "chat.confirmed", 559: "chat.ended", 599: "dialog.error",
 });
 
+const FAILURE_BUCKETS = Object.freeze({
+  45000001: "request-invalid",
+  45000002: "empty-audio",
+  45000151: "audio-format-invalid",
+  55000031: "server-busy",
+});
+
+function providerFailureBucket(value) {
+  const code = Number(value);
+  if (Object.hasOwn(FAILURE_BUCKETS, code)) return FAILURE_BUCKETS[code];
+  if (Number.isInteger(code) && String(Math.abs(code)).startsWith("550")) return "server-internal";
+  return "unknown-provider-error";
+}
+
+function diagnostic(providerEvent, terminalEvent = "none", failureBucket = "none") {
+  return Object.freeze({ providerEvent, terminalEvent, failureBucket });
+}
+
 function boundedText(value, max = 4096) {
   return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
 }
@@ -30,7 +48,11 @@ function validateConfig(value = {}) {
 }
 
 function translateFrame(frame, state) {
-  if (frame.messageType === MESSAGE_TYPES.ERROR) return { type: "error", code: frame.code, message: "doubao-service-error" };
+  if (frame.messageType === MESSAGE_TYPES.ERROR) return {
+    type: "error",
+    message: "doubao-service-error",
+    diagnostic: diagnostic("error-frame", "error-frame", providerFailureBucket(frame.code)),
+  };
   if (frame.messageType === MESSAGE_TYPES.AUDIO_ONLY_RESPONSE || frame.event === 352) return { type: "audio", audio: frame.payload };
   const name = EVENT_NAMES[frame.event] || "diagnostic";
   const payload = frame.payloadJson || {};
@@ -50,11 +72,13 @@ function translateFrame(frame, state) {
     return { type: "chat.final", text };
   }
   if (name === "tts.started") return { type: "tts.start", text: boundedText(payload.text, 4096) };
-  if (name === "tts.ended") return { type: "tts.end" };
-  if (name === "connection.failed") return { type: "error", message: "doubao-handshake-service-error" };
-  if (name === "session.failed") return { type: "error", message: "doubao-session-service-error" };
-  if (name === "dialog.error") return { type: "error", message: "doubao-service-error" };
-  return { type: name };
+  if (name === "tts.ended") return { type: "tts.end", diagnostic: diagnostic("tts-end") };
+  if (name === "connection.failed") return { type: "error", message: "doubao-handshake-service-error", diagnostic: diagnostic("connection-failed", "connection-failed", "unknown-provider-error") };
+  if (name === "connection.finished") return { type: name, diagnostic: diagnostic("connection-finished", "connection-finished") };
+  if (name === "session.finished") return { type: name, diagnostic: diagnostic("session-finished", "session-finished") };
+  if (name === "session.failed") return { type: "error", message: "doubao-session-service-error", diagnostic: diagnostic("session-failed", "session-failed", "unknown-provider-error") };
+  if (name === "dialog.error") return { type: "error", message: "doubao-service-error", diagnostic: diagnostic("dialog-error", "dialog-error", "unknown-provider-error") };
+  return { type: name, diagnostic: diagnostic(name) };
 }
 
 function protocolErrorReason(error) {
@@ -121,7 +145,7 @@ class DoubaoRealtimeSession {
         try { socket.terminate?.(); } catch { /* best effort */ }
         const error = new Error("doubao-handshake-rejected");
         finish(reject, error);
-        this.onEvent({ type: "error", message: error.message });
+        this.onEvent({ type: "error", message: error.message, diagnostic: diagnostic("transport-error", "transport-error", "unknown-provider-error") });
       });
       socket.on("message", (data) => {
         if (this.closed) return;
@@ -140,13 +164,13 @@ class DoubaoRealtimeSession {
       socket.once("error", () => {
         const error = new Error("doubao-connection-error");
         if (!this.ready) finish(reject, error);
-        this.onEvent({ type: "error", message: error.message });
+        this.onEvent({ type: "error", message: error.message, diagnostic: diagnostic("transport-error", "transport-error", "unknown-provider-error") });
       });
       socket.once("close", () => {
         const wasReady = this.ready;
         this.ready = false;
         if (!wasReady) finish(reject, new Error("doubao-connection-closed"));
-        if (!this.closed) this.onEvent({ type: "connection.closed" });
+        if (!this.closed) this.onEvent({ type: "connection.closed", diagnostic: diagnostic("transport-close", "transport-close") });
       });
     });
   }
@@ -181,4 +205,4 @@ class DoubaoRealtimeSession {
   }
 }
 
-module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, translateFrame, validateConfig };
+module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, providerFailureBucket, translateFrame, validateConfig };

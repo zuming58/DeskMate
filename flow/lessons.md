@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Serialized handling still needs pre-queue arrival evidence
+
+- Symptom: an answer can finish audibly and only then show a provider error, while the actual terminal frame may have arrived earlier during an awaited local speaker drain. Handler completion order alone cannot explain the wire arrival order.
+- Practice: assign a monotonic counter before enqueueing provider work, then retain only allowlisted event/terminal/phase enums and coarse error buckets. Keep last TTS-end and terminal sequences separately.
+- Rule: observability must be captured before the await boundary that can reorder visible effects, but protocol payloads, raw codes and identifiers are not required to prove that order.
+
 ## Backpressure cancellation is control flow, not playback failure
 
 - Symptom: replacing queue drops with an awaited credit window introduces a new race: a user can interrupt or stop while an audio write is waiting for credit. Treating the cancelled wait as an ordinary write exception makes a successful manual action end in `error`.

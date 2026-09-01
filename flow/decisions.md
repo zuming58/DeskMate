@@ -1,5 +1,12 @@
 # Decisions
 
+## D050 - Provider terminal diagnostics preserve arrival order without provider content
+
+- Date: 2026-09-01
+- Decision: every realtime provider event receives a process-local monotonic arrival sequence before entering the controller queue. Terminal events use closed enums, counters, arrival phase and an expected-stop flag; provider error codes map only to fixed coarse buckets.
+- Privacy: raw code, message, payload, text, PCM, timestamps, request/message/connect/session identifiers and device/network/window evidence are not exported. Unknown values collapse to `unknown-provider-error` or `none`.
+- Consequence: a `tts.end` waiting on local playback drain can be distinguished from a later error frame, dialog error, session terminal or transport close without changing runtime handling. Production recovery changes require a new HIL diagnostic that selects one terminal path.
+
 ## D049 - Speaker backlog uses played credit and renderer lifecycle is monotonically reconciled
 
 - Date: 2026-09-01
