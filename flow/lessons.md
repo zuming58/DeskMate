@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A persisted provider setting is not proof of provider behavior
+
+- Symptom: settings and new-session diagnostics both show an eight-second endpoint, yet the cloud service still answers after its short default pause.
+- Practice: trace the exact outbound request and compare the whole relevant object with the provider's current official sample. Keep the provider request minimal, preserve separately accepted transport modes, and require one real utterance before closing the gate.
+- Rule: local readback proves persistence; session snapshot proves request ownership; neither proves remote acceptance. Do not hide a provider mismatch with a local response delay, and do not change an independently HIL-selected mode while repairing another field.
+
 ## A successful renderer bundle is not a successful first render
 
 - Symptom: Electron opens a normal window and loads packaged assets, but React leaves a white content area because a store action referenced during render is undeclared.

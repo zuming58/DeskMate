@@ -1,5 +1,12 @@
 # Decisions
 
+## D056 - Provider endpointing requests stay minimal and preserve the accepted keep-alive mode
+
+- Date: 2026-09-02
+- Decision: DeskMate sends the companion pause only as `StartSession.asr.extra.end_smooth_window_ms`. It does not combine that field with an unrelated two-pass ASR override or a speculative ASR audio descriptor.
+- Boundary: D053 remains authoritative. `dialog.extra.input_mod=keep_alive` stays unchanged because strict half-duplex intentionally pauses microphone upload during playback and the earlier exact-package HIL selected this mode to avoid provider audio-idle failure.
+- Evidence rule: a saved value and a session snapshot prove only local persistence and request preparation. They do not prove that the provider honored the requested endpoint until a real utterance passes user-present timing acceptance.
+
 ## D055 - Companion settings are explicit transactions and sessions own frozen revisions
 
 - Date: 2026-09-01
