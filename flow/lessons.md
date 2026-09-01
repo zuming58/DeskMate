@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Utterance endpointing and conversation inactivity are different clocks
+
+- Symptom: increasing one generic timeout either still cuts off pauses before a sentence is complete or leaves an abandoned continuous session online too long.
+- Practice: send the documented silence threshold in the provider's companion StartSession request, and keep a separate local timer that is armed only while accepting user speech. Cancel it synchronously when a non-empty final utterance arrives, before queued handlers can race.
+- Rule: `thinking`, playback and drain are active work, not user inactivity. A physical call during listening resets inactivity; during an answer it uses the single explicit interruption path and never becomes a hidden start/stop toggle.
+
 ## A serialized event queue still needs synchronous turn ownership
 
 - Symptom: the provider can emit `tts.start` and a delayed/reflected ASR final back-to-back while the awaited handler still shows `listening`; aggregate logs then show cancelled speaker blocks without proving which user turn caused them.

@@ -65,6 +65,9 @@ export class DesktopBridgeAdapter {
   async stopCompanionConversation() { return this.bridge?.stopCompanionConversation ? this.bridge.stopCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async interruptCompanionConversation() { return this.bridge?.interruptCompanionConversation ? this.bridge.interruptCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getCompanionConversationStatus() { return this.bridge?.getCompanionConversationStatus ? this.bridge.getCompanionConversationStatus() : { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "desktop-bridge-unavailable" }, audioSink: { available: false, reason: "desktop-bridge-unavailable" }, service: { configured: false } }; }
+  async getCompanionPreferences() { return this.bridge?.getCompanionPreferences ? this.bridge.getCompanionPreferences() : { preferences: null, wakeWord: { available: false, enabled: false, reason: "desktop-bridge-unavailable" } }; }
+  async setCompanionPreferences(value) { return this.bridge?.setCompanionPreferences ? this.bridge.setCompanionPreferences(value) : { preferences: null, wakeWord: { available: false, enabled: false, reason: "desktop-bridge-unavailable" } }; }
+  async testCompanionCallAction() { return this.bridge?.testCompanionCallAction ? this.bridge.testCompanionCallAction() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async editSelectedText(instruction, { signal } = {}) {
     if (!this.bridge?.editSelectedText) throw new Error("语音编辑仅在 DeskMate 桌面版可用");

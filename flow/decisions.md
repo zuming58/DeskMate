@@ -1,5 +1,12 @@
 # Decisions
 
+## D054 - Companion endpointing uses two clocks and one reserved physical call action
+
+- Date: 2026-09-01
+- Decision: provider utterance endpointing is a companion-only 2/3/5-second StartSession setting, while whole-conversation inactivity is a separate 30/60/120/off local timer owned only by `listening`. Default identity is `小言`. EasyInput calls the one existing controller through reserved `host_action_v1` UUID `f11135b4-7471-47f1-808a-629ae99eb63b`; a repeated call resets listening or explicitly interrupts an answer but never toggles the conversation off.
+- Reason: a short provider silence threshold cuts off thoughtful speech, while using the same timer for whole-session cleanup would terminate valid thinking/playback. Reusing the frozen opaque Host Action preserves firmware compatibility and avoids turning the companion call into an executable mapping.
+- Boundary: normal dictation endpointing is unchanged. Wake-word support stays unavailable until a local Chinese engine/model, redistribution license, opt-in indication and foreground audio-owner integration are approved.
+
 ## D053 - Strict half-duplex microphone silence uses the provider keep-alive mode
 
 - Date: 2026-09-01

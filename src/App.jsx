@@ -183,6 +183,11 @@ function AppContent() {
   }), []);
   useEffect(() => voiceAdapters.desktop.onHostActionResult((result) => {
     if (result?.kind === "fixed-text") setToast(result?.ok ? `已输入固定文字（${result.bytes || 0} 字节）` : `固定文字输入失败：${result?.reason || "未知错误"}`);
+    else if (result?.kind === "companion-call") {
+      if (result?.reason === "host-action-duplicate") return;
+      const success = { "start-listening": "已开始陪伴并进入倾听", "listening-reset": "正在倾听，空闲计时已重置", "interrupt-listen": "已打断回答并继续倾听" }[result?.action];
+      setToast(result?.ok ? success || "AI 陪伴呼唤已响应" : result?.reason === "companion-call-busy" ? "陪伴会话正在切换，请稍候" : `AI 陪伴呼唤失败：${result?.reason || "未知错误"}`);
+    }
     else if (result?.reason === "host-action-duplicate") return;
     else setToast(result?.ok ? `已打开 ${result.label || "应用"}` : `打开应用失败：${result?.reason || "未找到映射"}`);
   }), []);
@@ -232,6 +237,18 @@ function AppContent() {
     globalThis.desktopBridge.getCompanionConversationStatus?.().then(updateCompanion).catch(() => {});
     return globalThis.desktopBridge.onCompanionConversationEvent?.(updateCompanion);
   }, [updateCompanion]);
+  useEffect(() => {
+    voiceAdapters.desktop.setCompanionPreferences({
+      name: state.settings.companionName,
+      wakePhrase: state.settings.companionWakePhrase,
+      endSmoothWindowMs: state.settings.companionEndSmoothWindowMs,
+      idleTimeoutMs: state.settings.companionIdleTimeoutMs,
+      microphoneSource: state.settings.microphoneSource,
+      microphoneId: state.settings.microphoneId,
+    }).then((value) => {
+      if (value?.preferences || value?.wakeWord) updateCompanion({ preferences: value.preferences, wakeWord: value.wakeWord });
+    }).catch(() => {});
+  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs, state.settings.microphoneSource, state.settings.microphoneId, updateCompanion]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;

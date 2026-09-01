@@ -5,6 +5,8 @@ const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", list
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
+const DEFAULT_IDLE_TIMEOUT_MS = 60000;
+const IDLE_TIMEOUT_OPTIONS_MS = new Set([0, 30000, 60000, 120000]);
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const PROVIDER_EVENT_NAMES = new Set([
@@ -114,6 +116,9 @@ class CompanionConversationController {
     this.eventChain = Promise.resolve();
     this.reconnecting = null;
     this.stopPromise = null;
+    this.idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
+    this.idleTimer = null;
+    this.lastStopReason = "never";
     this.lastError = "";
     this.audioSelection = Object.freeze({ requestedSource: "", activeSource: "", output: "", fallback: null });
     this.discardResponseUntilTtsEnd = false;
@@ -254,6 +259,7 @@ class CompanionConversationController {
       turnLifecycle: this.turnLifecycleSnapshot(),
       providerLifecycle: Object.freeze({ ...this.providerLifecycle }),
       stopLifecycle: Object.freeze({ ...this.stopLifecycle }),
+      sessionPolicy: Object.freeze({ idleTimeoutMs: this.idleTimeoutMs, idleTimerArmed: Boolean(this.idleTimer), lastStopReason: this.lastStopReason }),
       error: this.lastError,
     });
   }
@@ -274,10 +280,43 @@ class CompanionConversationController {
     return { ok: true, status: this.snapshot() };
   }
 
+  configureSession({ idleTimeoutMs } = {}) {
+    if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active" };
+    const numeric = Number(idleTimeoutMs);
+    this.idleTimeoutMs = IDLE_TIMEOUT_OPTIONS_MS.has(numeric) ? numeric : DEFAULT_IDLE_TIMEOUT_MS;
+    return { ok: true, status: this.snapshot() };
+  }
+
+  clearIdleTimer() {
+    if (this.idleTimer) this.clearTimer(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  armIdleTimer(reason = "listening") {
+    this.clearIdleTimer();
+    if (!this.active || this.state !== "listening" || this.idleTimeoutMs === 0) return false;
+    const token = this.active.token;
+    this.idleTimer = this.setTimer(() => {
+      this.idleTimer = null;
+      if (!this.isCurrent(token) || this.state !== "listening") return;
+      this.onEvent({ type: "idle.timeout", reason: "listening-idle-timeout", sessionId: this.active.sessionId, generation: this.active.generation });
+      void this.stop("listening-idle-timeout");
+    }, this.idleTimeoutMs);
+    this.onEvent({ type: "idle.timer", reason: safeErrorReason(reason), armed: true, timeoutMs: this.idleTimeoutMs, sessionId: this.active.sessionId, generation: this.active.generation });
+    return true;
+  }
+
+  resetListeningIdleTimer(reason = "companion-call") {
+    if (!this.active || this.state !== "listening") return false;
+    return this.armIdleTimer(reason);
+  }
+
   async transition(state, detail = {}) {
     if (!STATES.includes(state)) throw new Error("companion-state-invalid");
     this.state = state;
     this.syncHalfDuplexPhaseFromState(state);
+    if (state === "listening") this.armIdleTimer(detail.reason || "listening");
+    else this.clearIdleTimer();
     if (state !== "error") this.lastError = "";
     const payload = Object.freeze({ type: "state", state, sessionId: this.active?.sessionId || detail.sessionId || "", generation: this.active?.generation || detail.generation || 0, ...detail });
     this.onEvent(payload);
@@ -313,6 +352,7 @@ class CompanionConversationController {
     this.active = Object.freeze({ sessionId: boundedText(sessionId, 128), generation: Math.max(1, Number(generation) || 1), token: Symbol("companion-session") });
     this.turnSequence = 0;
     this.lastError = "";
+    this.lastStopReason = "never";
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
@@ -406,6 +446,7 @@ class CompanionConversationController {
     else if (["chat.partial", "chat.final"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("thinking");
     else if (["tts.start", "audio"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("speaking");
     else if (event?.type === "tts.end" && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("draining");
+    if (event?.type === "asr.final" && !suppressAsr && boundedText(event.text).trim()) this.clearIdleTimer();
     return Object.freeze({ sequence, phase, providerEvent, terminalEvent, asrArrivalPhase, suppressAsr });
   }
 
@@ -615,6 +656,7 @@ class CompanionConversationController {
     const session = this.active;
     const provider = this.provider;
     this.active = null;
+    this.clearIdleTimer();
     this.lastError = safeErrorReason(reason);
     this.abandonOpenTurn("provider");
     this.setHalfDuplexPhase("error");
@@ -636,6 +678,8 @@ class CompanionConversationController {
   }
 
   async performStop(reason = "user") {
+    this.clearIdleTimer();
+    this.lastStopReason = safeErrorReason(reason);
     if (!this.active) {
       if (this.state !== "idle") {
         this.state = "idle";
@@ -678,6 +722,23 @@ class CompanionConversationController {
     this.onEvent({ type: "response.interrupted", sessionId: this.active.sessionId, generation: this.active.generation });
     return { ok: true, status: this.snapshot() };
   }
+
+  async call(reason = "companion-call") {
+    if (!this.active) return { ok: false, reason: "companion-session-inactive", action: "start", status: this.snapshot() };
+    if (this.stopPromise || ["connecting", "stopping"].includes(this.state) || this.reconnecting) {
+      return { ok: false, reason: "companion-call-busy", action: "busy", status: this.snapshot() };
+    }
+    if (this.state === "listening") {
+      this.resetListeningIdleTimer(reason);
+      this.onEvent({ type: "call.acknowledged", action: "listening-reset", sessionId: this.active.sessionId, generation: this.active.generation });
+      return { ok: true, action: "listening-reset", status: this.snapshot() };
+    }
+    if (["thinking", "speaking", "completed"].includes(this.state) || this.playbackDraining || this.halfDuplexPhase === "draining") {
+      const result = await this.interrupt(reason);
+      return { ...result, action: result.ok ? "interrupt-listen" : "busy" };
+    }
+    return { ok: false, reason: "companion-call-busy", action: "busy", status: this.snapshot() };
+  }
 }
 
-module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, COMPANION_ECHO_GUARD_POLICY: ECHO_GUARD_POLICY, CompanionConversationController };
+module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, COMPANION_ECHO_GUARD_POLICY: ECHO_GUARD_POLICY, COMPANION_IDLE_TIMEOUT_OPTIONS_MS: [...IDLE_TIMEOUT_OPTIONS_MS], CompanionConversationController };

@@ -1,4 +1,5 @@
 import { shortcutDisplay } from "./shortcutCapture.js";
+import { COMPANION_CALL_ACTION_ID } from "./companionPreferences.js";
 
 export const KEY_ACTIONS = [
   { id: "voice-input", label: "语音输入" },
@@ -10,13 +11,14 @@ export const KEY_ACTIONS = [
   { id: "hotkey", label: "快捷键" },
   { id: "fixed-text", label: "固定文字" },
   { id: "open-app", label: "打开应用" },
+  { id: "companion-call", label: "AI 陪伴呼唤" },
   { id: "disabled", label: "禁用" },
 ];
 
 export const ENCODER_PRESS_ACTIONS = [
   { id: "scroll-axis-toggle", label: "切换方向" },
   { id: "text-caret-select", label: "文字选择" },
-  ...KEY_ACTIONS,
+  ...KEY_ACTIONS.filter((item) => item.id !== "companion-call"),
 ];
 
 export const DEFAULT_KEYMAP = [
@@ -117,6 +119,7 @@ export function firmwareAction(binding) {
   if (value.action === "hotkey" && value.shortcut) return { hotkey: value.shortcut };
   if (value.action === "fixed-text" && value.text) return { text: value.text };
   if (value.action === "open-app" && value.appActionId) return `host_action:${value.appActionId}`;
+  if (value.action === "companion-call") return `host_action:${COMPANION_CALL_ACTION_ID}`;
   throw new Error(`${actionLabel(value)}还缺少必要设置`);
 }
 

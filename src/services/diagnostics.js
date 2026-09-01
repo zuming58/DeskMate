@@ -12,6 +12,8 @@ const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacen
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
+const END_SMOOTH_WINDOW_MS = new Set([2000, 3000, 5000]);
+const IDLE_TIMEOUT_MS = new Set([0, 30000, 60000, 120000]);
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -38,6 +40,7 @@ export function createDiagnosticReport(input = {}) {
   const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
   const sinkCancelSource = conversationSource.sinkCancelReasons || {};
   const mainStateSource = conversationSource.mainState || {};
+  const endpointingSource = conversationSource.endpointing || {};
   const conversation = {
     state: CONVERSATION_STATES.has(conversationSource.state) ? conversationSource.state : "idle",
     serviceConfigured: Boolean(conversationSource.serviceConfigured),
@@ -52,6 +55,10 @@ export function createDiagnosticReport(input = {}) {
     },
     mainState: { active: Boolean(mainStateSource.active), state: CONVERSATION_STATES.has(mainStateSource.state) ? mainStateSource.state : "idle", generation: Math.max(0, Number(mainStateSource.generation) || 0) },
     eventSequence: Math.max(0, Number(conversationSource.eventSequence) || 0),
+    endpointing: {
+      endSmoothWindowMs: END_SMOOTH_WINDOW_MS.has(Number(endpointingSource.endSmoothWindowMs)) ? Number(endpointingSource.endSmoothWindowMs) : 5000,
+      idleTimeoutMs: IDLE_TIMEOUT_MS.has(Number(endpointingSource.idleTimeoutMs)) ? Number(endpointingSource.idleTimeoutMs) : 60000,
+    },
     stopLifecycle: {
       pending: Boolean(stopSource.pending),
       result: /^[a-z0-9-]{1,80}$/.test(String(stopSource.result || stopSource.lastResult || "")) ? String(stopSource.result || stopSource.lastResult) : "unknown",

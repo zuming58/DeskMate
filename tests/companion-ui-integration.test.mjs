@@ -71,7 +71,7 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.match(companion, /唯一前台会话仲裁器/);
   assert.match(companion, /回答中 · 防回声/);
   assert.match(companion, /防回声中，自动语音打断暂停/);
-  assert.ok(companion.indexOf('<div className="companion-overview">') < companion.indexOf('<AgentStateTestPanel notify={notify} navigate={navigate} index="03"'));
+  assert.ok(companion.indexOf('<div className="companion-overview">') < companion.indexOf('<AgentStateTestPanel notify={notify} navigate={navigate} index="04"'));
   assert.doesNotMatch(companion, /value: "expressions"|setSection\("expressions"\)|打开软件表情库|本地表情预览已移到/);
   assert.match(preload, /startCompanionConversation: \(value\) => ipcRenderer\.invoke\("companion:start", value\)/);
   assert.match(preload, /interruptCompanionConversation/);

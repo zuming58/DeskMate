@@ -25,6 +25,9 @@ const { EasyInputVoiceRecorder } = require("./easyinput-voice-recorder.cjs");
 const { DoubaoRealtimeSession } = require("./doubao-realtime.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
+const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
+const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
+const { UnavailableWakeWordAdapter } = require("./wake-word-adapter.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
 const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
@@ -40,7 +43,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t11d6-turn-cancel-diagnostics-v1";
+const DESKMATE_BUILD_ID = "t12a-companion-pause-identity-call-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -65,6 +68,9 @@ let companionMemoryStore;
 let companionMemoryControl;
 let knowledgeBaseSettings;
 let companionConversationController;
+let companionPreferenceStore;
+let wakeWordAdapter;
+let companionStartOptions = { microphoneSource: "computer", microphoneId: "" };
 let companionEventSequence = 0;
 let computerCompanionAudio;
 let easyInputAudioSource;
@@ -189,7 +195,7 @@ function updateCompanionOverlay(event = {}) {
 function handleCompanionConversationEvent(event = {}) {
   const snapshot = companionConversationController?.snapshot?.();
   const eventSequence = ++companionEventSequence;
-  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
+  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, preferences: companionPreferenceStore?.get?.(), wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
   const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...event, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);
@@ -704,7 +710,7 @@ function startInputBridge() {
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
     const result = await hostActionExecutor.execute(event.hostActionId);
-    sendToMain("host-action-result", { kind: "open-app", ...result, at: new Date().toISOString() });
+    sendToMain("host-action-result", { kind: event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app", ...result, at: new Date().toISOString() });
   });
   inputBridge.on("fixed-text", async (event) => {
     const blockedWindowHandles = [mainWindow, overlayWindow].filter(Boolean).map((window) => {
@@ -775,7 +781,7 @@ async function runBailianOrganizerTest(text) {
 function companionConversationStatus() {
   const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } }, error: "" };
   const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
-  return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
+  return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), preferences: companionPreferenceStore?.get?.(), wakeWord: wakeWordAdapter?.status?.(), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
 }
 
 function normalizeCompanionStartOptions(value = {}) {
@@ -797,6 +803,7 @@ async function startCompanionConversation(value = {}) {
   foregroundSessionState = started.state;
   const lease = { sessionId, generation: foregroundSessionState.active.generation };
   const options = normalizeCompanionStartOptions(value);
+  companionStartOptions = options;
   const prepared = computerCompanionAudio.prepare({ ...lease, deviceId: options.microphoneId });
   if (!prepared.ok) { releaseForegroundSession(lease); return { ok: false, reason: prepared.reason, status: companionConversationStatus() }; }
   let audioSource = computerCompanionAudio.source;
@@ -814,6 +821,8 @@ async function startCompanionConversation(value = {}) {
     selection: { requestedSource: options.microphoneSource, activeSource: options.microphoneSource === "computer" ? "computer" : "", output: "computer" },
   });
   if (!configured.ok) { releaseForegroundSession(lease); return { ok: false, reason: configured.reason, status: companionConversationStatus() }; }
+  const sessionConfigured = companionConversationController.configureSession({ idleTimeoutMs: companionPreferenceStore.get().idleTimeoutMs });
+  if (!sessionConfigured.ok) { releaseForegroundSession(lease); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
   const result = await companionConversationController.start(lease);
   if (!result.ok) releaseForegroundSession(lease);
   return { ...result, status: companionConversationStatus() };
@@ -829,6 +838,18 @@ async function interruptCompanionConversation(reason = "user") {
   return { ...result, status: companionConversationStatus() };
 }
 
+async function callCompanionConversation(reason = "companion-call") {
+  const snapshot = companionConversationController.snapshot();
+  if (["connecting", "stopping"].includes(snapshot.state)) return { ok: false, reason: "companion-call-busy", action: "busy", label: COMPANION_CALL_ACTION.label, status: companionConversationStatus() };
+  if (["completed", "error"].includes(snapshot.state) && snapshot.active) await stopCompanionConversation("companion-call-restart");
+  if (!companionIsActive()) {
+    const result = await startCompanionConversation(companionStartOptions);
+    return { ...result, action: result.ok ? "start-listening" : "start-failed", label: COMPANION_CALL_ACTION.label };
+  }
+  const result = await companionConversationController.call(reason);
+  return { ...result, label: COMPANION_CALL_ACTION.label, status: companionConversationStatus() };
+}
+
 app.whenReady().then(async () => {
   app.setAppUserModelId(APP_ID);
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
@@ -836,6 +857,8 @@ app.whenReady().then(async () => {
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
+  companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
+  wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();
   easyInputAudioManager = new EasyInputAudioManager({
     source: easyInputAudioSource,
@@ -854,7 +877,7 @@ app.whenReady().then(async () => {
     onError: (reason) => { if (companionIsActive()) void companionConversationController.fail(reason); },
   });
   companionConversationController = new CompanionConversationController({
-    providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: aiServiceStore.loadRealtimeSecret(), onEvent }),
+    providerFactory: ({ onEvent }) => new DoubaoRealtimeSession({ config: { ...aiServiceStore.loadRealtimeSecret(), ...companionPreferenceStore.get() }, onEvent }),
     audioSource: computerCompanionAudio.source,
     audioSink: computerCompanionAudio.sink,
     commitTurn: (turn) => companionMemoryStore.commitConversationTurn(turn),
@@ -862,7 +885,7 @@ app.whenReady().then(async () => {
     onEvent: handleCompanionConversationEvent,
   });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
-  hostActionExecutor = new HostActionExecutor({ store: appActionStore });
+  hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
   const codexReceiver = await codexHookServer.start();
   codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
@@ -971,6 +994,12 @@ app.whenReady().then(async () => {
   handleTrusted("ai-services:save-realtime", (value) => aiServiceStore.saveRealtime(value || {}));
   handleTrusted("ai-services:clear-realtime", () => aiServiceStore.clearRealtime());
   handleTrusted("companion:get-status", () => companionConversationStatus());
+  handleTrusted("companion:get-preferences", () => ({ preferences: companionPreferenceStore.get(), wakeWord: wakeWordAdapter.status() }));
+  handleTrusted("companion:set-preferences", (value = {}) => {
+    companionStartOptions = normalizeCompanionStartOptions(value);
+    return { preferences: companionPreferenceStore.save(value), wakeWord: wakeWordAdapter.status() };
+  });
+  handleTrusted("companion:test-call-action", () => callCompanionConversation("software-test"));
   handleTrusted("companion:start", (value) => startCompanionConversation(value));
   handleTrusted("companion:stop", () => stopCompanionConversation("user"));
   handleTrusted("companion:interrupt", () => interruptCompanionConversation("user"));

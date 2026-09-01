@@ -125,10 +125,11 @@ class AppActionStore {
 }
 
 class HostActionExecutor {
-  constructor({ store, now = () => Date.now(), duplicateWindowMs = 250 } = {}) {
+  constructor({ store, reservedActions = new Map(), now = () => Date.now(), duplicateWindowMs = 250 } = {}) {
     this.store = store;
     this.now = now;
     this.duplicateWindowMs = duplicateWindowMs;
+    this.reservedActions = reservedActions;
     this.lastById = new Map();
     this.tail = Promise.resolve();
   }
@@ -140,7 +141,8 @@ class HostActionExecutor {
     const previous = this.lastById.get(value);
     if (previous !== undefined && timestamp - previous < this.duplicateWindowMs) return Promise.resolve({ ok: false, reason: "host-action-duplicate" });
     this.lastById.set(value, timestamp);
-    const operation = this.tail.then(() => this.store.execute(value));
+    const handler = this.reservedActions.get(value);
+    const operation = this.tail.then(() => typeof handler === "function" ? handler() : this.store.execute(value));
     this.tail = operation.catch(() => {});
     return operation;
   }

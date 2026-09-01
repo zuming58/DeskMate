@@ -5,6 +5,7 @@ const { EVENTS, MESSAGE_TYPES, decodeFrame, encodeAudioEvent, encodeJsonEvent } 
 const DEFAULT_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
 const DOUBAO_PROTOCOL_APP_KEY = "PlgvMymc7f3tQnJ6";
 const STRICT_HALF_DUPLEX_INPUT_MODE = "keep_alive";
+const { normalizeCompanionPreferences } = require("./companion-preferences.cjs");
 const EVENT_NAMES = Object.freeze({
   50: "connection.started", 51: "connection.failed", 52: "connection.finished",
   150: "session.ready", 152: "session.finished", 153: "session.failed", 154: "session.usage",
@@ -54,10 +55,12 @@ function validateConfig(value = {}) {
   if (endpoint.protocol !== "wss:" || endpoint.username || endpoint.password || endpoint.hash) throw new Error("doubao-endpoint-invalid");
   const required = ["appId", "accessKey", "resourceId", "model", "voice"];
   for (const key of required) if (!String(value[key] || "").trim()) throw new Error(`doubao-${key}-missing`);
+  const companion = normalizeCompanionPreferences(value);
   return {
     endpoint: endpoint.href,
     appId: boundedText(value.appId, 160), accessKey: boundedText(value.accessKey, 512), appKey: boundedText(value.appKey, 240),
     resourceId: boundedText(value.resourceId, 160), model: boundedText(value.model, 120), voice: boundedText(value.voice, 160),
+    companionName: companion.name, endSmoothWindowMs: companion.endSmoothWindowMs,
   };
 }
 
@@ -138,10 +141,10 @@ class DoubaoRealtimeSession {
 
   buildSessionPayload() {
     return {
-      asr: { audio_info: { channel: 1, format: "pcm_s16le", sample_rate: 16000 }, extra: { end_smooth_window_ms: 650, enable_asr_twopass: true } },
+      asr: { audio_info: { channel: 1, format: "pcm_s16le", sample_rate: 16000 }, extra: { end_smooth_window_ms: this.config.endSmoothWindowMs, enable_asr_twopass: true } },
       dialog: {
-        bot_name: "DeskMate",
-        system_role: "你是 DeskMate，本地桌面陪伴助手。回答自然、简短，不执行系统命令，不声称拥有未接入的硬件能力。",
+        bot_name: this.config.companionName,
+        system_role: `你是 ${this.config.companionName}，DeskMate 本地桌面陪伴助手。回答自然、简短，不执行系统命令，不声称拥有未接入的硬件能力。`,
         speaking_style: "自然、友好、简洁，适合实时语音交流",
         // The official keep_alive mode permits temporary upstream silence while
         // strict half-duplex playback suppresses microphone chunks for echo safety.
