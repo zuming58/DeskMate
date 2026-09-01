@@ -140,7 +140,7 @@ function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState("");
   const lastBoardConnected = useRef(null);
-  const { event, state, mergeRuntime, updateCompanion } = useAppStore();
+  const { event, state, patch, mergeRuntime, updateCompanion } = useAppStore();
   const stopActionRef = useRef(null);
   if (!stopActionRef.current) stopActionRef.current = createCompanionStopAction({ getBridge: () => globalThis.desktopBridge, updateCompanion });
   const stopCompanion = stopActionRef.current.stop;

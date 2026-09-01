@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import fs from "node:fs";
+import React from "react";
+import { renderToString } from "react-dom/server";
+import { createServer } from "vite";
 import {
   companionPreferencesToDraft,
   parseCompanionPreferenceDraft,
@@ -168,4 +171,27 @@ test("Companion DOM and CSS keep independent columns, explicit save, and bounded
   assert.match(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /aspect-ratio:/);
   assert.match(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /max-height:/);
   assert.doesNotMatch(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /flex:\s*1/);
+});
+
+test("renderer shell declares the store patch action used while hydrating companion preferences", () => {
+  const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(app, /const \{[^}]*\bpatch\b[^}]*\} = useAppStore\(\);/);
+  assert.match(app, /getCompanionPreferences\(\)[\s\S]*patch\(\{ settings:/);
+});
+
+test("renderer shell completes an actual first render", async () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const previousLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "window", { configurable: true, writable: true, value: { location: { hash: "" }, addEventListener() {}, removeEventListener() {}, desktopBridge: undefined } });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, writable: true, value: { getItem() { return null; }, setItem() {}, removeItem() {} } });
+  const server = await createServer({ server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
+  try {
+    const { App } = await server.ssrLoadModule("/src/App.jsx");
+    const html = renderToString(React.createElement(App));
+    assert.match(html, /DESKMATE/);
+  } finally {
+    await server.close();
+    if (previousWindow === undefined) delete globalThis.window; else Object.defineProperty(globalThis, "window", previousWindow);
+    if (previousLocalStorage === undefined) delete globalThis.localStorage; else Object.defineProperty(globalThis, "localStorage", previousLocalStorage);
+  }
 });
