@@ -62,6 +62,12 @@ int main() {
     const auto display_source = ReadAll(DISPLAY_SOURCE_PATH);
     const auto motion_header = ReadAll(MOTION_HEADER_PATH);
     const auto motion_source = ReadAll(MOTION_SOURCE_PATH);
+    const auto manual_owner_header = ReadAll(MANUAL_OWNER_HEADER_PATH);
+    const auto manual_owner_source = ReadAll(MANUAL_OWNER_SOURCE_PATH);
+    const auto manual_protocol_header = ReadAll(MANUAL_PROTOCOL_HEADER_PATH);
+    const auto manual_protocol_source = ReadAll(MANUAL_PROTOCOL_SOURCE_PATH);
+    const auto servo_adapter_header = ReadAll(SERVO_ADAPTER_HEADER_PATH);
+    const auto servo_adapter_source = ReadAll(SERVO_ADAPTER_SOURCE_PATH);
     const auto oled_header = ReadAll(OLED_HEADER_PATH);
     const auto oled_source = ReadAll(OLED_SOURCE_PATH);
     const auto transport_header = ReadAll(TRANSPORT_HEADER_PATH);
@@ -70,6 +76,8 @@ int main() {
     const auto module_gitignore = ReadAll(MODULE_GITIGNORE_PATH);
     const auto link_contract = ReadAll(LINK_CONTRACT_PATH);
     const auto link_vectors = ReadAll(LINK_VECTORS_PATH);
+    const auto t10c_link_contract = ReadAll(T10C_LINK_CONTRACT_PATH);
+    const auto t10c_link_vectors = ReadAll(T10C_LINK_VECTORS_PATH);
 
     CHECK(Contains(root_cmake, "set(IDF_TARGET esp32s3)"));
     CHECK(Contains(root_cmake, "idf_build_set_property(MINIMAL_BUILD ON)"));
@@ -126,6 +134,8 @@ int main() {
     CHECK(Contains(endpoint_source, "EnabledCapabilities"));
     CHECK(Contains(endpoint_source, "DisplayAcceptResult::kBusy"));
     CHECK(Contains(endpoint_source, "DisplayAcceptResult::kNotReady"));
+    CHECK(Contains(endpoint_source, "kManualCalibrationCommand"));
+    CHECK(Contains(endpoint_source, "kGetManualCalibrationStatus"));
     CHECK(Contains(owner_header, "kReadChunkBytes = 64"));
     CHECK(Contains(owner_header, "kMaxReadsPerService = 4"));
     CHECK(Occurrences(owner_source, "transport_.Send(") == 1);
@@ -212,12 +222,36 @@ int main() {
     CHECK(!Contains(motion_production, "ledc_"));
     CHECK(!Contains(motion_production, "GPIO_NUM_"));
     CHECK(!Contains(main_source, "MotionSafetyCore"));
+    CHECK(!Contains(main_source, "ManualCalibrationOwner"));
+    CHECK(!Contains(main_source, "ServoAdapter"));
     CHECK(Contains(motion_header, "kEmergencyStopped"));
     CHECK(Contains(motion_header, "power_path_verified"));
     CHECK(Contains(motion_header, "direction_verified"));
     CHECK(Contains(motion_header, "limits_verified"));
     CHECK(Contains(motion_source, "MotionSource::kRecovery"));
     CHECK(Contains(motion_source, "ClearPending"));
+    const auto manual_candidate = manual_owner_header + manual_owner_source +
+                                  manual_protocol_header +
+                                  manual_protocol_source +
+                                  servo_adapter_header + servo_adapter_source;
+    CHECK(Contains(servo_adapter_header, "kYawGpio = 11"));
+    CHECK(Contains(servo_adapter_header, "kPitchGpio = 12"));
+    CHECK(Contains(servo_adapter_header, "kFrequencyHz = 50"));
+    CHECK(Contains(servo_adapter_header,
+                   "kReferenceBoardMapDocumented = true"));
+    CHECK(Contains(servo_adapter_header,
+                   "kInstalledMappingVerified = false"));
+    CHECK(Contains(servo_adapter_header, "kInstallationAllowed = false"));
+    CHECK(Contains(manual_owner_header,
+                   "kManualCalibrationMaximumStepTenthsDegree = 10"));
+    CHECK(Contains(manual_owner_header,
+                   "kManualCalibrationMaximumArmTtlMs = 5000"));
+    CHECK(Contains(manual_owner_source, "adapter_.DisableOutputs()"));
+    CHECK(Contains(manual_owner_source, "normal_motion_.EmergencyStop()"));
+    CHECK(!Contains(manual_candidate, "driver/ledc"));
+    CHECK(!Contains(manual_candidate, "ledc_"));
+    CHECK(!Contains(manual_candidate, "GPIO_NUM_"));
+    CHECK(!Contains(manual_candidate, "uart_"));
     CHECK(!Contains(production, "driver/i2s"));
     CHECK(!Contains(production, "i2s_"));
     CHECK(!Contains(production, "esp_codec"));
@@ -233,6 +267,12 @@ int main() {
     CHECK(Contains(link_contract, "CRC16-CCITT-FALSE"));
     CHECK(Contains(link_vectors,
                    "444D4C4B01010100010000000700010101443322118228"));
+    CHECK(Contains(t10c_link_contract,
+                   "T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN"));
+    CHECK(Contains(t10c_link_contract,
+                   "MOTION` capability bit 3 remains clear"));
+    CHECK(Contains(t10c_link_vectors,
+                   "444D4C4B0101200024000000130044332211050000008977665503000100000000342C"));
     CHECK(Contains(module_gitignore, "build/"));
     CHECK(Contains(module_gitignore, "*.bin"));
 

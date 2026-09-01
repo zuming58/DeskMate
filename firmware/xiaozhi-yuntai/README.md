@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10_MOTION_SAFETY_CORE_V1_FROZEN / MOTION_HARDWARE_LOCKED`。T09 的七状态、TTL 回 idle 和 latest-wins 已真机通过；需要用户在场的实体重启/断线不重放回归仍保留为延期项。
+当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN / T10C_CODE_ONLY / MOTION_HARDWARE_LOCKED`。T09 的七状态、TTL 回 idle 和 latest-wins 已真机通过；T10C 只有纯逻辑 owner、disabled/fake adapter 和模拟协议入口，没有生产运动调用点。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -45,6 +45,12 @@ T10A 消费冻结的 [`t10-motion-safety-core-v1.md`](../../docs/contracts/t10-m
 
 这一核心只有不透明的校准单位，不包含 PWM、脉宽、LEDC、GPIO 或实体适配器，也没有接入 `app_main`。因此当前板上 T09 固件不会因 T10A 源码存在而产生任何机械动作。来源差异见 [`t10-xiaozhi-servo-reference-audit.md`](../../docs/provenance/t10-xiaozhi-servo-reference-audit.md)。
 
+## T10C manual calibration candidate
+
+T10C 冻结了独立的 [`t10c-manual-calibration-v1.md`](../../contracts/deskmate-link/t10c-manual-calibration-v1.md) 与黄金向量，只开放 `SELECT_AXIS`、短时一次性 `ARM`、本地 provisional center、固定 1.0° `SINGLE_STEP`、`RECENTER` 和最高优先级急停语义。每一次可能输出都会消耗 ARM token；租约、断线或 boot epoch 变化都会解除 ARM 且不重放。
+
+产品 `app_main` 仍用未注入 manual owner 的原构造函数，`MOTION` capability 仍为关闭。GPIO11/GPIO12/50 Hz 仅作为固定参考板图的来源证据；当前安装映射、供电、中心、方向和限位并未实测，真实 adapter 明确禁止安装。T10C 不是烧录候选，完整来源与交接分别见 [`t10c-xiaozhi-manual-calibration-provenance.md`](../../docs/provenance/t10c-xiaozhi-manual-calibration-provenance.md) 和 [`t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md`](../../docs/handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)。
+
 ## Partition contract
 
 产品文件 [`partitions/v1/16m.csv`](partitions/v1/16m.csv) 与只读参考 `F:\Codex\xiaozhi-yuntai\partitions\v1\16m.csv` 逐字节一致，SHA-256 均为 `5F9FA5E46E092D5571D19DA7B8956F6F9BFD5B7F603799B24D8DFCE769E30C14`。ESP-IDF 配置强制使用该文件：
@@ -83,4 +89,4 @@ idf.py --version
 idf.py -C firmware/xiaozhi-yuntai build
 ```
 
-干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T10A 是 code-only 包，不是烧录候选；任何接线变更、设备识别、Flash 操作或舵机校准仍必须等用户在场并取得新的明确授权。
+干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T10A/T10C 都是 code-only 包，不是烧录候选；任何接线变更、设备识别、Flash 操作或舵机校准仍必须等用户在场并取得新的明确授权。

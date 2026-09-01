@@ -6,6 +6,7 @@
 
 ### Current execution point
 
+- T10C 小智手动校准候选已进入 code-only 交付门：冻结 additive `T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN` 和黄金向量，只在注入 fake adapter 的 Host 路径验证选择轴、短租约一次性 ARM、固定 1.0° 单步、回中、急停、幂等与三层证据。生产 `app_main` 不注入 owner，`MOTION` capability 仍关闭，没有 LEDC/PWM/GPIO/实体 adapter；Windows/EasyInput 转发字段仍是后续独立冻结切片。
 - T09 三端可见状态链已真机通过：七种冻结状态全部由用户确认，`thinking` TTL 自动回 idle，快速 `listening→thinking→working→completed` 由 latest-wins 收敛到开心表情，Link/Agent 计数无协议、断线或队列丢弃错误。证据见 [`t09-three-end-agent-state-acceptance-2026-08-31.md`](../docs/testing/t09-three-end-agent-state-acceptance-2026-08-31.md)。用户离开现场后，实体重启/断线不重放与可选 T03～T06 组合回归明确延期，不允许远程代做硬件操作。
 - 当前开发进入 T10A：[`T10_MOTION_SAFETY_CORE_V1_FROZEN`](../docs/contracts/t10-motion-safety-core-v1.md) 只建立默认锁闭的纯 C++ 运动仲裁、校准门、回中、限速、软限位、过期/会话清空和急停/故障锁存。该切片没有 PWM、GPIO、DeskMate Link 动作消息或 `app_main` 入口；真实供电、中心、方向和机械限位仍未知，T10B 真机校准必须等用户在场。
 - T08 共享合同已在 `c8b8a344a72a849640c8b19575768d6daf4d6667` 标记为 `DESKMATE_LINK_V1_FROZEN`，EasyInput 总控实现已落在 `codex/easyinput-t08-link-controller@697bffa0f372ef57e4b41fa3fa1d7b39bffbab0e`：完成 UART0 唯一 owner、帧编解码/流式恢复、HELLO/能力/状态生命周期、有限重试、对端重启识别、旧状态不重放和脱敏状态。固件 Host 8/8、ESP-IDF v5.5.5 固定分区构建、桌面 115/115 与打包通过，当前状态为 `HIL_NOT_AUTHORIZED`。小智窗口必须使用同一合同提交和黄金向量；两端代码/构建均通过前不接线，首次连接只读验收见 [`t08-first-read-only-link-acceptance.md`](../docs/testing/t08-first-read-only-link-acceptance.md)。

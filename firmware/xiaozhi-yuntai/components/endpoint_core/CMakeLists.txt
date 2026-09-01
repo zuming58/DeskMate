@@ -5,6 +5,9 @@ idf_component_register(
         "src/link_endpoint.cpp"
         "src/link_protocol.cpp"
         "src/link_uart_owner.cpp"
+        "src/manual_calibration_owner.cpp"
+        "src/manual_calibration_protocol.cpp"
         "src/motion_safety_core.cpp"
+        "src/servo_adapter.cpp"
     INCLUDE_DIRS "include"
 )

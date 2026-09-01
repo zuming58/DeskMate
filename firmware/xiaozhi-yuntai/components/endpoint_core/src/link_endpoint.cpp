@@ -1,5 +1,7 @@
 #include "link_endpoint.h"
 
+#include "manual_calibration_protocol.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -35,6 +37,9 @@ void XiaozhiLinkEndpoint::Start(std::uint32_t peer_boot_id,
     diagnostics_ = {};
     ClearCache();
     display_owner_.ResetSession();
+    if (manual_calibration_owner_ != nullptr) {
+        manual_calibration_owner_->OnLinkDisconnected();
+    }
 }
 
 LinkEndpointSnapshot XiaozhiLinkEndpoint::snapshot() const noexcept {
@@ -53,6 +58,9 @@ void XiaozhiLinkEndpoint::ResetControllerSession() noexcept {
     agent_state_ = AgentState::kIdle;
     ClearCache();
     display_owner_.ResetSession();
+    if (manual_calibration_owner_ != nullptr) {
+        manual_calibration_owner_->OnLinkDisconnected();
+    }
 }
 
 void XiaozhiLinkEndpoint::OnLinkDisconnected() noexcept {
@@ -155,6 +163,13 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
             link_ready_ = true;
+            if (manual_calibration_owner_ != nullptr) {
+                const auto manual = manual_calibration_owner_->snapshot();
+                if (manual.session_id != controller_boot_id_) {
+                    manual_calibration_owner_->StartSession(
+                        controller_boot_id_);
+                }
+            }
             std::array<std::uint8_t, 8> payload{};
             payload[0] = 2;
             payload[1] = kLinkVersion;
@@ -216,6 +231,32 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
             agent_state_ = state;
             return Respond(request, request.payload.data(),
                            request.payload_length, response);
+        }
+        case LinkMessageType::kManualCalibrationCommand: {
+            if (!link_ready_ || manual_calibration_owner_ == nullptr) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            ManualCalibrationCommand command{};
+            if (!DecodeManualCalibrationCommand(request, command)) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            const auto result =
+                manual_calibration_owner_->Execute(command, now_ms);
+            const auto payload = EncodeManualCalibrationResponse(
+                command, result, manual_calibration_owner_->snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kGetManualCalibrationStatus: {
+            if (!link_ready_ || manual_calibration_owner_ == nullptr) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            if (request.payload_length != 0) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            manual_calibration_owner_->Tick(now_ms);
+            const auto payload = EncodeManualCalibrationStatus(
+                manual_calibration_owner_->snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
         }
     }
     return Error(request, LinkErrorCode::kUnknownType, response);
