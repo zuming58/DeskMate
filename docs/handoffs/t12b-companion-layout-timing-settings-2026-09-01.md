@@ -6,6 +6,7 @@
 - Isolated worktree: `F:\Codex\deskmate-t12b-companion-layout-timing-settings`
 - Branch: `codex/t12b-companion-layout-timing-settings`
 - Exact base: `7555d4161b90df000aae600a098ea336e198c743`
+- Implementation and verification commit: `c1c35cd4ce74b78e1d9d690ab6bc3b81ec4f3599`
 - Build ID: `t12b-companion-layout-timing-settings-v1`
 - Final implementation HEAD: report the pushed branch tip; a commit cannot contain its own hash.
 
