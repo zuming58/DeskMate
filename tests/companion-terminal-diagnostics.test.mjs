@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const { SimulatedCompanionAudioSink, SimulatedCompanionAudioSource } = require("../electron/companion-audio.cjs");
 const { CompanionConversationController } = require("../electron/companion-conversation.cjs");
 const { FLAGS, MESSAGE_TYPES, SERIALIZATION, decodeFrame, encodeFrame } = require("../electron/doubao-realtime-codec.cjs");
-const { translateFrame } = require("../electron/doubao-realtime.cjs");
+const { providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
 
 class FakeProvider {
   constructor(onEvent, { closeEvent = null } = {}) {
@@ -147,14 +147,14 @@ test("event 359 drains to listening on the same provider and accepts a second tu
   await harness.controller.stop();
 });
 
-test("the official strict half-duplex keep-alive policy prevents the documented post-359 audio idle timeout", async () => {
+test("the strict half-duplex keep-alive request keeps endpointing minimal and classifies idle timeout", async () => {
   const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" } });
-  const inputMode = session.buildSessionPayload().dialog.extra.input_mod;
-  const simulatedProviderEvents = inputMode === "keep_alive"
-    ? [{ event: 359 }]
-    : [{ event: 359 }, { event: 599, status_code: 52000042 }];
-  assert.deepEqual(simulatedProviderEvents, [{ event: 359 }]);
+  const payload = session.buildSessionPayload();
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 5000 } });
+  assert.equal(payload.dialog.extra.input_mod, "keep_alive");
+  assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
+  assert.equal(providerFailureBucket(52000042), "audio-idle-timeout");
   session.close();
 });
 
@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes an explicit post-T11D.6 diagnostic build identity", () => {
+test("current package exposes an explicit provider endpointing repair build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t12b-companion-layout-timing-settings-v1/);
+  assert.match(main, /t12b1-provider-endpointing-repair-v1/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 

@@ -141,7 +141,9 @@ class DoubaoRealtimeSession {
 
   buildSessionPayload() {
     return {
-      asr: { audio_info: { channel: 1, format: "pcm_s16le", sample_rate: 16000 }, extra: { end_smooth_window_ms: this.config.endSmoothWindowMs, enable_asr_twopass: true } },
+      // Keep endpointing aligned with the official realtime dialogue sample:
+      // one bounded field and no unrelated two-pass ASR override.
+      asr: { extra: { end_smooth_window_ms: this.config.endSmoothWindowMs } },
       dialog: {
         bot_name: this.config.companionName,
         system_role: `你是 ${this.config.companionName}，DeskMate 本地桌面陪伴助手。回答自然、简短，不执行系统命令，不声称拥有未接入的硬件能力。`,

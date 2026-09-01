@@ -19,6 +19,7 @@ const {
 } = require("../electron/companion-preferences.cjs");
 const { CompanionConversationController } = require("../electron/companion-conversation.cjs");
 const { SimulatedCompanionAudioSink, SimulatedCompanionAudioSource } = require("../electron/companion-audio.cjs");
+const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
 
 class FakeProvider {
   constructor(onEvent) { this.onEvent = onEvent; }
@@ -60,6 +61,16 @@ test("manual companion seconds accept official boundaries and reject invalid dra
   assert.deepEqual(companionPreferencesToDraft({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5500, idleTimeoutMs: 90000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothSeconds: "5.5", idleTimeoutSeconds: "90" });
   assert.equal(validateCompanionPreferences({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5500, idleTimeoutMs: 90000 }).endSmoothWindowMs, 5500);
   assert.throws(() => validateCompanionPreferences({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 1200, idleTimeoutMs: 60000 }), /end-smooth/);
+});
+
+test("an eight-second setting reaches the exact minimal provider endpointing request", () => {
+  const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice", endSmoothWindowMs: 8000 } });
+  const payload = session.buildSessionPayload();
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 8000 } });
+  assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
+  assert.equal(Object.hasOwn(payload.asr, "audio_info"), false);
+  assert.equal(payload.dialog.extra.input_mod, "keep_alive");
+  session.close();
 });
 
 test("preference store exposes revisioned readback while draft editing has no persistence side effect", () => {

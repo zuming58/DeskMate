@@ -344,7 +344,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs } });
       setCompanionDraft(companionPreferencesToDraft(preferences));
       updateCompanion({ preferences, savedPreferences: { revision: result.revision, endSmoothWindowMs: preferences.endSmoothWindowMs, idleTimeoutMs: preferences.idleTimeoutMs }, wakeWord: result.wakeWord });
-      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}。${sessionActive ? "当前会话不变，请结束并重新开始后生效。" : "下一次新建陪伴会话生效。"}`;
+      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}。${sessionActive ? "当前会话不变；结束并重新开始后，软件会向豆包提交新的判停请求。" : "下一次新建陪伴会话时，软件会向豆包提交新的判停请求。"}`;
       setCompanionSettingsStatus({ state: "saved", message });
       notify(message);
     } catch {
@@ -398,7 +398,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <div className="companion-settings-form">
               <label className="field-label">陪伴名称<input value={companionDraft.name} maxLength={32} onChange={(event) => setCompanionDraft({ ...companionDraft, name: event.target.value })} /></label>
               <label className="field-label">唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /></label>
-              <label className="field-label">单句话内停顿<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>范围 0.5–50 秒，以 0.5 秒递增；推荐 5 秒。</small></label>
+              <label className="field-label">单句话内停顿<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>范围 0.5–50 秒，以 0.5 秒递增；推荐 5 秒。此值会在新会话中作为豆包服务端判停请求发送，并非电脑本地延时。</small></label>
               <label className="field-label">无人说话自动结束<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>0 表示关闭；其他值为 10–3600 的整数秒，只在倾听且没有接受到输入时累计。</small></label>
               {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
               <Notice tone="info" title="从下一次会话生效">保存后从下一次新建陪伴会话生效。{sessionActive ? "当前会话正在使用启动时冻结的参数，请结束并重新开始。" : "当前没有活动会话。"}</Notice>

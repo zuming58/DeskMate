@@ -61,7 +61,8 @@ test("T12A preferences migrate to 小言, persist enums, and reject malformed im
 test("Doubao StartSession receives the companion-only server endpointing and identity", () => {
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice", name: "小言", endSmoothWindowMs: 5000 } });
   const payload = session.buildSessionPayload();
-  assert.equal(payload.asr.extra.end_smooth_window_ms, 5000);
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 5000 } });
+  assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(payload.dialog.bot_name, "小言");
   assert.match(payload.dialog.system_role, /小言/);
   assert.deepEqual(normalizeCompanionPreferences({ endSmoothWindowMs: 650 }).endSmoothWindowMs, 5000);
