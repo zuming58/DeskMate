@@ -46,4 +46,3 @@ No application launch/control, credential read, transcript, reply, PCM, provider
 4. Map one EasyInput S key to `AI 陪伴呼唤`, complete the normal preview/confirm/write/readback flow, then verify start, listening reset, explicit response interruption and connecting/stopping busy behavior.
 5. Confirm normal dictation endpointing and T11D.6 long-answer/second-turn behavior did not regress.
 6. Confirm the UI says voice wake is unavailable and that no background microphone or network activity is created by the wake adapter.
-
