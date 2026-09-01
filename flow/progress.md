@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T12A companion pause, identity and EasyInput call software complete
+
+- Scope and identity: Windows software only on `codex/t12a-companion-pause-identity-call`, created from exact accepted T11D.6 base `eb8fff8ac801eb0960e52282c22ac60b6efd9bc4`; implementation commit is `ce00dd4caeea6bfa7c300afb65badfe55c8884a0`. Build identity is `t12a-companion-pause-identity-call-v1`.
+- Accepted baseline preserved: T11D.6 single-controller synchronous turn ownership, strict half-duplex, playback drain and explicit-only cancellation remain unchanged. T12A adds companion-only 2/3/5-second endpointing, independent 30/60/120/off listening idle timeout, persistent companion identity and a deliberately unavailable wake-word adapter boundary.
+- EasyInput call action: reserved host-action UUID `f11135b4-7471-47f1-808a-629ae99eb63b` adds `AI 陪伴呼唤` for S1-S8 through the existing T05/T06 configuration path. It starts an inactive session, resets listening idle, explicitly interrupts an active response back to listening, reports connecting/stopping busy and never toggles the session off. Unknown UUIDs remain fail closed; firmware and HID contracts are unchanged.
+- Verification: `npm ci --include=dev` passed; focused T12A tests passed `7/7`; full `npm test` passed `260/260`; `npm run build:desktop` passed. Packaged inspection confirmed the build ID. `DeskMate.exe` is `202690560` bytes / SHA-256 `E20EA5FCD56A7633169C6996120D6DB952E9C873CB558EEB42B90816E7F5AC6D`; `app.asar` is `112668935` bytes / SHA-256 `F5FB40705FF148BDB3628AA8C6F96D3E325AEE517CF49DE37158B60EFB228743`. `git diff --check` and firmware/native boundary checks passed.
+- Safety and next: no app launch/control, credential, transcript, reply, PCM, provider payload, port/device, firmware, Flash/NVS, OLED, servo or audio-hardware access occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`. User-present HIL must verify five-second intra-utterance pause, listening idle timeout, the physical `AI 陪伴呼唤` action, normal dictation isolation and the disabled wake boundary. Contract: `docs/contracts/t12a-companion-pause-identity-call-v1.md`; audit: `docs/reviews/t12a-wake-word-and-endpointing-source-audit-2026-09-01.md`; handoff: `docs/handoffs/t12a-companion-pause-identity-call-2026-09-01.md`.
+
 ## 2026-09-01 - T11D.6 synchronous turn ownership repair and cancellation diagnostics complete
 
 - Scope and identity: Windows software only on `codex/t11d6-turn-cancel-diagnostics`, created from exact T11D.5 base `2169c2575a79921f7286d48283db144b71a9c3c5`; implementation commit is `52537bf2e9dc8981f9b21e569e0e1b45e9464542`. Build identity is `t11d6-turn-cancel-diagnostics-v1`.
