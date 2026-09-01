@@ -139,7 +139,7 @@ function CompanionLiveBar({ conversation }) {
       <Microphone2 size={17} stroke={1.8} />
       <strong>{copy.label}</strong>
       <span className="companion-live-bar__text">{text || conversation.error || copy.message}</span>
-      {conversation.active && <button onClick={() => globalThis.desktopBridge?.stopCompanionConversation?.()}>结束</button>}
+      {conversation.active && <button disabled={conversation.state === "stopping"} onClick={() => globalThis.desktopBridge?.stopCompanionConversation?.()}>{conversation.state === "stopping" ? "结束中…" : "结束"}</button>}
       <small>Esc 结束</small>
     </div>
   );

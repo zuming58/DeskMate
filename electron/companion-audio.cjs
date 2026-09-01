@@ -10,6 +10,7 @@ class UnavailableCompanionAudioSink {
   status() { return { available: false, kind: "easyinput", reason: "easyinput-speaker-contract-not-frozen" }; }
   async start() { return { ok: false, reason: "easyinput-speaker-contract-not-frozen" }; }
   async write() { return false; }
+  async drain() { return { ok: false, reason: "easyinput-speaker-contract-not-frozen" }; }
   async interrupt() { return { ok: true }; }
   async stop() { return { ok: true }; }
 }
@@ -93,6 +94,7 @@ class SimulatedCompanionAudioSink {
   status() { return { available: true, kind: "simulated" }; }
   async start() { this.active = true; return { ok: true }; }
   async write(value) { const chunk = Buffer.from(value || []); if (!this.active || !chunk.length || chunk.length > MAX_AUDIO_CHUNK_BYTES) return false; this.chunks.push(chunk); return true; }
+  async drain() { return { ok: true }; }
   async interrupt() { this.interruptions += 1; this.chunks = []; return { ok: true }; }
   async stop() { this.active = false; this.chunks = []; return { ok: true }; }
 }

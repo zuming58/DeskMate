@@ -3,6 +3,8 @@ const { randomUUID } = require("crypto");
 const STATES = Object.freeze(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
 const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", listening: "listening", thinking: "thinking", speaking: "working", completed: "completed", error: "error" });
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
+const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
+const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
 
 function boundedText(value, max = 16384) {
   return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
@@ -30,6 +32,10 @@ class CompanionConversationController {
     publishState = async () => ({ ok: true }),
     onEvent = () => {},
     wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    setTimer = setTimeout,
+    clearTimer = clearTimeout,
+    drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS,
+    teardownStepTimeoutMs = DEFAULT_TEARDOWN_STEP_TIMEOUT_MS,
     retryDelaysMs = [0, 250, 750],
   } = {}) {
     if (typeof providerFactory !== "function") throw new Error("companion-provider-factory-required");
@@ -40,6 +46,10 @@ class CompanionConversationController {
     this.publishState = publishState;
     this.onEvent = onEvent;
     this.wait = wait;
+    this.setTimer = setTimer;
+    this.clearTimer = clearTimer;
+    this.drainTimeoutMs = drainTimeoutMs;
+    this.teardownStepTimeoutMs = teardownStepTimeoutMs;
     this.retryDelaysMs = retryDelaysMs.slice(0, 3);
     this.state = "idle";
     this.active = null;
@@ -47,11 +57,13 @@ class CompanionConversationController {
     this.turnSequence = 0;
     this.eventChain = Promise.resolve();
     this.reconnecting = null;
+    this.stopPromise = null;
     this.lastError = "";
     this.audioSelection = Object.freeze({ requestedSource: "", activeSource: "", output: "", fallback: null });
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
-    this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0 };
+    this.playbackDraining = false;
+    this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
   }
 
   echoGuardActive() {
@@ -97,8 +109,8 @@ class CompanionConversationController {
   }
 
   configureAudio({ audioSource, audioSink, selection = {} } = {}) {
-    if (this.active) return { ok: false, reason: "companion-session-active" };
-    if (!audioSource?.status || !audioSource?.start || !audioSource?.stop || !audioSink?.status || !audioSink?.start || !audioSink?.write || !audioSink?.interrupt || !audioSink?.stop) {
+    if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active" };
+    if (!audioSource?.status || !audioSource?.start || !audioSource?.stop || !audioSink?.status || !audioSink?.start || !audioSink?.write || !audioSink?.drain || !audioSink?.interrupt || !audioSink?.stop) {
       return { ok: false, reason: "companion-audio-adapter-invalid" };
     }
     this.audioSource = audioSource;
@@ -123,8 +135,26 @@ class CompanionConversationController {
     return payload;
   }
 
+  boundedOperation(operation, timeoutMs, timeoutReason) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        this.clearTimer(timer);
+        resolve(result);
+      };
+      timer = this.setTimer(() => finish({ ok: false, reason: timeoutReason, timedOut: true }), timeoutMs);
+      Promise.resolve().then(operation).then(
+        (value) => finish({ ok: true, value }),
+        (error) => finish({ ok: false, reason: safeErrorReason(error?.message) }),
+      );
+    });
+  }
+
   async start({ sessionId = randomUUID(), generation = 1 } = {}) {
-    if (this.active) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
+    if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     const sinkStatus = availability(this.audioSink, "audio-sink-unavailable");
     if (!sourceStatus.available) return { ok: false, reason: sourceStatus.reason || "audio-source-unavailable", status: this.snapshot() };
@@ -134,6 +164,7 @@ class CompanionConversationController {
     this.lastError = "";
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
+    this.playbackDraining = false;
     await this.transition("connecting");
     const token = this.active.token;
     try {
@@ -158,7 +189,8 @@ class CompanionConversationController {
 
   createProvider(token) {
     return this.providerFactory({ onEvent: (event) => {
-      this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
+      const arrival = Object.freeze({ suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining) });
+      this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
     } });
   }
 
@@ -215,7 +247,7 @@ class CompanionConversationController {
     return true;
   }
 
-  async handleProviderEvent(event = {}, token) {
+  async handleProviderEvent(event = {}, token, arrival = {}) {
     if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
     if (event.type === "connection.closed") { void this.reconnect(token); return { ok: true }; }
     if (event.type === "error") {
@@ -223,7 +255,7 @@ class CompanionConversationController {
       await this.fail(event.message || "companion-provider-error", token);
       return { ok: false };
     }
-    if (["asr.partial", "asr.final"].includes(event.type) && this.echoGuardActive()) {
+    if (["asr.partial", "asr.final"].includes(event.type) && (arrival.suppressAsr || this.echoGuardActive())) {
       this.echoGuardCounters.ignoredAsrDuringPlayback += 1;
       return { ignored: true, reason: "companion-playback-echo-guard" };
     }
@@ -278,17 +310,49 @@ class CompanionConversationController {
         if (this.isCurrent(token) && this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
         return { ok: true, interrupted: true };
       }
-      if (this.isCurrent(token)) await this.transition("listening", { reason: "tts-ended" });
-      return { ok: true };
+      this.playbackDraining = true;
+      const drained = await this.boundedOperation(() => this.audioSink.drain(), this.drainTimeoutMs, "companion-audio-drain-timeout");
+      if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
+      if (this.discardResponseUntilTtsEnd) {
+        const nextState = this.postInterruptState || "listening";
+        this.discardResponseUntilTtsEnd = false;
+        this.postInterruptState = "";
+        this.playbackDraining = false;
+        if (this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
+        return { ok: true, interrupted: true };
+      }
+      const drainResult = drained.ok ? drained.value : { ok: false, reason: drained.reason };
+      if (!drainResult?.ok) {
+        this.echoGuardCounters.playbackDrainTimeouts += 1;
+        await this.boundedOperation(() => this.audioSink.interrupt(), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
+      }
+      this.playbackDraining = false;
+      await this.transition("listening", { reason: drainResult?.ok ? "tts-playback-drained" : "tts-playback-drain-timeout" });
+      return { ok: true, drained: Boolean(drainResult?.ok) };
     }
     return { ignored: true, reason: "companion-event-unmapped" };
   }
 
   async cleanup(provider = this.provider) {
-    try { await this.audioSource?.stop?.(); } catch { /* best effort */ }
-    try { await this.audioSink?.interrupt?.(); await this.audioSink?.stop?.(); } catch { /* best effort */ }
-    try { provider?.close?.(); } catch { /* best effort */ }
+    const bounded = async (operation, reason) => {
+      const result = await this.boundedOperation(operation, this.teardownStepTimeoutMs, reason);
+      if (result.timedOut) this.echoGuardCounters.teardownTimeouts += 1;
+      return result;
+    };
+    await Promise.all([
+      bounded(() => this.audioSource?.stop?.(), "companion-audio-source-stop-timeout"),
+      (async () => {
+        await bounded(() => this.audioSink?.interrupt?.(), "companion-audio-sink-interrupt-timeout");
+        await bounded(() => this.audioSink?.stop?.(), "companion-audio-sink-stop-timeout");
+      })(),
+      bounded(() => provider?.close?.(), "companion-provider-close-timeout"),
+    ]);
     if (this.provider === provider) this.provider = null;
+  }
+
+  async publishTerminalState(state) {
+    const result = await this.boundedOperation(() => this.publishState({ source: "companion-conversation-v1", state }), this.teardownStepTimeoutMs, "companion-agent-state-timeout");
+    if (result.timedOut) this.echoGuardCounters.teardownTimeouts += 1;
   }
 
   async fail(reason, token = this.active?.token) {
@@ -299,16 +363,28 @@ class CompanionConversationController {
     this.lastError = safeErrorReason(reason);
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
+    this.playbackDraining = false;
     await this.cleanup(provider);
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
-    await this.publishState({ source: "companion-conversation-v1", state: "error" });
+    await this.publishTerminalState("error");
     return { ok: false, reason: this.lastError };
   }
 
-  async stop(reason = "user") {
+  stop(reason = "user") {
+    if (this.stopPromise) return this.stopPromise;
+    this.stopPromise = this.performStop(reason).finally(() => { this.stopPromise = null; });
+    return this.stopPromise;
+  }
+
+  async performStop(reason = "user") {
     if (!this.active) {
-      if (this.state !== "idle") await this.transition("idle", { reason });
+      if (this.state !== "idle") {
+        this.state = "idle";
+        this.lastError = "";
+        this.onEvent({ type: "state", state: "idle", reason, sessionId: "", generation: 0 });
+        await this.publishTerminalState("idle");
+      }
       return { ok: true, alreadyStopped: true, status: this.snapshot() };
     }
     const session = this.active;
@@ -317,11 +393,12 @@ class CompanionConversationController {
     this.active = null;
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
+    this.playbackDraining = false;
     await this.cleanup(provider);
     this.state = "idle";
     this.lastError = "";
     this.onEvent({ type: "state", state: "idle", reason, sessionId: session.sessionId, generation: session.generation });
-    await this.publishState({ source: "companion-conversation-v1", state: "idle" });
+    await this.publishTerminalState("idle");
     return { ok: true, status: this.snapshot() };
   }
 

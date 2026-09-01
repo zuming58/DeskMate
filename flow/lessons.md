@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A network TTS end event is not an audible-playback boundary
+
+- Symptom: strict half-duplex still released near the tail of a real answer, and speaker feedback could be accepted while Web Audio had queued samples left.
+- Practice: bind a drain request to the current session/generation and command sequence, keep playback state through the last scheduled node, and cap the wait with fail-soft interruption.
+- Rule: state machines must follow the last consumed sample, not merely the last received network frame. Every explicit stop path also needs bounded, idempotent teardown so one adapter cannot retain the foreground owner indefinitely.
+
 ## Browser echo cancellation is not a conversation policy
 
 - Requesting echo cancellation, noise suppression and automatic gain control is useful, but a computer speaker can still return enough speech for cloud ASR to produce a final event.

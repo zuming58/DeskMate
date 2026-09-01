@@ -415,7 +415,7 @@ test("computer-speaker playback ignores reflected ASR and resumes uplink after t
   assert.equal(provider.interruptions, 0);
   assert.deepEqual(commits, []);
   assert.deepEqual(transcripts, []);
-  assert.deepEqual(controller.snapshot().echoGuard.counters, { echoGuardDroppedChunks: 1, ignoredAsrDuringPlayback: 2 });
+  assert.deepEqual(controller.snapshot().echoGuard.counters, { echoGuardDroppedChunks: 1, ignoredAsrDuringPlayback: 2, playbackDrainTimeouts: 0, teardownTimeouts: 0 });
   provider.emit({ type: "tts.end" });
   await controller.eventChain;
   assert.equal(controller.snapshot().state, "listening");
@@ -423,6 +423,126 @@ test("computer-speaker playback ignores reflected ASR and resumes uplink after t
   assert.equal(source.push(Buffer.from([9, 10])), true);
   assert.equal(provider.audio.length, 2);
   await controller.stop();
+});
+
+test("tts end keeps working and suppresses uplink until the computer speaker has drained", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let releaseDrain;
+  sink.drain = () => new Promise((resolve) => { releaseDrain = resolve; });
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => commits.push(turn),
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "drain-gate", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  provider.emit({ type: "tts.end" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.snapshot().state, "speaking");
+  assert.equal(source.push(Buffer.from([3, 4])), true);
+  assert.equal(provider.audio.length, 0);
+  provider.emit({ type: "asr.final", text: "synthetic-echo" });
+  releaseDrain({ ok: true });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "listening");
+  assert.deepEqual(commits, []);
+  assert.equal(controller.snapshot().echoGuard.counters.ignoredAsrDuringPlayback, 1);
+  assert.equal(source.push(Buffer.from([5, 6])), true);
+  assert.equal(provider.audio.length, 1);
+  await controller.stop();
+});
+
+test("speaker drain timeout clears playback and fails soft back to listening", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  sink.drain = () => new Promise(() => {});
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+    drainTimeoutMs: 5,
+    teardownStepTimeoutMs: 5,
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "drain-timeout", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(sink.interruptions, 1);
+  assert.equal(controller.snapshot().echoGuard.counters.playbackDrainTimeouts, 1);
+  await controller.stop();
+});
+
+test("manual interruption during playback drain releases the current turn exactly once", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let releaseDrain;
+  sink.drain = () => new Promise((resolve) => { releaseDrain = resolve; });
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "interrupt-during-drain", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "tts.end" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await controller.interrupt("user")).ok, true);
+  releaseDrain({ ok: true });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(source.push(Buffer.from([1, 2])), true);
+  assert.equal(provider.audio.length, 1);
+  await controller.stop();
+});
+
+test("stop is idempotent and reaches idle when every teardown dependency hangs", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const events = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => {
+      provider = new FakeProvider(onEvent);
+      provider.close = () => new Promise(() => {});
+      return provider;
+    },
+    audioSource: source,
+    audioSink: sink,
+    onEvent: (event) => events.push(event),
+    wait: async () => {},
+    teardownStepTimeoutMs: 5,
+  });
+  await controller.start({ sessionId: "bounded-stop", generation: 4 });
+  source.stop = () => new Promise(() => {});
+  sink.interrupt = () => new Promise(() => {});
+  sink.stop = () => new Promise(() => {});
+  const first = controller.stop("user");
+  const repeated = controller.stop("user");
+  assert.equal(first, repeated);
+  assert.equal(controller.snapshot().state, "stopping");
+  const result = await first;
+  assert.equal(result.ok, true);
+  assert.equal(controller.snapshot().state, "idle");
+  assert.ok(controller.snapshot().echoGuard.counters.teardownTimeouts >= 3);
+  provider.emit({ type: "asr.final", text: "late-event" });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "idle");
+  assert.equal((await controller.stop("user")).alreadyStopped, true);
+  assert.deepEqual(events.filter((event) => event.type === "state").slice(-2).map((event) => event.state), ["stopping", "idle"]);
 });
 
 test("the first real TTS audio frame enters working even if the provider omits tts start", async () => {

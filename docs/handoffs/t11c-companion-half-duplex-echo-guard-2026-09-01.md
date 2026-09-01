@@ -2,6 +2,8 @@
 
 Date: 2026-09-01
 
+Follow-up: the subsequent user-present run completed several real turns but rejected the network-only `tts.end` release point and stop/capsule details. See `docs/testing/t11c-companion-followup-hil-2026-09-01.md` and the T11D contract.
+
 ## Delivery identity
 
 - Branch: `codex/t11c-companion-layout-echo-guard`
@@ -18,7 +20,7 @@ T11C keeps the one controller and freezes `computer-speaker-echo-guard-v1`:
 - computer capture requests echo cancellation, noise suppression, automatic gain control and mono while preserving the exact selected device inside the media request;
 - actual playback maps to `speaking` and the existing Agent state `working`;
 - during playback microphone chunks are counted and dropped before provider upload, while ASR partial/final events are counted and ignored before UI, persistence or interruption;
-- normal `tts.end` returns directly to `listening` and restores upload;
+- the original T11C implementation returned directly on `tts.end`; T11D supersedes that rejected release point with bounded AudioSink drain;
 - **打断回答并继续听** immediately clears playback, returns to `listening` and restores upload;
 - diagnostics expose only a policy enum, active flag and two integer counters.
 

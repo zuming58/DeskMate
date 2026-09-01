@@ -80,3 +80,18 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.doesNotMatch(companion, /getUserMedia|MediaRecorder|useRecorder/);
   assert.match(pages, /未发送到小智舵机/);
 });
+
+test("companion desktop layout aligns both overview columns and keeps the live bar compact", async () => {
+  const app = await source("src/App.jsx");
+  const pages = await source("src/pages.jsx");
+  const styles = await source("src/styles.css");
+  assert.match(styles, /\.companion-overview \{[^}]*align-items: stretch/);
+  assert.match(styles, /\.companion-stage \{[^}]*height: 100%/);
+  assert.match(styles, /\.companion-stage__face \{[^}]*flex: 1 1 440px/);
+  assert.match(styles, /\.companion-side-stack \{[^}]*height: 100%/);
+  assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-stage \{ min-height: 0; height: auto; \}/);
+  assert.match(styles, /\.companion-live-bar \{[^}]*width: fit-content;[^}]*max-width: min\(620px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.companion-live-bar \{ width: calc\(100vw - 28px\)/);
+  assert.match(app, /disabled=\{conversation\.state === "stopping"\}/);
+  assert.match(pages, /disabled=\{conversation\.state === "stopping"\}/);
+});

@@ -23,6 +23,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
   let playbackContext = null;
   let playbackAt = 0;
   const playbackNodes = new Set();
+  const drainWaiters = new Map();
 
   const emit = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: session?.sessionId || "", generation: session?.generation || 0, ...extra });
   const stopCapture = async () => {
@@ -34,10 +35,27 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     await captureContext?.close?.().catch?.(() => {});
     captureContext = null;
   };
+  const finishDrainWaiter = (requestSequence) => {
+    const waiter = drainWaiters.get(requestSequence);
+    if (!waiter) return;
+    drainWaiters.delete(requestSequence);
+    emit("sink.drained", { requestSequence });
+  };
+  const finishAllDrainWaiters = () => {
+    for (const requestSequence of [...drainWaiters.keys()]) finishDrainWaiter(requestSequence);
+  };
+  const markPlaybackEnded = (node) => {
+    playbackNodes.delete(node);
+    for (const [requestSequence, waiter] of drainWaiters) {
+      waiter.delete(node);
+      if (waiter.size === 0) finishDrainWaiter(requestSequence);
+    }
+  };
   const interruptPlayback = () => {
     for (const node of playbackNodes) { try { node.stop(); } catch { /* already ended */ } }
     playbackNodes.clear();
     playbackAt = playbackContext?.currentTime || 0;
+    finishAllDrainWaiters();
   };
   const stopPlayback = async () => {
     interruptPlayback();
@@ -121,8 +139,19 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     const startAt = Math.max(now, playbackAt);
     playbackAt = startAt + buffer.duration;
     playbackNodes.add(node);
-    node.onended = () => playbackNodes.delete(node);
+    node.onended = () => markPlaybackEnded(node);
     node.start(startAt);
+  };
+
+  const drainPlayback = (command) => {
+    const requestSequence = Number(command.sequence);
+    if (!Number.isSafeInteger(requestSequence) || requestSequence < 1) return;
+    const pendingNodes = new Set(playbackNodes);
+    if (pendingNodes.size === 0) {
+      emit("sink.drained", { requestSequence });
+      return;
+    }
+    drainWaiters.set(requestSequence, pendingNodes);
   };
 
   const handleCommand = async (command = {}) => {
@@ -132,6 +161,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     if (!sameSession(command, session)) return;
     if (command.type === "source.stop") return stopCapture();
     if (command.type === "sink.audio") return play(command);
+    if (command.type === "sink.drain") return drainPlayback(command);
     if (command.type === "sink.interrupt") return interruptPlayback();
     if (command.type === "sink.stop") return stopPlayback();
   };

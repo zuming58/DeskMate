@@ -1,6 +1,7 @@
 const MAX_AUDIO_CHUNK_BYTES = 64 * 1024;
 const COMMAND_VERSION = 1;
 const DEFAULT_START_TIMEOUT_MS = 5000;
+const DEFAULT_DRAIN_TIMEOUT_MS = 4000;
 
 function safeContext(value = {}) {
   const sessionId = String(value.sessionId || "").slice(0, 128);
@@ -15,12 +16,13 @@ function matchesContext(event, context) {
 }
 
 class ComputerCompanionAudioSession {
-  constructor({ sendCommand = () => {}, onError = () => {}, setTimer = setTimeout, clearTimer = clearTimeout, startTimeoutMs = DEFAULT_START_TIMEOUT_MS } = {}) {
+  constructor({ sendCommand = () => {}, onError = () => {}, setTimer = setTimeout, clearTimer = clearTimeout, startTimeoutMs = DEFAULT_START_TIMEOUT_MS, drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS } = {}) {
     this.sendCommand = sendCommand;
     this.onError = onError;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
     this.startTimeoutMs = startTimeoutMs;
+    this.drainTimeoutMs = drainTimeoutMs;
     this.rendererReady = false;
     this.context = null;
     this.sourceActive = false;
@@ -28,7 +30,7 @@ class ComputerCompanionAudioSession {
     this.sourceHandlers = null;
     this.pending = new Map();
     this.sequence = 0;
-    this.counters = { sourceChunks: 0, sinkChunks: 0, rejectedEvents: 0, interruptions: 0, queueDrops: 0 };
+    this.counters = { sourceChunks: 0, sinkChunks: 0, rejectedEvents: 0, interruptions: 0, queueDrops: 0, drainRequests: 0, drains: 0, drainTimeouts: 0 };
     this.source = Object.freeze({
       status: () => this.sourceStatus(),
       start: (handlers) => this.startSource(handlers),
@@ -38,6 +40,7 @@ class ComputerCompanionAudioSession {
       status: () => this.sinkStatus(),
       start: () => this.startSink(),
       write: (value) => this.writeSink(value),
+      drain: () => this.drainSink(),
       interrupt: () => this.interruptSink(),
       stop: () => this.stopSink(),
     });
@@ -48,6 +51,7 @@ class ComputerCompanionAudioSession {
     if (!this.rendererReady) {
       this.settle("source.started", { ok: false, reason: "computer-audio-renderer-unavailable" });
       this.settle("sink.started", { ok: false, reason: "computer-audio-renderer-unavailable" });
+      this.settleWhere((key) => key.startsWith("sink.drained:"), { ok: false, reason: "computer-audio-renderer-unavailable" });
       if (this.sourceActive) this.sourceHandlers?.onError?.(new Error("computer-audio-renderer-unavailable"));
       else if (this.sinkActive) this.onError("computer-audio-renderer-unavailable");
     }
@@ -100,6 +104,14 @@ class ComputerCompanionAudioSession {
     return true;
   }
 
+  settleWhere(predicate, result) {
+    let count = 0;
+    for (const key of [...this.pending.keys()]) {
+      if (predicate(key) && this.settle(key, result)) count += 1;
+    }
+    return count;
+  }
+
   async startSource(handlers = {}) {
     if (this.sourceActive) return { ok: false, reason: "computer-audio-source-active" };
     this.sourceHandlers = handlers;
@@ -131,6 +143,23 @@ class ComputerCompanionAudioSession {
     return this.command("sink.audio", { audio: chunk });
   }
 
+  async drainSink() {
+    if (!this.sinkActive || !this.rendererReady || !this.context) return { ok: false, reason: "computer-audio-sink-unavailable" };
+    const requestSequence = ++this.sequence;
+    const key = `sink.drained:${requestSequence}`;
+    this.counters.drainRequests += 1;
+    return new Promise((resolve) => {
+      const timer = this.setTimer(() => {
+        if (!this.pending.delete(key)) return;
+        this.counters.drainTimeouts += 1;
+        this.command("sink.interrupt");
+        resolve({ ok: false, reason: "computer-audio-drain-timeout" });
+      }, this.drainTimeoutMs);
+      this.pending.set(key, { resolve, timer });
+      this.sendCommand(Object.freeze({ version: COMMAND_VERSION, type: "sink.drain", sessionId: this.context.sessionId, generation: this.context.generation, sequence: requestSequence }));
+    });
+  }
+
   async interruptSink() {
     this.counters.interruptions += 1;
     if (this.context) this.command("sink.interrupt");
@@ -140,6 +169,7 @@ class ComputerCompanionAudioSession {
   async stopSink() {
     if (this.context) this.command("sink.stop");
     this.settle("sink.started", { ok: false, reason: "computer-audio-sink-stopped" });
+    this.settleWhere((key) => key.startsWith("sink.drained:"), { ok: false, reason: "computer-audio-sink-stopped" });
     this.sinkActive = false;
     return { ok: true };
   }
@@ -156,6 +186,20 @@ class ComputerCompanionAudioSession {
     }
     if (event.type === "source.started") return { ok: this.settle("source.started", { ok: true }) };
     if (event.type === "sink.started") return { ok: this.settle("sink.started", { ok: true }) };
+    if (event.type === "sink.drained") {
+      const requestSequence = Number(event.requestSequence);
+      if (!Number.isSafeInteger(requestSequence) || requestSequence < 1) {
+        this.counters.rejectedEvents += 1;
+        return { ok: false, reason: "computer-audio-drain-event-invalid" };
+      }
+      const settled = this.settle(`sink.drained:${requestSequence}`, { ok: true });
+      if (!settled) {
+        this.counters.rejectedEvents += 1;
+        return { ok: false, reason: "computer-audio-drain-event-stale" };
+      }
+      this.counters.drains += 1;
+      return { ok: true };
+    }
     if (event.type === "source.audio") {
       const chunk = Buffer.from(event.audio || []);
       if (!this.sourceActive || !chunk.length || chunk.length > MAX_AUDIO_CHUNK_BYTES) {

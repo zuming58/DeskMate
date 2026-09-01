@@ -15,6 +15,7 @@ test("main-process computer audio bridge locks one session and rejects stale or 
       commands.push(command);
       if (command.type === "source.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "source.started", sessionId: command.sessionId, generation: command.generation }));
       if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+      if (command.type === "sink.drain") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.drained", sessionId: command.sessionId, generation: command.generation, requestSequence: command.sequence }));
     },
   });
   session.setRendererReady(true);
@@ -26,12 +27,13 @@ test("main-process computer audio bridge locks one session and rejects stale or 
   assert.equal(session.handleRendererEvent({ version: 1, type: "source.audio", sessionId: "session-1", generation: 7, audio: Buffer.from([1, 2]) }).ok, true);
   assert.deepEqual([...chunks[0]], [1, 2]);
   assert.equal(await session.sink.write(Buffer.from([3, 4])), true);
+  assert.equal((await session.sink.drain()).ok, true);
   await session.sink.interrupt();
   await session.source.stop();
   await session.sink.stop();
   assert.ok(commands.some((item) => item.type === "sink.audio"));
   assert.ok(commands.some((item) => item.type === "sink.interrupt"));
-  assert.deepEqual(session.diagnostics().counters, { sourceChunks: 1, sinkChunks: 1, rejectedEvents: 2, interruptions: 1, queueDrops: 0 });
+  assert.deepEqual(session.diagnostics().counters, { sourceChunks: 1, sinkChunks: 1, rejectedEvents: 2, interruptions: 1, queueDrops: 0, drainRequests: 1, drains: 1, drainTimeouts: 0 });
 });
 
 test("renderer audio engine captures selected Windows input and plays bounded PCM without conversation state", async () => {
@@ -39,13 +41,14 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   let processor;
   let stopped = false;
   let playbackStarts = 0;
+  const playbackNodes = [];
   class FakeAudioContext {
     constructor() { this.sampleRate = 48000; this.currentTime = 1; this.destination = {}; }
     createMediaStreamSource() { return { connect() {} }; }
     createScriptProcessor() { processor = { connect() {}, disconnect() {}, onaudioprocess: null }; return processor; }
     createGain() { return { gain: { value: 1 }, connect() {} }; }
     createBuffer(_channels, length, rate) { const data = new Float32Array(length); return { duration: length / rate, getChannelData: () => data }; }
-    createBufferSource() { return { connect() {}, start() { playbackStarts += 1; }, stop() {}, onended: null, buffer: null }; }
+    createBufferSource() { const node = { connect() {}, start() { playbackStarts += 1; }, stop() {}, onended: null, buffer: null }; playbackNodes.push(node); return node; }
     async resume() {}
     async close() {}
   }
@@ -63,6 +66,10 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   await engine.handleCommand({ ...base, type: "source.start", deviceId: "chosen-device" });
   processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.25) } });
   await engine.handleCommand({ ...base, type: "sink.audio", audio: new Int16Array([1, -1, 2, -2]).buffer });
+  await engine.handleCommand({ ...base, type: "sink.drain", sequence: 12 });
+  assert.equal(events.some((item) => item.type === "sink.drained"), false);
+  playbackNodes[0].onended();
+  assert.ok(events.some((item) => item.type === "sink.drained" && item.requestSequence === 12));
   await engine.handleCommand({ ...base, type: "sink.interrupt" });
   await engine.handleCommand({ ...base, type: "source.stop" });
   assert.ok(events.some((item) => item.type === "source.started"));
@@ -105,4 +112,26 @@ test("renderer loss resolves pending starts and active sessions fail without wai
   session.setRendererReady(false);
   assert.deepEqual(await pendingSource, { ok: false, reason: "computer-audio-renderer-unavailable" });
   assert.deepEqual(errors, []);
+});
+
+test("main-process speaker drain is bounded and rejects its late acknowledgement", async () => {
+  const commands = [];
+  let session;
+  session = new ComputerCompanionAudioSession({
+    sendCommand: (command) => {
+      commands.push(command);
+      if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+    },
+    drainTimeoutMs: 5,
+  });
+  session.setRendererReady(true);
+  session.prepare({ sessionId: "bounded-drain", generation: 2 });
+  await session.sink.start();
+  const result = await session.sink.drain();
+  assert.deepEqual(result, { ok: false, reason: "computer-audio-drain-timeout" });
+  const drain = commands.find((command) => command.type === "sink.drain");
+  assert.ok(commands.some((command) => command.type === "sink.interrupt"));
+  assert.equal(session.handleRendererEvent({ version: 1, type: "sink.drained", sessionId: drain.sessionId, generation: drain.generation, requestSequence: drain.sequence }).reason, "computer-audio-drain-event-stale");
+  assert.equal(session.diagnostics().counters.drainTimeouts, 1);
+  await session.sink.stop();
 });

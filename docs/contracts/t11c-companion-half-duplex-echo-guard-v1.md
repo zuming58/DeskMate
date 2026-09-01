@@ -2,6 +2,8 @@
 
 Status: `T11C_COMPANION_HALF_DUPLEX_ECHO_GUARD_V1_FROZEN`
 
+Follow-up: T11D preserves this policy but supersedes its network-only `tts.end` release point with the played/drain boundary in `T11D_COMPANION_PLAYBACK_DRAIN_STOP_V1_FROZEN`.
+
 ## Scope and accepted baseline
 
 T11C is an additive Windows-software contract for the one existing `CompanionConversationController`. User-present acceptance of the T11B repair proved a real Doubao handshake, computer-microphone upload, continuous session and computer-speaker reply. T11C does not create another conversation or Agent-state machine and changes no firmware, HID report, DeskMate Link frame, OLED scene, servo or board-audio contract.
@@ -17,11 +19,12 @@ The default policy is `computer-speaker-echo-guard-v1`:
 | waiting for the user | enabled | partial/final accepted | `listening` | `listening` |
 | user final accepted | enabled until playback begins | final committed once | `thinking` | `thinking` |
 | actual assistant playback | disabled | partial/final ignored | `speaking` | `working` |
-| `tts.end` | enabled again | accepted | `listening` | `listening` |
+| `tts.end` before AudioSink drain | disabled | ignored | `speaking` | `working` |
+| matching AudioSink drained | enabled again | accepted | `listening` | `listening` |
 | manual interrupt | enabled immediately | accepted | `listening` | `listening` |
 | stop/failure | stopped | ignored/stale | `idle` / `error` | `idle` / `error` |
 
-`tts.start` enters `speaking`; the first real audio frame also enters `speaking` if the provider omitted that marker. `tts.end` returns directly to `listening`. The controller uses the existing ASR final event as the user-turn boundary because the provider exposes no more reliable local end-of-turn signal.
+`tts.start` enters `speaking`; the first real audio frame also enters `speaking` if the provider omitted that marker. T11D established that `tts.end` reports network delivery rather than audible completion, so the controller now returns to `listening` only after bounded AudioSink drain. The controller uses the existing ASR final event as the user-turn boundary because the provider exposes no more reliable local end-of-turn signal.
 
 While the policy is active, microphone PCM is not sent to the provider and ASR partial/final events are ignored before UI, persistence, interruption or state transitions. The page action **打断回答并继续听** clears scheduled playback, asks the provider to interrupt through the existing adapter, returns to `listening` and resumes upload immediately. It is the supported V1 interruption path.
 
