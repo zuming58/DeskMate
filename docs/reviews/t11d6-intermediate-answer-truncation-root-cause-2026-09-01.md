@@ -26,4 +26,3 @@ Local TTS completion is recorded only after played-block accounting and sink dra
 - A delayed ASR during thinking/speaking/draining increments a suppressed arrival-phase count and cannot cancel playback.
 
 All evidence is aggregate and content-free. A user-present HIL remains required before declaring the audible truncation closed.
-

@@ -45,4 +45,3 @@ The diagnostic must not contain transcript, reply, PCM, provider payload, numeri
 - The existing conversation controller, VoiceWorkflow arbitration, stop/Escape flow, playback credit, drain and keep-alive session remain the single owners.
 - No second microphone, ASR, conversation or cancellation state machine may be introduced.
 - The build identity is `t11d6-turn-cancel-diagnostics-v1`.
-
