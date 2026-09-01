@@ -228,12 +228,13 @@ void ConfigReadStream::abort() { document_ = {}; request_id_ = epoch_ = 0; next_
 bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
                                  const LinkStatusSnapshot& link,
                                  const AgentStateDiagnostics& agent,
-                                 const AudioCaptureDiagnostics& audio) {
+                                 const AudioCaptureDiagnostics& audio,
+                                 const SpeakerOutputDiagnostics& speaker) {
   abort();
   if (!id || !epoch) return false;
   const int written = std::snprintf(
       json_.data(), json_.size(),
-      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true,"agent_state_bridge_v1":true,"audio_capture_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu},"agent_state":{"accepted":%lu,"malformed":%lu,"duplicates":%lu,"expired":%lu,"dropped_disconnected":%lu,"forwarded":%lu,"queue_drops":%lu},"audio_capture":{"state":"%s","captured_frames":%lu,"sent_frames":%lu,"dropped_frames":%lu,"read_errors":%lu,"send_errors":%lu,"recoveries":%lu}})",
+      R"({"schema":"ai_keyboard.config_status.v1","capabilities":{"config_read_v1":true,"config_write_v1":true,"host_action_v1":true,"fixed_text_v1":true,"deskmate_link_v1":true,"agent_state_bridge_v1":true,"audio_capture_v1":true,"speaker_output_v1":true},"link":{"state":"%s","rx_frames":%lu,"tx_frames":%lu,"framing_errors":%lu,"crc_errors":%lu,"version_errors":%lu,"length_errors":%lu,"request_timeouts":%lu,"retries":%lu,"queue_drops":%lu,"peer_restarts":%lu,"unexpected_frames":%lu,"semantic_errors":%lu},"agent_state":{"accepted":%lu,"malformed":%lu,"duplicates":%lu,"expired":%lu,"dropped_disconnected":%lu,"forwarded":%lu,"queue_drops":%lu},"audio_capture":{"state":"%s","captured_frames":%lu,"sent_frames":%lu,"dropped_frames":%lu,"read_errors":%lu,"send_errors":%lu,"recoveries":%lu},"speaker_output":{"state":"%s","requests":%lu,"completed":%lu,"cancelled_for_microphone":%lu,"busy_rejections":%lu,"init_errors":%lu,"write_errors":%lu,"cleanup_errors":%lu}})",
       link_controller_state_name(link.state),
       static_cast<unsigned long>(link.rx_frames),
       static_cast<unsigned long>(link.tx_frames),
@@ -260,7 +261,15 @@ bool ConfigStatusStream::replace(uint32_t id, uint32_t epoch,
       static_cast<unsigned long>(audio.dropped_frames),
       static_cast<unsigned long>(audio.read_errors),
       static_cast<unsigned long>(audio.send_errors),
-      static_cast<unsigned long>(audio.recoveries));
+      static_cast<unsigned long>(audio.recoveries),
+      speaker_output_state_name(speaker.state),
+      static_cast<unsigned long>(speaker.requests),
+      static_cast<unsigned long>(speaker.completed),
+      static_cast<unsigned long>(speaker.cancelled_for_microphone),
+      static_cast<unsigned long>(speaker.busy_rejections),
+      static_cast<unsigned long>(speaker.init_errors),
+      static_cast<unsigned long>(speaker.write_errors),
+      static_cast<unsigned long>(speaker.cleanup_errors));
   if (written <= 0 || static_cast<size_t>(written) >= json_.size()) {
     abort();
     return false;

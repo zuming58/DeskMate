@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_capture_core.h"
+#include "audio_io_arbiter.h"
 #include "config_core.h"
 #include "peripheral_power.h"
 
@@ -21,7 +22,7 @@ namespace deskmate::easyinput {
 
 class AudioCaptureService {
 public:
-    bool begin(PeripheralPowerController& power);
+    bool begin(PeripheralPowerController& power, AudioIoArbiter& arbiter);
     void configure(std::string_view raw_config);
     void prewarm_wifi();
     AudioCaptureDiagnostics snapshot() const;
@@ -70,11 +71,14 @@ private:
                    std::uint32_t amount = 1);
 
     PeripheralPowerController* power_{};
+    AudioIoArbiter* arbiter_{};
     esp_netif_t* wifi_netif_{};
     EventGroupHandle_t wifi_events_{};
     esp_event_handler_instance_t wifi_handler_{};
     esp_event_handler_instance_t ip_handler_{};
     i2s_chan_handle_t mic_rx_{};
+    std::uint32_t microphone_generation_{};
+    std::uint32_t microphone_generation_counter_{};
 
     QueueHandle_t config_queue_{};
     QueueHandle_t capture_command_queue_{};

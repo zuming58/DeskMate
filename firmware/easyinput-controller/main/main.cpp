@@ -1,11 +1,13 @@
 #include "agent_state_core.h"
 #include "audio_capture_service.h"
+#include "audio_io_arbiter.h"
 #include "board_pins.h"
 #include "input_core.h"
 #include "input_runtime.h"
 #include "led_feedback.h"
 #include "led_strip.h"
 #include "peripheral_power.h"
+#include "speaker_output_service.h"
 #include "config_store.h"
 #include "deskmate_link_uart.h"
 
@@ -72,6 +74,7 @@ std::atomic<bool> tinyusb_driver_ready{false};
 LedFeedbackMailbox led_feedback_mailbox;
 LedFeedbackDiagnostics led_feedback_diagnostics;
 PeripheralPowerController peripheral_power;
+AudioIoArbiter audio_io_arbiter;
 ConfigNvsStore config_store;
 ConfigDocument active_config{};
 ConfigSlot active_config_slot{ConfigSlot::Invalid};
@@ -87,6 +90,7 @@ ConfigStatusStream config_status_stream;
 DeskMateLinkUart deskmate_link_uart;
 AgentStateBridge agent_state_bridge;
 AudioCaptureService audio_capture_service;
+SpeakerOutputService speaker_output_service;
 bool config_save_in_flight = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
@@ -423,7 +427,8 @@ void input_owner_task(void*) {
                             request.request_id, input_owner_config_command.epoch,
                             deskmate_link_uart.snapshot(),
                             agent_state_bridge.diagnostics(),
-                            audio_capture_service.snapshot());
+                            audio_capture_service.snapshot(),
+                            speaker_output_service.snapshot());
                     }
                 }
             }
@@ -551,7 +556,8 @@ extern "C" void app_main(void) {
     ConfigProjection projection{};
     if (parse_config_projection(active_config.view(), projection)) runtime.set_configuration(projection);
     (void)peripheral_power.begin_awake();
-    (void)audio_capture_service.begin(peripheral_power);
+    (void)speaker_output_service.begin(peripheral_power, audio_io_arbiter);
+    (void)audio_capture_service.begin(peripheral_power, audio_io_arbiter);
     audio_capture_service.configure(active_config.view());
     raw_edge_queue = xQueueCreateStatic(
         kRawEdgeQueueCapacity, sizeof(RawEdge), raw_edge_queue_storage.data(),
@@ -639,6 +645,7 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(tinyusb_driver_install(&usb_config));
     tinyusb_driver_ready.store(true, std::memory_order_release);
     xTaskNotifyGive(owner_task);
+    (void)speaker_output_service.request_startup_probe();
 }
 
 extern "C" void tud_mount_cb(void) {

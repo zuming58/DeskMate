@@ -2,6 +2,9 @@
 
 ## Current handoff
 
+- [T11E-A EasyInput local speaker output handoff](handoffs/t11e-a-easyinput-speaker-output-2026-09-01.md)
+- [T11E-A EasyInput speaker output frozen contract](contracts/easyinput-speaker-output-v1.md)
+- [T11E-A Maker speaker reference audit](provenance/t11e-a-easyinput-speaker-reference-audit.md)
 - [T10E EasyInput audio capture frozen contract](contracts/easyinput-audio-capture-v1.md)
 - [T10E EasyInput audio capture task](../flow/tasks/T10E-easyinput-audio-capture.md)
 - [T10E Maker audio reference audit](provenance/t10e-easyinput-audio-capture-reference-audit.md)

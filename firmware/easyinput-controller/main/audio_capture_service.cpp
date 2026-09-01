@@ -26,6 +26,7 @@ constexpr std::uint32_t kControlReceiveTimeoutMs = 10;
 constexpr std::uint32_t kMicrophoneReadTimeoutMs = 80;
 constexpr std::uint32_t kCaptureStartTimeoutMs = 750;
 constexpr std::uint32_t kCaptureRecoveryDelayMs = 80;
+constexpr std::uint32_t kSpeakerHandoffTimeoutMs = 250;
 
 TickType_t ticks(std::uint32_t milliseconds) {
     return pdMS_TO_TICKS(milliseconds) == 0 ? 1 : pdMS_TO_TICKS(milliseconds);
@@ -38,8 +39,10 @@ std::uint32_t now_ms() {
 
 }  // namespace
 
-bool AudioCaptureService::begin(PeripheralPowerController& power) {
+bool AudioCaptureService::begin(PeripheralPowerController& power,
+                                AudioIoArbiter& arbiter) {
     power_ = &power;
+    arbiter_ = &arbiter;
     if (!power.ready() || !esp_psram_is_initialized()) {
         set_state(AudioCaptureState::Faulted);
         return false;
@@ -441,8 +444,25 @@ void AudioCaptureService::stop_capture(std::uint64_t session_id) {
 }
 
 bool AudioCaptureService::start_microphone() {
-    if (power_ == nullptr ||
+    if (power_ == nullptr || arbiter_ == nullptr) return false;
+    if (++microphone_generation_counter_ == 0) {
+        microphone_generation_counter_ = 1;
+    }
+    microphone_generation_ = microphone_generation_counter_;
+    if (!arbiter_->request_microphone(microphone_generation_)) {
+        microphone_generation_ = 0;
+        return false;
+    }
+    const TickType_t started = xTaskGetTickCount();
+    while (arbiter_->speaker_active() &&
+           (xTaskGetTickCount() - started) <
+               ticks(kSpeakerHandoffTimeoutMs)) {
+        vTaskDelay(ticks(5));
+    }
+    if (arbiter_->speaker_active() ||
         !power_->acquire_consumer(PeripheralPowerOwner::KeyboardMic)) {
+        (void)arbiter_->finish_microphone(microphone_generation_);
+        microphone_generation_ = 0;
         return false;
     }
     i2s_chan_config_t channel =
@@ -474,6 +494,10 @@ bool AudioCaptureService::start_microphone() {
         stop_microphone();
         return false;
     }
+    if (!arbiter_->mark_microphone_ready(microphone_generation_)) {
+        stop_microphone();
+        return false;
+    }
     return true;
 }
 
@@ -486,6 +510,10 @@ void AudioCaptureService::stop_microphone() {
     if (power_ != nullptr &&
         power_->held(PeripheralPowerOwner::KeyboardMic)) {
         (void)power_->release_consumer(PeripheralPowerOwner::KeyboardMic);
+    }
+    if (arbiter_ != nullptr && microphone_generation_ != 0) {
+        (void)arbiter_->finish_microphone(microphone_generation_);
+        microphone_generation_ = 0;
     }
 }
 

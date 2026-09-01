@@ -3,6 +3,20 @@ project(easyinput_host_test LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 enable_testing()
+add_executable(audio_io_arbiter_tests
+    audio_io_arbiter_tests.cpp
+    ../components/input_core/src/audio_io_arbiter.cpp
+)
+target_include_directories(audio_io_arbiter_tests PRIVATE ../components/input_core/include)
+add_test(NAME audio_io_arbiter_tests COMMAND audio_io_arbiter_tests)
+
+add_executable(speaker_output_core_tests
+    speaker_output_core_tests.cpp
+    ../components/input_core/src/speaker_output_core.cpp
+)
+target_include_directories(speaker_output_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME speaker_output_core_tests COMMAND speaker_output_core_tests)
+
 add_executable(audio_capture_core_tests
     audio_capture_core_tests.cpp
     ../components/input_core/src/audio_capture_core.cpp
@@ -44,6 +58,7 @@ add_executable(input_runtime_tests
     ../components/input_core/src/audio_capture_core.cpp
     ../components/input_core/src/host_action_core.cpp
     ../components/input_core/src/deskmate_link_core.cpp
+    ../components/input_core/src/speaker_output_core.cpp
 )
 target_include_directories(input_runtime_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_runtime_tests COMMAND input_runtime_tests)
@@ -66,7 +81,7 @@ add_executable(peripheral_power_lease_tests
 target_include_directories(peripheral_power_lease_tests PRIVATE ../components/input_core/include)
 add_test(NAME peripheral_power_lease_tests COMMAND peripheral_power_lease_tests)
 
-add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp ../components/input_core/src/host_action_core.cpp ../components/input_core/src/deskmate_link_core.cpp ../components/input_core/src/audio_capture_core.cpp)
+add_executable(config_core_tests config_core_tests.cpp ../components/input_core/src/config_core.cpp ../components/input_core/src/host_action_core.cpp ../components/input_core/src/deskmate_link_core.cpp ../components/input_core/src/audio_capture_core.cpp ../components/input_core/src/speaker_output_core.cpp)
 target_include_directories(config_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME config_core_tests COMMAND config_core_tests)
 
@@ -104,5 +119,10 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     AUDIO_SERVICE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/audio_capture_service.h"
     AUDIO_SERVICE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/audio_capture_service.cpp"
     AUDIO_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/contracts/easyinput-audio-capture-v1.md"
+    SPEAKER_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/speaker_output_core.h"
+    SPEAKER_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/speaker_output_core.cpp"
+    SPEAKER_SERVICE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/speaker_output_service.h"
+    SPEAKER_SERVICE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/speaker_output_service.cpp"
+    SPEAKER_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../docs/contracts/easyinput-speaker-output-v1.md"
 )
 add_test(NAME firmware_source_contract_tests COMMAND firmware_source_contract_tests)

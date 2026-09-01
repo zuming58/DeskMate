@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A test-only state machine is not runtime evidence
+
+- Symptom: an early speaker package contained a detailed playback lifecycle class that only Host tests called, while the production service used a separate atomic state path.
+- Practice: remove unused behavioral models instead of presenting their tests as runtime coverage. Test immutable audio parameters and the real cross-task arbiter, and lock production ownership, power, network and sound-bank boundaries with source contracts.
+- Rule: a green unit test is evidence only for code reachable from the product or for an explicitly declared pure contract; parallel test-only behavior must not inflate the acceptance claim.
+
 ## ESP-IDF timeout units must follow the called API
 
 - Symptom: LAN heartbeat and control ACK remained healthy, but a real microphone

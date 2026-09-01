@@ -1,5 +1,12 @@
 # Decisions
 
+## D046 - EasyInput speaker starts as a local hardware gate with microphone priority
+
+- Date: 2026-09-01
+- Decision: the first EasyInput speaker slice is local I2S1 output only, using GPIO14/13/15, signed 16-bit 48 kHz mono-left PCM and the existing GPIO8 `Speaker` lease. Its sole producer is one synthesized low-volume startup probe; no desktop/HID/UDP/Link downlink is inferred from the fixed Maker sound-resource path.
+- Arbitration: the T10E board microphone has absolute priority. A microphone generation blocks new playback, cancels an active probe, waits for I2S1 deletion and releases only exact matching speaker/microphone generations before I2S0 begins.
+- Boundary: passing the local probe does not mean DeskMate real-time audio output is connected. A later package must separately freeze the desktop-to-EasyInput downlink, buffering, cancellation and recovery contract. Sound-bank reads/writes remain independent operations.
+
 ## D037 - Computer microphone is the default; EasyInput capture is selectable
 
 - Date: 2026-08-31

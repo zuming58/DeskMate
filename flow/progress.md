@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11E-A EasyInput local speaker code gate complete; HIL not authorized
+
+- Implementation: `codex/t11e-easyinput-speaker-downlink` starts from accepted T10E firmware `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4` and implements only `EASYINPUT_SPEAKER_OUTPUT_V1_FROZEN`. I2S1 uses GPIO14/13/15 at 48 kHz, 16-bit mono-left with one synthesized low-volume startup probe. The existing GPIO8 controller remains the sole physical power writer through its `Speaker` lease; no sound-bank, desktop, HID, UDP or DeskMate Link audio trigger was added.
+- Arbitration and failure: microphone generations have absolute priority, prevent new speaker admission and cancel active playback before I2S0 and `KeyboardMic` ownership begin. Allocation, I2S, write and cleanup failures remain speaker-local; sanitized diagnostics expose only capability, state and counters.
+- Verification: EasyInput Host CTest passed `12/12`. Exact ESP-IDF v5.5.5 `esp32s3` Minimal Build with the fixed 16 MiB partition layout passed before closure; the final clean-HEAD image identity is produced only after the delivery commit. Source/license, one-GPIO8-writer, no-network/no-sound-bank, privacy and partition source contracts pass.
+- Safety and next: no port scan, device identification, Flash/NVS read or write, erase, monitor, eFuse, sound-bank, Xiaozhi or servo action occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`. After a separate exact app-only authorization, verify one non-repeating boot probe plus full key/encoder/LED/HID/Link/microphone regression. Real-time desktop speaker downlink remains a later independently frozen package.
+
 ## 2026-08-31 - T10E repeated microphone and real voice-input HIL accepted
 
 - User acceptance: repeated board-microphone tests completed without returning to the stuck 0% condition, the live meter responded strongly enough for practical use, and a real S1 voice-input workflow transcribed successfully. This closes the functional capture/uplink defect fixed by `72fe912`; T10E core HIL is accepted.
