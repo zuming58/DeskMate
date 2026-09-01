@@ -5,7 +5,7 @@
 - Branch: `codex/t11d3-post-tts-dialog-recovery`
 - Exact base: `codex/t11d2-doubao-terminal-diagnostics@c28a54e30f2d1afbe44c1b64e0b72af543eeeebd`
 - Build identity: `t11d3-post-tts-dialog-recovery-v1`
-- Final HEAD: recorded after verification
+- Implementation and verification commit: `bd54437631660f635f3de980f8ea4e99bac2a4bd`
 
 ## Evidence and behavior
 

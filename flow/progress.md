@@ -2,7 +2,7 @@
 
 ## 2026-09-01 - T11D.3 evidence-selected post-TTS dialog recovery complete; HIL pending
 
-- Scope and identity: Windows software only on `codex/t11d3-post-tts-dialog-recovery`, created from exact T11D.2 base `c28a54e30f2d1afbe44c1b64e0b72af543eeeebd`. Build identity is `t11d3-post-tts-dialog-recovery-v1`.
+- Scope and identity: Windows software only on `codex/t11d3-post-tts-dialog-recovery`, created from exact T11D.2 base `c28a54e30f2d1afbe44c1b64e0b72af543eeeebd`; implementation and verification commit is `bd54437631660f635f3de980f8ea4e99bac2a4bd`. Build identity is `t11d3-post-tts-dialog-recovery-v1`.
 - HIL-selected behavior: the new T11D.2 evidence showed `tts.end` sequence `244`, successful speaker drain, then adjacent active-phase `dialog-error` sequence `245`, with no queue drop, drain timeout, error frame, reflected ASR or transport close. Only this current-token/current-provider-epoch vector consumes its successful-drain evidence and enters the existing finite reconnect path. It returns through `connecting -> listening` without replaying audio or text.
 - Failure and ownership boundary: non-adjacent, pre-drain, failed-drain, error-frame, session-failure, stopping and stale-provider events remain fail-closed. Two recoveries are allowed without a new accepted user-final turn; a new real user turn resets the streak. Stop/new generation wins. Four counts and one closed result enum provide proof without provider content or identifiers.
 - Product surface: the duplicate long React bottom live bar is removed. The independent 320x58 non-focus-stealing Electron overlay remains the sole floating capsule; the companion page keeps its face, status and controls. Seven-state face synchronization remains unimplemented and separate.
