@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Branch-local Flow updates do not automatically advance the project mainline
+
+- Symptom: the primary checkout still appeared to stop near T06/T07 even though software, EasyInput and Xiaozhi work had reached T12/T11E/T10C. Each short branch carried a newer plan/progress entry, but later software history and the hardware integration history had diverged and no owner reconciled them.
+- Practice: at every implementation handoff, record exact branch/HEAD and acceptance evidence, then have the main Agent check ancestry and copy only verified facts into one clean control branch. Keep implementation acceptance, user HIL and mainline integration as three separate states.
+- Rule: the newest `flow/plan.md`, newest commit time or green feature tests are not sufficient to declare a project milestone. A project milestone exists only after the integration owner records a common baseline and its unresolved gates in the authoritative control plane.
+
 ## A safety lease must expire before duplicate classification and status reporting
 
 - Symptom: a one-use ARM token can appear active beyond its lease if expiry is checked only when a new non-duplicate output arrives; repeated ARM traffic or status polling would otherwise preserve stale UI state.

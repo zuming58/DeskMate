@@ -1,5 +1,13 @@
 # Decisions
 
+## D057 - The main Agent owns one project-level control plane and integration verdict
+
+- Date: 2026-09-02
+- Decision: the `EasyInput固件开发` task is the DeskMate main Agent and integration owner. The DeskMate software and Xiaozhi tasks may independently implement and maintain branch-local Flow entries, but their entries are implementation handoffs rather than the project-level plan.
+- Delivery contract: every implementation task returns an exact branch and pushed HEAD, frozen/changed contracts, tests and build evidence, user-present HIL result, safety actions and remaining gates. The main Agent checks ancestry and evidence, integrates only accepted work, reruns risk-proportionate three-module gates and then updates the one authoritative `flow/plan.md` and top `flow/progress.md` entry.
+- Branch rule: a clean control/integration branch is created from the latest accepted common baseline. A dirty primary checkout, an unaccepted feature branch or a branch-local Flow file cannot become source of truth merely because it is newest by timestamp.
+- Current consequence: T11F remains the accepted code/build integration baseline. T12B.1 is a software candidate until its exact-package custom-VAD HIL passes and a later integration branch combines it with T11F.
+
 ## D056 - Manual servo calibration uses a one-use leased high-level action contract
 
 - Date: 2026-09-01

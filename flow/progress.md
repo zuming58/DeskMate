@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - Main Agent reconciled all three task Flows into one project control plan
+
+- Read and cross-checked the latest `EasyInput固件开发`, `DeskMate软件开发` and `小智云台固件开发` task conclusions against their actual branch-local `flow/` files, Git ancestry, worktree state and pushed HEADs. The primary checkout was intentionally left untouched because it remains a dirty T07C worktree.
+- Root cause of the stale T06/T07-looking plan: every feature branch updated its own `flow/`, but no integration owner recollected those facts after the T11F hardware integration and the later T12 software work diverged. T11F contains the current EasyInput/Xiaozhi integration, while T12A/T12B/T12B.1 continued from the pre-T11F desktop history; neither line alone is the complete product.
+- Established `codex/project-control-reconciliation-2026-09-02` from exact clean T11F HEAD `ee0ac8418b1d7c0497f72e3edc67b5ee39b232d4`. This branch changes control documentation only and does not merge the still-unaccepted software candidate or alter firmware.
+- Unified status: software candidate `codex/t12b1-provider-endpointing-repair@710595f0b8b4bd209721fef9c6a96d5b80f43481` has `270/270` and a successful Windows package but still needs exact-package custom-VAD HIL; EasyInput microphone is accepted, speaker is code/build only; Xiaozhi display/state chain is accepted at T09, T10C motion remains code-only with production MOTION disabled.
+- Added the authoritative current map at `docs/status/current-integration-map-2026-09-02.md`, updated `flow/plan.md`, and recorded the permanent integration-owner decision and branch-local Flow lesson. Next action is the T12B.1 user gate; after acceptance the main Agent creates the next three-end integration branch and reruns all three module gates.
+- No application was launched or controlled, no port/device was enumerated, and no Flash/NVS/eFuse, audio, OLED, PWM or servo operation occurred.
+
 ## 2026-09-01 - T11F three-end integration audit complete; desktop HIL is the only open user test
 
 - Integration: isolated branch `codex/t11f-three-end-integration` merged desktop `3a62bf1`, EasyInput `0407ba6` and Xiaozhi `b83ce88`; implementation directories had no merge conflicts. Shared flow/document conflicts were resolved by retaining all current facts without upgrading hardware claims.

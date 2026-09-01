@@ -1,10 +1,46 @@
 # Development plan
 
-## Current stage: integrated product foundation
+## Current stage: three-task reconciliation and T12B.1 acceptance
 
-目标：按已冻结的 V1 硬件基线启动正式实现：先完成 EasyInput 总控的小功能包和软件闭环，再冻结 DeskMate Link 并开发小智执行端，最后进行三端联调。
+目标：保持 T11F 两套固件集成基线稳定，先完成人工验证最新 T12B.1 Windows 候选，再由主 Agent 建立下一条共同三端基线；同时为 EasyInput 本地扬声器真机门和小智手动运动路由准备独立、安全、可回退的后续切片。
 
 ### Current execution point
+
+> **主 Agent 总控快照（2026-09-02，以下内容优先于本节后面的历史分支记录）**
+>
+> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总。当前不存在一条同时包含“最新软件候选”和“T11F 两套固件集成”的代码主线：T11F 是硬件集成基线，T12 软件线从更早的桌面提交继续演进。任何窗口自己的 `flow/` 都只是该分支交接，只有本总控分支负责项目级状态、合并顺序和最终验收。
+
+#### Current source-of-truth map
+
+| Track | Exact branch / HEAD | Accepted evidence | Current classification |
+| --- | --- | --- | --- |
+| Main integrated baseline | `codex/t11f-three-end-integration@ee0ac8418b1d7c0497f72e3edc67b5ee39b232d4` | Desktop `246/246` + package; EasyInput Host `12/12` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `INTEGRATED_BASELINE / CODE_BUILD_CONFIRMED` |
+| DeskMate software candidate | `codex/t12b1-provider-endpointing-repair@710595f0b8b4bd209721fef9c6a96d5b80f43481` | Official custom-VAD gate repaired; focused `60/60`, full `270/270`, Windows package passed | `SOFTWARE_CANDIDATE / HIL_PENDING / NOT_IN_T11F` |
+| EasyInput controller | T10E capture `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4`; T11E-A speaker `0407ba6dd4f4674ec4ae77c5be1c289ecadc23cf` | Board microphone and real S1 transcription accepted; speaker code/build passed | Microphone `HIL_ACCEPTED`; speaker `HIL_NOT_AUTHORIZED` |
+| Xiaozhi yuntai | T10C `b83ce886ec8efd1fea288a65e0127d2a887d5883`; OLED polish `8d6af0cd38fb3fed85ceba03bcd99857dd1e552e` | OLED/state code and builds passed; seven-state T09 chain was user accepted | Display `HIL_ACCEPTED` at T09 baseline; motion `CODE_ONLY / HARDWARE_LOCKED` |
+| Primary checkout | `codex/companion-t07c-ui-shell@9e5e442042ae20c6867e1270a1eb61d07fda64ce` with user changes | None for current integration | `STALE_DIRTY_CHECKOUT / NOT_SOURCE_OF_TRUTH` |
+
+The exact evidence and ancestry analysis are maintained in [`current-integration-map-2026-09-02.md`](../docs/status/current-integration-map-2026-09-02.md).
+
+#### Unified execution order
+
+1. **T13A mainline control reconciliation — COMPLETE IN THIS BRANCH.** Preserve the dirty primary checkout, establish one clean control branch from T11F, merge the three window-level Flow facts into this plan, and record exact branch/HEAD/evidence without merging unstable implementation code.
+2. **T12B.1 software user gate — OPEN, owned by the DeskMate software window.** Run only build ID `t12b1-provider-custom-vad-v2`: save 8 seconds, begin a new session, pause 3–7 seconds mid-sentence, continue the same utterance, and repeat one normal short utterance. Pass/fail plus a sanitized diagnostic returns to the main Agent. Until it passes, `710595f` is not the product integration baseline.
+3. **T13B post-HIL three-end integration — BLOCKED BY STEP 2.** From the main integrated baseline, integrate the accepted T12 software history with T11F, resolve shared Flow/doc conflicts once, then rerun Desktop full tests/package, EasyInput Host+IDF and Xiaozhi Host+IDF. Only this branch may become the next common product baseline.
+4. **T11E-B EasyInput local-speaker HIL — READY FOR A SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
+5. **T10D manual-motion route — CODE DESIGN MAY PROCEED; PHYSICAL MOTION REMAINS BLOCKED.** Freeze and implement the missing Windows manual control plus EasyInput translator against the existing T10C high-level contract, while keeping the production Xiaozhi owner and real PWM adapter absent. Real servo work waits for installed-axis mapping, independent current-limited supply, common ground, physical cutoff, unloaded center, direction and soft-limit evidence.
+6. **Later product software — PARALLEL DISCOVERY, NOT YET MAINLINE.** Memory projection/retrieval, persona, wake word and LLM intent/application control stay in the DeskMate software track. Each must return a frozen contract, branch/HEAD, tests/package and truthfully bounded HIL before main-agent integration.
+
+#### Ownership and reporting
+
+- `EasyInput固件开发`（本窗口）是主 Agent / integration owner：维护唯一总 `flow/`，审计两个实现窗口，决定合并与人工验收顺序。
+- `DeskMate软件开发` 独立实现 Windows 软件；不直接把自己的 Flow 状态升级为总项目完成，交付时必须返回 exact branch/HEAD、测试、打包、HIL 和未完成项。
+- `小智云台固件开发` 独立实现显示/动作固件；当前没有新改动需求，运动安全门未关闭前不得创建真实 adapter、PWM 或烧录候选。
+- 三个窗口均不得在自己的功能分支里宣布“总项目主线已更新”；主 Agent 完成整合审计后，才在本计划和 `flow/progress.md` 顶部统一记账。
+
+#### Historical detail below
+
+以下条目保留各阶段的证据和来龙去脉，但不再代表当前执行优先级；遇到冲突时以上述总控快照和状态图为准。
 
 - T11F 三端集成审计已在隔离分支汇合 T11D.4 桌面、T11E-A EasyInput 和 T10C 小智：桌面 246/246 与打包、EasyInput Host 12/12 + ESP-IDF v5.5.5、小智 Host 11/11 + ESP-IDF v5.5.3 均通过。当前唯一可执行人工门是 T11D.4 长回答后同 session 直接回聆听、立即第二轮、按钮/ESC 结束和单胶囊；舵机链仍缺桌面 UI、EasyInput translator、生产 owner/真实 adapter 与电气机械证据，不得烧录或真动。
 
