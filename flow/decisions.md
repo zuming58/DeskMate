@@ -1,5 +1,12 @@
 # Decisions
 
+## D036 - Manual servo calibration uses a one-use leased high-level action contract
+
+- Date: 2026-09-01
+- Decision: T10C adds only `SELECT_AXIS`, volatile one-use `ARM`, adapter-local provisional center, fixed-direction 1.0-degree `SINGLE_STEP`, `RECENTER` and idempotent highest-priority emergency stop. The wire never carries PWM, pulse width, GPIO, absolute angle or arbitrary step size.
+- Evidence: Windows intent, EasyInput forwarding and Xiaozhi terminal completion/rejection are distinct correlated facts. A completed endpoint action is not proof of a safe or measured physical angle.
+- Gate: disconnect, peer restart and lease expiry disarm and discard pending work without replay. The production owner remains absent and MOTION capability remains disabled until installed-board electrical/mechanical evidence and a separately authorized real adapter exist.
+
 ## D035 - Link health crosses the native boundary only as enumerated diagnostics
 
 - Date: 2026-08-30

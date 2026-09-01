@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A safety lease must expire before duplicate classification and status reporting
+
+- Symptom: a one-use ARM token can appear active beyond its lease if expiry is checked only when a new non-duplicate output arrives; repeated ARM traffic or status polling would otherwise preserve stale UI state.
+- Practice: advance the lease clock before action-id deduplication and before emitting the independent status snapshot. Expiry clears only volatile authorization and never creates output.
+- Rule: time-bounded actuator authorization is state, not a request-side validation detail. Every externally observable owner path must first make expiry effective, while emergency stop remains independently executable at highest priority.
+
 ## Reference motion code is behavior evidence, not calibration evidence
 
 - Symptom: the Xiaozhi reference contains nominal centers, ranges, GPIOs and direct LEDC initialization, so copying it would make a new product image move both servos immediately even though the real supply path, direction and mechanical limits remain unverified.
