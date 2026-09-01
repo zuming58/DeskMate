@@ -2,6 +2,11 @@
 
 ## Current handoff
 
+- [T11B desktop computer-audio companion handoff](handoffs/t11b-desktop-computer-audio-companion-2026-09-01.md)
+- [T11B desktop computer-audio companion frozen contract](contracts/t11b-desktop-computer-audio-companion-v1.md)
+- [T11 realtime dialogue software gap audit](reviews/t11-realtime-dialogue-software-gap-audit-2026-09-01.md)
+- [T11B desktop computer-audio companion task](../flow/tasks/T11B-desktop-computer-audio-companion.md)
+
 - [T11A companion and Agent status closure handoff](handoffs/t11a-companion-agent-status-closure-2026-09-01.md)
 
 - [T12A desktop memory controls handoff](handoffs/t12a-desktop-memory-controls-2026-09-01.md)

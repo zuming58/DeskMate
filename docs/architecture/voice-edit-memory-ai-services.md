@@ -10,7 +10,8 @@
 - `companion-memory.sqlite3` is created in Electron `userData` with WAL and full synchronous commits. Every future conversation turn can be committed before any summary job. Daily summaries, reviewable candidates, accepted memories and embedding records have separate tables.
 - T11 adds one foreground companion session controller. Companion capture and text voice input/edit are mutually exclusive: dictation preempts and permanently ends the active companion session, while companion start is rejected during an active `VoiceWorkflow`.
 - Text dictation defaults to a concrete Windows input device and can explicitly select the T10E EasyInput LAN source. The preference is local, while each recording locks its actual source. Board failure before start is visible and falls back once to the Windows source; failure after start ends the session without switching.
-- The Doubao realtime adapter, finite reconnect, audio queues, credentials and turn commits live in Electron main. T10E now supplies the accepted EasyInput uplink, but the realtime companion remains blocked by the intentionally unavailable EasyInput speaker sink. Automated tests use simulated source/sink adapters and the companion does not silently fall back to computer or Xiaozhi audio.
+- The Doubao realtime adapter, finite reconnect, credentials and turn commits remain owned by Electron main. T11B supplies the production computer microphone and computer speaker path while reusing the persisted microphone selection. A selected EasyInput uplink may fall back visibly to the computer only before capture starts; a later failure ends the session without switching. EasyInput speaker downlink remains unavailable because no T11E contract is frozen.
+- Web Audio capture/playback runs behind a versioned session/generation IPC bridge. Raw PCM crosses only that narrow main/renderer audio boundary and never enters React state, diagnostics, logs, SQLite or exports. The renderer never receives provider credentials or network configuration.
 
 ## Service separation
 
@@ -18,7 +19,7 @@
 | --- | --- | --- | --- |
 | Speech transcription | Bailian `qwen3-asr-flash` | voice input, KEY3 instruction | Existing encrypted Bailian credential |
 | Text model | Bailian fallback or configured OpenAI-compatible endpoint | smart organizer, KEY3 voice edit; later Bridge and memory jobs | API key encrypted in Electron main; endpoint/model status only in renderer |
-| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; uplink exists, but real conversation remains blocked until the EasyInput speaker sink is available |
+| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; selected computer/EasyInput input plus computer output is implemented; real credential/audio HIL remains pending |
 | Memory | local SQLite WAL | future companion turns and retrieval | Never written to EasyInput or Xiaozhi Flash |
 
 The text model and realtime voice plane must remain separate. Realtime replies cannot directly run Windows commands. Conversation events go to a typed intent Bridge, which then invokes only registered, purpose-visible host actions. This preserves the existing UUID application registry rather than giving a model arbitrary shell access.
@@ -49,4 +50,4 @@ Read-only reference: `F:\Codex\suligent` on 2026-08-29. No files were copied.
 - Its sidecar plane uses a separate OpenAI-compatible Chat Completions model for structured intent/state analysis with bounded context, timeout and deterministic fallback.
 - Client playback can be interrupted when capture starts, which supports the DeskMate requirement that text voice input preempt companion speech.
 
-DeskMate adopts the two-plane architecture, not the project-specific persona, navigation logic or credentials. T11 independently implements a strict realtime adapter and foreground interruption arbitration; real EasyInput audio and live credentials remain an explicit acceptance gate.
+DeskMate adopts the two-plane architecture, not the project-specific persona, navigation logic or credentials. T11 independently implements a strict realtime adapter and foreground interruption arbitration. T11B cancels local playback and discards stale response frames without guessing an undocumented provider cancellation event; real credentials, packaged audio and acoustic quality remain explicit acceptance gates.

@@ -46,7 +46,7 @@ Qwen/Bailian ASR remains unchanged for text voice input and voice edit.
 
 `CompanionAudioSource` provides `status`, `start`, `stop`, PCM chunks, and errors. `CompanionAudioSink` provides `status`, `start`, `write`, `interrupt`, and `stop`.
 
-T11 ships simulated adapters for automated tests and explicit unavailable EasyInput adapters in production. Until T10E supplies the real board adapter, the UI reports `easyinput-audio-source-pending` / `easyinput-audio-sink-pending` and refuses to claim a live conversation. It must not silently fall back to the computer microphone or Xiaozhi audio.
+The original T11 slice shipped simulated adapters and explicit unavailable production adapters. T11A later supplied the accepted EasyInput microphone uplink. The additive frozen T11B extension is defined in [`t11b-desktop-computer-audio-companion-v1.md`](t11b-desktop-computer-audio-companion-v1.md): computer microphone plus computer speaker is now the production baseline, and a selected EasyInput microphone may fall back visibly to the computer only before capture starts. This does not freeze or guess an EasyInput speaker protocol.
 
 ## Turn persistence
 
@@ -70,4 +70,4 @@ Codex and manual Agent events received during this ownership window are dropped,
 
 ## Acceptance boundary
 
-Code acceptance requires simulated provider/audio tests, SQLite exactly-once tests, desktop tests, and desktop packaging. Real Doubao credentials, real network dialogue, EasyInput microphone/speaker quality, and physical OLED behavior remain user-present acceptance items.
+Code acceptance requires simulated provider/audio tests, SQLite exactly-once tests, desktop tests, and desktop packaging. Real Doubao credentials, real network dialogue, packaged microphone/speaker behavior, EasyInput fallback, acoustic interruption quality, and physical OLED behavior remain user-present acceptance items.

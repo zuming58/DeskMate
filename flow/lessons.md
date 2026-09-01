@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A preferred audio source can be unavailable while the fallback adapter is still startable
+
+- Symptom: a fallback wrapper reported the unavailable preferred EasyInput status, so the conversation controller rejected the session before it ever called the wrapper's start method and the promised computer fallback never ran.
+- Practice: an aggregate pre-start adapter reports startability when any approved candidate can start, but reports no active source until one adapter actually acquires the session. After acquisition, all disconnects are handled by that locked adapter and never trigger another fallback.
+- Rule: availability gates must describe the composite operation they guard. Preferred-source health and actual-session ownership are separate facts.
+
 ## Capability labels must be projections of runtime facts, not page-owned copy
 
 - Symptom: the diagnostic page could show the EasyInput-to-Xiaozhi Link as connected while the companion page still said “pending”; an accepted board microphone could also be described as not integrated merely because the computer microphone was currently selected.

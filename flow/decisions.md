@@ -1,5 +1,12 @@
 # Decisions
 
+## D045 - Continuous companion uses the computer speaker baseline without inventing board downlink
+
+- Date: 2026-09-01
+- Decision: T11B uses the persisted computer/EasyInput microphone choice and the computer speaker to close the production continuous-dialogue loop. Computer input is the default. If EasyInput was requested, fallback to the selected computer microphone is allowed only before capture starts and must be visible; a later source failure ends the session without switching.
+- Boundary: one `CompanionConversationController`, one foreground owner and one Agent State publisher remain authoritative. EasyInput speaker downlink is still `NOT_FROZEN`; no UDP, HID or DeskMate Link speaker transport may be guessed, and Xiaozhi audio is not a substitute.
+- Interruption and privacy: manual or confirmed spoken interruption clears local playback and discards late response frames without sending an undocumented provider cancellation event. Credentials stay in Electron main. PCM crosses only the session/generation-bound Web Audio IPC bridge and never enters React state, diagnostics, logs, SQLite or exports.
+
 ## D044 - Companion surfaces share one runtime truth and Codex automation remains explicitly owned
 
 - Date: 2026-09-01
