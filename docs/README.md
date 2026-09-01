@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11D.5 half-duplex keep-alive and UI handoff](handoffs/t11d5-half-duplex-keepalive-ui-2026-09-01.md)
+- [T11D.5 strict half-duplex keep-alive contract](contracts/t11d5-half-duplex-keepalive-v1.md)
+- [T11D.5 DialogCommonError root-cause review](reviews/t11d5-dialog-audio-idle-timeout-root-cause-2026-09-01.md)
+
 - [T11D.4 dialog-error root diagnostics handoff](handoffs/t11d4-dialog-error-root-diagnostics-2026-09-01.md)
 - [T11D.4 dialog-error root diagnostics contract](contracts/t11d4-dialog-error-root-diagnostics-v1.md)
 - [T11D.4 DialogCommonError root-cause audit](reviews/t11d4-dialog-error-root-cause-audit-2026-09-01.md)

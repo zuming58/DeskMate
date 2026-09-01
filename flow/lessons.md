@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Protocol input mode must describe intentional silence, not only the audio format
+
+- Symptom: every TTS block is accepted and played, local drain succeeds and the transport remains open, yet the provider emits a dialog error immediately after the answer.
+- Practice: compare the application's mute policy with the provider's current session modes and error table. A strict half-duplex client can be wire-format correct while violating the provider's expectation that microphone packets remain continuous.
+- Rule: when an audio client deliberately pauses upload, declare the documented silence/keep-alive policy. Do not solve an upstream idle timeout by uploading speaker echo, inventing reconnect, treating an error as completion or switching to push-to-talk semantics.
+
 ## A reconnect can hide a provider error while breaking conversation continuity
 
 - Symptom: a long response plays fully, then the product shows `connecting` and repeats the welcome instead of accepting the next turn.

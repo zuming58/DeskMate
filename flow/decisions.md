@@ -1,5 +1,13 @@
 # Decisions
 
+## D053 - Strict half-duplex microphone silence uses the provider keep-alive mode
+
+- Date: 2026-09-01
+- Decision: a continuous DeskMate realtime session that suppresses microphone PCM during computer-speaker playback declares `dialog.extra.input_mod = "keep_alive"`. Event `359` remains a same-session turn boundary; event `599` remains fail-closed.
+- Evidence: the exact T11D.4 run had complete playback and zero local/transport failures but 600 echo-guard upstream drops followed by adjacent `DialogCommonError`. The current official provider document requires `keep_alive` when microphone upload may pause and defines `52000042 DialogAudioIdleTimeoutError` for the matching timeout.
+- Privacy: `52000042` maps only to `audio-idle-timeout`; raw code/message/payload and identities remain excluded. The rejected run did not export the numeric code, so the category match is recorded as causal inference pending exact-package HIL.
+- Consequence: do not replace the provider session, send push-to-talk EndASR, continuously upload speaker echo, or ignore `599` to hide the symptom.
+
 ## D052 - DialogCommonError fails closed and TTS completion remains a same-session boundary
 
 - Date: 2026-09-01
