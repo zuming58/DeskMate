@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - T10D-A EasyInput manual-motion bridge code/build gate complete
+
+- Delivered `codex/t10d-easyinput-manual-motion-bridge` implementation commit `0c69d9b3d89b99a2f29d502586b46ad40dd7131e`. The additive `EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN` contract assigns Feature `0x16` and Input `0x17`, both with 63-byte payloads, strict CRC/padding/semantic checks and committed golden vectors.
+- EasyInput now accepts one correlated Host request, reports accepted and terminal evidence independently, forwards the exact frozen T10C `0x20/0x21` payloads through the existing UART owner, and fails closed on busy/conflict/stale, timeout, bad response, USB epoch change, Link disconnect and peer restart. Diagnostics contain bounded counters/boot evidence only.
+- Safety remains structural: ARM needs four attestations, a non-zero one-use token and 1000..5000 ms lease; output commands contain only selected yaw/pitch and fixed `-1/+1` direction. There is no arbitrary angle, pulse, duty, PWM, GPIO or EasyInput-local servo adapter.
+- Verification: complete EasyInput Host CTest passed `13/13`; exact ESP-IDF v5.5.5 build passed with unchanged fixed partitions (24 KiB NVS, 4 KiB PHY, 3 MiB factory, two 576 KiB sound banks), app size `0xD2F60`. No device/port, application, Flash/NVS/eFuse, flash, monitor, audio, OLED, PWM or servo action occurred.
+- Software handoff is documented at `docs/handoffs/t10d-a-easyinput-manual-motion-bridge-2026-09-02.md`. T10D-B must implement a status-first yaw/pitch/ARM/provisional-center/±1°/recenter/e-stop/clear UI and keep intent, forwarding and endpoint evidence separate. Current production Xiaozhi is expected to return `NOT_READY`; T10D-C remains hardware locked.
+- Separately received the DeskMate software T13 delivery `codex/t13-desktop-persona-memory-intent@35e627389282d8279d82646787f509681474c048` (implementation `04f1fc06e0021fd44dbe2a9ba99bcadb599714bf`): persona, reviewed memory, managed knowledge projection/embedding, safe intent bridge and bounded Codex lifecycle summary; `276/276` plus build/package passed, with user acceptance still pending. It is recorded in the total plan but not merged into T11F.
+
 ## 2026-09-02 - Firmware continuation split selected while DeskMate software continues independently
 
 - The DeskMate software task reaffirmed its Windows-only boundary and delivered `codex/t12b1-provider-endpointing-repair@710595f0b8b4bd209721fef9c6a96d5b80f43481` with `270/270`, packaging and pending exact-package custom-VAD HIL. Its later memory, persona, wake and intent/application-control work remains in that task and will return exact handoffs to the main Agent.
