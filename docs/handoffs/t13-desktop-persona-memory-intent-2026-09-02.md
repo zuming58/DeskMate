@@ -4,6 +4,7 @@
 
 - Branch: `codex/t13-desktop-persona-memory-intent`
 - Base: `710595f0b8b4bd209721fef9c6a96d5b80f43481`
+- Implementation commit: `04f1fc06e0021fd44dbe2a9ba99bcadb599714bf`
 - Windows software only. No EasyInput or Xiaozhi firmware, hardware, port, Flash, NVS, OLED, servo, or audio-device operation.
 
 ## Delivered
