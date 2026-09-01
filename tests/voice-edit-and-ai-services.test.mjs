@@ -59,6 +59,7 @@ test("AI service settings validate endpoints and encrypt every credential at res
     assert.equal(store.loadTextSecret().apiKey, "deepseek-test-key");
     assert.equal(store.loadRealtimeSecret().appId, "app-123");
     assert.equal(store.loadRealtimeSecret().accessKey, "access-key-123");
+    assert.equal(store.loadRealtimeSecret().appKey, "");
     assert.equal(store.clearText().text.configured, false);
     assert.equal(store.clearRealtime().realtime.configured, false);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }

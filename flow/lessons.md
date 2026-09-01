@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A protocol codec cannot certify itself
+
+- Symptom: a fake server built frames with the same local encoder as the client, so all tests passed while the live provider immediately failed with a generic frame error.
+- Practice: verify required headers and handshake order against the authoritative service document, then test the parser with hard-coded external golden bytes for every documented layout, compression mode and failure boundary.
+- Rule: an encoder/decoder round trip proves internal consistency, not interoperability. Provider payloads and identifiers must remain outside logs and user-visible error copy even while failure reasons become more specific.
+
 ## A preferred audio source can be unavailable while the fallback adapter is still startable
 
 - Symptom: a fallback wrapper reported the unavailable preferred EasyInput status, so the conversation controller rejected the session before it ever called the wrapper's start method and the promised computer fallback never ran.

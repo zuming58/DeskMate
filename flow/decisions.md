@@ -1,5 +1,12 @@
 # Decisions
 
+## D046 - Realtime provider compatibility requires external wire evidence
+
+- Date: 2026-09-01
+- Decision: the Doubao adapter follows official protocol page `1594356` and its linked sample. The fixed `X-Api-App-Key` is supplied as a provider protocol constant; users configure only their own App ID and Access Key. Connection acknowledgement precedes session start.
+- Wire boundary: decoder support covers the documented flags, sequence/event layouts, connection/session identifiers, no/gzip compression and error frames with fixed size limits and failure closure. Raw frames, provider payloads, identifiers, PCM and text never enter diagnostics or user-visible errors.
+- Verification: local encoder/decoder round trips are insufficient for external protocols. Acceptance requires hard-coded official or independently derived golden vectors, including negative and compressed layouts.
+
 ## D045 - Continuous companion uses the computer speaker baseline without inventing board downlink
 
 - Date: 2026-09-01

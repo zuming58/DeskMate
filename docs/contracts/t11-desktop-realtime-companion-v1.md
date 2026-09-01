@@ -40,6 +40,13 @@ Renderer events contain only bounded partial transcript, final user text, assist
 
 T11 uses the Doubao realtime-dialogue binary WebSocket protocol through a strict main-process adapter. Frames, JSON payloads, session IDs, event IDs, and audio chunks are bounded. Startup and runtime reconnect use a finite retry schedule. A reconnect clears the old provider and audio queues; old audio, replies, and expression events are not replayed.
 
+The additive interoperability rule is:
+
+- the provider-defined `X-Api-App-Key` is a protocol constant supplied by the adapter, not an editable user secret;
+- `StartConnection` must be acknowledged before `StartSession` is sent;
+- documented flags `0..4`, sequence/event layouts, optional connection IDs, session IDs, no/gzip compression and error frames are accepted only within fixed bounds;
+- provider payloads, raw frames, connection/session IDs and text never enter error copy or diagnostics. Failures expose only an enumerated handshake, service, frame-layout, compression, JSON or identifier reason and close safely.
+
 Qwen/Bailian ASR remains unchanged for text voice input and voice edit.
 
 ## Audio adapter contract

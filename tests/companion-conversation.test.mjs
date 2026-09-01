@@ -5,14 +5,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
+import { gzipSync } from "node:zlib";
 
 const require = createRequire(import.meta.url);
 const { PrestartFallbackCompanionAudioSource, SimulatedCompanionAudioSink, SimulatedCompanionAudioSource } = require("../electron/companion-audio.cjs");
 const { CompanionConversationController } = require("../electron/companion-conversation.cjs");
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
-const { decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
-const { DoubaoRealtimeSession, translateFrame } = require("../electron/doubao-realtime.cjs");
+const { COMPRESSION, FLAGS, MAX_FRAME_BYTES, decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
+const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, translateFrame } = require("../electron/doubao-realtime.cjs");
 const { acceptsForegroundSessionEvent, emergencyStopForegroundSession, finishForegroundSession, initialForegroundSession, startForegroundSession } = require("../electron/foreground-session.cjs");
 
 function turn(eventId, text = "你好") {
@@ -60,19 +61,49 @@ test("SQLite turn commit is transactional and exactly-once by source event id", 
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("Doubao binary codec has a stable golden vector and rejects malformed frames", () => {
+test("Doubao codec matches the official StartConnection and StartSession golden vectors", () => {
   const frame = encodeJsonEvent(EVENTS.START_CONNECTION, {});
-  assert.equal(frame.toString("hex"), "1114100000000001000000027b7d");
+  const officialStartConnection = Buffer.from([17, 20, 16, 0, 0, 0, 0, 1, 0, 0, 0, 2, 123, 125]);
+  assert.deepEqual(frame, officialStartConnection);
   assert.deepEqual(decodeFrame(frame).payloadJson, {});
+  const officialStartSession = Buffer.from([17, 20, 16, 0, 0, 0, 0, 100, 0, 0, 0, 36, 55, 53, 97, 54, 49, 50, 54, 101, 45, 52, 50, 55, 102, 45, 52, 57, 97, 49, 45, 97, 50, 99, 49, 45, 54, 50, 49, 49, 52, 51, 99, 98, 57, 100, 98, 51, 0, 0, 0, 60, 123, 34, 100, 105, 97, 108, 111, 103, 34, 58, 123, 34, 98, 111, 116, 95, 110, 97, 109, 101, 34, 58, 34, 232, 177, 134, 229, 140, 133, 34, 44, 34, 100, 105, 97, 108, 111, 103, 95, 105, 100, 34, 58, 34, 34, 44, 34, 101, 120, 116, 114, 97, 34, 58, 110, 117, 108, 108, 125, 125]);
+  const decoded = decodeFrame(officialStartSession);
+  assert.equal(decoded.event, EVENTS.START_SESSION);
+  assert.equal(decoded.sessionId, "75a6126e-427f-49a1-a2c1-621143cb9db3");
+  assert.deepEqual(decoded.payloadJson, { dialog: { bot_name: "豆包", dialog_id: "", extra: null } });
+  assert.deepEqual(encodeJsonEvent(EVENTS.START_SESSION, decoded.payloadJson, decoded.sessionId), officialStartSession);
+});
+
+test("Doubao codec accepts every documented flag layout, identifiers, gzip and fail-closed errors", () => {
+  for (const flags of [FLAGS.NO_SEQUENCE, FLAGS.LAST_WITHOUT_SEQUENCE]) {
+    const decoded = decodeFrame(encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, flags, serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") }));
+    assert.equal(decoded.flags, flags);
+    assert.equal(decoded.terminal, flags === FLAGS.LAST_WITHOUT_SEQUENCE);
+  }
+  for (const [flags, sequence] of [[FLAGS.POSITIVE_SEQUENCE, 7], [FLAGS.LAST_WITH_NEGATIVE_SEQUENCE, -7]]) {
+    const decoded = decodeFrame(encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, flags, sequence, serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") }));
+    assert.equal(decoded.sequence, sequence);
+  }
+  const connected = decodeFrame(encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 50, connectId: "connect-1", serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") }));
+  assert.equal(connected.connectId, "connect-1");
   const response = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 451, sessionId: "s1", serialization: SERIALIZATION.JSON, payload: Buffer.from('{"results":[{"text":"你好","is_interim":false}]}') });
   const translated = translateFrame(decodeFrame(response), { replyText: "" });
   assert.deepEqual(translated, { type: "asr.final", text: "你好" });
-  const errorFrame = encodeFrame({ messageType: MESSAGE_TYPES.ERROR, flags: 0, code: 45000001, serialization: SERIALIZATION.JSON, payload: Buffer.from('{"message":"denied"}') });
-  assert.deepEqual(translateFrame(decodeFrame(errorFrame), { replyText: "" }), { type: "error", code: 45000001, message: "denied" });
-  const malformed = Buffer.from(frame);
+  const gzipFrame = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 150, sessionId: "s1", serialization: SERIALIZATION.JSON, compression: COMPRESSION.GZIP, payload: gzipSync(Buffer.from("{}")) });
+  assert.deepEqual(decodeFrame(gzipFrame).payloadJson, {});
+  const errorFrame = encodeFrame({ messageType: MESSAGE_TYPES.ERROR, flags: FLAGS.NO_SEQUENCE, code: 45000001, serialization: SERIALIZATION.JSON, payload: Buffer.from('{"message":"private provider content"}') });
+  assert.deepEqual(translateFrame(decodeFrame(errorFrame), { replyText: "" }), { type: "error", code: 45000001, message: "doubao-service-error" });
+  assert.doesNotMatch(JSON.stringify(translateFrame(decodeFrame(errorFrame), { replyText: "" })), /private provider content/);
+  const malformed = Buffer.from(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
   malformed.writeInt32BE(999, 8);
-  assert.throws(() => decodeFrame(malformed), /doubao-payload-size-invalid/);
+  assert.throws(() => decodeFrame(malformed), /doubao-(connect-id|payload-size)-invalid/);
   assert.throws(() => decodeFrame(Buffer.alloc(7)), /doubao-frame-size-invalid/);
+  const invalidGzip = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, flags: FLAGS.NO_SEQUENCE, serialization: SERIALIZATION.JSON, compression: COMPRESSION.GZIP, payload: Buffer.from("not-gzip") });
+  assert.throws(() => decodeFrame(invalidGzip), /doubao-gzip-invalid/);
+  const gzipBomb = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, flags: FLAGS.NO_SEQUENCE, serialization: SERIALIZATION.RAW, compression: COMPRESSION.GZIP, payload: gzipSync(Buffer.alloc(MAX_FRAME_BYTES + 1)) });
+  assert.throws(() => decodeFrame(gzipBomb), /doubao-gzip-invalid/);
+  assert.equal(protocolErrorReason(new Error("doubao-gzip-invalid")), "doubao-frame-compression-invalid");
+  assert.equal(protocolErrorReason(new Error("private provider sentence")), "doubao-frame-layout-invalid");
 });
 
 test("Doubao adapter performs the binary handshake and bounds PCM chunks", async () => {
@@ -82,20 +113,47 @@ test("Doubao adapter performs the binary handshake and bounds PCM chunks", async
     send(value) {
       const frame = decodeFrame(value);
       this.frames.push(frame);
+      if (frame.event === EVENTS.START_CONNECTION) queueMicrotask(() => this.emit("message", encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 50, connectId: "connect-1", serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") })));
       if (frame.event === EVENTS.START_SESSION) queueMicrotask(() => this.emit("message", encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 150, sessionId: frame.sessionId, serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") })));
     }
     close() { this.readyState = 3; this.emit("close"); }
   }
   let socket;
   const WebSocketImpl = class extends FakeSocket { constructor(...args) { super(...args); socket = this; } static OPEN = 1; };
-  const session = new DoubaoRealtimeSession({ config: { endpoint: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", appId: "app", accessKey: "access", appKey: "key", resourceId: "resource", model: "model", voice: "voice" }, WebSocketImpl });
+  const session = new DoubaoRealtimeSession({ config: { endpoint: "wss://openspeech.bytedance.com/api/v3/realtime/dialogue", appId: "app", accessKey: "access", appKey: "wrong-user-value", resourceId: "resource", model: "model", voice: "voice" }, WebSocketImpl });
   assert.equal((await session.connect()).ok, true);
   assert.equal(socket.options.headers["X-Api-Access-Key"], "access");
+  assert.equal(socket.options.headers["X-Api-App-Key"], DOUBAO_PROTOCOL_APP_KEY);
   assert.deepEqual(socket.frames.slice(0, 2).map((frame) => frame.event), [EVENTS.START_CONNECTION, EVENTS.START_SESSION]);
   assert.equal(session.sendAudio(Buffer.from([1, 2, 3])), true);
   assert.equal(socket.frames.at(-1).event, EVENTS.AUDIO_TASK_REQUEST);
   assert.equal(session.sendAudio(Buffer.alloc(64 * 1024 + 1)), false);
   session.close();
+});
+
+test("Doubao adapter fails closed on an HTTP handshake rejection without reading its body", async () => {
+  let resumed = 0;
+  class RejectedSocket extends EventEmitter {
+    static OPEN = 1;
+    constructor() {
+      super();
+      this.readyState = 0;
+      queueMicrotask(() => this.emit("unexpected-response", {}, { resume: () => { resumed += 1; } }));
+    }
+    terminate() { this.readyState = 3; }
+  }
+  const events = [];
+  const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" }, WebSocketImpl: RejectedSocket, onEvent: (event) => events.push(event) });
+  await assert.rejects(() => session.connect(), /doubao-handshake-rejected/);
+  assert.equal(resumed, 1);
+  assert.deepEqual(events, [{ type: "error", message: "doubao-handshake-rejected" }]);
+});
+
+test("Doubao settings identify the protocol App Key as fixed and expose redacted failure copy", () => {
+  const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(pages, /App Key（协议固定）/);
+  assert.match(pages, /doubao-frame-compression-invalid/);
+  assert.doesNotMatch(pages, /App Key（可选）/);
 });
 
 class FakeProvider {

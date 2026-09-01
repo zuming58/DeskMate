@@ -53,7 +53,7 @@ function normalizeRealtimeConfig(value = {}) {
     endpoint: validateEndpoint(value.endpoint, { websocket: true }),
     appId: cleanText(value.appId, "App ID", { required: true, maxLength: 160 }),
     accessKey: validateSecret(value.accessKey, "Access Key"),
-    appKey: cleanText(value.appKey, "App Key", { maxLength: 240 }),
+    appKey: provider === "doubao" ? "" : cleanText(value.appKey, "App Key", { maxLength: 240 }),
     resourceId: cleanText(value.resourceId, "Resource ID", { required: true, maxLength: 160 }),
     model: cleanText(value.model, "实时语音模型", { required: true, maxLength: 120 }),
     voice: cleanText(value.voice, "音色", { required: true, maxLength: 160 }),

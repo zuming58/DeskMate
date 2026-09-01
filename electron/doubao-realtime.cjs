@@ -3,6 +3,7 @@ const WebSocket = require("ws");
 const { EVENTS, MESSAGE_TYPES, decodeFrame, encodeAudioEvent, encodeJsonEvent } = require("./doubao-realtime-codec.cjs");
 
 const DEFAULT_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
+const DOUBAO_PROTOCOL_APP_KEY = "PlgvMymc7f3tQnJ6";
 const EVENT_NAMES = Object.freeze({
   50: "connection.started", 51: "connection.failed", 52: "connection.finished",
   150: "session.ready", 152: "session.finished", 153: "session.failed", 154: "session.usage",
@@ -29,7 +30,7 @@ function validateConfig(value = {}) {
 }
 
 function translateFrame(frame, state) {
-  if (frame.messageType === MESSAGE_TYPES.ERROR) return { type: "error", code: frame.code, message: boundedText(frame.payloadJson?.message || frame.payloadJson?.error || "豆包实时对话返回错误", 240) };
+  if (frame.messageType === MESSAGE_TYPES.ERROR) return { type: "error", code: frame.code, message: "doubao-service-error" };
   if (frame.messageType === MESSAGE_TYPES.AUDIO_ONLY_RESPONSE || frame.event === 352) return { type: "audio", audio: frame.payload };
   const name = EVENT_NAMES[frame.event] || "diagnostic";
   const payload = frame.payloadJson || {};
@@ -50,8 +51,19 @@ function translateFrame(frame, state) {
   }
   if (name === "tts.started") return { type: "tts.start", text: boundedText(payload.text, 4096) };
   if (name === "tts.ended") return { type: "tts.end" };
-  if (name.endsWith("failed") || name === "dialog.error") return { type: "error", message: boundedText(payload.message || payload.error || "豆包实时对话失败", 240) };
+  if (name === "connection.failed") return { type: "error", message: "doubao-handshake-service-error" };
+  if (name === "session.failed") return { type: "error", message: "doubao-session-service-error" };
+  if (name === "dialog.error") return { type: "error", message: "doubao-service-error" };
   return { type: name };
+}
+
+function protocolErrorReason(error) {
+  const reason = String(error?.message || "");
+  if (/gzip|too-large/.test(reason)) return "doubao-frame-compression-invalid";
+  if (/json/.test(reason)) return "doubao-frame-json-invalid";
+  if (/session-id|connect-id|identifier/.test(reason)) return "doubao-frame-identifier-invalid";
+  if (/header|frame-size/.test(reason)) return "doubao-frame-header-invalid";
+  return "doubao-frame-layout-invalid";
 }
 
 class DoubaoRealtimeSession {
@@ -64,6 +76,7 @@ class DoubaoRealtimeSession {
     this.socket = null;
     this.ready = false;
     this.closed = false;
+    this.sessionRequestSent = false;
     this.state = { replyText: "" };
   }
 
@@ -72,7 +85,7 @@ class DoubaoRealtimeSession {
       "X-Api-App-ID": this.config.appId,
       "X-Api-Access-Key": this.config.accessKey,
       "X-Api-Resource-Id": this.config.resourceId,
-      "X-Api-App-Key": this.config.appKey,
+      "X-Api-App-Key": DOUBAO_PROTOCOL_APP_KEY,
       "X-Api-Connect-Id": randomUUID(),
     }).filter(([, value]) => value));
   }
@@ -102,13 +115,24 @@ class DoubaoRealtimeSession {
       socket.once("open", () => {
         if (this.closed) return;
         socket.send(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
-        socket.send(encodeJsonEvent(EVENTS.START_SESSION, this.buildSessionPayload(), this.sessionId));
+      });
+      socket.once("unexpected-response", (_request, response) => {
+        response?.resume?.();
+        try { socket.terminate?.(); } catch { /* best effort */ }
+        const error = new Error("doubao-handshake-rejected");
+        finish(reject, error);
+        this.onEvent({ type: "error", message: error.message });
       });
       socket.on("message", (data) => {
         if (this.closed) return;
         let event;
-        try { event = translateFrame(decodeFrame(data), this.state); }
-        catch { event = { type: "error", message: "doubao-frame-invalid" }; }
+        try {
+          event = translateFrame(decodeFrame(data), this.state);
+          if (event.type === "connection.started" && !this.sessionRequestSent) {
+            this.sessionRequestSent = true;
+            socket.send(encodeJsonEvent(EVENTS.START_SESSION, this.buildSessionPayload(), this.sessionId));
+          }
+        } catch (error) { event = { type: "error", message: protocolErrorReason(error) }; }
         if (event.type === "session.ready") { this.ready = true; finish(resolve, { ok: true, sessionId: this.sessionId }); }
         if (event.type === "error" && !this.ready) finish(reject, new Error(event.message));
         this.onEvent(event);
@@ -157,4 +181,4 @@ class DoubaoRealtimeSession {
   }
 }
 
-module.exports = { DEFAULT_ENDPOINT, DoubaoRealtimeSession, translateFrame, validateConfig };
+module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, protocolErrorReason, translateFrame, validateConfig };
