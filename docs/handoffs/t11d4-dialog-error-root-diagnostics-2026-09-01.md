@@ -5,7 +5,7 @@
 - Branch: `codex/t11d4-dialog-error-root`
 - Exact base: `codex/t11d3-post-tts-dialog-recovery@e637b73fa59e29f7ac6799002c9c68f986c0fc76`
 - Build identity: `t11d4-dialog-error-root-diagnostics-v1`
-- Implementation and verification commit: recorded by the closure commit
+- Implementation and verification commit: `9055b00215e8846c578267ea20ce4686dffcf9dd`
 
 ## Result
 
