@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T11D.2 Doubao terminal diagnostics complete; behavior repair awaits new HIL evidence
+
+- Scope and identity: Windows diagnostic-only branch `codex/t11d2-doubao-terminal-diagnostics` was created from exact T11D.1 base `1243570244133370c6de70dc241f208a23f6409d`; implementation commit is `355f8b2835f06e09c74c45a29f9f46aefdccc0d2`. Build identity is `t11d2-doubao-terminal-diagnostics-v1`.
+- Evidence: provider events now receive a process-local arrival sequence before controller queueing. Independent counters and closed enums distinguish error frame, dialog error, session finish/failure, connection finish and transport error/close, including whether a terminal arrived during explicit stop or while `tts.end` waited for speaker drain.
+- Privacy and behavior boundary: provider error codes map only to fixed coarse buckets. Raw code/message/payload, text, PCM, timestamps and connect/session/request/message identifiers remain excluded. Reconnect, stop, error handling, audio credit/drain, strict half-duplex, UI expressions and all firmware are unchanged.
+- Verification: `npm ci --include=dev` passed; targeted terminal/privacy plus long-answer/backpressure/stop/half-duplex regressions passed `59/59`; full `npm test` passed `242/242`; isolated Windows packaging passed. `DeskMate.exe` is `202690560` bytes / SHA-256 `EA82E908ADDCB143CDF95579A3912C313C65D0543A3A86B710BA2D454B8A625A`; `app.asar` is `112642539` bytes / SHA-256 `C1827A5F3370C1B5D8D2E36AC5FE80EB6F0917D8E34008271B0DC4C6095A274F`. Read-only inspection confirmed the T11D.2 build identity.
+- Safety and next: no app launch/control, user diagnostic, credential, audio/text, device, port, Flash or firmware access occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. One new exact-package conversation and sanitized export must select `error-frame`, `dialog-error`, session terminal or transport terminal before any behavior repair. The audited Desktop/Xiaozhi seven-state face synchronization is not implemented in this package. Contract: `docs/contracts/t11d2-doubao-terminal-diagnostics-v1.md`; handoff: `docs/handoffs/t11d2-doubao-terminal-diagnostics-2026-09-01.md`.
+
 ## 2026-09-01 - T11D.1 queue/runtime root repair implemented; Windows HIL pending
 
 - Scope and base: Windows software only on `codex/t11d1-companion-queue-runtime-root-fix`, created from audit baseline `d21b8d1e304fd45d35181794065ebe5edc3ee021`; implementation and verification commit is `0e0adcc99d0277461d816563978de2f898213371`. The rejected T11D evidence was preserved: speaker `queueDrops=3` explained truncation, and captured whole-runtime updates explained renderer stopping after main idle.
