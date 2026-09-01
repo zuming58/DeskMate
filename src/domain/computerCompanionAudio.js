@@ -52,7 +52,15 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
       if (!mediaDevices?.getUserMedia || !AudioContextClass) throw new Error("computer-audio-renderer-unsupported");
       session = Object.freeze({ sessionId: String(command.sessionId), generation: Number(command.generation) });
       const deviceId = String(command.deviceId || "");
-      stream = await mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
+      stream = await mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        },
+      });
       if (!stream?.getAudioTracks?.().length) throw Object.assign(new Error("computer-microphone-not-found"), { name: "NotFoundError" });
       captureContext = new AudioContextClass();
       const input = captureContext.createMediaStreamSource(stream);

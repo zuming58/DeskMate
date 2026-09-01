@@ -269,6 +269,7 @@ function AppContent() {
         if (value.audioSource) next.audioSource = value.audioSource;
         if (value.audioSink) next.audioSink = value.audioSink;
         if (value.audioSelection) next.audioSelection = value.audioSelection;
+        if (value.echoGuard) next.echoGuard = value.echoGuard;
         if (value.computerAudio) next.computerAudio = value.computerAudio;
         if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
       } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);

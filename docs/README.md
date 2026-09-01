@@ -2,6 +2,9 @@
 
 ## Current handoff
 
+- [T11C companion half-duplex echo guard contract](contracts/t11c-companion-half-duplex-echo-guard-v1.md)
+- [T11B live companion main-chain acceptance](testing/t11b-live-companion-main-chain-acceptance-2026-09-01.md)
+
 - [T11B Doubao real-frame interoperability repair](handoffs/t11b-doubao-real-frame-repair-2026-09-01.md)
 
 - [T11B desktop computer-audio companion handoff](handoffs/t11b-desktop-computer-audio-companion-2026-09-01.md)

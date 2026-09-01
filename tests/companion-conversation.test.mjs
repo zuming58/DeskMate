@@ -195,7 +195,7 @@ test("continuous companion session persists final turns before UI completion and
   await controller.eventChain;
   assert.deepEqual(commits.map((item) => [item.role, item.content]), [["user", "你好"], ["assistant", "你好呀"]]);
   assert.ok(events.findIndex((item) => item.type === "turn.user-final") > events.findIndex((item) => item.type === "transcript.partial"));
-  assert.deepEqual(states, ["waiting", "listening", "thinking", "working", "completed", "listening"]);
+  assert.deepEqual(states, ["waiting", "listening", "thinking", "working", "listening"]);
   assert.equal(controller.snapshot().active, true);
   const staleProvider = provider;
   await controller.stop("escape");
@@ -367,8 +367,14 @@ test("manual response interruption clears playback and ignores late response fra
   provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
   await controller.eventChain;
   assert.equal(sink.chunks.length, 1);
+  assert.equal(source.push(Buffer.from([7, 8])), true);
+  assert.equal(provider.audio.length, 0);
+  assert.equal(controller.snapshot().echoGuard.active, true);
+  assert.equal(controller.snapshot().echoGuard.counters.echoGuardDroppedChunks, 1);
   assert.equal((await controller.interrupt("user")).ok, true);
   assert.equal(provider.interruptions, 1);
+  assert.equal(source.push(Buffer.from([9, 10])), true);
+  assert.deepEqual([...provider.audio[0]], [9, 10]);
   provider.emit({ type: "audio", audio: Buffer.from([3, 4]) });
   provider.emit({ type: "chat.final", text: "迟到回复" });
   provider.emit({ type: "tts.end" });
@@ -379,32 +385,64 @@ test("manual response interruption clears playback and ignores late response fra
   await controller.stop();
 });
 
-test("a confirmed user utterance during playback drops the old response and preserves the new thinking turn", async () => {
+test("computer-speaker playback ignores reflected ASR and resumes uplink after tts end", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();
-  const replies = [];
+  const commits = [];
+  const transcripts = [];
   let provider;
   const controller = new CompanionConversationController({
     providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
     audioSource: source,
     audioSink: sink,
-    onEvent: (event) => { if (event.type === "reply.partial") replies.push(event.text); },
+    commitTurn: async (turn) => { commits.push(turn); },
+    onEvent: (event) => { if (event.type === "transcript.partial") transcripts.push(event.text); },
     wait: async () => {},
   });
+  assert.equal(controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } }).ok, true);
   await controller.start({ sessionId: "spoken-interrupt", generation: 1 });
+  assert.equal(source.push(Buffer.from([5, 6])), true);
+  assert.equal(provider.audio.length, 1);
   provider.emit({ type: "tts.start" });
   provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
   await controller.eventChain;
-  provider.emit({ type: "asr.final", text: "先停一下" });
-  provider.emit({ type: "audio", audio: Buffer.from([3, 4]) });
-  provider.emit({ type: "chat.partial", text: "旧", fullText: "旧回答" });
+  assert.equal(source.push(Buffer.from([7, 8])), true);
+  provider.emit({ type: "asr.partial", text: "扬声器回灌片段" });
+  provider.emit({ type: "asr.final", text: "扬声器回灌终句" });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "speaking");
+  assert.equal(provider.audio.length, 1);
+  assert.equal(provider.interruptions, 0);
+  assert.deepEqual(commits, []);
+  assert.deepEqual(transcripts, []);
+  assert.deepEqual(controller.snapshot().echoGuard.counters, { echoGuardDroppedChunks: 1, ignoredAsrDuringPlayback: 2 });
   provider.emit({ type: "tts.end" });
   await controller.eventChain;
-  assert.equal(sink.chunks.length, 0);
-  assert.deepEqual(replies, []);
-  assert.equal(controller.snapshot().state, "thinking");
-  provider.emit({ type: "chat.partial", text: "新", fullText: "新回答" });
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(controller.snapshot().echoGuard.active, false);
+  assert.equal(source.push(Buffer.from([9, 10])), true);
+  assert.equal(provider.audio.length, 2);
+  await controller.stop();
+});
+
+test("the first real TTS audio frame enters working even if the provider omits tts start", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const states = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    publishState: async ({ state }) => { states.push(state); return { ok: true }; },
+    wait: async () => {},
+  });
+  assert.equal(controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } }).ok, true);
+  await controller.start({ sessionId: "audio-first", generation: 1 });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
   await controller.eventChain;
-  assert.deepEqual(replies, ["新回答"]);
+  assert.equal(controller.snapshot().state, "speaking");
+  assert.equal(controller.snapshot().echoGuard.active, true);
+  assert.equal(states.at(-1), "working");
   await controller.stop();
 });

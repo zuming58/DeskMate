@@ -54,7 +54,7 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
     bridge,
     AudioContextClass: FakeAudioContext,
     mediaDevices: { getUserMedia: async (constraints) => {
-      assert.deepEqual(constraints, { audio: { deviceId: { exact: "chosen-device" } } });
+      assert.deepEqual(constraints, { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, deviceId: { exact: "chosen-device" } } });
       return { getAudioTracks: () => [{ addEventListener() {}, stop() { stopped = true; } }], getTracks: () => [{ stop() { stopped = true; } }] };
     } },
   });
@@ -70,6 +70,29 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   assert.ok(events.some((item) => item.type === "sink.started"));
   assert.equal(playbackStarts, 1);
   assert.equal(stopped, true);
+  await engine.close();
+});
+
+test("renderer computer microphone keeps processing constraints when the system-default device is selected", async () => {
+  let received;
+  class FakeAudioContext {
+    constructor() { this.sampleRate = 48000; this.destination = {}; }
+    createMediaStreamSource() { return { connect() {} }; }
+    createScriptProcessor() { return { connect() {}, disconnect() {}, onaudioprocess: null }; }
+    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    async close() {}
+  }
+  const engine = createComputerCompanionAudioEngine({
+    bridge: { sendCompanionComputerAudioEvent() {} },
+    AudioContextClass: FakeAudioContext,
+    mediaDevices: { getUserMedia: async (constraints) => {
+      received = constraints;
+      return { getAudioTracks: () => [{ addEventListener() {}, stop() {} }], getTracks: () => [{ stop() {} }] };
+    } },
+  });
+  await engine.handleCommand({ version: 1, type: "source.start", sessionId: "default-device", generation: 1 });
+  assert.deepEqual(received, { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+  assert.equal(Object.hasOwn(received.audio, "deviceId"), false);
   await engine.close();
 });
 

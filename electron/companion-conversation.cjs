@@ -2,6 +2,7 @@ const { randomUUID } = require("crypto");
 
 const STATES = Object.freeze(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
 const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", listening: "listening", thinking: "thinking", speaking: "working", completed: "completed", error: "error" });
+const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 
 function boundedText(value, max = 16384) {
   return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").slice(0, max);
@@ -50,6 +51,29 @@ class CompanionConversationController {
     this.audioSelection = Object.freeze({ requestedSource: "", activeSource: "", output: "", fallback: null });
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
+    this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0 };
+  }
+
+  echoGuardActive() {
+    return this.audioSelection.output === "computer" && this.state === "speaking";
+  }
+
+  echoGuardSnapshot() {
+    return Object.freeze({
+      policy: ECHO_GUARD_POLICY,
+      active: this.echoGuardActive(),
+      counters: Object.freeze({ ...this.echoGuardCounters }),
+    });
+  }
+
+  forwardSourceAudio(chunk, token) {
+    if (!this.isCurrent(token)) return false;
+    if (this.echoGuardActive()) {
+      this.echoGuardCounters.echoGuardDroppedChunks += 1;
+      return false;
+    }
+    this.provider?.sendAudio?.(chunk);
+    return true;
   }
 
   snapshot() {
@@ -67,6 +91,7 @@ class CompanionConversationController {
         activeSource: sourceStatus.activeSource || this.audioSelection.activeSource,
         fallback: sourceStatus.fallback || this.audioSelection.fallback,
       }),
+      echoGuard: this.echoGuardSnapshot(),
       error: this.lastError,
     });
   }
@@ -117,7 +142,7 @@ class CompanionConversationController {
       const sink = await this.audioSink.start();
       if (!sink?.ok) throw new Error(sink?.reason || "audio-sink-start-failed");
       const source = await this.audioSource.start({
-        onAudio: (chunk) => { if (this.isCurrent(token)) this.provider?.sendAudio?.(chunk); },
+        onAudio: (chunk) => { this.forwardSourceAudio(chunk, token); },
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
@@ -171,7 +196,7 @@ class CompanionConversationController {
       await this.connectWithRetry(token);
       if (!this.isCurrent(token)) return;
       const source = await this.audioSource.start({
-        onAudio: (chunk) => { if (this.isCurrent(token)) this.provider?.sendAudio?.(chunk); },
+        onAudio: (chunk) => { this.forwardSourceAudio(chunk, token); },
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
@@ -198,8 +223,13 @@ class CompanionConversationController {
       await this.fail(event.message || "companion-provider-error", token);
       return { ok: false };
     }
+    if (["asr.partial", "asr.final"].includes(event.type) && this.echoGuardActive()) {
+      this.echoGuardCounters.ignoredAsrDuringPlayback += 1;
+      return { ignored: true, reason: "companion-playback-echo-guard" };
+    }
     if (event.type === "audio") {
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
+      if (this.state !== "speaking") await this.transition("speaking", { reason: "tts-audio" });
       await this.audioSink.write(event.audio);
       return { ok: true };
     }
@@ -248,9 +278,7 @@ class CompanionConversationController {
         if (this.isCurrent(token) && this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
         return { ok: true, interrupted: true };
       }
-      await this.transition("completed");
-      await this.wait(0);
-      if (this.isCurrent(token)) await this.transition("listening");
+      if (this.isCurrent(token)) await this.transition("listening", { reason: "tts-ended" });
       return { ok: true };
     }
     return { ignored: true, reason: "companion-event-unmapped" };
@@ -310,4 +338,4 @@ class CompanionConversationController {
   }
 }
 
-module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, CompanionConversationController };
+module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, COMPANION_ECHO_GUARD_POLICY: ECHO_GUARD_POLICY, CompanionConversationController };

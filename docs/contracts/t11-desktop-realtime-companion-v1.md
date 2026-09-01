@@ -53,7 +53,7 @@ Qwen/Bailian ASR remains unchanged for text voice input and voice edit.
 
 `CompanionAudioSource` provides `status`, `start`, `stop`, PCM chunks, and errors. `CompanionAudioSink` provides `status`, `start`, `write`, `interrupt`, and `stop`.
 
-The original T11 slice shipped simulated adapters and explicit unavailable production adapters. T11A later supplied the accepted EasyInput microphone uplink. The additive frozen T11B extension is defined in [`t11b-desktop-computer-audio-companion-v1.md`](t11b-desktop-computer-audio-companion-v1.md): computer microphone plus computer speaker is now the production baseline, and a selected EasyInput microphone may fall back visibly to the computer only before capture starts. This does not freeze or guess an EasyInput speaker protocol.
+The original T11 slice shipped simulated adapters and explicit unavailable production adapters. T11A later supplied the accepted EasyInput microphone uplink. The additive frozen T11B extension is defined in [`t11b-desktop-computer-audio-companion-v1.md`](t11b-desktop-computer-audio-companion-v1.md): computer microphone plus computer speaker is now the production baseline, and a selected EasyInput microphone may fall back visibly to the computer only before capture starts. T11C adds the strict half-duplex [`computer-speaker-echo-guard-v1`](t11c-companion-half-duplex-echo-guard-v1.md). Neither extension freezes or guesses an EasyInput speaker protocol.
 
 ## Turn persistence
 

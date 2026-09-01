@@ -22,12 +22,10 @@ Date: 2026-09-01
 
 ## Deliberately open
 
-- Real credential and live Doubao network acceptance.
-- Packaged computer microphone permission and selected-device behavior.
-- Real computer-speaker playback, echo, latency and natural barge-in quality.
+- The real credential, live Doubao network, computer microphone and computer-speaker main chain passed user-present acceptance on 2026-09-01.
+- T11C now defaults to strict half-duplex playback with explicit manual interruption. Natural automatic barge-in quality remains open and requires an independent AEC/acoustic gate.
 - EasyInput microphone fallback and mid-session disconnect in a real companion session.
 - T11E EasyInput speaker framing, firmware implementation and a later Windows sink.
 - Physical OLED/Agent-state confirmation during live conversation.
 
 These are `HIL_NOT_RUN`, not missing software claims. No hardware or network endpoint was accessed during this audit.
-

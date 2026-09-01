@@ -59,7 +59,7 @@ test("EasyInput ACK and downstream Link evidence remain separate", () => {
   assert.equal(unavailable.xiaozhiDisplayConfirmed, false);
 });
 
-test("companion page visually separates preview from real hardware state testing", async () => {
+test("companion overview keeps the real face first and removes the conflicting software preview entry", async () => {
   const [pages, app] = await Promise.all([
     readFile(new URL("../src/pages.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
@@ -68,8 +68,8 @@ test("companion page visually separates preview from real hardware state testing
   const companionOverview = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
   const expressionLibrary = pages.slice(pages.indexOf("export function ExpressionsPage"), pages.indexOf("export function ExpressionEditorPage"));
   for (const label of ["小智工作状态测试", "EasyInput 写入", "小智 DeskMate Link", "EasyInput ACK 只证明写入被总控接受", "查看系统诊断"]) assert.match(companion, new RegExp(label));
-  assert.match(companionOverview, /<AgentStateTestPanel[\s\S]*<div className="companion-overview">/);
-  assert.match(companionOverview, /本地表情预览已移到“表情库”，不会控制小智/);
+  assert.match(companionOverview, /<div className="companion-overview">[\s\S]*<AgentStateTestPanel/);
+  assert.doesNotMatch(companionOverview, /本地表情预览已移到|打开软件表情库|value: "expressions"/);
   assert.doesNotMatch(companionOverview, /aria-label="Windows 软件表情预览"/);
   for (const label of ["Windows 软件表情预览库", "只做软件预览", "不会发送 Agent State", "不会控制小智 OLED"]) assert.match(expressionLibrary, new RegExp(label));
   assert.match(companion, /requestManualAgentState/);

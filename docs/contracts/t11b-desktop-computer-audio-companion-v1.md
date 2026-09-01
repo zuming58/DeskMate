@@ -42,7 +42,7 @@ The frozen lifecycle remains:
 
 The session stays active across turns. Final user and assistant turns are committed transactionally before final UI events.
 
-Manual interruption and a confirmed user utterance during playback clear scheduled computer audio immediately. The controller clears its local partial reply and discards late audio/reply frames from the interrupted response until its `tts.end`. No undocumented provider cancellation event is transmitted. The next user turn remains the current turn and stale frames never re-enter playback or persistence.
+T11B originally allowed manual interruption and a confirmed user utterance during playback to clear scheduled computer audio. Live acceptance later showed computer-speaker feedback could satisfy that automatic path. For the computer-speaker baseline this paragraph is superseded by [`T11C_COMPANION_HALF_DUPLEX_ECHO_GUARD_V1_FROZEN`](t11c-companion-half-duplex-echo-guard-v1.md): playback is strict half-duplex and manual interruption is the supported V1 path.
 
 Transport failures use the existing finite reconnect path. Reconnect creates a new provider instance, restarts capture through the already locked source adapter and never replays old PCM, replies or Agent states. Provider/content errors fail closed with an enumerated error code.
 
@@ -66,4 +66,3 @@ Voice input/edit preempts companion ownership. Displaced states are dropped, not
 - No UDP, HID or DeskMate Link speaker framing is invented.
 - Xiaozhi audio is not initialized or used as a fallback.
 - Real Doubao credentials/network, microphone permissions, acoustic echo, latency, packaged playback and physical Agent/OLED behavior require user-present HIL.
-

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Browser echo cancellation is not a conversation policy
+
+- Requesting echo cancellation, noise suppression and automatic gain control is useful, but a computer speaker can still return enough speech for cloud ASR to produce a final event.
+- If a product cannot prove an acoustic barge-in gate, enforce turn-taking at the state-machine boundary: stop microphone upload and ignore ASR during actual playback, then resume only on `tts.end` or an explicit manual interruption.
+- Keep only counts and enums in diagnostics. Reflected ASR text and raw PCM are neither necessary nor safe debugging evidence.
+
 ## A protocol codec cannot certify itself
 
 - Symptom: a fake server built frames with the same local encoder as the client, so all tests passed while the live provider immediately failed with a generic frame error.

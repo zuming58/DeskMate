@@ -1,5 +1,12 @@
 # Decisions
 
+## D047 - Computer-speaker companion defaults to strict half-duplex
+
+- Date: 2026-09-01
+- Decision: the accepted computer-speaker realtime companion uses `computer-speaker-echo-guard-v1`. While real TTS playback is active, microphone PCM is not uploaded and ASR partial/final is ignored. `tts.end` or the explicit manual interrupt returns immediately to listening and restores upload.
+- Why: live T11B acceptance proved the main chain but also showed that speaker feedback could satisfy the old spoken-barge-in path and interrupt the assistant's own answer. Browser AEC constraints help but cannot be treated as sufficient acoustic evidence.
+- Consequence: natural automatic barge-in is not a V1 claim and requires a separate AEC/acoustic-gate package. EasyInput KEY1 remains the existing text VoiceWorkflow trigger until a separate visible ownership/routing contract is frozen.
+
 ## D046 - Realtime provider compatibility requires external wire evidence
 
 - Date: 2026-09-01

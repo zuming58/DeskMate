@@ -12,6 +12,7 @@
 - Text dictation defaults to a concrete Windows input device and can explicitly select the T10E EasyInput LAN source. The preference is local, while each recording locks its actual source. Board failure before start is visible and falls back once to the Windows source; failure after start ends the session without switching.
 - The Doubao realtime adapter, finite reconnect, credentials and turn commits remain owned by Electron main. T11B supplies the production computer microphone and computer speaker path while reusing the persisted microphone selection. A selected EasyInput uplink may fall back visibly to the computer only before capture starts; a later failure ends the session without switching. EasyInput speaker downlink remains unavailable because no T11E contract is frozen.
 - Web Audio capture/playback runs behind a versioned session/generation IPC bridge. Raw PCM crosses only that narrow main/renderer audio boundary and never enters React state, diagnostics, logs, SQLite or exports. The renderer never receives provider credentials or network configuration.
+- T11B user-present acceptance proved the real Doubao/computer-microphone/computer-speaker chain. T11C now uses strict half-duplex for the computer speaker: `listening` uploads PCM, ASR final enters `thinking`, real playback enters `speaking/working` and suppresses upload plus ASR, then `tts.end` or explicit manual interruption returns to `listening`. Automatic acoustic barge-in remains outside the accepted boundary.
 
 ## Service separation
 
@@ -19,7 +20,7 @@
 | --- | --- | --- | --- |
 | Speech transcription | Bailian `qwen3-asr-flash` | voice input, KEY3 instruction | Existing encrypted Bailian credential |
 | Text model | Bailian fallback or configured OpenAI-compatible endpoint | smart organizer, KEY3 voice edit; later Bridge and memory jobs | API key encrypted in Electron main; endpoint/model status only in renderer |
-| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; selected computer/EasyInput input plus computer output is implemented; real credential/audio HIL remains pending |
+| Realtime voice | Doubao binary WebSocket adapter behind `CompanionConversationController` | companion ASR/chat/TTS | Credentials encrypted in main; real computer input/output chain accepted; strict half-duplex guard is the default while natural automatic barge-in remains pending |
 | Memory | local SQLite WAL | future companion turns and retrieval | Never written to EasyInput or Xiaozhi Flash |
 
 The text model and realtime voice plane must remain separate. Realtime replies cannot directly run Windows commands. Conversation events go to a typed intent Bridge, which then invokes only registered, purpose-visible host actions. This preserves the existing UUID application registry rather than giving a model arbitrary shell access.

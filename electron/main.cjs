@@ -186,7 +186,7 @@ function updateCompanionOverlay(event = {}) {
 
 function handleCompanionConversationEvent(event = {}) {
   const snapshot = companionConversationController?.snapshot?.();
-  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, computerAudio: computerCompanionAudio?.diagnostics?.() } : event;
+  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.() } : event;
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);
   if (event.type === "state" && ["idle", "error"].includes(event.state) && foregroundSessionState.active?.mode === "companion") {
@@ -769,7 +769,7 @@ async function runBailianOrganizerTest(text) {
 }
 
 function companionConversationStatus() {
-  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, error: "" };
+  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0 } }, error: "" };
   const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
   return { ...snapshot, service, foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" } };
 }

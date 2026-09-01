@@ -21,7 +21,7 @@ test("keeps the primary navigation compact and moves companion tools into AI Com
   for (const hiddenLabel of ["表情库", "表情编辑", "动作编排", "环境感知", "AI 联动"]) {
     assert.equal(labels.includes(hiddenLabel), false);
   }
-  for (const section of ["陪伴与记忆", "记忆管理", "表情库", "动作编排", "AI 联动"]) {
+  for (const section of ["陪伴与记忆", "记忆管理", "动作编排", "AI 联动"]) {
     assert.match(pages, new RegExp(section));
   }
   assert.match(pages, /id: "connections".*label: "设备连接"/);
@@ -69,6 +69,10 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.doesNotMatch(companion, /T10E 待接入|等待 T10E 音频/);
   assert.match(companion, /startCompanionConversation/);
   assert.match(companion, /唯一前台会话仲裁器/);
+  assert.match(companion, /回答中 · 防回声/);
+  assert.match(companion, /防回声中，自动语音打断暂停/);
+  assert.ok(companion.indexOf('<div className="companion-overview">') < companion.indexOf('<AgentStateTestPanel notify={notify} navigate={navigate} index="03"'));
+  assert.doesNotMatch(companion, /value: "expressions"|setSection\("expressions"\)|打开软件表情库|本地表情预览已移到/);
   assert.match(preload, /startCompanionConversation: \(value\) => ipcRenderer\.invoke\("companion:start", value\)/);
   assert.match(preload, /interruptCompanionConversation/);
   assert.match(app, /createComputerCompanionAudioEngine/);

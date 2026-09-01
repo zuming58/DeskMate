@@ -20,6 +20,8 @@ export function createDiagnosticReport(input = {}) {
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
   const conversationSource = input.conversation || {};
   const conversationCounters = conversationSource.counters || {};
+  const echoGuardSource = conversationSource.echoGuard || {};
+  const echoGuardCounters = echoGuardSource.counters || {};
   const conversation = {
     state: CONVERSATION_STATES.has(conversationSource.state) ? conversationSource.state : "idle",
     serviceConfigured: Boolean(conversationSource.serviceConfigured),
@@ -29,6 +31,11 @@ export function createDiagnosticReport(input = {}) {
     fallback: Boolean(conversationSource.fallback),
     error: /^[a-z0-9-]{0,120}$/.test(String(conversationSource.error || "")) ? String(conversationSource.error || "") : "companion-session-failed",
     counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
+    echoGuard: {
+      policy: echoGuardSource.policy === "computer-speaker-echo-guard-v1" ? echoGuardSource.policy : "unavailable",
+      active: Boolean(echoGuardSource.active),
+      counters: Object.fromEntries(["echoGuardDroppedChunks", "ignoredAsrDuringPlayback"].map((key) => [key, Number.isInteger(echoGuardCounters[key]) ? echoGuardCounters[key] : 0])),
+    },
   };
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
