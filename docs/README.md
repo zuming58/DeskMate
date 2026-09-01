@@ -2,6 +2,10 @@
 
 ## Current handoff
 
+- [T11D.6 strict turn ownership and cancellation diagnostics handoff](handoffs/t11d6-turn-cancel-diagnostics-2026-09-01.md)
+- [T11D.6 turn ownership and cancellation diagnostics contract](contracts/t11d6-turn-cancel-diagnostics-v1.md)
+- [T11D.6 intermediate-answer truncation root-cause review](reviews/t11d6-intermediate-answer-truncation-root-cause-2026-09-01.md)
+
 - [T11D.5 half-duplex keep-alive and UI handoff](handoffs/t11d5-half-duplex-keepalive-ui-2026-09-01.md)
 - [T11D.5 strict half-duplex keep-alive contract](contracts/t11d5-half-duplex-keepalive-v1.md)
 - [T11D.5 DialogCommonError root-cause review](reviews/t11d5-dialog-audio-idle-timeout-root-cause-2026-09-01.md)

@@ -389,3 +389,10 @@
 - 决策：首版 Link 固定为 115200 8N1 的三线 3.3 V TTL UART；EasyInput 是唯一请求发起者，同时只允许一个在途请求。帧使用 `DMLK` magic、版本、方向、消息 ID、非零序列、最大 128 字节 payload 和 CRC16-CCITT-FALSE。T08 只开放 HELLO、能力、状态和无硬件副作用的 Agent 状态存储/确认。
 - 原因：先冻结最小、可逐字节测试且没有机械风险的切片，可以让两个窗口真正并行，同时把启动噪声、断线、重复、超时、对端重启和旧动作不重放一次定义清楚。
 - 边界：UART0 转为 Link 后关闭应用与 bootloader 日志，不写 eFuse；ROM 启动噪声由流式解析器重同步。DISPLAY、MOTION、AUDIO 能力在后续切片验收前保持未启用；首次接线只读，不执行 OLED、舵机或音频。
+
+## D033 · Companion half-duplex authority is fixed at provider arrival
+
+- 日期：2026-09-01
+- 决策：实时陪伴只在 `listening` 接受麦克风 PCM 与 ASR；`thinking`、`speaking` 和本地 playback drain 全部关闭上行。判断依据是 provider callback 到达时同步推进的封闭阶段，不是等待串行 handler 执行后才变化的 React/控制器显示状态。
+- 原因：`tts.start/audio` 与 ASR 可以在同一个事件循环中连续到达；若阶段只在异步 handler 内更新，后到的回声 ASR 会读取旧 `listening` 并被当成新用户轮次。旧代码又对每个 accepted ASR final 无条件取消 sink，能直接截断已排队回答。
+- 边界：普通 ASR final 只开启用户轮次，不拥有取消权。当前只有显式“打断回答并继续听”可以在会话内取消 TTS；自然语音抢话仍未开放。provider `interrupt()` 只清本地累积文本，不构成服务端取消确认。

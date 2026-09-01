@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A serialized event queue still needs synchronous turn ownership
+
+- Symptom: the provider can emit `tts.start` and a delayed/reflected ASR final back-to-back while the awaited handler still shows `listening`; aggregate logs then show cancelled speaker blocks without proving which user turn caused them.
+- Practice: advance a closed half-duplex phase in the provider callback before enqueueing work, attach that immutable arrival phase to the event, and let only `listening` accept microphone/ASR. Count TTS completion only after local played/drain acknowledgement.
+- Rule: serialization preserves handler order but does not make handler state current at callback arrival. Ordinary ASR must never double as cancellation authority; only an explicit user control may abandon an answer.
+
 ## Protocol input mode must describe intentional silence, not only the audio format
 
 - Symptom: every TTS block is accepted and played, local drain succeeds and the transport remains open, yet the provider emits a dialog error immediately after the answer.
