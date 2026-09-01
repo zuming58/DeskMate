@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-01 - T11C companion strict half-duplex and layout closure complete; acoustic HIL pending
+
+- Role and identity: Windows desktop software only. Branch `codex/t11c-companion-layout-echo-guard` was created from exact repaired baseline `e77195edc4743fdd461860e9999acf60a30be95d`; implementation commit is `9f23b3a325cb66d75f5433ec61cb873c3120477e`.
+- HIL fact and cause: the user confirmed real speech input and audible reply after T11B, accepting the fixed-App-Key handshake, selected computer microphone, Doubao session and computer speaker. The answer could still interrupt itself because capture continued during playback and any reflected ASR final could trigger the old spoken-interrupt path.
+- Behavior: `computer-speaker-echo-guard-v1` now enforces strict turn taking. Listening uploads PCM, user final enters thinking, real playback enters speaking/Agent working while PCM and ASR are suppressed, and normal `tts.end` or explicit manual interruption restores listening/upload. Browser capture also requests echo cancellation, noise suppression, automatic gain control and mono without exposing the selected device ID.
+- Product surface: the real companion face is first, device/companion evidence stays beside it, and the Xiaozhi state test follows the whole overview. The conflicting Companion expression-library segment/callout is removed, while assets and hardware mappings remain. Playback visibly says `回答中 · 防回声`. Only an enum, active flag and two counters enter sanitized diagnostics.
+- Verification: `npm ci --include=dev` passed; targeted tests passed `42/42`; full `npm test` passed `216/216`; isolated Windows packaging passed. `DeskMate.exe` is 202,690,560 bytes with SHA-256 `4AFD80B0386FB0E850549A55FD194AE1E01B31AF5EED1B694CEAF7A854DCB27C`. `git diff --check`, ASCII path, differential secret, ignored-output and firmware-scope checks passed.
+- Safety and next: no app launch/control, user audio, credential, transcript, port/device/Flash, firmware, OLED or servo access occurred. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / MAIN_CHAIN_HIL_CONFIRMED / ECHO_GUARD_HIL_PENDING`. User-present follow-up is two normal turns, one long uninterrupted answer, one manual interruption and `listening -> thinking -> working -> listening` face/Xiaozhi observation. EasyInput KEY1 remains text VoiceWorkflow; natural automatic barge-in remains a later AEC/acoustic-gate package. Handoff: `docs/handoffs/t11c-companion-half-duplex-echo-guard-2026-09-01.md`.
+
 ## 2026-09-01 - T11B Doubao real-frame interoperability repair complete; live dialogue HIL pending
 
 - Role and identity: Windows desktop software only. Branch `codex/t11b-doubao-real-frame-repair` was created from exact T11B base `fe91dafcfd9c3a12c2c62491aa5a28849a6c4b42`; implementation commit is `80dac2e98ca462a781ff8ecf14d6bafcffdecd02`.

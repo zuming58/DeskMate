@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T11C companion half-duplex echo guard handoff](handoffs/t11c-companion-half-duplex-echo-guard-2026-09-01.md)
 - [T11C companion half-duplex echo guard contract](contracts/t11c-companion-half-duplex-echo-guard-v1.md)
 - [T11B live companion main-chain acceptance](testing/t11b-live-companion-main-chain-acceptance-2026-09-01.md)
 
