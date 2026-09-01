@@ -1,5 +1,12 @@
 # Decisions
 
+## D058 - Complete the manual-motion route as three ordered packages
+
+- Date: 2026-09-02
+- Decision: T10D-A belongs to the EasyInput/main-agent track and freezes only the Desktop→EasyInput request envelope plus a strict one-in-flight translator to the existing T10C `0x20/0x21` messages. It forwards operation, axis, direction, session/action IDs, volatile token, lease and attestations without adding angle, pulse, duty or GPIO fields; fake-endpoint evidence cannot be presented as motion.
+- Separation: T10D-B is a later Windows-only manual UI owned by the DeskMate software task. T10D-C is a later Xiaozhi real-adapter and user-present HIL package. Neither T10D-A nor T10D-B may enable production `MOTION`, install PWM or claim physical movement.
+- Gate: T10D-C cannot begin until installed axis mapping, independent current-limited supply, common ground, reachable cutoff, unloaded center, direction and soft limits are recorded. Preset choreography and expression-linked motion come only after both axes pass manual calibration.
+
 ## D057 - The main Agent owns one project-level control plane and integration verdict
 
 - Date: 2026-09-02

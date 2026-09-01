@@ -4,6 +4,7 @@
 
 - [Current three-task integration map (2026-09-02)](status/current-integration-map-2026-09-02.md)
 - [T13A mainline control reconciliation task](../flow/tasks/T13A-mainline-control-reconciliation.md)
+- [T10D-A EasyInput manual-motion bridge task](../flow/tasks/T10D-A-easyinput-manual-motion-bridge.md)
 - [T11F three-end integration audit](handoffs/t11f-three-end-integration-audit-2026-09-01.md)
 
 - [T10C Xiaozhi manual calibration frozen contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)

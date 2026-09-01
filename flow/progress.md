@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - Firmware continuation split selected while DeskMate software continues independently
+
+- The DeskMate software task reaffirmed its Windows-only boundary and delivered `codex/t12b1-provider-endpointing-repair@710595f0b8b4bd209721fef9c6a96d5b80f43481` with `270/270`, packaging and pending exact-package custom-VAD HIL. Its later memory, persona, wake and intent/application-control work remains in that task and will return exact handoffs to the main Agent.
+- Main-agent firmware analysis selected T10D-A as the next safe parallel package: freeze and implement only the Desktop→EasyInput manual-calibration transport and strict EasyInput→Xiaozhi translator against the already frozen T10C messages. It will use a fake endpoint and Host/build gates; no Windows UI, real Xiaozhi adapter, PWM, motion, app launch or device access enters this slice.
+- Xiaozhi requires no new display/state code for current companion behavior. Its next production change is intentionally deferred until T10D-A and the later T10D-B UI are integrated and the user-present electrical/mechanical Stage 0 evidence is accepted. Preset actions and dancing remain later than manual two-axis calibration.
+- EasyInput T11E-B local-speaker HIL remains an independent, separately authorized hardware gate. Realtime desktop speaker downlink stays `NOT_FROZEN` until the local probe and microphone-priority behavior pass.
+- Added `flow/tasks/T10D-A-easyinput-manual-motion-bridge.md` and D058. No implementation source, application, port/device, Flash/NVS/eFuse, audio, OLED, PWM or servo was touched in this planning update.
+
 ## 2026-09-02 - Main Agent reconciled all three task Flows into one project control plan
 
 - Read and cross-checked the latest `EasyInput固件开发`, `DeskMate软件开发` and `小智云台固件开发` task conclusions against their actual branch-local `flow/` files, Git ancestry, worktree state and pushed HEADs. The primary checkout was intentionally left untouched because it remains a dirty T07C worktree.
