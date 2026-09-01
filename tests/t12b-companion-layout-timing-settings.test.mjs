@@ -63,10 +63,10 @@ test("manual companion seconds accept official boundaries and reject invalid dra
   assert.throws(() => validateCompanionPreferences({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 1200, idleTimeoutMs: 60000 }), /end-smooth/);
 });
 
-test("an eight-second setting reaches the exact minimal provider endpointing request", () => {
+test("an eight-second setting enables the provider custom VAD window", () => {
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice", endSmoothWindowMs: 8000 } });
   const payload = session.buildSessionPayload();
-  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 8000 } });
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 8000, enable_custom_vad: true } });
   assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
   assert.equal(Object.hasOwn(payload.asr, "audio_info"), false);
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");

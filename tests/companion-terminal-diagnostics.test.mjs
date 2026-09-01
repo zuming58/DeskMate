@@ -147,11 +147,11 @@ test("event 359 drains to listening on the same provider and accepts a second tu
   await harness.controller.stop();
 });
 
-test("the strict half-duplex keep-alive request keeps endpointing minimal and classifies idle timeout", async () => {
+test("the strict half-duplex keep-alive request enables custom endpointing and classifies idle timeout", async () => {
   const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" } });
   const payload = session.buildSessionPayload();
-  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 5000 } });
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 5000, enable_custom_vad: true } });
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
   assert.equal(providerFailureBucket(52000042), "audio-idle-timeout");
@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes an explicit provider endpointing repair build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t12b1-provider-endpointing-repair-v1/);
+  assert.match(main, /t12b1-provider-custom-vad-v2/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 
