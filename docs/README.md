@@ -2,6 +2,13 @@
 
 ## Current handoff
 
+- [T11E-A EasyInput local speaker output handoff](handoffs/t11e-a-easyinput-speaker-output-2026-09-01.md)
+- [T11E-A EasyInput speaker output frozen contract](contracts/easyinput-speaker-output-v1.md)
+- [T11E-A Maker speaker reference audit](provenance/t11e-a-easyinput-speaker-reference-audit.md)
+- [T10E EasyInput audio capture task](../flow/tasks/T10E-easyinput-audio-capture.md)
+- [T10E Maker audio reference audit](provenance/t10e-easyinput-audio-capture-reference-audit.md)
+- [T10E EasyInput audio capture code handoff](handoffs/t10e-easyinput-audio-capture-2026-08-31.md)
+
 - [T11D.4 dialog-error root diagnostics handoff](handoffs/t11d4-dialog-error-root-diagnostics-2026-09-01.md)
 - [T11D.4 dialog-error root diagnostics contract](contracts/t11d4-dialog-error-root-diagnostics-v1.md)
 - [T11D.4 DialogCommonError root-cause audit](reviews/t11d4-dialog-error-root-cause-audit-2026-09-01.md)

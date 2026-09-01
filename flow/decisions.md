@@ -1,5 +1,27 @@
 # Decisions
 
+## D055 - EasyInput speaker starts as a local hardware gate with microphone priority
+
+- Date: 2026-09-01
+- Decision: the first EasyInput speaker slice is local I2S1 output only, using GPIO14/13/15, signed 16-bit 48 kHz mono-left PCM and the existing GPIO8 `Speaker` lease. Its sole producer is one synthesized low-volume startup probe; no desktop/HID/UDP/Link downlink is inferred from the fixed Maker sound-resource path.
+- Arbitration: the T10E board microphone has absolute priority. A microphone generation blocks new playback, cancels an active probe, waits for I2S1 deletion and releases only exact matching speaker/microphone generations before I2S0 begins.
+- Boundary: passing the local probe does not mean DeskMate real-time audio output is connected. A later package must separately freeze the desktop-to-EasyInput downlink, buffering, cancellation and recovery contract. Sound-bank reads/writes remain independent operations.
+
+## D054 - Computer microphone is the default; EasyInput capture is selectable
+
+- Date: 2026-08-31
+- Decision: DeskMate desktop voice workflows default to the computer microphone. The verified EasyInput LAN microphone remains an optional user-selected source rather than the mandatory source for every recording.
+- Session behavior: the selected source is fixed for one recording session and never changes mid-recording. If the optional EasyInput source is unavailable before a session, the desktop may visibly fall back to the computer microphone; it must not claim that board audio is active.
+- Scope: EasyInput remains the sole enabled external board-audio endpoint in V1, while the existing computer microphone adapter is also allowed. Bluetooth microphone capture remains unimplemented and must not be shown as available.
+
+## D053 - EasyInput is the only DeskMate V1 board audio capture endpoint
+
+- Date: 2026-08-31
+- Decision: T10E uses the EasyInput onboard microphone through I2S0 on GPIO9/10/11 and the existing GPIO8 `KeyboardMic` lease. Audio is PCM S16LE, 16 kHz, mono, 20 ms frames over the frozen Maker-compatible LAN control and packet formats.
+- Configuration: firmware projects only the existing top-level `wifi_ssid`, `wifi_password`, `audio_host` and `audio_port` values. Incomplete configuration disables capture; it never triggers LAN scanning, broadcast or address guessing.
+- Scheduling and failure: capture and UDP sending are isolated by a bounded 64-frame PSRAM queue. Network, allocation and I2S failures are audio-local and cannot block input, LED, configuration, Host Action, Agent-state or DeskMate Link behavior.
+- Boundary: T10E does not add speaker playback, BLE, Xiaozhi audio, desktop code or a second GPIO8 owner.
+
 ## D052 - DialogCommonError fails closed and TTS completion remains a same-session boundary
 
 - Date: 2026-09-01

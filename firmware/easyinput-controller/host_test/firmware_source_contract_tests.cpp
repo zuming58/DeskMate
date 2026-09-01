@@ -88,6 +88,16 @@ int main() {
     const std::string link_uart_source = read_all(LINK_UART_SOURCE_PATH);
     const std::string link_contract = read_all(LINK_CONTRACT_PATH);
     const std::string link_vectors = read_all(LINK_VECTORS_PATH);
+    const std::string audio_core_header = read_all(AUDIO_CORE_HEADER_PATH);
+    const std::string audio_core_source = read_all(AUDIO_CORE_SOURCE_PATH);
+    const std::string audio_service_header = read_all(AUDIO_SERVICE_HEADER_PATH);
+    const std::string audio_service_source = read_all(AUDIO_SERVICE_SOURCE_PATH);
+    const std::string audio_contract = read_all(AUDIO_CONTRACT_PATH);
+    const std::string speaker_core_header = read_all(SPEAKER_CORE_HEADER_PATH);
+    const std::string speaker_core_source = read_all(SPEAKER_CORE_SOURCE_PATH);
+    const std::string speaker_service_header = read_all(SPEAKER_SERVICE_HEADER_PATH);
+    const std::string speaker_service_source = read_all(SPEAKER_SERVICE_SOURCE_PATH);
+    const std::string speaker_contract = read_all(SPEAKER_CONTRACT_PATH);
 
     CHECK(contains(main_source, "esp_timer_get_time()"));
     CHECK(contains(main_source, "monotonic_milliseconds"));
@@ -336,6 +346,98 @@ int main() {
     CHECK(contains(link_contract, "DESKMATE_LINK_V1_FROZEN"));
     CHECK(contains(link_vectors,
                    "444D4C4B01010100010000000700010101443322118228"));
+
+    // T10E is the only EasyInput microphone implementation. It keeps GPIO8
+    // ownership centralized, uses a bounded PSRAM queue and never guesses a
+    // host or starts I2S from the physical PTT keys.
+    CHECK(contains(audio_contract, "EASYINPUT_AUDIO_CAPTURE_V1_FROZEN"));
+    CHECK(contains(audio_contract, "EICC"));
+    CHECK(contains(audio_contract, "EIAU"));
+    CHECK(contains(audio_core_header, "kAudioFrameQueueCapacity = 64"));
+    CHECK(contains(audio_core_header, "kAudioControlTimeoutMs = 15000"));
+    CHECK(contains(audio_core_header, "kAudioMaximumStreamMs = 300000"));
+    CHECK(contains(audio_core_source, "convert_i2s_32_to_pcm16"));
+    CHECK(contains(audio_service_source, "I2S_NUM_0"));
+    CHECK(contains(audio_service_source, "I2S_STD_SLOT_RIGHT"));
+    CHECK(contains(audio_service_source, "kMicrophoneReadTimeoutMs);"));
+    CHECK(!contains(audio_service_source,
+                    "ticks(kMicrophoneReadTimeoutMs)"));
+    CHECK(contains(audio_service_source, "MALLOC_CAP_SPIRAM"));
+    CHECK(contains(audio_service_source, "xQueueCreateStatic"));
+    CHECK(contains(audio_service_source, "xQueueReceive(frame_queue_"));
+    CHECK(occurrences(audio_service_source,
+                      "socket(AF_INET, SOCK_DGRAM, IPPROTO_IP)") == 1);
+    CHECK(!contains(audio_service_source, "audio_sender"));
+    CHECK(contains(audio_service_source, "PeripheralPowerOwner::KeyboardMic"));
+    CHECK(contains(audio_service_source, "getaddrinfo(config.audio_host.data()"));
+    CHECK(!contains(audio_service_source, "INADDR_BROADCAST"));
+    CHECK(!contains(audio_service_source, "gpio_set_level"));
+    CHECK(!contains(audio_service_source, "ssid=%"));
+    CHECK(!contains(audio_service_source, "audio_host=%"));
+    CHECK(contains(main_source, "audio_capture_service.prewarm_wifi()"));
+    CHECK(contains(main_source, "event.index == 0 || event.index == 2"));
+    CHECK(contains(main_source, "audio_capture_service.configure(active_config.view())"));
+    CHECK(contains(main_source, "audio_capture_service.snapshot()"));
+    CHECK(contains(main_cmake, "audio_capture_service.cpp"));
+    CHECK(contains(main_cmake, "esp_driver_i2s"));
+    CHECK(contains(main_cmake, "esp_wifi"));
+    CHECK(contains(main_cmake, "esp_psram"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_SPIRAM=y"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_SPIRAM_MODE_OCT=y"));
+    CHECK(contains(sdkconfig_defaults, "CONFIG_SPIRAM_USE_CAPS_ALLOC=y"));
+    CHECK(contains(board_pins, "kMicI2sBclkGpio = 9"));
+    CHECK(contains(board_pins, "kMicI2sWsGpio = 10"));
+    CHECK(contains(board_pins, "kMicI2sDinGpio = 11"));
+    CHECK(contains(audio_service_header, "AudioCaptureDiagnostics snapshot() const"));
+
+    // T11E-A is local I2S1 playback only. The microphone has absolute
+    // priority, GPIO8 still has one writer, and no sound bank or guessed
+    // network downlink enters this package.
+    CHECK(contains(speaker_contract, "EASYINPUT_SPEAKER_OUTPUT_V1_FROZEN"));
+    CHECK(contains(speaker_contract, "No desktop"));
+    CHECK(contains(speaker_core_header, "kSpeakerSampleRate = 48000"));
+    CHECK(contains(speaker_core_header, "kSpeakerFrameSamples = 480"));
+    CHECK(contains(speaker_core_header,
+                   "kSpeakerNormalDrainZeroFrames == 6"));
+    CHECK(contains(speaker_core_source, "speaker_output_state_name"));
+    CHECK(contains(speaker_service_header, "request_startup_probe"));
+    CHECK(contains(speaker_service_source, "I2S_NUM_1"));
+    CHECK(contains(speaker_service_source, "auto_clear_after_cb = true"));
+    CHECK(contains(speaker_service_source, "I2S_STD_SLOT_LEFT"));
+    CHECK(contains(speaker_service_source, "kWriteTimeoutMs)"));
+    CHECK(!contains(speaker_service_source, "pdMS_TO_TICKS(kWriteTimeoutMs)"));
+    CHECK(contains(speaker_service_source,
+                   "PeripheralPowerOwner::Speaker"));
+    CHECK(contains(speaker_service_source,
+                   "arbiter_->microphone_requested()"));
+    CHECK(contains(speaker_service_source,
+                   "result.ownership_released"));
+    CHECK(contains(audio_service_source, "arbiter_->request_microphone"));
+    CHECK(contains(audio_service_source, "arbiter_->speaker_active()"));
+    CHECK(contains(audio_service_source, "arbiter_->mark_microphone_ready"));
+    CHECK(contains(audio_service_source,
+                   "if (!stop_microphone()) {\n"
+                   "                set_state(AudioCaptureState::Faulted);"));
+    CHECK(contains(audio_service_source,
+                   "if (cleanup_succeeded && arbiter_ != nullptr"));
+    CHECK(contains(audio_service_source,
+                   "arbiter_->finish_microphone(microphone_generation_)"));
+    CHECK(contains(audio_service_header, "bool stop_microphone();"));
+    CHECK(contains(audio_service_source,
+                   "bool AudioCaptureService::stop_microphone()"));
+    CHECK(!contains(
+        audio_service_source,
+        "if (error != ESP_OK) {\n"
+        "        power_->release_consumer(PeripheralPowerOwner::KeyboardMic);"));
+    CHECK(!contains(speaker_service_source, "gpio_set_level"));
+    CHECK(!contains(speaker_service_source, "socket("));
+    CHECK(!contains(speaker_service_source, "sound_a"));
+    CHECK(!contains(speaker_service_source, "sound_b"));
+    CHECK(contains(board_pins, "kSpeakerI2sBclkGpio = 14"));
+    CHECK(contains(board_pins, "kSpeakerI2sWsGpio = 13"));
+    CHECK(contains(board_pins, "kSpeakerI2sDoutGpio = 15"));
+    CHECK(contains(main_cmake, "speaker_output_service.cpp"));
+    CHECK(contains(main_source, "speaker_output_service.request_startup_probe()"));
     CHECK(contains(root_cmake, "deskmate_expected_partition_entries"));
     CHECK(contains(root_cmake, "DeskMate EasyInput partitions.csv drifted"));
     CHECK(normalize_partition_entries(partitions) ==

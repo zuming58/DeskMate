@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-09-01 - T11E-A EasyInput local speaker code and independent audit complete
+
+- Implementation: I2S1 uses GPIO14/13/15 at 48 kHz, 16-bit mono-left with one synthesized low-volume startup probe. The existing GPIO8 controller remains the sole physical power writer through its `Speaker` lease; no sound-bank, desktop, HID, UDP or DeskMate Link audio trigger was added.
+- Arbitration and audit repair: microphone generations have absolute priority and cancel active playback before I2S0 begins. Independent review closed microphone teardown gaps so unresolved I2S deletion or GPIO8 lease release faults capture closed rather than admitting overlapping hardware ownership.
+- Verification: EasyInput Host CTest `12/12` and exact ESP-IDF v5.5.5 fixed-16-MiB build passed. Status remains `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_AUTHORIZED`; no device, Flash/NVS/eFuse, sound bank, Xiaozhi or servo operation occurred.
+
+## 2026-08-31 - T10E EasyInput microphone path accepted
+
+- Real HIL confirmed non-zero board audio, repeated start/stop and a real S1 voice-input transcription after repairing the single-UDP-endpoint and I2S timeout-unit defects.
+- Product decision: computer microphone remains the default; the working EasyInput LAN microphone remains selectable. This integration preserves the accepted firmware and does not authorize a new image write.
+
 ## 2026-09-01 - T11D.4 same-session dialog boundary restored; DialogCommonError root diagnostics ready
 
 - Scope and identity: Windows software only on `codex/t11d4-dialog-error-root`, created from exact rejected T11D.3 base `e637b73fa59e29f7ac6799002c9c68f986c0fc76`; implementation and verification commit is `9055b00215e8846c578267ea20ce4686dffcf9dd`. Build identity is `t11d4-dialog-error-root-diagnostics-v1`.

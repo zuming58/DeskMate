@@ -1,5 +1,6 @@
 build/
 build-*/
+build-*-sdkconfig
 host_test/build/
 managed_components/
 *.bin

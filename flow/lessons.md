@@ -1,5 +1,28 @@
 # Lessons learned
 
+## A test-only state machine is not runtime evidence
+
+- Symptom: an early speaker package contained a detailed playback lifecycle class that only Host tests called, while the production service used a separate atomic state path.
+- Practice: remove unused behavioral models instead of presenting their tests as runtime coverage. Test immutable audio parameters and the real cross-task arbiter, and lock production ownership, power, network and sound-bank boundaries with source contracts.
+- Rule: a green unit test is evidence only for code reachable from the product or for an explicitly declared pure contract; parallel test-only behavior must not inflate the acceptance claim.
+
+## ESP-IDF timeout units must follow the called API
+
+- Symptom: LAN heartbeat and control ACK remained healthy, but a real microphone session produced zero audio frames even though the capture task was running.
+- Root cause: `i2s_channel_read` accepts milliseconds and converts them to FreeRTOS ticks internally. Passing `pdMS_TO_TICKS(80)` gave the API about 8 ms on the current 100 Hz tick configuration, shorter than one 20 ms audio frame.
+- Rule: confirm the exact frozen-version signature and lock the production call-site unit with a source-contract test; never pre-convert a timeout merely because an adjacent FreeRTOS API takes ticks.
+
+## A UDP endpoint lock must cover the real multi-packet path
+
+- Symptom: heartbeat and control ACK were healthy, while desktop audio frames stayed at zero and `sourceRejects` kept increasing.
+- Root cause: control packets and PCM used separate UDP sockets and therefore different ephemeral source ports; the desktop correctly rejected PCM after locking the acknowledged endpoint.
+- Rule: heartbeat, ACK and business data for one locked `IP:port` session must reuse one socket, with a source-contract test preventing a second sender socket.
+
+## Optional network audio must retry configuration, not only reconnection
+
+- Symptom: an initial Wi-Fi configuration failure could leave a fail-soft audio task retrying reconnect without reapplying the rejected station configuration; healthy first socket creation was also miscounted as recovery.
+- Rule: track configuration application separately from connectivity, retry the operation that failed, and count recovery only after an observed fault returns to service.
+
 ## A reconnect can hide a provider error while breaking conversation continuity
 
 - Symptom: a long response plays fully, then the product shows `connecting` and repeats the welcome instead of accepting the next turn.
