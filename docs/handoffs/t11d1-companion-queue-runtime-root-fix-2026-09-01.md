@@ -6,6 +6,7 @@ Date: 2026-09-01
 
 - Branch: `codex/t11d1-companion-queue-runtime-root-fix`
 - Exact base: `d21b8d1e304fd45d35181794065ebe5edc3ee021`
+- Implementation and verification commit: `0e0adcc99d0277461d816563978de2f898213371`
 - Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`
 - Scope: Windows software only. No application launch/control, hardware, port, firmware, credential, user diagnostic, PCM or conversation text access.
 
