@@ -23,6 +23,7 @@ import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
 import { formatDashboardDate } from "./domain/dashboardStatus.js";
 import { createComputerCompanionAudioEngine } from "./domain/computerCompanionAudio.js";
+import { createCompanionStopAction } from "./domain/companionStop.js";
 import {
   AgentsPage,
   CompanionPage,
@@ -129,7 +130,7 @@ const companionStateCopy = {
   error: { label: "对话异常", message: "陪伴会话已安全停止" },
 };
 
-function CompanionLiveBar({ conversation }) {
+function CompanionLiveBar({ conversation, stopCompanion }) {
   if (!conversation || conversation.state === "idle") return null;
   const copy = companionStateCopy[conversation.state] || companionStateCopy.connecting;
   const text = conversation.state === "speaking" ? conversation.reply : conversation.transcript;
@@ -139,7 +140,7 @@ function CompanionLiveBar({ conversation }) {
       <Microphone2 size={17} stroke={1.8} />
       <strong>{copy.label}</strong>
       <span className="companion-live-bar__text">{text || conversation.error || copy.message}</span>
-      {conversation.active && <button disabled={conversation.state === "stopping"} onClick={() => globalThis.desktopBridge?.stopCompanionConversation?.()}>{conversation.state === "stopping" ? "结束中…" : "结束"}</button>}
+      {conversation.active && <button disabled={conversation.stopLifecycle?.pending} onClick={() => { void stopCompanion("capsule"); }}>{conversation.stopLifecycle?.pending ? "结束中…" : conversation.stopLifecycle?.error ? "重试结束" : "结束"}</button>}
       <small>Esc 结束</small>
     </div>
   );
@@ -165,9 +166,10 @@ function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState("");
   const lastBoardConnected = useRef(null);
-  const runtimeRef = useRef(null);
-  const { event, state, patch } = useAppStore();
-  runtimeRef.current = state.runtime;
+  const { event, state, mergeRuntime, updateCompanion } = useAppStore();
+  const stopActionRef = useRef(null);
+  if (!stopActionRef.current) stopActionRef.current = createCompanionStopAction({ getBridge: () => globalThis.desktopBridge, updateCompanion });
+  const stopCompanion = stopActionRef.current.stop;
   useEffect(() => mockAdapters.agentStatus.subscribe(event, { emitCurrent: false }), [event]);
   useEffect(() => {
     if (!window.desktopBridge) return undefined;
@@ -212,8 +214,7 @@ function AppContent() {
   }), []);
   useEffect(() => {
     const updateBridge = (inputBridge) => {
-      const runtime = runtimeRef.current || {};
-      patch({ runtime: { ...runtime, inputBridge: { ...(runtime.inputBridge || {}), ...inputBridge } } });
+      mergeRuntime("inputBridge", inputBridge);
       if (lastBoardConnected.current !== inputBridge.boardConnected) {
         lastBoardConnected.current = inputBridge.boardConnected;
         deviceEventBus.publish(createDeviceEvent("connection-change", "easyinput-hid", { connected: Boolean(inputBridge.boardConnected) }));
@@ -221,18 +222,17 @@ function AppContent() {
     };
     voiceAdapters.desktop.capabilities().then((value) => { if (value.inputBridge) updateBridge(value.inputBridge); }).catch(() => {});
     return voiceAdapters.desktop.onInputBridgeStatus(updateBridge);
-  }, [patch]);
+  }, [mergeRuntime]);
   useEffect(() => {
     let active = true;
     const updateAudio = (value = {}) => {
       if (!active) return;
-      const runtime = runtimeRef.current || {};
-      patch({ runtime: { ...runtime, easyInputAudio: { ...(runtime.easyInputAudio || {}), ...value } } });
+      mergeRuntime("easyInputAudio", value);
     };
     voiceAdapters.desktop.getEasyInputAudioStatus().then(updateAudio).catch(() => updateAudio({ available: false, configured: false, state: "desktop-bridge-unavailable", reason: "desktop-bridge-unavailable" }));
     const unsubscribe = voiceAdapters.desktop.onEasyInputAudioEvent(updateAudio);
     return () => { active = false; unsubscribe?.(); };
-  }, [patch]);
+  }, [mergeRuntime]);
   useEffect(() => {
     const bridge = globalThis.desktopBridge;
     if (!bridge?.onCompanionComputerAudioCommand || !bridge?.sendCompanionComputerAudioEvent) return undefined;
@@ -249,38 +249,15 @@ function AppContent() {
     let active = true;
     globalThis.desktopBridge?.getMemoryStatus?.().then((memory) => {
       if (!active || !memory) return;
-      const runtime = runtimeRef.current || {};
-      patch({ runtime: { ...runtime, memory } });
+      mergeRuntime("memory", memory);
     }).catch(() => {});
     return () => { active = false; };
-  }, [patch]);
+  }, [mergeRuntime]);
   useEffect(() => {
     if (!globalThis.desktopBridge) return undefined;
-    const updateCompanion = (value = {}) => {
-      const runtime = runtimeRef.current || {};
-      const current = runtime.companion || {};
-      const next = { ...current };
-      if (value.type === "state") {
-        next.state = value.state || "error";
-        next.active = !["idle", "error"].includes(next.state);
-        next.sessionId = value.sessionId || next.sessionId || "";
-        next.generation = Number(value.generation) || next.generation || 0;
-        next.error = value.error || (next.state === "error" ? next.error : "");
-        if (value.audioSource) next.audioSource = value.audioSource;
-        if (value.audioSink) next.audioSink = value.audioSink;
-        if (value.audioSelection) next.audioSelection = value.audioSelection;
-        if (value.echoGuard) next.echoGuard = value.echoGuard;
-        if (value.computerAudio) next.computerAudio = value.computerAudio;
-        if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
-      } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
-      else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
-      else if (value.type === "audio.selection") next.audioSelection = { requestedSource: value.requestedSource || "computer", activeSource: value.activeSource || "computer", output: "computer", fallback: value.fallback || null };
-      else Object.assign(next, value);
-      patch({ runtime: { ...runtime, companion: next } });
-    };
     globalThis.desktopBridge.getCompanionConversationStatus?.().then(updateCompanion).catch(() => {});
     return globalThis.desktopBridge.onCompanionConversationEvent?.(updateCompanion);
-  }, [patch]);
+  }, [updateCompanion]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;
@@ -291,6 +268,15 @@ function AppContent() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape" || event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !state.runtime?.companion?.active) return;
+      event.preventDefault();
+      void stopCompanion("escape");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [state.runtime?.companion?.active, stopCompanion]);
   useEffect(() => {
     if (!toast) return undefined;
     const timer = window.setTimeout(() => setToast(""), 2600);
@@ -310,11 +296,11 @@ function AppContent() {
         <AppHeader current={current} setMobileOpen={setMobileOpen} />
         <div className="app-content">
           <div className={current === "voice" ? "" : "voice-workflow-host--hidden"}><VoicePage navigate={navigate} notify={setToast} /></div>
-          {current !== "voice" && <CurrentPage navigate={navigate} notify={setToast} initialSection={resolveRouteDetail()} />}
+          {current !== "voice" && <CurrentPage navigate={navigate} notify={setToast} initialSection={resolveRouteDetail()} stopCompanion={stopCompanion} />}
         </div>
       </main>
       {toast && <div className="toast"><CircleCheck size={18} />{toast}</div>}
-      <CompanionLiveBar conversation={state.runtime?.companion} />
+      <CompanionLiveBar conversation={state.runtime?.companion} stopCompanion={stopCompanion} />
       <div className="demo-watermark"><Sparkles size={14} />{state.runtime?.inputBridge?.boardConnected ? "EasyInput 真机桥已连接" : "软件核心已就绪 · 等待板子"}</div>
     </div>
   );

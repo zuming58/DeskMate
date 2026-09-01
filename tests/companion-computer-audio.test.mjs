@@ -15,6 +15,10 @@ test("main-process computer audio bridge locks one session and rejects stale or 
       commands.push(command);
       if (command.type === "source.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "source.started", sessionId: command.sessionId, generation: command.generation }));
       if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+      if (command.type === "sink.audio") queueMicrotask(() => {
+        session.handleRendererEvent({ version: 1, type: "sink.accepted", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence });
+        session.handleRendererEvent({ version: 1, type: "sink.played", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence });
+      });
       if (command.type === "sink.drain") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.drained", sessionId: command.sessionId, generation: command.generation, requestSequence: command.sequence }));
     },
   });
@@ -33,7 +37,7 @@ test("main-process computer audio bridge locks one session and rejects stale or 
   await session.sink.stop();
   assert.ok(commands.some((item) => item.type === "sink.audio"));
   assert.ok(commands.some((item) => item.type === "sink.interrupt"));
-  assert.deepEqual(session.diagnostics().counters, { sourceChunks: 1, sinkChunks: 1, rejectedEvents: 2, interruptions: 1, queueDrops: 0, drainRequests: 1, drains: 1, drainTimeouts: 0 });
+  assert.deepEqual(session.diagnostics().counters, { sourceChunks: 1, sinkChunks: 1, rejectedEvents: 2, interruptions: 1, queueDrops: 0, drainRequests: 1, drains: 1, drainTimeouts: 0, sinkAccepted: 1, sinkPlayed: 1, sinkCancelled: 0, backpressureWaits: 0, backpressureTimeouts: 0, bufferedAudioHighWaterMs: 1 });
 });
 
 test("renderer audio engine captures selected Windows input and plays bounded PCM without conversation state", async () => {
@@ -65,7 +69,7 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   await engine.handleCommand({ ...base, type: "sink.start" });
   await engine.handleCommand({ ...base, type: "source.start", deviceId: "chosen-device" });
   processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.25) } });
-  await engine.handleCommand({ ...base, type: "sink.audio", audio: new Int16Array([1, -1, 2, -2]).buffer });
+  await engine.handleCommand({ ...base, type: "sink.audio", sequence: 11, audio: new Int16Array([1, -1, 2, -2]).buffer });
   await engine.handleCommand({ ...base, type: "sink.drain", sequence: 12 });
   assert.equal(events.some((item) => item.type === "sink.drained"), false);
   playbackNodes[0].onended();
@@ -75,6 +79,8 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   assert.ok(events.some((item) => item.type === "source.started"));
   assert.ok(events.some((item) => item.type === "source.audio" && item.audio.byteLength > 0));
   assert.ok(events.some((item) => item.type === "sink.started"));
+  assert.ok(events.some((item) => item.type === "sink.accepted" && item.audioSequence === 11));
+  assert.ok(events.some((item) => item.type === "sink.played" && item.audioSequence === 11));
   assert.equal(playbackStarts, 1);
   assert.equal(stopped, true);
   await engine.close();
@@ -134,4 +140,58 @@ test("main-process speaker drain is bounded and rejects its late acknowledgement
   assert.equal(session.handleRendererEvent({ version: 1, type: "sink.drained", sessionId: drain.sessionId, generation: drain.generation, requestSequence: drain.sequence }).reason, "computer-audio-drain-event-stale");
   assert.equal(session.diagnostics().counters.drainTimeouts, 1);
   await session.sink.stop();
+});
+
+test("main-process speaker backpressure preserves order and resumes on played credit", async () => {
+  const commands = [];
+  let session;
+  session = new ComputerCompanionAudioSession({
+    maxBufferedAudioMs: 3000,
+    sendCommand: (command) => {
+      commands.push(command);
+      if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+      if (command.type === "sink.audio") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.accepted", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence }));
+      if (command.type === "sink.drain") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.drained", sessionId: command.sessionId, generation: command.generation, requestSequence: command.sequence }));
+    },
+  });
+  session.setRendererReady(true);
+  session.prepare({ sessionId: "credit-window", generation: 1 });
+  await session.sink.start();
+  const second = Buffer.alloc(48_000);
+  await session.sink.write(second);
+  await session.sink.write(second);
+  await session.sink.write(second);
+  let fourthSettled = false;
+  const fourth = session.sink.write(second).then((value) => { fourthSettled = true; return value; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fourthSettled, false);
+  const first = commands.find((command) => command.type === "sink.audio");
+  session.handleRendererEvent({ version: 1, type: "sink.played", sessionId: first.sessionId, generation: first.generation, audioSequence: first.sequence });
+  assert.equal(await fourth, true);
+  const audioCommands = commands.filter((command) => command.type === "sink.audio");
+  for (const command of audioCommands.slice(1)) session.handleRendererEvent({ version: 1, type: "sink.played", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence });
+  assert.equal((await session.sink.drain()).ok, true);
+  assert.equal(session.diagnostics().counters.queueDrops, 0);
+  assert.equal(session.diagnostics().counters.backpressureWaits, 1);
+  assert.equal(session.diagnostics().counters.sinkPlayed, 4);
+});
+
+test("speaker backpressure true limit fails explicitly instead of dropping queued audio", async () => {
+  let session;
+  session = new ComputerCompanionAudioSession({
+    maxBufferedAudioMs: 1000,
+    backpressureTimeoutMs: 5,
+    sendCommand: (command) => {
+      if (command.type === "sink.start") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.started", sessionId: command.sessionId, generation: command.generation }));
+      if (command.type === "sink.audio") queueMicrotask(() => session.handleRendererEvent({ version: 1, type: "sink.accepted", sessionId: command.sessionId, generation: command.generation, audioSequence: command.sequence }));
+    },
+  });
+  session.setRendererReady(true);
+  session.prepare({ sessionId: "credit-timeout", generation: 1 });
+  await session.sink.start();
+  await session.sink.write(Buffer.alloc(48_000));
+  await assert.rejects(session.sink.write(Buffer.alloc(48_000)), /computer-audio-backpressure-timeout/);
+  assert.equal(session.diagnostics().counters.backpressureTimeouts, 1);
+  assert.equal(session.diagnostics().counters.queueDrops, 0);
+  await session.sink.interrupt();
 });

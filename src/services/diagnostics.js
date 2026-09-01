@@ -22,6 +22,10 @@ export function createDiagnosticReport(input = {}) {
   const conversationCounters = conversationSource.counters || {};
   const echoGuardSource = conversationSource.echoGuard || {};
   const echoGuardCounters = echoGuardSource.counters || {};
+  const buildSource = conversationSource.build || {};
+  const stopSource = conversationSource.stopLifecycle || {};
+  const providerSource = conversationSource.providerLifecycle || {};
+  const mainStateSource = conversationSource.mainState || {};
   const conversation = {
     state: CONVERSATION_STATES.has(conversationSource.state) ? conversationSource.state : "idle",
     serviceConfigured: Boolean(conversationSource.serviceConfigured),
@@ -30,11 +34,26 @@ export function createDiagnosticReport(input = {}) {
     output: "computer",
     fallback: Boolean(conversationSource.fallback),
     error: /^[a-z0-9-]{0,120}$/.test(String(conversationSource.error || "")) ? String(conversationSource.error || "") : "companion-session-failed",
-    counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
+    build: {
+      id: /^[a-z0-9.-]{1,80}$/.test(String(buildSource.id || "")) ? String(buildSource.id) : "unknown",
+      version: /^[0-9.]{1,24}$/.test(String(buildSource.version || "")) ? String(buildSource.version) : "unknown",
+    },
+    mainState: { active: Boolean(mainStateSource.active), state: CONVERSATION_STATES.has(mainStateSource.state) ? mainStateSource.state : "idle", generation: Math.max(0, Number(mainStateSource.generation) || 0) },
+    eventSequence: Math.max(0, Number(conversationSource.eventSequence) || 0),
+    stopLifecycle: {
+      pending: Boolean(stopSource.pending),
+      result: /^[a-z0-9-]{1,80}$/.test(String(stopSource.result || stopSource.lastResult || "")) ? String(stopSource.result || stopSource.lastResult) : "unknown",
+      error: /^[a-z0-9-]{0,120}$/.test(String(stopSource.error || "")) ? String(stopSource.error || "") : "companion-stop-failed",
+      requested: Math.max(0, Number(stopSource.requested) || 0),
+      duplicateRequests: Math.max(0, Number(stopSource.duplicateRequests) || 0),
+      completed: Math.max(0, Number(stopSource.completed) || 0),
+    },
+    providerLifecycle: Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),
+    counters: Object.fromEntries(["sourceChunks", "sinkChunks", "rejectedEvents", "interruptions", "queueDrops", "drainRequests", "drains", "drainTimeouts", "sinkAccepted", "sinkPlayed", "sinkCancelled", "backpressureWaits", "backpressureTimeouts", "bufferedAudioHighWaterMs"].map((key) => [key, Number.isInteger(conversationCounters[key]) ? conversationCounters[key] : 0])),
     echoGuard: {
       policy: echoGuardSource.policy === "computer-speaker-echo-guard-v1" ? echoGuardSource.policy : "unavailable",
       active: Boolean(echoGuardSource.active),
-      counters: Object.fromEntries(["echoGuardDroppedChunks", "ignoredAsrDuringPlayback"].map((key) => [key, Number.isInteger(echoGuardCounters[key]) ? echoGuardCounters[key] : 0])),
+      counters: Object.fromEntries(["echoGuardDroppedChunks", "ignoredAsrDuringPlayback", "playbackDrainTimeouts", "teardownTimeouts"].map((key) => [key, Number.isInteger(echoGuardCounters[key]) ? echoGuardCounters[key] : 0])),
     },
   };
   const safeInput = sanitize(input);

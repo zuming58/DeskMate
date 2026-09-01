@@ -1,5 +1,12 @@
 # Decisions
 
+## D049 - Speaker backlog uses played credit and renderer lifecycle is monotonically reconciled
+
+- Date: 2026-09-01
+- Decision: computer-speaker PCM uses a session/generation-bound accepted/played/cancelled credit contract. A full finite window blocks the next write; a finite timeout ends the session with a sanitized error. Scheduled audio is never silently cleared to accept newer audio, and explicit cancellation is never counted as played.
+- State ownership: each renderer runtime slice has one atomic reducer action. Main companion events and status snapshots carry a monotonic sequence and generation; the page, capsule and Escape share one awaited stop/reconcile action that accepts success only when main reports inactive.
+- Consequence: provider `tts.end` plus natural playback acknowledgements is the listening boundary. Diagnostics expose build identity and lifecycle enums/counters only. This supersedes the rejected T11D queue/drop and whole-runtime snapshot implementation without changing strict half-duplex or hardware contracts.
+
 ## D048 - Network TTS completion is not computer-speaker completion
 
 - Date: 2026-09-01

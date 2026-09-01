@@ -2,7 +2,6 @@ import { downsampleToPcm16 } from "./pcmAudio.js";
 
 const VERSION = 1;
 const MAX_CHUNK_BYTES = 64 * 1024;
-const MAX_BUFFERED_SECONDS = 3;
 
 function reasonFor(error, fallback) {
   if (error?.name === "NotAllowedError") return "computer-microphone-permission-denied";
@@ -22,7 +21,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
   let processor = null;
   let playbackContext = null;
   let playbackAt = 0;
-  const playbackNodes = new Set();
+  const playbackNodes = new Map();
   const drainWaiters = new Map();
 
   const emit = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: session?.sessionId || "", generation: session?.generation || 0, ...extra });
@@ -45,14 +44,22 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     for (const requestSequence of [...drainWaiters.keys()]) finishDrainWaiter(requestSequence);
   };
   const markPlaybackEnded = (node) => {
+    const sequence = playbackNodes.get(node);
+    if (!sequence) return;
     playbackNodes.delete(node);
+    emit("sink.played", { audioSequence: sequence });
     for (const [requestSequence, waiter] of drainWaiters) {
       waiter.delete(node);
       if (waiter.size === 0) finishDrainWaiter(requestSequence);
     }
   };
   const interruptPlayback = () => {
-    for (const node of playbackNodes) { try { node.stop(); } catch { /* already ended */ } }
+    for (const [node, sequence] of playbackNodes) {
+      playbackNodes.delete(node);
+      node.onended = null;
+      try { node.stop(); } catch { /* already ended */ }
+      emit("sink.cancelled", { audioSequence: sequence });
+    }
     playbackNodes.clear();
     playbackAt = playbackContext?.currentTime || 0;
     finishAllDrainWaiters();
@@ -123,11 +130,9 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
         ? new Uint8Array(command.audio.buffer, command.audio.byteOffset, command.audio.byteLength)
         : new Uint8Array(command.audio || []);
     if (!bytes.byteLength || bytes.byteLength > MAX_CHUNK_BYTES || bytes.byteLength % 2 !== 0) return;
+    const audioSequence = Number(command.sequence);
+    if (!Number.isSafeInteger(audioSequence) || audioSequence < 1) return;
     const now = playbackContext.currentTime;
-    if (Math.max(0, playbackAt - now) > MAX_BUFFERED_SECONDS) {
-      interruptPlayback();
-      emit("sink.queue-drop");
-    }
     const aligned = bytes.byteOffset % 2 === 0 ? bytes : bytes.slice();
     const samples = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
     const buffer = playbackContext.createBuffer(1, samples.length, 24000);
@@ -138,15 +143,16 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     node.connect(playbackContext.destination);
     const startAt = Math.max(now, playbackAt);
     playbackAt = startAt + buffer.duration;
-    playbackNodes.add(node);
+    playbackNodes.set(node, audioSequence);
     node.onended = () => markPlaybackEnded(node);
     node.start(startAt);
+    emit("sink.accepted", { audioSequence });
   };
 
   const drainPlayback = (command) => {
     const requestSequence = Number(command.sequence);
     if (!Number.isSafeInteger(requestSequence) || requestSequence < 1) return;
-    const pendingNodes = new Set(playbackNodes);
+    const pendingNodes = new Set(playbackNodes.keys());
     if (pendingNodes.size === 0) {
       emit("sink.drained", { requestSequence });
       return;

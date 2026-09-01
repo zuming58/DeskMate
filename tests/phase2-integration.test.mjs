@@ -70,7 +70,12 @@ test("diagnostics export removes secrets and content", () => {
   const report = createDiagnosticReport({ schemaVersion: 99, generatedAt: "forged", token: "secret", wifiPassword: "secret", transcript: "spoken", localPath: "private", serialNumber: "serial-secret", windowTitle: "private-window", ipAddress: "192.168.1.4", runtime: "web", nested: { apiKey: "secret", status: "ok" }, lanAudio: { status: "streaming", configured: true, networkReady: true, heartbeat: true, micTest: true, audioHost: "192.168.1.4", counters: { audioFrames: 12, sequenceGaps: 2 } }, conversation: { state: "speaking", serviceConfigured: true, connected: true, input: "easyinput", fallback: true, error: "safe-error", transcript: "private transcript", responseText: "private response", counters: { sourceChunks: 8, sinkChunks: 9, queueDrops: 1 }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: true, rawPcm: "private", counters: { echoGuardDroppedChunks: 3, ignoredAsrDuringPlayback: 2 } } } });
   const serialized = JSON.stringify(report); assert.doesNotMatch(serialized, /secret|spoken|private|192\.168/); assert.equal(report.nested.status, "ok"); assert.equal(report.lanAudio.status, "streaming"); assert.equal(report.lanAudio.counters.audioFrames, 12); assert.equal(report.lanAudio.counters.sequenceGaps, 2);
   assert.equal(report.schemaVersion, 1); assert.notEqual(report.generatedAt, "forged");
-  assert.deepEqual(report.conversation, { state: "speaking", serviceConfigured: true, connected: true, input: "easyinput", output: "computer", fallback: true, error: "safe-error", counters: { sourceChunks: 8, sinkChunks: 9, rejectedEvents: 0, interruptions: 0, queueDrops: 1 }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: true, counters: { echoGuardDroppedChunks: 3, ignoredAsrDuringPlayback: 2 } } });
+  assert.equal(report.conversation.build.id, "unknown");
+  assert.equal(report.conversation.mainState.state, "idle");
+  assert.equal(report.conversation.stopLifecycle.result, "unknown");
+  assert.equal(report.conversation.providerLifecycle.events, 0);
+  assert.deepEqual(report.conversation.counters, { sourceChunks: 8, sinkChunks: 9, rejectedEvents: 0, interruptions: 0, queueDrops: 1, drainRequests: 0, drains: 0, drainTimeouts: 0, sinkAccepted: 0, sinkPlayed: 0, sinkCancelled: 0, backpressureWaits: 0, backpressureTimeouts: 0, bufferedAudioHighWaterMs: 0 });
+  assert.deepEqual(report.conversation.echoGuard, { policy: "computer-speaker-echo-guard-v1", active: true, counters: { echoGuardDroppedChunks: 3, ignoredAsrDuringPlayback: 2, playbackDrainTimeouts: 0, teardownTimeouts: 0 } });
 });
 
 test("smart organizer returns structured metadata and uses pre-applied rules", async () => {

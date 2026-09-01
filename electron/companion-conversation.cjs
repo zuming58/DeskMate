@@ -64,6 +64,8 @@ class CompanionConversationController {
     this.postInterruptState = "";
     this.playbackDraining = false;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
+    this.providerLifecycle = { connectAttempts: 0, connections: 0, closes: 0, reconnects: 0, events: 0, audioEvents: 0, ttsStarts: 0, ttsEnds: 0, providerErrors: 0 };
+    this.stopLifecycle = { requested: 0, duplicateRequests: 0, completed: 0, alreadyStopped: 0, lastResult: "never" };
   }
 
   echoGuardActive() {
@@ -104,6 +106,8 @@ class CompanionConversationController {
         fallback: sourceStatus.fallback || this.audioSelection.fallback,
       }),
       echoGuard: this.echoGuardSnapshot(),
+      providerLifecycle: Object.freeze({ ...this.providerLifecycle }),
+      stopLifecycle: Object.freeze({ ...this.stopLifecycle }),
       error: this.lastError,
     });
   }
@@ -189,6 +193,12 @@ class CompanionConversationController {
 
   createProvider(token) {
     return this.providerFactory({ onEvent: (event) => {
+      this.providerLifecycle.events += 1;
+      if (event?.type === "audio") this.providerLifecycle.audioEvents += 1;
+      else if (event?.type === "tts.start") this.providerLifecycle.ttsStarts += 1;
+      else if (event?.type === "tts.end") this.providerLifecycle.ttsEnds += 1;
+      else if (event?.type === "error") this.providerLifecycle.providerErrors += 1;
+      else if (event?.type === "connection.closed") this.providerLifecycle.closes += 1;
       const arrival = Object.freeze({ suppressAsr: ["asr.partial", "asr.final"].includes(event?.type) && (this.echoGuardActive() || this.playbackDraining) });
       this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
     } });
@@ -201,11 +211,13 @@ class CompanionConversationController {
       if (this.retryDelaysMs[attempt] > 0) await this.wait(this.retryDelaysMs[attempt]);
       const provider = this.createProvider(token);
       this.provider = provider;
+      this.providerLifecycle.connectAttempts += 1;
       try {
         const result = await provider.connect();
         if (!result?.ok) throw new Error(result?.reason || "companion-connect-failed");
         if (!this.isCurrent(token)) { provider.close?.(); throw new Error("companion-session-stale"); }
-        if (attempt > 0) this.onEvent({ type: "reconnected", attempt, sessionId: this.active.sessionId, generation: this.active.generation });
+        this.providerLifecycle.connections += 1;
+        if (attempt > 0) { this.providerLifecycle.reconnects += 1; this.onEvent({ type: "reconnected", attempt, sessionId: this.active.sessionId, generation: this.active.generation }); }
         return result;
       } catch (error) {
         lastError = error;
@@ -221,9 +233,12 @@ class CompanionConversationController {
     if (this.reconnecting) return this.reconnecting;
     this.reconnecting = (async () => {
       await this.audioSource.stop();
+      if (!this.isCurrent(token)) return;
       await this.audioSink.interrupt();
+      if (!this.isCurrent(token)) return;
       this.provider?.close?.();
       this.provider = null;
+      if (!this.isCurrent(token)) return;
       await this.transition("connecting", { reason: "provider-reconnect" });
       await this.connectWithRetry(token);
       if (!this.isCurrent(token)) return;
@@ -232,6 +247,7 @@ class CompanionConversationController {
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
+      if (!this.isCurrent(token)) { await this.audioSource.stop(); return; }
       await this.transition("listening");
     })().catch((error) => this.fail(error?.message || "companion-reconnect-failed", token)).finally(() => { this.reconnecting = null; });
     return this.reconnecting;
@@ -262,7 +278,13 @@ class CompanionConversationController {
     if (event.type === "audio") {
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       if (this.state !== "speaking") await this.transition("speaking", { reason: "tts-audio" });
-      await this.audioSink.write(event.audio);
+      let written;
+      try { written = await this.audioSink.write(event.audio); }
+      catch (error) {
+        if (!this.isCurrent(token) || this.discardResponseUntilTtsEnd || ["computer-audio-playback-interrupted", "computer-audio-sink-stopped", "computer-audio-renderer-unavailable"].includes(error?.message)) return { ignored: true, reason: "companion-playback-cancelled" };
+        throw error;
+      }
+      if (written !== true) throw new Error("computer-audio-playback-write-failed");
       return { ok: true };
     }
     if (event.type === "asr.partial") {
@@ -372,7 +394,8 @@ class CompanionConversationController {
   }
 
   stop(reason = "user") {
-    if (this.stopPromise) return this.stopPromise;
+    this.stopLifecycle.requested += 1;
+    if (this.stopPromise) { this.stopLifecycle.duplicateRequests += 1; return this.stopPromise; }
     this.stopPromise = this.performStop(reason).finally(() => { this.stopPromise = null; });
     return this.stopPromise;
   }
@@ -385,6 +408,8 @@ class CompanionConversationController {
         this.onEvent({ type: "state", state: "idle", reason, sessionId: "", generation: 0 });
         await this.publishTerminalState("idle");
       }
+      this.stopLifecycle.alreadyStopped += 1;
+      this.stopLifecycle.lastResult = "already-stopped";
       return { ok: true, alreadyStopped: true, status: this.snapshot() };
     }
     const session = this.active;
@@ -399,6 +424,8 @@ class CompanionConversationController {
     this.lastError = "";
     this.onEvent({ type: "state", state: "idle", reason, sessionId: session.sessionId, generation: session.generation });
     await this.publishTerminalState("idle");
+    this.stopLifecycle.completed += 1;
+    this.stopLifecycle.lastResult = "completed";
     return { ok: true, status: this.snapshot() };
   }
 

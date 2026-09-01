@@ -260,6 +260,40 @@ test("runtime connection loss reconnects without replaying stale audio", async (
   await controller.stop();
 });
 
+test("a reconnect await boundary cannot publish a post-stop state", async () => {
+  let releaseReconnectStop;
+  let stopCalls = 0;
+  const source = {
+    status: () => ({ available: true }),
+    start: async () => ({ ok: true }),
+    stop: () => {
+      stopCalls += 1;
+      if (stopCalls === 1) return new Promise((resolve) => { releaseReconnectStop = resolve; });
+      return Promise.resolve({ ok: true });
+    },
+  };
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  const states = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: sink,
+    onEvent: (event) => { if (event.type === "state") states.push(event.state); },
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "reconnect-stop-race", generation: 1 });
+  providers[0].emit({ type: "connection.closed" });
+  await controller.eventChain;
+  await new Promise((resolve) => setImmediate(resolve));
+  await controller.stop("user");
+  releaseReconnectStop({ ok: true });
+  if (controller.reconnecting) await controller.reconnecting;
+  assert.equal(controller.snapshot().state, "idle");
+  assert.deepEqual(states.slice(-2), ["stopping", "idle"]);
+  assert.equal(providers.length, 1);
+});
+
 test("transport errors use the same finite reconnect path while provider errors fail closed", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();
@@ -383,6 +417,51 @@ test("manual response interruption clears playback and ignores late response fra
   assert.equal(controller.snapshot().state, "listening");
   assert.equal(states.at(-1), "listening");
   await controller.stop();
+});
+
+test("manual interrupt while speaker write is backpressured is a normal cancellation", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  let rejectWrite;
+  const sink = {
+    status: () => ({ available: true, active: true }), start: async () => ({ ok: true }),
+    write: () => new Promise((_resolve, reject) => { rejectWrite = reject; }),
+    drain: async () => ({ ok: true }),
+    interrupt: async () => { rejectWrite?.(new Error("computer-audio-playback-interrupted")); return { ok: true }; },
+    stop: async () => ({ ok: true }),
+  };
+  let provider;
+  const controller = new CompanionConversationController({ providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)), audioSource: source, audioSink: sink, wait: async () => {} });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "backpressure-interrupt", generation: 1 });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await controller.interrupt("user")).ok, true);
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(controller.snapshot().error, "");
+  await controller.stop();
+});
+
+test("stop while speaker write is backpressured reaches idle without converting cancellation to error", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  let rejectWrite;
+  const sink = {
+    status: () => ({ available: true, active: true }), start: async () => ({ ok: true }),
+    write: () => new Promise((_resolve, reject) => { rejectWrite = reject; }),
+    drain: async () => ({ ok: true }),
+    interrupt: async () => { rejectWrite?.(new Error("computer-audio-playback-interrupted")); return { ok: true }; },
+    stop: async () => ({ ok: true }),
+  };
+  let provider;
+  const controller = new CompanionConversationController({ providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)), audioSource: source, audioSink: sink, wait: async () => {} });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "backpressure-stop", generation: 1 });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await controller.stop("user")).ok, true);
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "idle");
+  assert.equal(controller.snapshot().error, "");
 });
 
 test("computer-speaker playback ignores reflected ASR and resumes uplink after tts end", async () => {

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Backpressure cancellation is control flow, not playback failure
+
+- Symptom: replacing queue drops with an awaited credit window introduces a new race: a user can interrupt or stop while an audio write is waiting for credit. Treating the cancelled wait as an ordinary write exception makes a successful manual action end in `error`.
+- Practice: distinguish accepted, naturally played and explicitly cancelled outcomes. Cancel every reservation and waiter atomically before releasing credit, then let the controller ignore cancellation when the response was interrupted or its generation is no longer current.
+- Rule: every blocking flow-control primitive needs a cancellation contract tested at the exact user-control boundary; bounded waiting alone is not lifecycle correctness.
+
 ## A bounded queue must not turn overload into silent success
 
 - Symptom: a real answer ended early while the diagnostic showed speaker queue drops and no reflected ASR. The renderer's fixed backlog cap stopped every scheduled node, then accepted newer audio and later allowed the normal drain path to continue.

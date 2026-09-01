@@ -40,6 +40,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
+const DESKMATE_BUILD_ID = "t11d1-playback-runtime-root-fix-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -64,6 +65,7 @@ let companionMemoryStore;
 let companionMemoryControl;
 let knowledgeBaseSettings;
 let companionConversationController;
+let companionEventSequence = 0;
 let computerCompanionAudio;
 let easyInputAudioSource;
 let easyInputAudioManager;
@@ -186,7 +188,9 @@ function updateCompanionOverlay(event = {}) {
 
 function handleCompanionConversationEvent(event = {}) {
   const snapshot = companionConversationController?.snapshot?.();
-  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.() } : event;
+  const eventSequence = ++companionEventSequence;
+  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, stopLifecycle: snapshot?.stopLifecycle, mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
+  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...event, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);
   if (event.type === "state" && ["idle", "error"].includes(event.state) && foregroundSessionState.active?.mode === "companion") {
@@ -771,7 +775,7 @@ async function runBailianOrganizerTest(text) {
 function companionConversationStatus() {
   const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } }, error: "" };
   const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
-  return { ...snapshot, service, foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" } };
+  return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
 }
 
 function normalizeCompanionStartOptions(value = {}) {

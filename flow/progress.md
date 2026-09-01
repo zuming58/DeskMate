@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T11D.1 queue/runtime root repair implemented; Windows HIL pending
+
+- Scope and base: Windows software only on `codex/t11d1-companion-queue-runtime-root-fix`, created from audit baseline `d21b8d1e304fd45d35181794065ebe5edc3ee021`. The rejected T11D evidence was preserved: speaker `queueDrops=3` explained truncation, and captured whole-runtime updates explained renderer stopping after main idle.
+- Playback: renderer/main now exchange sequence-bound `accepted`, natural `played` and explicit `cancelled` outcomes. Main grants a finite 3000 ms playback credit window and backpressures later writes; acceptance/credit timeouts fail the session explicitly. No overflow path stops old nodes and continues silently. Drain waits all accepted audio, while interrupt/stop cancel blocked writes without creating a false error.
+- State and stop: runtime slices use reducer-owned atomic merges. Main events/status carry monotonic sequence and generation, and reconnect rechecks ownership after awaits. Page, capsule and Escape share one awaited single-flight stop with bounded returned-status reconciliation and a retryable sanitized failure state.
+- Evidence: diagnostics add fixed build ID, main/render state, stop/provider/audio lifecycle enums and counts and correct realtime service configuration. They exclude user diagnostic source files, PCM, text, IDs, credentials and device/network/window data.
+- Verification: clean `npm ci --include=dev` passed; targeted production regression `59/59`; full `npm test` `234/234`; isolated Windows directory packaging passed. `DeskMate.exe` is `202690560` bytes / SHA-256 `292D3BBB3C134E8A76A0DAEF3499E3EC2A457776708E93D13041EC49F62589E7`; packaged `app.asar` is `112635192` bytes / SHA-256 `07B7E402F46EB5468E430933A2E02AF2BA7E3D5FCFBFB8FC67478F0DF03A3F1D`, and read-only inspection confirmed build ID `t11d1-playback-runtime-root-fix-v1`. Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. Contract: `docs/contracts/t11d1-companion-playback-credit-runtime-stop-v1.md`; handoff: `docs/handoffs/t11d1-companion-queue-runtime-root-fix-2026-09-01.md`.
+
 ## 2026-09-01 - T11D user-present gate failed; queue/state audit complete and repair paused
 
 - Exact evidence: the running processes were independently verified to come from the exact T11D package, excluding an old package. A stuck-state sanitized export reported renderer `stopping/connected`, `queueDrops=3`, `ignoredAsrDuringPlayback=0`, while terminal Agent `idle` had already been acknowledged 13 seconds earlier. The diagnostic file itself was not committed.

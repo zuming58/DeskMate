@@ -39,7 +39,7 @@ export const defaultState = {
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
-    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {} }, service: { configured: false, provider: "doubao" } },
+    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {} }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {} },
     memory: { ready: false, storage: "unavailable" },
     lastTrigger: null,
   },
@@ -163,6 +163,47 @@ export function reduceAppState(state, action) {
   if (action.type === "reset") return structuredClone(defaultState);
   if (action.type === "replace") return action.value;
   if (action.type === "patch") return { ...state, ...action.value };
+  if (action.type === "runtime-slice") {
+    const slice = String(action.slice || "");
+    if (!Object.hasOwn(state.runtime || {}, slice)) return state;
+    return { ...state, runtime: { ...state.runtime, [slice]: { ...(state.runtime?.[slice] || {}), ...(action.value || {}) } } };
+  }
+  if (action.type === "companion-runtime") {
+    const current = state.runtime?.companion || {};
+    const value = action.value || {};
+    const currentSequence = Math.max(0, Number(current.eventSequence) || 0);
+    const incomingSequence = Math.max(0, Number(value.eventSequence) || 0);
+    if (incomingSequence && currentSequence && incomingSequence < currentSequence) return state;
+    const currentGeneration = Math.max(0, Number(current.generation) || 0);
+    const incomingGeneration = Math.max(0, Number(value.generation) || 0);
+    const isStatus = value.type === "status" || !value.type;
+    if (!isStatus && currentGeneration && incomingGeneration && incomingGeneration < currentGeneration) return state;
+    if (!isStatus && currentGeneration && incomingGeneration === currentGeneration && current.sessionId && value.sessionId && current.sessionId !== value.sessionId) return state;
+    if (!isStatus && ["idle", "error"].includes(current.state) && currentGeneration && incomingGeneration && incomingGeneration <= currentGeneration && value.type !== "stop.lifecycle") return state;
+    const next = { ...current };
+    if (value.type === "state") {
+      next.state = value.state || "error";
+      next.active = !["idle", "error"].includes(next.state);
+      next.sessionId = value.sessionId || (next.state === "idle" ? "" : next.sessionId || "");
+      next.generation = incomingGeneration || (next.state === "idle" ? 0 : currentGeneration);
+      next.error = value.error || (next.state === "error" ? next.error : "");
+      for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "build", "mainState", "stopLifecycle", "providerLifecycle"]) if (value[key] !== undefined) next[key] = value[key];
+      if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
+    } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
+    else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
+    else if (value.type === "audio.selection") next.audioSelection = { requestedSource: value.requestedSource || "computer", activeSource: value.activeSource || "computer", output: "computer", fallback: value.fallback || null };
+    else if (value.type === "stop.lifecycle") {
+      next.stopLifecycle = { ...(next.stopLifecycle || {}), ...(value.stopLifecycle || {}) };
+      if (value.stopLifecycle?.pending) { next.state = "stopping"; next.active = true; }
+    }
+    else {
+      const preserveTerminalGeneration = isStatus && !value.active && currentGeneration > incomingGeneration;
+      Object.assign(next, value);
+      if (preserveTerminalGeneration) { next.generation = currentGeneration; next.sessionId = current.sessionId || ""; }
+    }
+    if (incomingSequence) next.eventSequence = incomingSequence;
+    return { ...state, runtime: { ...state.runtime, companion: next } };
+  }
   if (action.type === "event") {
     const event = action.value;
     const agentExpression = event.type === "working" ? state.agentExpressionMapping[agentKey(event.agent)] : null;
@@ -177,6 +218,8 @@ export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(reduceAppState, undefined, loadState);
   useEffect(() => { try { const persisted = structuredClone(state); delete persisted.runtime; localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)); } catch { /* storage can be unavailable */ } }, [state]);
   const patch = useCallback((value) => dispatch({ type: "patch", value }), []);
+  const mergeRuntime = useCallback((slice, value) => dispatch({ type: "runtime-slice", slice, value }), []);
+  const updateCompanion = useCallback((value) => dispatch({ type: "companion-runtime", value }), []);
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
   const replace = useCallback((value) => {
     const validated = validateConfig(value);
@@ -185,7 +228,7 @@ export function AppStoreProvider({ children }) {
   }, []);
   const event = useCallback((value) => dispatch({ type: "event", value }), []);
   const exportConfig = useCallback(() => serializeConfig(state), [state]);
-  const api = useMemo(() => ({ state, patch, reset, replace, event, exportConfig }), [state, patch, reset, replace, event, exportConfig]);
+  const api = useMemo(() => ({ state, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig }), [state, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig]);
   return createElement(AppStoreContext.Provider, { value: api }, children);
 }
 export function useAppStore() { const value = useContext(AppStoreContext); if (!value) throw new Error("useAppStore must be used inside AppStoreProvider"); return value; }

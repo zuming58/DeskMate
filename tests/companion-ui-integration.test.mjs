@@ -92,6 +92,9 @@ test("companion desktop layout aligns both overview columns and keeps the live b
   assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-stage \{ min-height: 0; height: auto; \}/);
   assert.match(styles, /\.companion-live-bar \{[^}]*width: fit-content;[^}]*max-width: min\(620px/);
   assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.companion-live-bar \{ width: calc\(100vw - 28px\)/);
-  assert.match(app, /disabled=\{conversation\.state === "stopping"\}/);
-  assert.match(pages, /disabled=\{conversation\.state === "stopping"\}/);
+  assert.match(app, /disabled=\{conversation\.stopLifecycle\?\.pending\}/);
+  assert.match(pages, /disabled=\{conversation\.stopLifecycle\?\.pending\}/);
+  assert.match(app, /stopCompanion\("capsule"\)/);
+  assert.match(app, /stopCompanion\("escape"\)/);
+  assert.match(pages, /stopCompanion\?\.\("page"\)/);
 });
