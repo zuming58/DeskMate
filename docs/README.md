@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T11F three-end integration audit](handoffs/t11f-three-end-integration-audit-2026-09-01.md)
+
 - [T10C Xiaozhi manual calibration frozen contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)
 - [T10C Xiaozhi manual calibration golden vectors](../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json)
 - [T10C Xiaozhi manual calibration handoff](handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)

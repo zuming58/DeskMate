@@ -6,6 +6,8 @@
 
 ### Current execution point
 
+- T11F 三端集成审计已在隔离分支汇合 T11D.4 桌面、T11E-A EasyInput 和 T10C 小智：桌面 246/246 与打包、EasyInput Host 12/12 + ESP-IDF v5.5.5、小智 Host 11/11 + ESP-IDF v5.5.3 均通过。当前唯一可执行人工门是 T11D.4 长回答后同 session 直接回聆听、立即第二轮、按钮/ESC 结束和单胶囊；舵机链仍缺桌面 UI、EasyInput translator、生产 owner/真实 adapter 与电气机械证据，不得烧录或真动。
+
 - T10C 小智手动校准候选已进入 code-only 交付门：冻结 additive [`T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN`](../contracts/deskmate-link/t10c-manual-calibration-v1.md) 和黄金向量，只在注入 fake adapter 的 Host 路径验证选择轴、短租约一次性 ARM、固定 1.0° 单步、回中、急停、幂等与三层证据。生产 `app_main` 不注入 owner，`MOTION` capability 仍关闭，没有 LEDC/PWM/GPIO/实体 adapter；Windows/EasyInput 转发仍是后续独立切片，所以当前不可进行舵机真动验收。
 - 小智 OLED 动画优化已合并：待机眨眼、区分等待场景和 latest-wins 显示邮箱通过 Host/构建门，但尚未形成新的真机烧录授权。
 

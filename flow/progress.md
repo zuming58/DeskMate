@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-01 - T11F three-end integration audit complete; desktop HIL is the only open user test
+
+- Integration: isolated branch `codex/t11f-three-end-integration` merged desktop `3a62bf1`, EasyInput `0407ba6` and Xiaozhi `b83ce88`; implementation directories had no merge conflicts. Shared flow/document conflicts were resolved by retaining all current facts without upgrading hardware claims.
+- Verification: desktop `246/246` and Windows packaging passed; EasyInput Host `12/12` plus ESP-IDF v5.5.5 fixed-layout build passed; Xiaozhi Host `11/11` plus ESP-IDF v5.5.3 fixed-layout build passed. Exact artifacts and hashes are recorded in `docs/handoffs/t11f-three-end-integration-audit-2026-09-01.md`.
+- HIL decision: the launched T11D.4 desktop package is ready for one long-response/same-session/second-turn/stop matrix. EasyInput speaker HIL requires a later separately authorized app-only image. Servo HIL is not available: Windows UI and EasyInput translator are absent, Xiaozhi production owner/real adapter are disabled, and electrical/mechanical gates remain unknown.
+- Safety: no port/device/Flash/NVS/eFuse access, erase, flash, monitor, audio capture, OLED command, PWM or servo action occurred. Next, record the desktop result; if accepted, open the strict Windows→EasyInput T10C route package before any real-adapter or mechanical work.
+
 ## 2026-09-01 - T10C Xiaozhi manual calibration candidate complete, motion remains locked
 
 - What changed: branch `codex/xiaozhi-t10c-manual-calibration` freezes the additive `T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN` contract and adds a pure C++ manual owner, disabled/fake servo adapters and optional simulated endpoint injection. Base framing/CRC/UART and existing messages are unchanged.
