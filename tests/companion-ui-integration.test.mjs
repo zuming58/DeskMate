@@ -91,6 +91,11 @@ test("companion desktop layout keeps the overview aligned and only the independe
   assert.match(styles, /\.companion-stage__face \{[^}]*flex: 1 1 440px/);
   assert.match(styles, /\.companion-side-stack \{[^}]*height: 100%/);
   assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-stage \{ min-height: 0; height: auto; \}/);
+  assert.match(pages, /className="companion-session-controls"/);
+  assert.match(styles, /\.companion-session-controls \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*gap: 14px/);
+  assert.match(styles, /\.companion-dialogue-actions \{[^}]*margin: 0;[^}]*min-height: 42px/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.companion-session-evidence \{ grid-template-columns: 1fr; \}/);
+  assert.doesNotMatch(styles.match(/\.companion-session-controls \{[^}]*\}/)?.[0] || "", /position: absolute|margin-top:\s*-/);
   assert.doesNotMatch(app, /CompanionLiveBar|companion-live-bar|stopCompanion\("capsule"\)/);
   assert.doesNotMatch(styles, /\.companion-live-bar/);
   assert.match(main, /function createOverlayWindow\(\)/);

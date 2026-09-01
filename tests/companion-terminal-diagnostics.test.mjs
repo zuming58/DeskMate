@@ -147,6 +147,31 @@ test("event 359 drains to listening on the same provider and accepts a second tu
   await harness.controller.stop();
 });
 
+test("the official strict half-duplex keep-alive policy prevents the documented post-359 audio idle timeout", async () => {
+  const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
+  const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" } });
+  const inputMode = session.buildSessionPayload().dialog.extra.input_mod;
+  const simulatedProviderEvents = inputMode === "keep_alive"
+    ? [{ event: 359 }]
+    : [{ event: 359 }, { event: 599, status_code: 52000042 }];
+  assert.deepEqual(simulatedProviderEvents, [{ event: 359 }]);
+  session.close();
+});
+
+test("the documented audio idle timeout remains a classified fail-closed DialogCommonError", async () => {
+  const harness = createHarness();
+  const provider = await startHarness(harness, "audio-idle-timeout-fail-closed");
+  provider.emit({ type: "tts.end", diagnostic: terminalDiagnostic("tts-end", "none") });
+  await harness.controller.eventChain;
+  provider.emit({ type: "error", message: "doubao-service-error", diagnostic: terminalDiagnostic("dialog-error", "dialog-error", "audio-idle-timeout", "audio-idle-timeout") });
+  await harness.controller.eventChain;
+  const snapshot = harness.controller.snapshot();
+  assert.equal(snapshot.state, "error");
+  assert.equal(snapshot.providerLifecycle.lastFailureBucket, "audio-idle-timeout");
+  assert.equal(snapshot.providerLifecycle.lastDialogErrorStatusClass, "audio-idle-timeout");
+  assert.equal(snapshot.providerLifecycle.reconnects, 0);
+});
+
 test("an adjacent DialogCommonError records bounded evidence and fails closed without reconnect", async () => {
   const harness = createHarness();
   const provider = await startHarness(harness, "dialog-error-fail-closed");
@@ -320,8 +345,8 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("T11D.4 package exposes an explicit fail-closed diagnostic build identity", () => {
+test("T11D.5 package exposes an explicit half-duplex keep-alive build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t11d4-dialog-error-root-diagnostics-v1/);
+  assert.match(main, /t11d5-half-duplex-keepalive-ui-v1/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

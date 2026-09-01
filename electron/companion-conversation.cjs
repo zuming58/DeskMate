@@ -15,11 +15,11 @@ const TERMINAL_EVENT_NAMES = new Set([
   "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close",
 ]);
 const FAILURE_BUCKET_NAMES = new Set([
-  "none", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy",
+  "none", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy",
   "server-internal", "unknown-provider-error",
 ]);
 const DIALOG_ERROR_STATUS_CLASS_NAMES = new Set([
-  "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid",
+  "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout",
   "server-busy", "server-internal", "unknown-provider-error",
 ]);
 

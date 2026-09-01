@@ -6,8 +6,8 @@ const CONVERSATION_STATES = new Set(["idle", "connecting", "listening", "thinkin
 const PROVIDER_EVENTS = new Set(["none", "audio", "tts-start", "tts-end", "session-ready", "session-finished", "session-failed", "connection-started", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close", "other"]);
 const TERMINAL_EVENTS = new Set(["none", "session-finished", "session-failed", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close"]);
 const TERMINAL_PHASES = new Set(["none", "starting", "active", "draining", "stopping", "reconnecting", "idle"]);
-const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"]);
-const DIALOG_ERROR_STATUS_CLASSES = new Set(["none", "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"]);
+const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"]);
+const DIALOG_ERROR_STATUS_CLASSES = new Set(["none", "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"]);
 const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacent"]);
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };

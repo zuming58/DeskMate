@@ -247,7 +247,8 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
 .companion-stage__copy h2 { font-size: 26px; letter-spacing: -.035em; }
 .companion-stage__copy p { margin-top: 6px; font-size: 12px; }
 .companion-dialogue-button { align-self: center; min-width: 260px; }
-.companion-dialogue-actions { justify-content: center; margin-top: 0; }
+.companion-session-controls { width: 100%; flex: 0 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.companion-dialogue-actions { justify-content: center; margin: 0; min-height: 42px; }
 .companion-session-evidence { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
 .companion-session-evidence span { min-width: 0; padding: 10px 12px; border: 1px solid #e2e9f1; border-radius: 12px; background: #f8fafc; }
 .companion-session-evidence small,.companion-session-evidence strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -391,6 +392,7 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
   .setting-row { align-items: flex-start; flex-direction: column; }.setting-row__control { width: 100%; max-width: none; justify-content: flex-start; }.segmented { max-width: 100%; overflow-x: auto; }.slider-control { width: 100%; min-width: 0; }.settings-nav { grid-template-columns: 1fr; }.service-config-grid { grid-template-columns: 1fr; }.service-config-block { padding: 14px; }
   .confirmation-overlay { padding: 12px; }.confirmation-dialog { border-radius: 20px; }.confirmation-dialog__header { grid-template-columns: 42px minmax(0,1fr); gap: 12px; padding: 20px 18px 16px; }.confirmation-dialog__icon { width: 42px; height: 42px; border-radius: 13px; }.confirmation-dialog__body { padding: 0 18px 18px; }.confirmation-dialog__footer { padding: 14px 18px; }.confirmation-dialog__footer .button { flex: 1; }
   .embedded-heading { align-items: flex-start; flex-direction: column; }.companion-stage__face, .companion-stage__face .companion-face { min-height: 260px; height: 260px; }.companion-expression-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .companion-dialogue-actions { align-items: stretch; flex-direction: column; }.companion-dialogue-actions .button { width: 100%; }.companion-session-evidence { grid-template-columns: 1fr; }
   .memory-metrics { grid-template-columns: 1fr; }
   .link-diagnostics-card { grid-template-columns: 44px minmax(0,1fr); }.link-diagnostics-card > .status-badge { grid-column: 2; justify-self: start; }.link-diagnostics-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.agent-delivery-line { grid-template-columns: 1fr; gap: 4px; }
   .chart-legend { grid-template-columns: auto auto 1fr; }.chart-legend span:nth-last-child(-n+2) { display: none; }.demo-watermark { display: none; }

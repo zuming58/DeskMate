@@ -13,7 +13,7 @@ const { CompanionConversationController } = require("../electron/companion-conve
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
 const { COMPRESSION, FLAGS, MAX_FRAME_BYTES, decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
-const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
+const { DOUBAO_PROTOCOL_APP_KEY, STRICT_HALF_DUPLEX_INPUT_MODE, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
 const { acceptsForegroundSessionEvent, emergencyStopForegroundSession, finishForegroundSession, initialForegroundSession, startForegroundSession } = require("../electron/foreground-session.cjs");
 
 function turn(eventId, text = "你好") {
@@ -100,12 +100,12 @@ test("Doubao codec accepts every documented flag layout, identifiers, gzip and f
   assert.doesNotMatch(JSON.stringify(translateFrame(decodeFrame(errorFrame), { replyText: "" })), /private provider content/);
   assert.deepEqual([
     providerFailureBucket(45000001), providerFailureBucket(45000002), providerFailureBucket(45000151),
-    providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
-  ], ["request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
+    providerFailureBucket(52000042), providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
+  ], ["request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
   assert.deepEqual([
     dialogErrorStatusClass(undefined), dialogErrorStatusClass(""), dialogErrorStatusClass({ private: true }),
-    dialogErrorStatusClass("45000002"), dialogErrorStatusClass(55000031), dialogErrorStatusClass(123),
-  ], ["missing", "missing", "invalid", "empty-audio", "server-busy", "unknown-provider-error"]);
+    dialogErrorStatusClass("45000002"), dialogErrorStatusClass(52000042), dialogErrorStatusClass(55000031), dialogErrorStatusClass(123),
+  ], ["missing", "missing", "invalid", "empty-audio", "audio-idle-timeout", "server-busy", "unknown-provider-error"]);
   const malformed = Buffer.from(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
   malformed.writeInt32BE(999, 8);
   assert.throws(() => decodeFrame(malformed), /doubao-(connect-id|payload-size)-invalid/);
@@ -137,6 +137,8 @@ test("Doubao adapter performs the binary handshake and bounds PCM chunks", async
   assert.equal(socket.options.headers["X-Api-Access-Key"], "access");
   assert.equal(socket.options.headers["X-Api-App-Key"], DOUBAO_PROTOCOL_APP_KEY);
   assert.deepEqual(socket.frames.slice(0, 2).map((frame) => frame.event), [EVENTS.START_CONNECTION, EVENTS.START_SESSION]);
+  assert.equal(STRICT_HALF_DUPLEX_INPUT_MODE, "keep_alive");
+  assert.equal(socket.frames[1].payloadJson.dialog.extra.input_mod, "keep_alive");
   assert.equal(session.sendAudio(Buffer.from([1, 2, 3])), true);
   assert.equal(socket.frames.at(-1).event, EVENTS.AUDIO_TASK_REQUEST);
   assert.equal(session.sendAudio(Buffer.alloc(64 * 1024 + 1)), false);

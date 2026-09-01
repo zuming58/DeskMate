@@ -4,6 +4,7 @@ const { EVENTS, MESSAGE_TYPES, decodeFrame, encodeAudioEvent, encodeJsonEvent } 
 
 const DEFAULT_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogue";
 const DOUBAO_PROTOCOL_APP_KEY = "PlgvMymc7f3tQnJ6";
+const STRICT_HALF_DUPLEX_INPUT_MODE = "keep_alive";
 const EVENT_NAMES = Object.freeze({
   50: "connection.started", 51: "connection.failed", 52: "connection.finished",
   150: "session.ready", 152: "session.finished", 153: "session.failed", 154: "session.usage",
@@ -16,6 +17,7 @@ const FAILURE_BUCKETS = Object.freeze({
   45000001: "request-invalid",
   45000002: "empty-audio",
   45000151: "audio-format-invalid",
+  52000042: "audio-idle-timeout",
   55000031: "server-busy",
 });
 
@@ -36,7 +38,7 @@ function dialogErrorStatusClass(value) {
 
 function diagnostic(providerEvent, terminalEvent = "none", failureBucket = "none", detail = {}) {
   const result = { providerEvent, terminalEvent, failureBucket };
-  if (["missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error"].includes(detail.dialogErrorStatusClass)) {
+  if (["missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"].includes(detail.dialogErrorStatusClass)) {
     result.dialogErrorStatusClass = detail.dialogErrorStatusClass;
   }
   return Object.freeze(result);
@@ -141,7 +143,9 @@ class DoubaoRealtimeSession {
         bot_name: "DeskMate",
         system_role: "你是 DeskMate，本地桌面陪伴助手。回答自然、简短，不执行系统命令，不声称拥有未接入的硬件能力。",
         speaking_style: "自然、友好、简洁，适合实时语音交流",
-        extra: { input_mod: "audio", model: this.config.model, strict_audit: true, enable_loudness_norm: true },
+        // The official keep_alive mode permits temporary upstream silence while
+        // strict half-duplex playback suppresses microphone chunks for echo safety.
+        extra: { input_mod: STRICT_HALF_DUPLEX_INPUT_MODE, model: this.config.model, strict_audit: true, enable_loudness_norm: true },
       },
       tts: { speaker: this.config.voice, audio_config: { channel: 1, format: "pcm_s16le", sample_rate: 24000, speech_rate: 0, loudness_rate: 0 }, extra: {} },
     };
@@ -225,4 +229,4 @@ class DoubaoRealtimeSession {
   }
 }
 
-module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame, validateConfig };
+module.exports = { DEFAULT_ENDPOINT, DOUBAO_PROTOCOL_APP_KEY, STRICT_HALF_DUPLEX_INPUT_MODE, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame, validateConfig };
