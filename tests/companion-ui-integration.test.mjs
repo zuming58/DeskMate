@@ -86,11 +86,12 @@ test("companion desktop layout keeps the overview aligned and only the independe
   const pages = await source("src/pages.jsx");
   const styles = await source("src/styles.css");
   const main = await source("electron/main.cjs");
-  assert.match(styles, /\.companion-overview \{[^}]*align-items: stretch/);
-  assert.match(styles, /\.companion-stage \{[^}]*height: 100%/);
-  assert.match(styles, /\.companion-stage__face \{[^}]*flex: 1 1 440px/);
-  assert.match(styles, /\.companion-side-stack \{[^}]*height: 100%/);
-  assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-stage \{ min-height: 0; height: auto; \}/);
+  assert.match(styles, /\.companion-overview \{[^}]*align-items: start/);
+  assert.match(styles, /\.companion-primary-column \{[^}]*display: grid;[^}]*align-items: start/);
+  assert.match(styles, /\.companion-stage \{[^}]*height: auto;[^}]*align-self: start/);
+  assert.match(styles, /\.companion-stage__face \{[^}]*aspect-ratio: 3\/2;[^}]*max-height: 380px;[^}]*flex: 0 0 auto/);
+  assert.match(styles, /\.companion-side-stack \{[^}]*height: auto;[^}]*align-self: start/);
+  assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-overview \{ align-items: start; \}/);
   assert.match(pages, /className="companion-session-controls"/);
   assert.match(styles, /\.companion-session-controls \{[^}]*display: flex;[^}]*flex-direction: column;[^}]*gap: 14px/);
   assert.match(styles, /\.companion-dialogue-actions \{[^}]*margin: 0;[^}]*min-height: 42px/);

@@ -6,7 +6,7 @@ import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding 
 import { mapAiStateToPetIntent } from "../domain/petIntent.js";
 import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
-import { COMPANION_DEFAULTS, COMPANION_END_SMOOTH_OPTIONS, COMPANION_IDLE_TIMEOUT_OPTIONS, normalizeCompanionPreferences } from "../domain/companionPreferences.js";
+import { COMPANION_DEFAULTS, isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs, normalizeCompanionPreferences } from "../domain/companionPreferences.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
 export const SCHEMA_VERSION = 12;
@@ -132,8 +132,8 @@ export function validateConfig(value) {
   if (value.settings?.sttMode !== undefined && !["unconfigured", "mock", "http", "bailian"].includes(value.settings.sttMode)) throw new Error("STT 模式无效");
   if (value.settings?.companionName !== undefined && (typeof value.settings.companionName !== "string" || !value.settings.companionName.trim() || value.settings.companionName.length > 32)) throw new Error("陪伴名称无效");
   if (value.settings?.companionWakePhrase !== undefined && (typeof value.settings.companionWakePhrase !== "string" || !value.settings.companionWakePhrase.trim() || value.settings.companionWakePhrase.length > 64)) throw new Error("唤醒短语无效");
-  if (value.settings?.companionEndSmoothWindowMs !== undefined && !COMPANION_END_SMOOTH_OPTIONS.includes(Number(value.settings.companionEndSmoothWindowMs))) throw new Error("停顿阈值无效");
-  if (value.settings?.companionIdleTimeoutMs !== undefined && !COMPANION_IDLE_TIMEOUT_OPTIONS.includes(Number(value.settings.companionIdleTimeoutMs))) throw new Error("会话空闲时长无效");
+  if (value.settings?.companionEndSmoothWindowMs !== undefined && !isValidCompanionEndSmoothWindowMs(value.settings.companionEndSmoothWindowMs)) throw new Error("停顿阈值无效");
+  if (value.settings?.companionIdleTimeoutMs !== undefined && !isValidCompanionIdleTimeoutMs(value.settings.companionIdleTimeoutMs)) throw new Error("会话空闲时长无效");
   if (value.settings?.sttEndpoint !== undefined && (typeof value.settings.sttEndpoint !== "string" || value.settings.sttEndpoint.length > 2048)) throw new Error("STT 端点格式无效");
   if (value.settings?.customOrganizerRule !== undefined && (typeof value.settings.customOrganizerRule !== "string" || value.settings.customOrganizerRule.length > 4000)) throw new Error("自定义整理规则格式无效");
   const expressionIds = new Set(expressionPresets.map((item) => item.id));
@@ -206,6 +206,9 @@ export function reduceAppState(state, action) {
       const preserveTerminalGeneration = isStatus && !value.active && currentGeneration > incomingGeneration;
       Object.assign(next, value);
       if (preserveTerminalGeneration) { next.generation = currentGeneration; next.sessionId = current.sessionId || ""; }
+    }
+    for (const key of ["providerLifecycle", "turnLifecycle", "sessionPolicy", "asrTiming", "preferences", "savedPreferences", "wakeWord", "mainState", "build"]) {
+      if (value[key] !== undefined) next[key] = value[key];
     }
     if (incomingSequence) next.eventSequence = incomingSequence;
     return { ...state, runtime: { ...state.runtime, companion: next } };

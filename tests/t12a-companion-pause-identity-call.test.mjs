@@ -120,12 +120,20 @@ test("reserved companion Host Action round-trips without entering AppActionStore
   assert.equal((await executor.execute("11111111-2222-3333-4444-555555555555")).reason, "host-action-not-mapped");
 });
 
-test("wake boundary is unavailable without opening a microphone and diagnostics expose only endpointing enums", async () => {
+test("wake boundary is unavailable without opening a microphone and diagnostics separate saved from applied endpointing", async () => {
   const wake = new UnavailableWakeWordAdapter();
   assert.deepEqual(wake.status(), { version: "wake-word-adapter-v1", available: false, enabled: false, reason: "wake-word-engine-not-integrated", localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
   assert.equal((await wake.start()).ok, false);
-  const report = createDiagnosticReport({ conversation: { endpointing: { endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }, companionName: "private-name", wakePhrase: "private-phrase" } });
-  assert.deepEqual(report.conversation.endpointing, { endSmoothWindowMs: 3000, idleTimeoutMs: 120000 });
+  const report = createDiagnosticReport({ conversation: {
+    savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
+    sessionPolicy: { sessionApplied: { revision: 3, endSmoothWindowMs: 5000, idleTimeoutMs: 60000 } },
+    companionName: "private-name",
+    wakePhrase: "private-phrase",
+  } });
+  assert.deepEqual(report.conversation.endpointing, {
+    saved: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000 },
+    sessionApplied: { revision: 3, endSmoothWindowMs: 5000, idleTimeoutMs: 60000 },
+  });
   assert.doesNotMatch(JSON.stringify(report), /private-name|private-phrase/);
 });
 

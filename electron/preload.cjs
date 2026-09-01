@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getCompanionConversationStatus: () => ipcRenderer.invoke("companion:get-status"),
   getCompanionPreferences: () => ipcRenderer.invoke("companion:get-preferences"),
   setCompanionPreferences: (value) => ipcRenderer.invoke("companion:set-preferences", value),
+  setCompanionStartOptions: (value) => ipcRenderer.invoke("companion:set-start-options", value),
   testCompanionCallAction: () => ipcRenderer.invoke("companion:test-call-action"),
   onCompanionConversationEvent: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("companion-conversation-event", handler); return () => ipcRenderer.removeListener("companion-conversation-event", handler); },
   setCompanionComputerAudioReady: (ready) => ipcRenderer.invoke("companion:set-computer-audio-ready", Boolean(ready)),

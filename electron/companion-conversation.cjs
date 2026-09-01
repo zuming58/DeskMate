@@ -1,12 +1,12 @@
 const { randomUUID } = require("crypto");
+const { COMPANION_PREFERENCES_DEFAULT, isValidEndSmoothWindowMs, isValidIdleTimeoutMs } = require("./companion-preferences.cjs");
 
 const STATES = Object.freeze(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
 const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", listening: "listening", thinking: "thinking", speaking: "working", completed: "completed", error: "error" });
 const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
-const DEFAULT_IDLE_TIMEOUT_MS = 60000;
-const IDLE_TIMEOUT_OPTIONS_MS = new Set([0, 30000, 60000, 120000]);
+const DEFAULT_IDLE_TIMEOUT_MS = COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs;
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const PROVIDER_EVENT_NAMES = new Set([
@@ -91,6 +91,7 @@ class CompanionConversationController {
     wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     setTimer = setTimeout,
     clearTimer = clearTimeout,
+    now = Date.now,
     drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS,
     teardownStepTimeoutMs = DEFAULT_TEARDOWN_STEP_TIMEOUT_MS,
     retryDelaysMs = [0, 250, 750],
@@ -105,6 +106,7 @@ class CompanionConversationController {
     this.wait = wait;
     this.setTimer = setTimer;
     this.clearTimer = clearTimer;
+    this.now = now;
     this.drainTimeoutMs = drainTimeoutMs;
     this.teardownStepTimeoutMs = teardownStepTimeoutMs;
     this.retryDelaysMs = retryDelaysMs.slice(0, 3);
@@ -119,6 +121,10 @@ class CompanionConversationController {
     this.idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
     this.idleTimer = null;
     this.lastStopReason = "never";
+    this.sessionProviderPreferences = Object.freeze({ revision: 0, ...COMPANION_PREFERENCES_DEFAULT });
+    this.sessionApplied = null;
+    this.lastPartialAt = null;
+    this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
     this.lastError = "";
     this.audioSelection = Object.freeze({ requestedSource: "", activeSource: "", output: "", fallback: null });
     this.discardResponseUntilTtsEnd = false;
@@ -259,7 +265,8 @@ class CompanionConversationController {
       turnLifecycle: this.turnLifecycleSnapshot(),
       providerLifecycle: Object.freeze({ ...this.providerLifecycle }),
       stopLifecycle: Object.freeze({ ...this.stopLifecycle }),
-      sessionPolicy: Object.freeze({ idleTimeoutMs: this.idleTimeoutMs, idleTimerArmed: Boolean(this.idleTimer), lastStopReason: this.lastStopReason }),
+      sessionPolicy: Object.freeze({ idleTimeoutMs: this.idleTimeoutMs, idleTimerArmed: Boolean(this.idleTimer), lastStopReason: this.lastStopReason, sessionApplied: this.sessionApplied }),
+      asrTiming: Object.freeze({ ...this.asrTiming }),
       error: this.lastError,
     });
   }
@@ -280,10 +287,21 @@ class CompanionConversationController {
     return { ok: true, status: this.snapshot() };
   }
 
-  configureSession({ idleTimeoutMs } = {}) {
+  configureSession({ preferences, idleTimeoutMs: legacyIdleTimeoutMs } = {}) {
     if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active" };
-    const numeric = Number(idleTimeoutMs);
-    this.idleTimeoutMs = IDLE_TIMEOUT_OPTIONS_MS.has(numeric) ? numeric : DEFAULT_IDLE_TIMEOUT_MS;
+    const candidate = preferences && typeof preferences === "object" ? preferences : { ...this.sessionProviderPreferences, idleTimeoutMs: legacyIdleTimeoutMs };
+    const endSmoothWindowMs = Number(candidate.endSmoothWindowMs);
+    const idleTimeoutMs = Number(candidate.idleTimeoutMs);
+    if (!isValidEndSmoothWindowMs(endSmoothWindowMs) || !isValidIdleTimeoutMs(idleTimeoutMs)) return { ok: false, reason: "companion-session-preferences-invalid" };
+    this.idleTimeoutMs = idleTimeoutMs;
+    this.sessionProviderPreferences = Object.freeze({
+      revision: Math.max(0, Number(candidate.revision) || 0),
+      name: boundedText(candidate.name || COMPANION_PREFERENCES_DEFAULT.name, 32),
+      wakePhrase: boundedText(candidate.wakePhrase || COMPANION_PREFERENCES_DEFAULT.wakePhrase, 64),
+      endSmoothWindowMs,
+      idleTimeoutMs,
+    });
+    this.sessionApplied = Object.freeze({ ...this.sessionProviderPreferences });
     return { ok: true, status: this.snapshot() };
   }
 
@@ -358,6 +376,8 @@ class CompanionConversationController {
     this.playbackDraining = false;
     this.activeTtsTurn = null;
     this.pendingChatFinals = 0;
+    this.lastPartialAt = null;
+    this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
     this.setHalfDuplexPhase("connecting");
     await this.transition("connecting");
     const token = this.active.token;
@@ -452,7 +472,7 @@ class CompanionConversationController {
 
   createProvider(token) {
     const providerEpoch = ++this.providerEpoch;
-    return this.providerFactory({ onEvent: (event) => {
+    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, onEvent: (event) => {
       const providerArrival = this.recordProviderArrival(event);
       const arrival = Object.freeze({
         ...providerArrival,
@@ -493,6 +513,7 @@ class CompanionConversationController {
     if (!this.isCurrent(token)) return cancelled();
     if (this.reconnecting) return this.reconnecting;
     this.reconnecting = (async () => {
+      this.lastPartialAt = null;
       await this.audioSource.stop();
       if (!this.isCurrent(token)) return cancelled();
       this.abandonOpenTurn("provider");
@@ -563,10 +584,16 @@ class CompanionConversationController {
       return { ok: true };
     }
     if (event.type === "asr.partial") {
+      this.lastPartialAt = this.now();
       this.onEvent({ type: "transcript.partial", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true };
     }
     if (event.type === "asr.final") {
+      if (this.lastPartialAt !== null) {
+        const elapsed = Math.max(0, Math.min(60000, Math.round(this.now() - this.lastPartialAt)));
+        this.asrTiming = { metric: "provider-partial-to-final-v1", status: "available", lastMs: elapsed, samples: this.asrTiming.samples + 1 };
+      }
+      this.lastPartialAt = null;
       if (await this.commitFinalTurn("user", event.text, token)) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
@@ -689,6 +716,7 @@ class CompanionConversationController {
       }
       this.stopLifecycle.alreadyStopped += 1;
       this.stopLifecycle.lastResult = "already-stopped";
+      this.onEvent({ type: "stop.lifecycle", reason: this.lastStopReason, stopLifecycle: { ...this.stopLifecycle } });
       return { ok: true, alreadyStopped: true, status: this.snapshot() };
     }
     const session = this.active;
@@ -707,6 +735,7 @@ class CompanionConversationController {
     await this.publishTerminalState("idle");
     this.stopLifecycle.completed += 1;
     this.stopLifecycle.lastResult = "completed";
+    this.onEvent({ type: "stop.lifecycle", reason: this.lastStopReason, sessionId: session.sessionId, generation: session.generation, stopLifecycle: { ...this.stopLifecycle } });
     return { ok: true, status: this.snapshot() };
   }
 
@@ -741,4 +770,4 @@ class CompanionConversationController {
   }
 }
 
-module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, COMPANION_ECHO_GUARD_POLICY: ECHO_GUARD_POLICY, COMPANION_IDLE_TIMEOUT_OPTIONS_MS: [...IDLE_TIMEOUT_OPTIONS_MS], CompanionConversationController };
+module.exports = { COMPANION_CONVERSATION_STATES: STATES, COMPANION_STATE_TO_AGENT: STATE_TO_AGENT, COMPANION_ECHO_GUARD_POLICY: ECHO_GUARD_POLICY, CompanionConversationController };

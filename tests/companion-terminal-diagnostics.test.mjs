@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes an explicit post-T11D.6 diagnostic build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t12a-companion-pause-identity-call-v1/);
+  assert.match(main, /t12b-companion-layout-timing-settings-v1/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 

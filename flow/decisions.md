@@ -1,5 +1,13 @@
 # Decisions
 
+## D055 - Companion settings are explicit transactions and sessions own frozen revisions
+
+- Date: 2026-09-01
+- Decision: Companion identity and timing fields are edited as a renderer draft, persisted only by one explicit Save action and acknowledged only after Electron main validates, atomically writes and rereads the file. Each new conversation snapshots one revision; that identity, provider pause and listening idle policy remain fixed for the whole session and its reconnects.
+- Range: provider pause is 0.5–50 seconds in 0.5-second steps. Listening idle stop is off or an integer 10–3600 seconds. These supersede D054's preset-only ranges without changing its two-clock ownership or reserved physical call action.
+- Evidence: diagnostics keep saved and session-applied numeric values separate, expose only a bounded partial-to-final interval/count, and emit a final lifecycle event after an internally completed stop. Identity, wake phrase, text, audio and provider identifiers remain excluded.
+- Presentation: the Companion overview uses independent self-height columns and a bounded `3:2` face. A taller settings stack cannot stretch the realtime face or displace the directly following Xiaozhi state test.
+
 ## D054 - Companion endpointing uses two clocks and one reserved physical call action
 
 - Date: 2026-09-01

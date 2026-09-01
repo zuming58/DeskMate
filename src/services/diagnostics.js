@@ -1,4 +1,5 @@
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "../domain/linkDiagnostics.js";
+import { isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs } from "../domain/companionPreferences.js";
 
 const SECRET_KEYS = /token|api.?key|password|wifi|path|text|transcript|recording|audio|serial|window.?title|ip|address/i;
 const AUDIO_STATES = new Set(["not-configured", "binding", "waiting-heartbeat", "ready", "starting", "streaming", "ambiguous", "faulted", "unavailable", "desktop-bridge-unavailable"]);
@@ -12,8 +13,6 @@ const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacen
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
-const END_SMOOTH_WINDOW_MS = new Set([2000, 3000, 5000]);
-const IDLE_TIMEOUT_MS = new Set([0, 30000, 60000, 120000]);
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -40,7 +39,21 @@ export function createDiagnosticReport(input = {}) {
   const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
   const sinkCancelSource = conversationSource.sinkCancelReasons || {};
   const mainStateSource = conversationSource.mainState || {};
-  const endpointingSource = conversationSource.endpointing || {};
+  const savedPreferencesSource = conversationSource.savedPreferences || {};
+  const sessionPolicySource = conversationSource.sessionPolicy || {};
+  const sessionAppliedSource = sessionPolicySource.sessionApplied || {};
+  const asrTimingSource = conversationSource.asrTiming || {};
+  const savedEndpointing = {
+    revision: Math.max(0, Number(savedPreferencesSource.revision) || 0),
+    endSmoothWindowMs: isValidCompanionEndSmoothWindowMs(savedPreferencesSource.endSmoothWindowMs) ? Number(savedPreferencesSource.endSmoothWindowMs) : 5000,
+    idleTimeoutMs: isValidCompanionIdleTimeoutMs(savedPreferencesSource.idleTimeoutMs) ? Number(savedPreferencesSource.idleTimeoutMs) : 60000,
+  };
+  const sessionApplied = isValidCompanionEndSmoothWindowMs(sessionAppliedSource.endSmoothWindowMs) && isValidCompanionIdleTimeoutMs(sessionAppliedSource.idleTimeoutMs)
+    ? { revision: Math.max(0, Number(sessionAppliedSource.revision) || 0), endSmoothWindowMs: Number(sessionAppliedSource.endSmoothWindowMs), idleTimeoutMs: Number(sessionAppliedSource.idleTimeoutMs) }
+    : { status: "unavailable" };
+  const asrTiming = asrTimingSource.metric === "provider-partial-to-final-v1" && asrTimingSource.status === "available"
+    ? { metric: "provider-partial-to-final-v1", status: "available", lastMs: Math.max(0, Math.min(60000, Number(asrTimingSource.lastMs) || 0)), samples: Math.max(0, Number(asrTimingSource.samples) || 0) }
+    : { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: null, samples: Math.max(0, Number(asrTimingSource.samples) || 0) };
   const conversation = {
     state: CONVERSATION_STATES.has(conversationSource.state) ? conversationSource.state : "idle",
     serviceConfigured: Boolean(conversationSource.serviceConfigured),
@@ -55,10 +68,8 @@ export function createDiagnosticReport(input = {}) {
     },
     mainState: { active: Boolean(mainStateSource.active), state: CONVERSATION_STATES.has(mainStateSource.state) ? mainStateSource.state : "idle", generation: Math.max(0, Number(mainStateSource.generation) || 0) },
     eventSequence: Math.max(0, Number(conversationSource.eventSequence) || 0),
-    endpointing: {
-      endSmoothWindowMs: END_SMOOTH_WINDOW_MS.has(Number(endpointingSource.endSmoothWindowMs)) ? Number(endpointingSource.endSmoothWindowMs) : 5000,
-      idleTimeoutMs: IDLE_TIMEOUT_MS.has(Number(endpointingSource.idleTimeoutMs)) ? Number(endpointingSource.idleTimeoutMs) : 60000,
-    },
+    endpointing: { saved: savedEndpointing, sessionApplied },
+    asrTiming,
     stopLifecycle: {
       pending: Boolean(stopSource.pending),
       result: /^[a-z0-9-]{1,80}$/.test(String(stopSource.result || stopSource.lastResult || "")) ? String(stopSource.result || stopSource.lastResult) : "unknown",
@@ -66,6 +77,7 @@ export function createDiagnosticReport(input = {}) {
       requested: Math.max(0, Number(stopSource.requested) || 0),
       duplicateRequests: Math.max(0, Number(stopSource.duplicateRequests) || 0),
       completed: Math.max(0, Number(stopSource.completed) || 0),
+      reason: /^[a-z0-9-]{1,120}$/.test(String(sessionPolicySource.lastStopReason || "")) ? String(sessionPolicySource.lastStopReason) : "never",
     },
     providerLifecycle: {
       ...Object.fromEntries(["connectAttempts", "connections", "closes", "reconnects", "events", "audioEvents", "ttsStarts", "ttsEnds", "providerErrors", "errorFrames", "dialogErrors", "dialogErrorsAdjacentTtsEnd", "sessionFinished", "sessionFailed", "connectionFinished", "transportErrors", "transportCloses", "providerEventSequence", "lastTtsEndSequence", "lastTerminalEventSequence"].map((key) => [key, Math.max(0, Number(providerSource[key]) || 0)])),

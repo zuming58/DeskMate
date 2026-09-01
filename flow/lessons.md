@@ -1,5 +1,17 @@
 # Lessons learned
 
+## Saved settings are not active-session evidence
+
+- Symptom: a UI could show a newly selected pause value while the already connected provider still used the value captured when its session started. A flat diagnostic copied from renderer settings therefore presented preference as runtime fact.
+- Practice: edit a draft, persist through one explicit write/readback transaction, and snapshot a revision at session creation. Export saved and session-applied numeric values separately; use content-free interval/count metrics when runtime timing needs evidence.
+- Rule: an active realtime session never hot-switches identity or timing because a form changed. Reconnect belongs to the same frozen session; only a new session may consume later saved values.
+
+## Grid stretch can turn a bounded visual into a layout regression
+
+- Symptom: a tall settings column stretched its sibling card; `height: 100%`, a large minimum height and a flex-growing face then produced an elongated character far beyond its intended proportions.
+- Practice: give columns independent self-height ownership, keep the visual in a bounded aspect-ratio box and preserve semantic source order when collapsing to one column.
+- Rule: visual proportions must be owned by the visual component. A neighboring card's content height is never an input to face geometry.
+
 ## Utterance endpointing and conversation inactivity are different clocks
 
 - Symptom: increasing one generic timeout either still cuts off pauses before a sentence is complete or leaves an abandoned continuous session online too long.

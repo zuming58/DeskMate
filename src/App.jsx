@@ -238,17 +238,17 @@ function AppContent() {
     return globalThis.desktopBridge.onCompanionConversationEvent?.(updateCompanion);
   }, [updateCompanion]);
   useEffect(() => {
-    voiceAdapters.desktop.setCompanionPreferences({
-      name: state.settings.companionName,
-      wakePhrase: state.settings.companionWakePhrase,
-      endSmoothWindowMs: state.settings.companionEndSmoothWindowMs,
-      idleTimeoutMs: state.settings.companionIdleTimeoutMs,
-      microphoneSource: state.settings.microphoneSource,
-      microphoneId: state.settings.microphoneId,
-    }).then((value) => {
-      if (value?.preferences || value?.wakeWord) updateCompanion({ preferences: value.preferences, wakeWord: value.wakeWord });
+    let active = true;
+    voiceAdapters.desktop.getCompanionPreferences().then((value) => {
+      if (!active || !value?.preferences) return;
+      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs } });
+      updateCompanion({ preferences: value.preferences, savedPreferences: { revision: value.revision, endSmoothWindowMs: value.preferences.endSmoothWindowMs, idleTimeoutMs: value.preferences.idleTimeoutMs }, wakeWord: value.wakeWord });
     }).catch(() => {});
-  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs, state.settings.microphoneSource, state.settings.microphoneId, updateCompanion]);
+    return () => { active = false; };
+  }, [patch, updateCompanion]);
+  useEffect(() => {
+    voiceAdapters.desktop.setCompanionStartOptions({ microphoneSource: state.settings.microphoneSource, microphoneId: state.settings.microphoneId }).catch(() => {});
+  }, [state.settings.microphoneSource, state.settings.microphoneId]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;

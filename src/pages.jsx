@@ -65,7 +65,7 @@ import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCap
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicrophoneSession } from "./domain/microphoneSource.js";
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "./domain/linkDiagnostics.js";
-import { COMPANION_DEFAULTS, COMPANION_END_SMOOTH_OPTIONS, COMPANION_IDLE_TIMEOUT_OPTIONS } from "./domain/companionPreferences.js";
+import { COMPANION_DEFAULTS, companionPreferencesToDraft, parseCompanionPreferenceDraft } from "./domain/companionPreferences.js";
 import { agentStateEvidence, manualAgentStateFailureMessage, previewSoftwareExpression, requestManualAgentState } from "./domain/expressionLinkUx.js";
 import { dashboardHardwareStatus } from "./domain/dashboardStatus.js";
 import { deviceServiceStatus } from "./domain/deviceServiceStatus.js";
@@ -263,8 +263,10 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
 }
 
 export function CompanionPage({ notify, navigate, stopCompanion }) {
-  const { state, patch } = useAppStore();
+  const { state, patch, updateCompanion } = useAppStore();
   const [section, setSection] = useState("overview");
+  const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }));
+  const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
   const sessionActive = Boolean(conversation.active);
   const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
@@ -274,8 +276,10 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const expression = conversationExpression || state.currentExpression;
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
   const serviceStatus = deviceServiceStatus({ inputBridge: state.runtime?.inputBridge, audioStatus: state.runtime?.easyInputAudio, preferredMicrophoneSource: state.settings.microphoneSource, companion: conversation, memory: state.runtime?.memory });
-  const updateCompanionSettings = (value) => patch({ settings: { ...state.settings, ...value } });
-  const companionName = state.settings.companionName || COMPANION_DEFAULTS.name;
+  const companionName = (sessionActive ? conversation.sessionPolicy?.sessionApplied?.name : state.settings.companionName) || state.settings.companionName || COMPANION_DEFAULTS.name;
+  useEffect(() => {
+    setCompanionDraft(companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }));
+  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs]);
   const conversationCopy = {
     idle: [`你好，我是${companionName}`, conversation.sessionPolicy?.lastStopReason === "listening-idle-timeout" ? "长时间未说话，已结束。按一下可重新进入连续对话。" : "按一下进入连续对话；文字语音输入会优先中断陪伴会话。"],
     connecting: ["正在连接…", "正在建立豆包实时对话会话。"],
@@ -326,6 +330,27 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       notify(result?.ok ? "已打断当前回答，继续倾听" : blockerCopy[result?.reason] || "当前没有可打断的回答");
     } catch (error) { notify(`打断失败：${error.message}`); }
   };
+  const saveCompanionSettings = async () => {
+    const parsed = parseCompanionPreferenceDraft(companionDraft);
+    if (!parsed.ok) {
+      setCompanionSettingsStatus({ state: "error", message: parsed.reason });
+      return;
+    }
+    setCompanionSettingsStatus({ state: "saving", message: "正在保存并回读…" });
+    try {
+      const result = await voiceAdapters.desktop.setCompanionPreferences(parsed.value);
+      if (!result?.preferences) throw new Error("companion-preferences-readback-unavailable");
+      const preferences = result.preferences;
+      patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs } });
+      setCompanionDraft(companionPreferencesToDraft(preferences));
+      updateCompanion({ preferences, savedPreferences: { revision: result.revision, endSmoothWindowMs: preferences.endSmoothWindowMs, idleTimeoutMs: preferences.idleTimeoutMs }, wakeWord: result.wakeWord });
+      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}。${sessionActive ? "当前会话不变，请结束并重新开始后生效。" : "下一次新建陪伴会话生效。"}`;
+      setCompanionSettingsStatus({ state: "saved", message });
+      notify(message);
+    } catch {
+      setCompanionSettingsStatus({ state: "error", message: "设置保存或回读失败，原有配置保持不变" });
+    }
+  };
   return (
     <div className="page page--companion">
       <PageIntro
@@ -345,7 +370,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       />
       {section === "overview" && <>
         <div className="companion-overview">
-        <Card className="companion-stage">
+        <div className="companion-primary-column">
+          <Card className="companion-stage">
           <div className="card-heading"><div><strong>DeskMate 实时陪伴</strong><small>WINDOWS · DOUBAO REALTIME</small></div><StatusBadge tone={conversation.state === "error" ? "warning" : sessionActive ? "success" : "neutral"}>{sessionActive ? ({ connecting: "连接中", listening: "聆听中", thinking: "思考中", speaking: "回答中 · 防回声", completed: "本轮完成", stopping: "结束中" }[conversation.state] || "会话中") : selectedPreset.name}</StatusBadge></div>
           <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
           <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
@@ -356,7 +382,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             {conversation.state === "speaking" && <Notice tone="info" title="严格轮流说话">防回声中，自动语音打断暂停，可手动点击“打断回答并继续听”。</Notice>}
             {conversation.audioSelection?.fallback && <Notice tone="warning" title="本轮已明确回退">{microphoneSourceFailureMessage(conversation.audioSelection.fallback.reason)}；保存的首选来源没有改变，本轮实际使用电脑麦克风。</Notice>}
           </div>
-        </Card>
+          </Card>
+          <AgentStateTestPanel notify={notify} navigate={navigate} index="04" />
+        </div>
         <div className="companion-side-stack">
           <Card>
             <SectionTitle index="01" title="陪伴与记忆" description="最终用户和助手回合先事务写入本地 SQLite，再显示为完成。" />
@@ -367,10 +395,15 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
           </Card>
           <Card>
             <SectionTitle index="03" title="陪伴对话设置" description="只影响实时陪伴，不改变普通语音输入和文字整理的停顿规则。" />
-            <label className="field-label">陪伴名称<input value={state.settings.companionName} maxLength={32} onChange={(event) => updateCompanionSettings({ companionName: event.target.value })} /></label>
-            <label className="field-label">唤醒短语<input value={state.settings.companionWakePhrase} maxLength={64} onChange={(event) => updateCompanionSettings({ companionWakePhrase: event.target.value })} /></label>
-            <SettingRow title="单句话内停顿" description="服务端检测到这段连续静音后，才把本句话交给助手处理"><Segmented compact value={state.settings.companionEndSmoothWindowMs} onChange={(value) => updateCompanionSettings({ companionEndSmoothWindowMs: value })} options={COMPANION_END_SMOOTH_OPTIONS.map((value) => ({ value, label: `${value / 1000} 秒${value === 5000 ? " · 推荐" : ""}` }))} /></SettingRow>
-            <SettingRow title="无人说话自动结束" description="只在倾听且没有接受到输入时累计；思考和播报不计时"><Segmented compact value={state.settings.companionIdleTimeoutMs} onChange={(value) => updateCompanionSettings({ companionIdleTimeoutMs: value })} options={COMPANION_IDLE_TIMEOUT_OPTIONS.map((value) => ({ value, label: value === 0 ? "关闭" : `${value / 1000} 秒${value === 60000 ? " · 默认" : ""}` }))} /></SettingRow>
+            <div className="companion-settings-form">
+              <label className="field-label">陪伴名称<input value={companionDraft.name} maxLength={32} onChange={(event) => setCompanionDraft({ ...companionDraft, name: event.target.value })} /></label>
+              <label className="field-label">唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /></label>
+              <label className="field-label">单句话内停顿<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>范围 0.5–50 秒，以 0.5 秒递增；推荐 5 秒。</small></label>
+              <label className="field-label">无人说话自动结束<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>0 表示关闭；其他值为 10–3600 的整数秒，只在倾听且没有接受到输入时累计。</small></label>
+              {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
+              <Notice tone="info" title="从下一次会话生效">保存后从下一次新建陪伴会话生效。{sessionActive ? "当前会话正在使用启动时冻结的参数，请结束并重新开始。" : "当前没有活动会话。"}</Notice>
+              <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
+            </div>
             <Notice tone="info" title="语音唤醒待接入 / 未启用">“{state.settings.companionWakePhrase}”只保存为未来的本地离线唤醒配置；当前不会后台打开麦克风，也不会保持豆包在线。EasyInput 的“AI 陪伴呼唤”按键可独立使用。</Notice>
           </Card>
           <Card>
@@ -389,7 +422,6 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
           <Notice tone="info" title="语音互斥边界">陪伴会话与文字语音输入共用唯一前台会话仲裁器；启动语音输入或语音编辑会立即结束陪伴会话，结束后不会自动恢复。</Notice>
         </div>
       </div>
-      <AgentStateTestPanel notify={notify} navigate={navigate} index="04" />
       </>}
       {section === "memory" && <MemoryManagementPage notify={notify} />}
       {section === "motion" && <MotionPage notify={notify} embedded />}
@@ -1352,7 +1384,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const clearTextService = async () => { try { const value = await globalThis.desktopBridge?.clearTextModelService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify(bailianStatus.configured ? "已移除自定义文本模型，将回退到百炼 qwen3.7-flash" : "文本大模型配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
   const saveRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.saveRealtimeVoiceService?.(realtimeService); if (!value) throw new Error("请在 DeskMate 桌面版中配置"); setAiServiceStatus(value); setRealtimeService((current) => ({ ...current, accessKey: "", appKey: "" })); notify("实时语音凭据已加密保存；只有开始陪伴会话时才会联网"); } catch (error) { notify(`保存失败：${error.message}`); } };
   const clearRealtimeService = async () => { try { const value = await globalThis.desktopBridge?.clearRealtimeVoiceService?.(); if (!value) throw new Error("请在 DeskMate 桌面版中操作"); setAiServiceStatus(value); notify("实时语音配置已删除"); } catch (error) { notify(`删除失败：${error.message}`); } };
-  const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const companion = state.runtime?.companion || {}; const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, conversation: { state: companion.state, serviceConfigured: companion.serviceConfigured ?? companion.service?.configured, connected: companion.active, input: companion.audioSelection?.activeSource || companion.audioSelection?.requestedSource, fallback: Boolean(companion.audioSelection?.fallback), error: companion.error, endpointing: { endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }, counters: companion.computerAudio?.counters, sinkCancelReasons: companion.computerAudio?.sinkCancelReasons, lastSinkCancelReason: companion.computerAudio?.lastSinkCancelReason, echoGuard: companion.echoGuard, build: companion.build, mainState: companion.mainState, eventSequence: companion.eventSequence, stopLifecycle: companion.stopLifecycle, providerLifecycle: companion.providerLifecycle, turnLifecycle: companion.turnLifecycle }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
+  const exportDiagnostics = async () => { const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const companion = state.runtime?.companion || {}; const report = createDiagnosticReport({ runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, conversation: { state: companion.state, serviceConfigured: companion.serviceConfigured ?? companion.service?.configured, connected: companion.active, input: companion.audioSelection?.activeSource || companion.audioSelection?.requestedSource, fallback: Boolean(companion.audioSelection?.fallback), error: companion.error, savedPreferences: companion.savedPreferences, sessionPolicy: companion.sessionPolicy, asrTiming: companion.asrTiming, counters: companion.computerAudio?.counters, sinkCancelReasons: companion.computerAudio?.sinkCancelReasons, lastSinkCancelReason: companion.computerAudio?.lastSinkCancelReason, echoGuard: companion.echoGuard, build: companion.build, mainState: companion.mainState, eventSequence: companion.eventSequence, stopLifecycle: companion.stopLifecycle, providerLifecycle: companion.providerLifecycle, turnLifecycle: companion.turnLifecycle }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
   const downloadConfig = () => { const blob = new Blob([exportConfig()], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-config.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 0); notify("配置 JSON 已导出"); };
   const importConfig = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { replace(JSON.parse(reader.result)); notify("配置已导入"); } catch (error) { notify(`导入失败：${error.message}`); } }; reader.readAsText(file); event.target.value = ""; };
   const sttDiagnostic = state.settings.sttMode === "bailian" ? { label: "千问 ASR", value: bailianStatus.configured ? "已配置" : "缺少密钥", tone: bailianStatus.configured ? "success" : "demo" } : state.settings.sttMode === "mock" ? { label: "Mock STT", value: "模拟", tone: "demo" } : state.settings.sttMode === "http" ? { label: "HTTP STT 端点", value: "待验证", tone: "demo" } : { label: "语音转写服务", value: "未配置", tone: "demo" };
