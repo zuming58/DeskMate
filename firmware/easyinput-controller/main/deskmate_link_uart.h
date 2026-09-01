@@ -11,6 +11,9 @@ class DeskMateLinkUart {
     [[noreturn]] void run();
     LinkStatusSnapshot snapshot() const;
     bool queue_agent_state(LinkAgentState state, std::uint32_t transition_id);
+    bool queue_manual_calibration(
+        const ManualCalibrationLinkRequest& request);
+    bool take_manual_calibration_result(ManualCalibrationLinkResult& result);
     void mark_task_create_failure();
 
  private:
@@ -24,6 +27,11 @@ class DeskMateLinkUart {
     LinkAgentState queued_agent_state_{LinkAgentState::Idle};
     std::uint32_t queued_transition_id_{};
     bool agent_state_pending_{};
+    ManualCalibrationLinkRequest queued_manual_calibration_{};
+    ManualCalibrationLinkResult manual_calibration_result_{};
+    bool manual_calibration_command_pending_{};
+    bool manual_calibration_active_{};
+    bool manual_calibration_result_pending_{};
 };
 
 }  // namespace deskmate::easyinput

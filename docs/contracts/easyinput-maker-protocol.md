@@ -19,8 +19,12 @@
 | `0x13` | Host → Board Feature | 请求设备状态快照 |
 | `0x14` | Host → Board Feature | 扬声器资源请求 |
 | `0x15` | Board → Host Input | 扬声器资源响应 |
+| `0x16` | Host → Board Feature | T10D-A 手动校准请求，63-byte payload |
+| `0x17` | Board → Host Input | T10D-A 手动校准 accepted/terminal 响应，63-byte payload |
 
 实现要求：严格校验版本、长度、分块、总长度和 CRC；未知报告不写入。
+
+`0x16/0x17` 是 additive DeskMate 产品扩展，完整冻结布局、生命周期和黄金向量见 [`EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN`](../../contracts/deskmate-host/easyinput-manual-calibration-v1.md)。它只转发既有小智 `0x20/0x21` 高层校准消息，不提供任意角度、PWM、脉宽、占空比或 GPIO 控制，也不代表实体舵机已经可用。
 
 DeskMate 的 Windows 侧已实现 `0x10` 分块编码、`0x11` 配置确认/Host Action 解码和厂商 HID 报告长度校验。配置写入当前保持安全门禁：Maker 会用一份 JSON 覆盖完整板载配置，而 DeskMate 尚未取得可无损合并的完整现有配置，因此 UI 只保存本机设置并明确拒绝实际写入。完成“读取当前配置 → 保留网络/音频字段 → 用户确认 → 写入 → 校验确认”闭环后才开放。
 

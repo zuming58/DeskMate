@@ -45,6 +45,18 @@ add_executable(agent_state_core_tests
 target_include_directories(agent_state_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME agent_state_core_tests COMMAND agent_state_core_tests)
 
+add_executable(manual_calibration_bridge_core_tests
+    manual_calibration_bridge_core_tests.cpp
+    ../components/input_core/src/manual_calibration_bridge_core.cpp
+    ../components/input_core/src/deskmate_link_core.cpp
+)
+target_include_directories(manual_calibration_bridge_core_tests PRIVATE ../components/input_core/include)
+target_compile_definitions(manual_calibration_bridge_core_tests PRIVATE
+    HOST_MANUAL_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-host/golden-vectors-easyinput-manual-calibration-v1.json"
+    LINK_MANUAL_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json"
+)
+add_test(NAME manual_calibration_bridge_core_tests COMMAND manual_calibration_bridge_core_tests)
+
 add_executable(input_core_tests input_core_tests.cpp ../components/input_core/src/input_core.cpp ../components/input_core/src/hid_report.cpp)
 target_include_directories(input_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_core_tests COMMAND input_core_tests)
@@ -114,6 +126,11 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     LINK_UART_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_link_uart.cpp"
     LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/v1.md"
     LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-v1.json"
+    MANUAL_BRIDGE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/manual_calibration_bridge_core.h"
+    MANUAL_BRIDGE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/manual_calibration_bridge_core.cpp"
+    MANUAL_HOST_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-host/easyinput-manual-calibration-v1.md"
+    MANUAL_HOST_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-host/golden-vectors-easyinput-manual-calibration-v1.json"
+    MANUAL_LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/t10c-manual-calibration-v1.md"
     AUDIO_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/audio_capture_core.h"
     AUDIO_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/audio_capture_core.cpp"
     AUDIO_SERVICE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/audio_capture_service.h"

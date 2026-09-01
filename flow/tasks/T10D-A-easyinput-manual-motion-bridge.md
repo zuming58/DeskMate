@@ -2,7 +2,7 @@
 
 ## Status
 
-`OPEN / CODE_ONLY / HARDWARE_FORBIDDEN`
+`IMPLEMENTED / TEST_CONFIRMED / BUILD_CONFIRMED / HARDWARE_FORBIDDEN`
 
 ## Objective
 
@@ -56,3 +56,11 @@ after proving that it does not collide with the current contracts.
   16 MiB partition table or locked T03–T11 behavior.
 - Main Agent records exact branch/HEAD and leaves physical motion classified as
   `NOT_READY / HIL_NOT_RUN`.
+
+## Result
+
+- Frozen Host transport: `EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN`, HID Feature `0x16` and Input `0x17`, both with 63-byte payloads and committed golden vectors.
+- EasyInput implements one strict host slot, accepted/terminal evidence, exact T10C `0x20/0x21` forwarding, timeout/disconnect/restart closure and redacted counters.
+- Host CTest passed `13/13`, including fake Xiaozhi endpoint and source-contract safety gates.
+- Exact ESP-IDF v5.5.5 fixed-layout build passed; application size `0xD2F60` inside the unchanged `0x300000` factory partition.
+- No device, port, Flash/NVS/eFuse, OLED, audio, PWM, GPIO-servo or physical motion operation occurred. Production motion remains `NOT_READY / HIL_NOT_RUN`.

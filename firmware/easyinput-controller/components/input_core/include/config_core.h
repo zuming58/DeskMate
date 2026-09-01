@@ -7,6 +7,7 @@
 #include "audio_capture_core.h"
 #include "agent_state_core.h"
 #include "deskmate_link_core.h"
+#include "manual_calibration_bridge_core.h"
 #include "speaker_output_core.h"
 namespace deskmate::easyinput {
 inline constexpr size_t kConfigMaxJsonBytes = 2048;
@@ -34,7 +35,7 @@ class ConfigReadStream {
  private: ConfigDocument document_{}; uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; bool pending_{};
 };
 class ConfigStatusStream {
- public: bool replace(uint32_t,uint32_t,const LinkStatusSnapshot&,const AgentStateDiagnostics& = {},const AudioCaptureDiagnostics& = {},const SpeakerOutputDiagnostics& = {}); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
+ public: bool replace(uint32_t,uint32_t,const LinkStatusSnapshot&,const AgentStateDiagnostics& = {},const AudioCaptureDiagnostics& = {},const SpeakerOutputDiagnostics& = {},const ManualCalibrationBridgeDiagnostics& = {}); bool encode_next(std::array<uint8_t,kConfigFeaturePayloadBytes>&) const; bool mark_sent(); void abort(); bool pending() const{return pending_;} uint32_t epoch() const{return epoch_;}
  private: std::array<char,kConfigStatusMaxJsonBytes> json_{}; uint32_t request_id_{},epoch_{}; uint8_t next_chunk_{},total_chunks_{}; uint16_t length_{},crc16_{}; bool pending_{};
 };
 enum class ConfigActionKind:uint8_t { Disabled,VoiceInput,VoiceEdit,Enter,Backspace,SelectAll,Copy,Paste,Undo,Hotkey,EncoderAxisToggle,TextCaretSelect,FixedText,HostAction,Unsupported };

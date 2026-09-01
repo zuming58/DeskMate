@@ -88,6 +88,11 @@ int main() {
     const std::string link_uart_source = read_all(LINK_UART_SOURCE_PATH);
     const std::string link_contract = read_all(LINK_CONTRACT_PATH);
     const std::string link_vectors = read_all(LINK_VECTORS_PATH);
+    const std::string manual_bridge_header = read_all(MANUAL_BRIDGE_HEADER_PATH);
+    const std::string manual_bridge_source = read_all(MANUAL_BRIDGE_SOURCE_PATH);
+    const std::string manual_host_contract = read_all(MANUAL_HOST_CONTRACT_PATH);
+    const std::string manual_host_vectors = read_all(MANUAL_HOST_VECTORS_PATH);
+    const std::string manual_link_contract = read_all(MANUAL_LINK_CONTRACT_PATH);
     const std::string audio_core_header = read_all(AUDIO_CORE_HEADER_PATH);
     const std::string audio_core_source = read_all(AUDIO_CORE_SOURCE_PATH);
     const std::string audio_service_header = read_all(AUDIO_SERVICE_HEADER_PATH);
@@ -346,6 +351,38 @@ int main() {
     CHECK(contains(link_contract, "DESKMATE_LINK_V1_FROZEN"));
     CHECK(contains(link_vectors,
                    "444D4C4B01010100010000000700010101443322118228"));
+
+    // T10D-A is a bounded Host-to-Link bridge only. The controller must keep
+    // report IDs additive, forward the already frozen T10C messages exactly,
+    // and never grow a local servo/PWM/GPIO motion adapter.
+    CHECK(contains(manual_host_contract,
+                   "EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN"));
+    CHECK(contains(manual_link_contract,
+                   "T10C_MANUAL_CALIBRATION_LINK_V1_FROZEN"));
+    CHECK(contains(manual_bridge_header,
+                   "kManualCalibrationRequestReportId = 0x16"));
+    CHECK(contains(manual_bridge_header,
+                   "kManualCalibrationStatusReportId = 0x17"));
+    CHECK(contains(manual_bridge_header,
+                   "kManualCalibrationHostPayloadBytes = 63"));
+    CHECK(contains(manual_bridge_header,
+                   "kManualCalibrationCommandPayloadBytes = 19"));
+    CHECK(contains(manual_bridge_header,
+                   "kManualCalibrationStatusPayloadBytes = 18"));
+    CHECK(contains(manual_bridge_source, "{'D', 'M', 'C', 'R'}"));
+    CHECK(contains(manual_bridge_source, "{'D', 'M', 'C', 'S'}"));
+    CHECK(contains(main_source, "kManualCalibrationRequestReportId"));
+    CHECK(contains(main_source, "kManualCalibrationStatusReportId"));
+    CHECK(contains(main_source, "queue_manual_calibration(dispatch)"));
+    CHECK(contains(link_uart_source,
+                   "controller_.queue_manual_calibration(manual_request)"));
+    CHECK(contains(manual_host_vectors, "status_request"));
+    CHECK(contains(manual_host_vectors, "select_terminal"));
+    CHECK(!contains(manual_bridge_header, "pulse_width"));
+    CHECK(!contains(manual_bridge_header, "duty"));
+    CHECK(!contains(manual_bridge_header, "gpio"));
+    CHECK(!contains(manual_bridge_source, "ledc"));
+    CHECK(!contains(manual_bridge_source, "servo"));
 
     // T10E is the only EasyInput microphone implementation. It keeps GPIO8
     // ownership centralized, uses a bounded PSRAM queue and never guesses a

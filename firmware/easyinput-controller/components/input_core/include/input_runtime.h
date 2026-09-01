@@ -229,17 +229,27 @@ struct ConfigTransferState {
     bool advances_read_stream{false};
     bool advances_status_stream{false};
     bool advances_host_command{false};
+    bool advances_manual_response{false};
     bool completed{false};
     bool completed_status{false};
+    bool completed_manual{false};
     bool failed{false};
+    bool failed_manual{false};
     void clear() {
         active = false;
         report = {};
         advances_read_stream = false;
         advances_status_stream = false;
         advances_host_command = false;
+        advances_manual_response = false;
     }
-    void reset_outcome() { completed = false; completed_status = false; failed = false; }
+    void reset_outcome() {
+        completed = false;
+        completed_status = false;
+        completed_manual = false;
+        failed = false;
+        failed_manual = false;
+    }
 };
 
 class UsbInputRuntime {

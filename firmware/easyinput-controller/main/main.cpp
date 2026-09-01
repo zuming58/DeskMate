@@ -6,6 +6,7 @@
 #include "input_runtime.h"
 #include "led_feedback.h"
 #include "led_strip.h"
+#include "manual_calibration_bridge_core.h"
 #include "peripheral_power.h"
 #include "speaker_output_service.h"
 #include "config_store.h"
@@ -56,6 +57,12 @@ StaticQueue_t agent_state_command_queue_control{};
 std::array<uint8_t, sizeof(ConfigFeatureCommand)>
     agent_state_command_queue_storage{};
 QueueHandle_t agent_state_command_queue = nullptr;
+StaticQueue_t manual_calibration_command_queue_control{};
+constexpr size_t kManualCalibrationCommandQueueCapacity = 4;
+std::array<uint8_t, kManualCalibrationCommandQueueCapacity *
+                        sizeof(ConfigFeatureCommand)>
+    manual_calibration_command_queue_storage{};
+QueueHandle_t manual_calibration_command_queue = nullptr;
 QueueHandle_t config_save_queue = nullptr;
 QueueHandle_t config_result_queue = nullptr;
 StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
@@ -89,6 +96,7 @@ ConfigReadStream config_read_stream;
 ConfigStatusStream config_status_stream;
 DeskMateLinkUart deskmate_link_uart;
 AgentStateBridge agent_state_bridge;
+ManualCalibrationBridge manual_calibration_bridge;
 AudioCaptureService audio_capture_service;
 SpeakerOutputService speaker_output_service;
 bool config_save_in_flight = false;
@@ -96,6 +104,8 @@ std::array<uint8_t, kConfigFeaturePayloadBytes> config_response_payload{};
 ConfigTransferState config_transfer;
 bool config_ack_pending = false;
 std::array<uint8_t, kConfigFeaturePayloadBytes> config_ack_payload{};
+std::array<uint8_t, kManualCalibrationHostPayloadBytes>
+    manual_calibration_response_payload{};
 void reset_config_save_result(ConfigSaveResult& result) {
     result.status = ConfigSaveStatus::WriteFailed;
     result.document.bytes.fill(0);
@@ -259,6 +269,13 @@ void input_owner_task(void*) {
             config_transfer.completed_status = false;
             (void)config_status_stream.mark_sent();
         }
+        if (config_transfer.completed_manual) {
+            config_transfer.completed_manual = false;
+            (void)manual_calibration_bridge.mark_response_sent();
+        }
+        if (config_transfer.failed_manual) {
+            config_transfer.failed_manual = false;
+        }
         if (config_transfer.failed) {
             config_transfer.failed = false;
             config_read_stream.abort();
@@ -382,6 +399,25 @@ void input_owner_task(void*) {
                         dispatch.state, dispatch.transition_id));
             }
         }
+        while (xQueueReceive(manual_calibration_command_queue,
+                             &input_owner_config_command, 0) == pdTRUE) {
+            ManualCalibrationLinkRequest dispatch{};
+            const LinkStatusSnapshot link = deskmate_link_uart.snapshot();
+            if (manual_calibration_bridge.accept(
+                    input_owner_config_command.payload.data(),
+                    input_owner_config_command.length,
+                    input_owner_config_command.epoch, link, dispatch)) {
+                manual_calibration_bridge.note_forward_result(
+                    deskmate_link_uart.queue_manual_calibration(dispatch),
+                    link);
+            }
+        }
+        ManualCalibrationLinkResult manual_terminal{};
+        if (deskmate_link_uart.take_manual_calibration_result(
+                manual_terminal)) {
+            manual_calibration_bridge.complete(
+                manual_terminal, deskmate_link_uart.snapshot());
+        }
         while (xQueueReceive(config_command_queue,
                              &input_owner_config_command, 0) == pdTRUE) {
             if (input_owner_config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
@@ -428,7 +464,8 @@ void input_owner_task(void*) {
                             deskmate_link_uart.snapshot(),
                             agent_state_bridge.diagnostics(),
                             audio_capture_service.snapshot(),
-                            speaker_output_service.snapshot());
+                            speaker_output_service.snapshot(),
+                            manual_calibration_bridge.diagnostics());
                     }
                 }
             }
@@ -444,6 +481,9 @@ void input_owner_task(void*) {
                 deskmate_link_uart.queue_agent_state(
                     expiry_dispatch.state, expiry_dispatch.transition_id));
         }
+        manual_calibration_bridge.poll_lifecycle(
+            runtime.diagnostics().usb_mount_epoch,
+            deskmate_link_uart.snapshot());
 
         runtime.service_release_reassertion(now_ms);
 
@@ -453,6 +493,31 @@ void input_owner_task(void*) {
             const bool accepted = tud_hid_report(
                 report.report_id, report.payload.data(), report.length);
             finish_hid_send_attempt(runtime, report, accepted, transfer);
+        }
+        if (tud_hid_ready() && !transfer.active &&
+            !config_transfer.active &&
+            manual_calibration_bridge.front_response(
+                manual_calibration_response_payload)) {
+            const bool accepted = tud_hid_report(
+                kManualCalibrationStatusReportId,
+                manual_calibration_response_payload.data(),
+                manual_calibration_response_payload.size());
+            if (accepted) {
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = false;
+                config_transfer.advances_manual_response = true;
+                config_transfer.report.report_id =
+                    kManualCalibrationStatusReportId;
+                config_transfer.report.length = static_cast<uint8_t>(
+                    manual_calibration_response_payload.size());
+                config_transfer.report.epoch =
+                    runtime.diagnostics().usb_mount_epoch;
+                std::copy(manual_calibration_response_payload.begin(),
+                          manual_calibration_response_payload.end(),
+                          config_transfer.report.payload.begin());
+            }
         }
         if (config_ack_pending && tud_hid_ready() && !transfer.active &&
             !config_transfer.active) {
@@ -572,6 +637,13 @@ extern "C" void app_main(void) {
         &agent_state_command_queue_control);
     ESP_ERROR_CHECK(agent_state_command_queue == nullptr ? ESP_ERR_NO_MEM
                                                          : ESP_OK);
+    manual_calibration_command_queue = xQueueCreateStatic(
+        kManualCalibrationCommandQueueCapacity, sizeof(ConfigFeatureCommand),
+        manual_calibration_command_queue_storage.data(),
+        &manual_calibration_command_queue_control);
+    ESP_ERROR_CHECK(manual_calibration_command_queue == nullptr
+                        ? ESP_ERR_NO_MEM
+                        : ESP_OK);
     config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
     config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
     ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
@@ -695,7 +767,13 @@ extern "C" void tud_hid_set_report_cb(
     if (report_type != HID_REPORT_TYPE_FEATURE) return;
     ConfigFeatureReportView feature{};
     AgentStateFeatureReportView agent_feature{};
-    if (normalize_agent_state_feature_report(
+    ManualCalibrationFeatureReportView manual_feature{};
+    if (normalize_manual_calibration_feature_report(
+            report_id, buffer, length, manual_feature)) {
+        feature.report_id = kManualCalibrationRequestReportId;
+        feature.payload = manual_feature.payload;
+        feature.length = manual_feature.length;
+    } else if (normalize_agent_state_feature_report(
             report_id, buffer, length, agent_feature)) {
         feature.report_id = kAgentStateReportId;
         feature.payload = agent_feature.payload;
@@ -710,9 +788,12 @@ extern "C" void tud_hid_set_report_cb(
     command.length = static_cast<uint8_t>(config_read ? kConfigReadRequestPayloadBytes : feature.length);
     command.epoch = callback_lifecycle.snapshot().epoch;
     std::copy_n(feature.payload, command.length, command.payload.begin());
-    QueueHandle_t destination = feature.report_id == kAgentStateReportId
-        ? agent_state_command_queue
-        : config_command_queue;
+    QueueHandle_t destination = config_command_queue;
+    if (feature.report_id == kAgentStateReportId) {
+        destination = agent_state_command_queue;
+    } else if (feature.report_id == kManualCalibrationRequestReportId) {
+        destination = manual_calibration_command_queue;
+    }
     const BaseType_t queued = feature.report_id == kAgentStateReportId
         ? (destination == nullptr ? pdFALSE
                                   : xQueueOverwrite(destination, &command))

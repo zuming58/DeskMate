@@ -1301,7 +1301,7 @@ void descriptor_and_vendor_fail_closed() {
         9, 0x02, 34, 0, 1, 1, 0, 0xa0, 50,
         9, 0x04, 0, 0, 1, 0x03, 0, 0, 0,
         9, 0x21, 0x11, 0x01, 0, 1, 0x22,
-        0xea, 0x00,
+        0x10, 0x01,
         7, 0x05, 0x81, 0x03, 64, 0, 10};
     CHECK(kUsbConfigurationDescriptor == expected_configuration);
     const std::array<uint8_t, 2> expected_language{0x09, 0x04};
@@ -1334,6 +1334,9 @@ void descriptor_and_vendor_fail_closed() {
         0x85,0x13,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x10,0x09,0x04,0xb1,0x02,
         0x85,0x14,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x05,0xb1,0x02,
         0x85,0x15,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x06,0x81,0x02,0xc0,
+        0x06,0x00,0xff,0x09,0x07,0xa1,0x01,
+        0x85,0x16,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x07,0xb1,0x02,
+        0x85,0x17,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x08,0x81,0x02,0xc0,
     };
     CHECK(expected_report.size() == kHidReportDescriptorSize);
     CHECK(std::equal(expected_report.begin(), expected_report.end(), kHidReportDescriptor));
@@ -1348,9 +1351,11 @@ void descriptor_and_vendor_fail_closed() {
     CHECK(reports.feature_bits[0x13] == 16 * 8);
     CHECK(reports.feature_bits[0x14] == 63 * 8);
     CHECK(reports.input_bits[0x15] == 63 * 8);
+    CHECK(reports.feature_bits[0x16] == 63 * 8);
+    CHECK(reports.input_bits[0x17] == 63 * 8);
     for (uint16_t id = 0; id < 256; ++id) {
         const bool expected = id == 0x01 || id == 0x02 ||
-                              (id >= 0x10 && id <= 0x15);
+                              (id >= 0x10 && id <= 0x17);
         if (!expected) {
             CHECK(reports.input_bits[id] == 0);
             CHECK(reports.output_bits[id] == 0);
@@ -1386,7 +1391,7 @@ void descriptor_and_vendor_fail_closed() {
     UsbInputRuntime runtime;
     const auto before = runtime.diagnostics();
     const uint8_t payload[2]{1, 2};
-    for (uint8_t id = 0x10; id <= 0x15; ++id) CHECK(!runtime.reject_vendor_feature(id, payload, 2));
+    for (uint8_t id = 0x10; id <= 0x17; ++id) CHECK(!runtime.reject_vendor_feature(id, payload, 2));
     const auto after = runtime.diagnostics();
     CHECK(before.raw_edge_drops == after.raw_edge_drops);
     CHECK(before.hid_report_drops == after.hid_report_drops);

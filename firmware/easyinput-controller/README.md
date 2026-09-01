@@ -12,6 +12,8 @@ T10E 在三端 T09 验收基线上增加 EasyInput 板载麦克风上行：完�
 
 T11E-A 冻结并实现本地扬声器硬件底座：I2S1 使用 `GPIO14/13/15`、48 kHz/16-bit/mono-left、既有 GPIO8 `Speaker` 租约，并由 generation 仲裁保证麦克风绝对优先。当前只有一次低音量合成开机双提示音用于后续真机门；没有桌面实时下行协议，不读取或写入声音 bank，也不触碰 BLE、小智音频或舵机。Host/构建通过不等于扬声器真机通过。
 
+T10D-A 冻结并实现手动校准转发桥：Windows 通过 Feature `0x16` 提交一个有 CRC、确认 ID 和单调请求 ID 的 63-byte 请求，EasyInput 通过 Input `0x17` 分别报告已接收与小智终态。总控只逐字节转发既有 T10C `0x20/0x21`，保持 250 ms/三次发送、断线/重启清空和单请求门禁。它没有角度、PWM、脉宽、GPIO 或实体舵机 adapter；生产小智 `MOTION` 仍关闭，所以代码/构建通过不是运动真机通过。
+
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 
 参考资料：
@@ -23,6 +25,7 @@ T11E-A 冻结并实现本地扬声器硬件底座：I2S1 使用 `GPIO14/13/15`�
 - [T10E Maker reference audit](../../docs/provenance/t10e-easyinput-audio-capture-reference-audit.md)
 - [T11E-A speaker output contract](../../docs/contracts/easyinput-speaker-output-v1.md)
 - [T11E-A Maker reference audit](../../docs/provenance/t11e-a-easyinput-speaker-reference-audit.md)
+- [T10D-A manual calibration host transport](../../contracts/deskmate-host/easyinput-manual-calibration-v1.md)
 - 本机只读参考：`F:\Codex\easyinput-wzm\easy-input-maker`
 
 不要把外部参考目录、其 `build/`、固件镜像、NVS、录音或本机设备信息复制到本目录。

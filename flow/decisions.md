@@ -1,5 +1,13 @@
 # Decisions
 
+## D059 - EasyInput manual calibration uses additive HID reports 0x16/0x17
+
+- Date: 2026-09-02
+- Decision: Windows sends one 63-byte `DMCR` request in Feature Report `0x16`; EasyInput returns 63-byte `DMCS` accepted and terminal evidence in Input Report `0x17`. Both use CRC16-CCITT-FALSE, a USB-epoch-scoped monotonic request ID and a distinct UI confirmation ID.
+- Translation: command requests contain the exact frozen 19-byte T10C `0x20` payload; status requests become an empty T10C `0x21`. EasyInput neither interprets physical angles nor adds arbitrary target, step size, PWM, pulse, duty or GPIO fields.
+- Lifecycle: one request is in flight; identical duplicates are idempotent, conflicts/stale/busy are explicit, and USB unmount, Link disconnect, controller reboot or peer restart clears volatile work without replay. EasyInput acceptance is forwarding evidence only; only a correlated Xiaozhi terminal response is endpoint evidence, and neither proves physical movement.
+- Consequence: T10D-B software must consume the frozen reports and golden vectors. T10D-C remains a separate real-adapter/user-present hardware package with production `MOTION` disabled until its safety gates close.
+
 ## D058 - Complete the manual-motion route as three ordered packages
 
 - Date: 2026-09-02

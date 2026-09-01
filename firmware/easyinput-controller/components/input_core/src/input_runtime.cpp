@@ -1,5 +1,7 @@
 #include "input_runtime.h"
 
+#include "manual_calibration_bridge_core.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -753,7 +755,12 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
     if (result.dropped_events != 0) {
         events.discard_pending();
         transfer.clear();
-        if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
+        if (config_transfer) {
+            const bool manual = config_transfer->advances_manual_response;
+            config_transfer->clear();
+            if (manual) config_transfer->failed_manual = true;
+            else config_transfer->failed = true;
+        }
         runtime.on_usb_lifecycle_drops(result.dropped_events);
         runtime.reconcile_usb_lifecycle(callback);
         return result;
@@ -768,7 +775,13 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                     event.epoch != runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_mount(event.epoch);
                     transfer.clear();
-                    if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
+                    if (config_transfer) {
+                        const bool manual =
+                            config_transfer->advances_manual_response;
+                        config_transfer->clear();
+                        if (manual) config_transfer->failed_manual = true;
+                        else config_transfer->failed = true;
+                    }
                 }
                 break;
             case UsbLifecycleEventKind::Unmount:
@@ -776,7 +789,13 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                     event.epoch == runtime.diagnostics().usb_mount_epoch) {
                     runtime.on_unmount();
                     transfer.clear();
-                    if (config_transfer) { config_transfer->clear(); config_transfer->failed = true; }
+                    if (config_transfer) {
+                        const bool manual =
+                            config_transfer->advances_manual_response;
+                        config_transfer->clear();
+                        if (manual) config_transfer->failed_manual = true;
+                        else config_transfer->failed = true;
+                    }
                 }
                 break;
             case UsbLifecycleEventKind::Resume:
@@ -797,9 +816,12 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                     const bool advances = config_transfer->advances_read_stream;
                     const bool advances_status = config_transfer->advances_status_stream;
                     const bool advances_host = config_transfer->advances_host_command;
+                    const bool advances_manual =
+                        config_transfer->advances_manual_response;
                     config_transfer->clear();
                     config_transfer->completed = advances;
                     config_transfer->completed_status = advances_status;
+                    config_transfer->completed_manual = advances_manual;
                     if (advances_host) runtime.complete_host_command();
                 } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
@@ -823,8 +845,12 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                                event.payload.begin() + event.length,
                                config_transfer->report.payload.begin())) {
                     const bool failed_host = config_transfer->advances_host_command;
+                    const bool failed_manual =
+                        config_transfer->advances_manual_response;
                     config_transfer->clear();
                     if (failed_host) runtime.fail_host_command();
+                    else if (failed_manual)
+                        config_transfer->failed_manual = true;
                     else config_transfer->failed = true;
                 } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
@@ -867,6 +893,8 @@ uint16_t usb_wire_report_length(uint8_t report_id) {
             return 1u + 8u;
         case kMouseReportId:
             return 1u + 5u;
+        case kManualCalibrationStatusReportId:
+            return 64u;
         default:
             return 0;
     }
@@ -886,6 +914,10 @@ UsbLifecycleEvent make_usb_transfer_event(
         (wire_report[1] == 0x03 || wire_report[1] == 0x04 ||
          wire_report[1] == 0x06 || wire_report[1] == 0x01 ||
          wire_report[1] == 0x05)) {
+        expected_length = 64;
+    }
+    if (wire_report[0] == kManualCalibrationStatusReportId &&
+        wire_length == 64) {
         expected_length = 64;
     }
     if (expected_length == 0 || wire_length != expected_length) return event;
@@ -914,6 +946,9 @@ const uint8_t kHidReportDescriptor[] = {
     0x85,0x13,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x10,0x09,0x04,0xb1,0x02,
     0x85,0x14,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x05,0xb1,0x02,
     0x85,0x15,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x06,0x81,0x02,0xc0,
+    0x06,0x00,0xff,0x09,0x07,0xa1,0x01,
+    0x85,0x16,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x07,0xb1,0x02,
+    0x85,0x17,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x08,0x81,0x02,0xc0,
 };
 const size_t kHidReportDescriptorSize = sizeof(kHidReportDescriptor);
 

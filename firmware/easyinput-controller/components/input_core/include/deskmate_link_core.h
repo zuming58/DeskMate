@@ -29,6 +29,8 @@ enum class LinkMessageType : std::uint8_t {
     GetCapabilities = 0x02,
     GetStatus = 0x03,
     SetAgentState = 0x04,
+    ManualCalibrationCommand = 0x20,
+    GetManualCalibrationStatus = 0x21,
 };
 
 enum class LinkErrorCode : std::uint8_t {
@@ -119,6 +121,38 @@ struct LinkStatusSnapshot {
     std::uint32_t peer_restarts{};
     std::uint32_t unexpected_frames{};
     std::uint32_t semantic_errors{};
+    std::uint32_t controller_boot_id{};
+    std::uint32_t peer_boot_id{};
+};
+
+enum class ManualCalibrationLinkTerminalKind : std::uint8_t {
+    Response = 0,
+    LinkError = 1,
+    Timeout = 2,
+    Disconnected = 3,
+    InvalidResponse = 4,
+    Internal = 5,
+};
+
+struct ManualCalibrationLinkRequest {
+    std::uint32_t host_request_id{};
+    std::uint8_t message_type{};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 19> payload{};
+};
+
+struct ManualCalibrationLinkResult {
+    std::uint32_t host_request_id{};
+    std::uint32_t link_sequence{};
+    std::uint32_t controller_boot_id{};
+    std::uint32_t peer_boot_id{};
+    std::uint8_t message_type{};
+    std::uint8_t terminal_flag{};
+    LinkErrorCode link_error{LinkErrorCode::None};
+    ManualCalibrationLinkTerminalKind terminal{
+        ManualCalibrationLinkTerminalKind::Internal};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 19> payload{};
 };
 
 std::uint16_t deskmate_link_crc16(const std::uint8_t* data,
@@ -152,6 +186,9 @@ class LinkController {
     bool poll(std::uint32_t now_ms, LinkWireFrame& outgoing);
     void receive(const LinkFrame& incoming, std::uint32_t now_ms);
     bool queue_agent_state(LinkAgentState state, std::uint32_t transition_id);
+    bool queue_manual_calibration(
+        const ManualCalibrationLinkRequest& request);
+    bool take_manual_calibration_result(ManualCalibrationLinkResult& result);
     void note_tx_drop();
     void set_parser_diagnostics(const LinkParserDiagnostics& diagnostics);
     LinkStatusSnapshot snapshot() const { return status_; }
@@ -163,6 +200,8 @@ class LinkController {
         std::uint32_t sent_at_ms{};
         bool active{};
         bool needs_send{};
+        bool manual_calibration{};
+        std::uint32_t host_request_id{};
     };
 
     struct QueuedAgentState {
@@ -171,18 +210,34 @@ class LinkController {
         bool pending{};
     };
 
+    struct QueuedManualCalibration {
+        ManualCalibrationLinkRequest request{};
+        bool pending{};
+    };
+
     bool begin_request(LinkMessageType type, const std::uint8_t* payload,
-                       std::uint16_t length);
+                       std::uint16_t length, bool manual_calibration = false,
+                       std::uint32_t host_request_id = 0);
     bool emit_pending(std::uint32_t now_ms, LinkWireFrame& outgoing);
     void complete_success();
     void complete_failure(std::uint32_t now_ms);
     void disconnect(std::uint32_t now_ms);
     bool handle_response(const LinkFrame& incoming, std::uint32_t now_ms);
+    bool valid_manual_response(const LinkFrame& incoming) const;
+    void finish_manual(ManualCalibrationLinkTerminalKind terminal,
+                       std::uint8_t terminal_flag = 0,
+                       LinkErrorCode link_error = LinkErrorCode::None,
+                       const std::uint8_t* payload = nullptr,
+                       std::uint8_t payload_length = 0);
+    void cancel_manual(ManualCalibrationLinkTerminalKind terminal);
     std::uint32_t next_sequence();
 
     LinkStatusSnapshot status_{};
     PendingRequest pending_{};
     QueuedAgentState queued_agent_state_{};
+    QueuedManualCalibration queued_manual_calibration_{};
+    ManualCalibrationLinkResult manual_calibration_result_{};
+    bool manual_calibration_result_pending_{};
     std::uint32_t controller_boot_id_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t sequence_{};

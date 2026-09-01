@@ -1,0 +1,32 @@
+{
+  "schema": "deskmate.host.golden-vectors.easyinput-manual-calibration.v1",
+  "contract": "EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN",
+  "encoding": "uppercase hexadecimal without separators; report ID included",
+  "vectors": [
+    {
+      "name": "status_request",
+      "expect": "feature-report",
+      "hex": "16444D435201020000040302010000000000000000000000000000000000000000000000E84F0000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "select_request",
+      "expect": "feature-report",
+      "hex": "16444D43520101010005030201D4C3B2A14433221101000000000000000100000000000029070000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "select_accepted",
+      "expect": "input-report",
+      "hex": "17444D43530101010005030201D4C3B2A1000000002000000000000000000000000000000000000000000000010000000000000044332211DDCCBBAA9ADF0000"
+    },
+    {
+      "name": "select_terminal",
+      "expect": "input-report",
+      "hex": "17444D43530102010005030201D4C3B2A1200000002002001344332211010000000000000000010024000A00010000000100000044332211DDCCBBAA59B00000"
+    },
+    {
+      "name": "status_terminal",
+      "expect": "input-report",
+      "hex": "17444D43530102020004030201000000002500000021020012443322110500000002000000030026000A0000010000000100000044332211DDCCBBAAEE010000"
+    }
+  ]
+}

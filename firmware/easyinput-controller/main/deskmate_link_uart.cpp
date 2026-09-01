@@ -78,6 +78,42 @@ bool DeskMateLinkUart::queue_agent_state(LinkAgentState state,
     return accepted;
 }
 
+bool DeskMateLinkUart::queue_manual_calibration(
+    const ManualCalibrationLinkRequest& request) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool accepted =
+        published_status_.state == LinkControllerState::Connected &&
+        !manual_calibration_active_ &&
+        !manual_calibration_result_pending_ && request.host_request_id != 0 &&
+        (request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::
+                                         ManualCalibrationCommand) ||
+         request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::
+                                         GetManualCalibrationStatus));
+    if (accepted) {
+        queued_manual_calibration_ = request;
+        manual_calibration_command_pending_ = true;
+        manual_calibration_active_ = true;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return accepted;
+}
+
+bool DeskMateLinkUart::take_manual_calibration_result(
+    ManualCalibrationLinkResult& result) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool ready = manual_calibration_result_pending_;
+    if (ready) {
+        result = manual_calibration_result_;
+        manual_calibration_result_ = {};
+        manual_calibration_result_pending_ = false;
+        manual_calibration_active_ = false;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return ready;
+}
+
 void DeskMateLinkUart::mark_task_create_failure() {
     controller_.fault();
     publish_status();
@@ -129,11 +165,46 @@ void DeskMateLinkUart::mark_task_create_failure() {
             controller_.note_tx_drop();
         }
 
+        ManualCalibrationLinkRequest manual_request{};
+        bool manual_request_ready = false;
+        portENTER_CRITICAL(&status_mux_);
+        if (manual_calibration_command_pending_) {
+            manual_request = queued_manual_calibration_;
+            queued_manual_calibration_ = {};
+            manual_calibration_command_pending_ = false;
+            manual_request_ready = true;
+        }
+        portEXIT_CRITICAL(&status_mux_);
+        if (manual_request_ready &&
+            !controller_.queue_manual_calibration(manual_request)) {
+            ManualCalibrationLinkResult rejected{};
+            rejected.host_request_id = manual_request.host_request_id;
+            rejected.controller_boot_id =
+                controller_.snapshot().controller_boot_id;
+            rejected.peer_boot_id = controller_.snapshot().peer_boot_id;
+            rejected.message_type = manual_request.message_type;
+            rejected.terminal =
+                controller_.snapshot().state == LinkControllerState::Connected
+                    ? ManualCalibrationLinkTerminalKind::Internal
+                    : ManualCalibrationLinkTerminalKind::Disconnected;
+            portENTER_CRITICAL(&status_mux_);
+            manual_calibration_result_ = rejected;
+            manual_calibration_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
+        }
+
         LinkWireFrame outgoing{};
         if (controller_.poll(now_ms, outgoing)) {
             const int written = uart_write_bytes(
                 kDeskMateLinkUart, outgoing.bytes.data(), outgoing.length);
             if (written != outgoing.length) controller_.note_tx_drop();
+        }
+        ManualCalibrationLinkResult manual_result{};
+        if (controller_.take_manual_calibration_result(manual_result)) {
+            portENTER_CRITICAL(&status_mux_);
+            manual_calibration_result_ = manual_result;
+            manual_calibration_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
         }
         publish_status();
     }

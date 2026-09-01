@@ -1,8 +1,8 @@
 # Development plan
 
-## Current stage: three-task reconciliation and T12B.1 acceptance
+## Current stage: T10D manual-motion route integration and T13 software acceptance
 
-目标：保持 T11F 两套固件集成基线稳定，先完成人工验证最新 T12B.1 Windows 候选，再由主 Agent 建立下一条共同三端基线；同时为 EasyInput 本地扬声器真机门和小智手动运动路由准备独立、安全、可回退的后续切片。
+目标：保持 T11F 两套固件集成基线稳定，将已经完成代码/构建门的 T10D-A EasyInput 手动校准桥交给软件窗口实现 T10D-B 人工控制界面；并行等待 T13 人设/记忆/知识库/安全意图/Codex 状态软件包的人工验收。实体舵机、真实 adapter 和 `MOTION` 能力继续锁闭。
 
 ### Current execution point
 
@@ -15,8 +15,8 @@
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
 | Main integrated baseline | `codex/t11f-three-end-integration@ee0ac8418b1d7c0497f72e3edc67b5ee39b232d4` | Desktop `246/246` + package; EasyInput Host `12/12` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `INTEGRATED_BASELINE / CODE_BUILD_CONFIRMED` |
-| DeskMate software candidate | `codex/t12b1-provider-endpointing-repair@710595f0b8b4bd209721fef9c6a96d5b80f43481` | Official custom-VAD gate repaired; focused `60/60`, full `270/270`, Windows package passed | `SOFTWARE_CANDIDATE / HIL_PENDING / NOT_IN_T11F` |
-| EasyInput controller | T10E capture `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4`; T11E-A speaker `0407ba6dd4f4674ec4ae77c5be1c289ecadc23cf` | Board microphone and real S1 transcription accepted; speaker code/build passed | Microphone `HIL_ACCEPTED`; speaker `HIL_NOT_AUTHORIZED` |
+| DeskMate software candidate | `codex/t13-desktop-persona-memory-intent@35e627389282d8279d82646787f509681474c048` | Persona, reviewed memory, managed knowledge projection/embedding, safe intent bridge and bounded Codex lifecycle summary; full `276/276`, build/package passed | `SOFTWARE_CANDIDATE / USER_ACCEPTANCE_PENDING / NOT_IN_T11F` |
+| EasyInput controller | T10D-A branch `codex/t10d-easyinput-manual-motion-bridge`; T10E capture `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4`; T11E-A speaker `0407ba6dd4f4674ec4ae77c5be1c289ecadc23cf` | T10D-A Host `13/13` + ESP-IDF v5.5.5 fixed-layout build; board microphone accepted; speaker code/build passed | Motion bridge `CODE_BUILD_CONFIRMED / HIL_NOT_RUN`; microphone `HIL_ACCEPTED`; speaker `HIL_NOT_AUTHORIZED` |
 | Xiaozhi yuntai | T10C `b83ce886ec8efd1fea288a65e0127d2a887d5883`; OLED polish `8d6af0cd38fb3fed85ceba03bcd99857dd1e552e` | OLED/state code and builds passed; seven-state T09 chain was user accepted | Display `HIL_ACCEPTED` at T09 baseline; motion `CODE_ONLY / HARDWARE_LOCKED` |
 | Primary checkout | `codex/companion-t07c-ui-shell@9e5e442042ae20c6867e1270a1eb61d07fda64ce` with user changes | None for current integration | `STALE_DIRTY_CHECKOUT / NOT_SOURCE_OF_TRUTH` |
 
@@ -25,12 +25,12 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 #### Unified execution order
 
 1. **T13A mainline control reconciliation — COMPLETE IN THIS BRANCH.** Preserve the dirty primary checkout, establish one clean control branch from T11F, merge the three window-level Flow facts into this plan, and record exact branch/HEAD/evidence without merging unstable implementation code.
-2. **T12B.1 software user gate — OPEN, owned by the DeskMate software window.** Run only build ID `t12b1-provider-custom-vad-v2`: save 8 seconds, begin a new session, pause 3–7 seconds mid-sentence, continue the same utterance, and repeat one normal short utterance. Pass/fail plus a sanitized diagnostic returns to the main Agent. Until it passes, `710595f` is not the product integration baseline.
-3. **T13B post-HIL three-end integration — BLOCKED BY STEP 2.** From the main integrated baseline, integrate the accepted T12 software history with T11F, resolve shared Flow/doc conflicts once, then rerun Desktop full tests/package, EasyInput Host+IDF and Xiaozhi Host+IDF. Only this branch may become the next common product baseline.
-4. **T11E-B EasyInput local-speaker HIL — READY FOR A SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
-5. **T10D-A EasyInput manual-motion bridge — NEXT FIRMWARE PACKAGE / READY TO START IN PARALLEL.** First audit and freeze the missing Desktop→EasyInput transport, then implement a one-request-in-flight translator that forwards the existing T10C high-level payload unchanged, correlates the Xiaozhi terminal response and clears pending work on disconnect/reboot. Use Host tests and a fake Xiaozhi endpoint only; do not add UI, PWM, a real adapter, Flash access or motion.
-6. **T10D-B/T10D-C motion completion — ORDERED BEHIND T10D-A.** The DeskMate software task later adds the manual axis/ARM/recenter/e-stop/±1° interface without modifying firmware. Only after electrical/mechanical Stage 0 evidence may Xiaozhi add a separately reviewed real adapter and begin user-present single-axis calibration. Preset gestures, dancing and expression-linked motion wait until both axes have accepted centers, directions and limits.
-7. **Later product software — PARALLEL DISCOVERY, NOT YET MAINLINE.** Memory projection/retrieval, persona, wake word and LLM intent/application control stay in the DeskMate software track. Each must return a frozen contract, branch/HEAD, tests/package and truthfully bounded HIL before main-agent integration.
+2. **T10D-A EasyInput manual-motion bridge — CODE/BUILD COMPLETE.** HID `0x16/0x17` and the strict one-request translator are frozen and implemented; Host `13/13` plus ESP-IDF v5.5.5 fixed-layout build pass. No hardware was touched and production motion is still unavailable.
+3. **T10D-B Windows manual-control UI — NEXT, owned by DeskMate software.** Consume only the frozen Host report and golden vectors. Query status before enabling controls; expose yaw/pitch selection, four-attestation short-lease ARM, provisional center, fixed ±1° step, recenter, e-stop and clear. Show intent/forward/endpoint evidence separately; never add arbitrary angle/PWM/GPIO fields or claim motion from an EasyInput ACK.
+4. **T13 software user gate — OPEN, owned by DeskMate software + user.** Validate the exact T13 package for persona persistence, reviewed memory/forget, knowledge projection/rebuild, safe application intent confirmation and bounded Codex lifecycle status. Its branch is not yet the common product baseline.
+5. **Next three-end integration — BLOCKED BY STEPS 3–4.** Integrate the accepted software history with T11F and T10D-A, resolve shared Flow/doc conflicts once, then rerun Desktop full tests/package, EasyInput Host+IDF and Xiaozhi Host+IDF. Only that branch may become the next common product baseline.
+6. **T10D-C real-adapter calibration — HARDWARE LOCKED.** Only after T10D-B and documented electrical/mechanical Stage 0 evidence may Xiaozhi add a separately reviewed real adapter and begin user-present single-axis calibration. Preset gestures, dancing and expression-linked motion wait until both axes have accepted centers, directions and limits.
+7. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
 
 #### Ownership and reporting
 

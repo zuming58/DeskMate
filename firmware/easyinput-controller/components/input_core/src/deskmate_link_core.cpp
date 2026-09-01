@@ -244,6 +244,7 @@ void LinkController::start(std::uint32_t controller_boot_id,
     pending_ = {};
     queued_agent_state_ = {};
     controller_boot_id_ = controller_boot_id == 0 ? 1 : controller_boot_id;
+    status_.controller_boot_id = controller_boot_id_;
     peer_boot_id_ = 0;
     sequence_ = 0;
     next_hello_ms_ = now_ms;
@@ -254,8 +255,10 @@ void LinkController::start(std::uint32_t controller_boot_id,
 }
 
 void LinkController::fault() {
+    cancel_manual(ManualCalibrationLinkTerminalKind::Disconnected);
     pending_ = {};
     queued_agent_state_ = {};
+    queued_manual_calibration_ = {};
     peer_boot_id_ = 0;
     capabilities_known_ = false;
     status_.agent_state = LinkAgentState::Idle;
@@ -263,6 +266,7 @@ void LinkController::fault() {
     status_.last_error = LinkErrorCode::None;
     status_.implemented_capabilities = 0;
     status_.enabled_capabilities = 0;
+    status_.peer_boot_id = 0;
     status_.state = LinkControllerState::Faulted;
 }
 
@@ -274,7 +278,9 @@ std::uint32_t LinkController::next_sequence() {
 
 bool LinkController::begin_request(LinkMessageType type,
                                    const std::uint8_t* payload,
-                                   std::uint16_t length) {
+                                   std::uint16_t length,
+                                   bool manual_calibration,
+                                   std::uint32_t host_request_id) {
     if (pending_.active || length > kDeskMateLinkMaxPayloadBytes ||
         (payload == nullptr && length != 0)) {
         return false;
@@ -289,6 +295,8 @@ bool LinkController::begin_request(LinkMessageType type,
     }
     pending_.active = true;
     pending_.needs_send = true;
+    pending_.manual_calibration = manual_calibration;
+    pending_.host_request_id = host_request_id;
     return true;
 }
 
@@ -319,6 +327,9 @@ bool LinkController::poll(std::uint32_t now_ms, LinkWireFrame& outgoing) {
             pending_.needs_send = true;
         } else {
             increment_saturated(status_.request_timeouts);
+            if (pending_.manual_calibration) {
+                finish_manual(ManualCalibrationLinkTerminalKind::Timeout);
+            }
             pending_.active = false;
             complete_failure(now_ms);
         }
@@ -339,6 +350,16 @@ bool LinkController::poll(std::uint32_t now_ms, LinkWireFrame& outgoing) {
 
     if (!capabilities_known_ && due(now_ms, next_capabilities_ms_)) {
         return begin_request(LinkMessageType::GetCapabilities, nullptr, 0) &&
+               emit_pending(now_ms, outgoing);
+    }
+    if (queued_manual_calibration_.pending) {
+        const ManualCalibrationLinkRequest request =
+            queued_manual_calibration_.request;
+        queued_manual_calibration_ = {};
+        return begin_request(
+                   static_cast<LinkMessageType>(request.message_type),
+                   request.payload.data(), request.payload_length, true,
+                   request.host_request_id) &&
                emit_pending(now_ms, outgoing);
     }
     if (queued_agent_state_.pending) {
@@ -364,13 +385,16 @@ void LinkController::complete_success() {
 }
 
 void LinkController::disconnect(std::uint32_t now_ms) {
+    cancel_manual(ManualCalibrationLinkTerminalKind::Disconnected);
     pending_ = {};
     queued_agent_state_ = {};
+    queued_manual_calibration_ = {};
     capabilities_known_ = false;
     status_.agent_state = LinkAgentState::Idle;
     status_.last_error = LinkErrorCode::None;
     status_.implemented_capabilities = 0;
     status_.enabled_capabilities = 0;
+    status_.peer_boot_id = 0;
     status_.status_flags = 0;
     status_.state = LinkControllerState::Waiting;
     next_hello_ms_ = now_ms + kDeskMateLinkHelloIntervalMs;
@@ -411,6 +435,7 @@ bool LinkController::handle_response(const LinkFrame& incoming,
             increment_saturated(status_.peer_restarts);
         }
         peer_boot_id_ = new_peer_boot_id;
+        status_.peer_boot_id = peer_boot_id_;
         capabilities_known_ = false;
         status_.state = LinkControllerState::Connected;
         status_.implemented_capabilities = 0;
@@ -460,7 +485,84 @@ bool LinkController::handle_response(const LinkFrame& incoming,
                           incoming.payload.begin() + incoming.payload_length,
                           pending_.frame.payload.begin());
     }
+    if (type == LinkMessageType::ManualCalibrationCommand ||
+        type == LinkMessageType::GetManualCalibrationStatus) {
+        return valid_manual_response(incoming);
+    }
     return false;
+}
+
+bool LinkController::valid_manual_response(const LinkFrame& incoming) const {
+    if (!pending_.manual_calibration) return false;
+    const auto type = static_cast<LinkMessageType>(incoming.type);
+    if (type == LinkMessageType::ManualCalibrationCommand) {
+        if (incoming.payload_length != 19 ||
+            pending_.frame.payload_length != 19 ||
+            !std::equal(incoming.payload.begin(), incoming.payload.begin() + 8,
+                        pending_.frame.payload.begin()) ||
+            incoming.payload[12] > 16 || incoming.payload[13] > 5 ||
+            !((incoming.payload[14] <= 1) || incoming.payload[14] == 0xff) ||
+            (incoming.payload[15] & ~0x3fu) != 0 ||
+            incoming.payload[16] > 16 || incoming.payload[17] != 10 ||
+            incoming.payload[18] != 0) {
+            return false;
+        }
+        return true;
+    }
+    if (type == LinkMessageType::GetManualCalibrationStatus) {
+        return incoming.payload_length == 18 &&
+               read_u32(incoming.payload.data()) == controller_boot_id_ &&
+               incoming.payload[12] <= 5 &&
+               (incoming.payload[13] <= 1 || incoming.payload[13] == 0xff) &&
+               (incoming.payload[14] & ~0x3fu) == 0 &&
+               incoming.payload[15] <= 16 && incoming.payload[16] == 10 &&
+               incoming.payload[17] == 0;
+    }
+    return false;
+}
+
+void LinkController::finish_manual(
+    ManualCalibrationLinkTerminalKind terminal, std::uint8_t terminal_flag,
+    LinkErrorCode link_error, const std::uint8_t* payload,
+    std::uint8_t payload_length) {
+    if (!pending_.manual_calibration || manual_calibration_result_pending_)
+        return;
+    ManualCalibrationLinkResult result{};
+    result.host_request_id = pending_.host_request_id;
+    result.link_sequence = pending_.frame.sequence;
+    result.controller_boot_id = controller_boot_id_;
+    result.peer_boot_id = peer_boot_id_;
+    result.message_type = pending_.frame.type;
+    result.terminal_flag = terminal_flag;
+    result.link_error = link_error;
+    result.terminal = terminal;
+    result.payload_length = payload_length;
+    if (payload != nullptr && payload_length <= result.payload.size()) {
+        std::copy_n(payload, payload_length, result.payload.begin());
+    }
+    manual_calibration_result_ = result;
+    manual_calibration_result_pending_ = true;
+}
+
+void LinkController::cancel_manual(
+    ManualCalibrationLinkTerminalKind terminal) {
+    if (pending_.manual_calibration) {
+        finish_manual(terminal);
+        return;
+    }
+    if (!queued_manual_calibration_.pending ||
+        manual_calibration_result_pending_) {
+        return;
+    }
+    ManualCalibrationLinkResult result{};
+    result.host_request_id =
+        queued_manual_calibration_.request.host_request_id;
+    result.controller_boot_id = controller_boot_id_;
+    result.peer_boot_id = peer_boot_id_;
+    result.message_type = queued_manual_calibration_.request.message_type;
+    result.terminal = terminal;
+    manual_calibration_result_ = result;
+    manual_calibration_result_pending_ = true;
 }
 
 void LinkController::receive(const LinkFrame& incoming,
@@ -476,21 +578,39 @@ void LinkController::receive(const LinkFrame& incoming,
     if (incoming.flag == LinkFrameFlag::Error) {
         if (incoming.payload_length != 1 || !valid_error(incoming.payload[0])) {
             increment_saturated(status_.semantic_errors);
+            if (pending_.manual_calibration) {
+                finish_manual(
+                    ManualCalibrationLinkTerminalKind::InvalidResponse);
+            }
             pending_.active = false;
             complete_failure(now_ms);
             return;
         }
         status_.last_error = static_cast<LinkErrorCode>(incoming.payload[0]);
         increment_saturated(status_.semantic_errors);
+        if (pending_.manual_calibration) {
+            finish_manual(ManualCalibrationLinkTerminalKind::LinkError,
+                          static_cast<std::uint8_t>(LinkFrameFlag::Error),
+                          status_.last_error);
+        }
         pending_.active = false;
         complete_failure(now_ms);
         return;
     }
     if (!handle_response(incoming, now_ms)) {
         increment_saturated(status_.semantic_errors);
+        if (pending_.manual_calibration) {
+            finish_manual(ManualCalibrationLinkTerminalKind::InvalidResponse);
+        }
         pending_.active = false;
         complete_failure(now_ms);
         return;
+    }
+    if (pending_.manual_calibration) {
+        finish_manual(ManualCalibrationLinkTerminalKind::Response,
+                      static_cast<std::uint8_t>(LinkFrameFlag::Response),
+                      LinkErrorCode::None, incoming.payload.data(),
+                      static_cast<std::uint8_t>(incoming.payload_length));
     }
     complete_success();
 }
@@ -506,6 +626,37 @@ bool LinkController::queue_agent_state(LinkAgentState state,
         return false;
     }
     queued_agent_state_ = {state, transition_id, true};
+    return true;
+}
+
+bool LinkController::queue_manual_calibration(
+    const ManualCalibrationLinkRequest& request) {
+    const bool command = request.message_type ==
+                         static_cast<std::uint8_t>(
+                             LinkMessageType::ManualCalibrationCommand);
+    const bool status = request.message_type ==
+                        static_cast<std::uint8_t>(
+                            LinkMessageType::GetManualCalibrationStatus);
+    if (status_.state != LinkControllerState::Connected ||
+        !capabilities_known_ || request.host_request_id == 0 ||
+        (!command && !status) ||
+        request.payload_length != (command ? 19u : 0u) ||
+        queued_manual_calibration_.pending ||
+        manual_calibration_result_pending_ ||
+        (pending_.active && pending_.manual_calibration)) {
+        return false;
+    }
+    queued_manual_calibration_.request = request;
+    queued_manual_calibration_.pending = true;
+    return true;
+}
+
+bool LinkController::take_manual_calibration_result(
+    ManualCalibrationLinkResult& result) {
+    if (!manual_calibration_result_pending_) return false;
+    result = manual_calibration_result_;
+    manual_calibration_result_ = {};
+    manual_calibration_result_pending_ = false;
     return true;
 }
 
