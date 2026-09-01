@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-01 - T11A companion status truth and Codex ownership closure complete
+
+- Role and base: Windows desktop software only. Branch `codex/t11a-companion-agent-status-closure` was created from latest cumulative software HEAD `b61cef36b856e802b1fb9bded7b2e2d81ba74808`; implementation commit is `cbb9097cab32669ae5d881fb1f14c04b1d961388`.
+- What changed: the real Xiaozhi work-state test is now above the companion fold while Windows expression preview is isolated in the expression library. Companion, Connections and Diagnostics use one bounded runtime presentation model for EasyInput HID, DeskMate Link, LAN microphone, realtime service and memory. An integrated-but-unselected board microphone is no longer called pending, and EasyInput ACK is never presented as Xiaozhi display evidence.
+- Codex boundary: `codex-hook-v1` is versioned, diagnostic and explicitly disableable. Official lifecycle metadata automatically covers idle/thinking/working/waiting/completed with duplicate suppression and no replay after provider/voice/companion displacement. Official Hooks currently provide no general turn-failure event, so error stays manual instead of being inferred from private text, windows or processes.
+- Verification: `npm ci --include=dev` passed; `npm test` passed `202/202`; Windows packaging passed via `npm run build:desktop -- --config.directories.output=release-t11a-verify`. Package SHA-256 is `8E0E2453B983D7DC6BCD394B816C9A7E736476C036DF05E97FBA8BE4EC1F0FA1`. `git diff --check` passed and generated output remains ignored.
+- Safety and next: no automated UI, port/device/Flash, firmware, OLED, servo or audio hardware operation occurred. The already user-open package was not controlled; build output used a separate ignored directory. Status is `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. Detailed handoff: `docs/handoffs/t11a-companion-agent-status-closure-2026-09-01.md`. Next software-only slice may close continuous conversation around existing adapters, but T11E speaker framing remains blocked until independently frozen.
+
 ## 2026-09-01 - T12A local-memory controls and knowledge-base boundary complete
 
 - Role and base: Windows desktop software only. Branch `codex/t12a-desktop-memory-controls` was created from locked desktop HEAD `da0fe11ccc429f9f166ef4d1b9e4a3ba82ece01b`; implementation commit is `99ecbf6e4f0b5cb2d58113788aa7ba583d675465`.
