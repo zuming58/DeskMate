@@ -1,5 +1,7 @@
 # Development plan
 
+- T13 Windows persona/memory/intent software slice is implemented on `codex/t13-desktop-persona-memory-intent` from exact accepted software base `710595f0b8b4bd209721fef9c6a96d5b80f43481`. It adds a versioned persona injected into new realtime sessions, model-generated but review-required memory candidates, accepted-memory context, managed Markdown double links, deterministic local chunk embeddings and hybrid retrieval, confirmation-gated registered AppActions, and bounded Codex work summaries. SQLite remains authoritative and both firmware modules are untouched. Contract: [`T13_DESKTOP_PERSONA_MEMORY_INTENT_V1_FROZEN`](../docs/contracts/t13-desktop-persona-memory-intent-v1.md). Packaged user verification remains open.
+
 ## Current stage: integrated product foundation
 
 目标：按已冻结的 V1 硬件基线启动正式实现：先完成 EasyInput 总控的小功能包和软件闭环，再冻结 DeskMate Link 并开发小智执行端，最后进行三端联调。

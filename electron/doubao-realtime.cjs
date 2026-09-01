@@ -6,6 +6,7 @@ const DEFAULT_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/realtime/dialogu
 const DOUBAO_PROTOCOL_APP_KEY = "PlgvMymc7f3tQnJ6";
 const STRICT_HALF_DUPLEX_INPUT_MODE = "keep_alive";
 const { normalizeCompanionPreferences } = require("./companion-preferences.cjs");
+const { buildPersonaInstructions, normalizePersona } = require("./companion-persona.cjs");
 const EVENT_NAMES = Object.freeze({
   50: "connection.started", 51: "connection.failed", 52: "connection.finished",
   150: "session.ready", 152: "session.finished", 153: "session.failed", 154: "session.usage",
@@ -60,7 +61,7 @@ function validateConfig(value = {}) {
     endpoint: endpoint.href,
     appId: boundedText(value.appId, 160), accessKey: boundedText(value.accessKey, 512), appKey: boundedText(value.appKey, 240),
     resourceId: boundedText(value.resourceId, 160), model: boundedText(value.model, 120), voice: boundedText(value.voice, 160),
-    companionName: companion.name, endSmoothWindowMs: companion.endSmoothWindowMs,
+    companionName: companion.name, endSmoothWindowMs: companion.endSmoothWindowMs, persona: normalizePersona(value.persona), memoryContext: Array.isArray(value.memoryContext) ? value.memoryContext.slice(0, 20) : [],
   };
 }
 
@@ -147,8 +148,8 @@ class DoubaoRealtimeSession {
       asr: { extra: { end_smooth_window_ms: this.config.endSmoothWindowMs, enable_custom_vad: true } },
       dialog: {
         bot_name: this.config.companionName,
-        system_role: `你是 ${this.config.companionName}，DeskMate 本地桌面陪伴助手。回答自然、简短，不执行系统命令，不声称拥有未接入的硬件能力。`,
-        speaking_style: "自然、友好、简洁，适合实时语音交流",
+        system_role: buildPersonaInstructions({ name: this.config.companionName, persona: this.config.persona, memoryContext: this.config.memoryContext }),
+        speaking_style: this.config.persona.speakingStyle,
         // The official keep_alive mode permits temporary upstream silence while
         // strict half-duplex playback suppresses microphone chunks for echo safety.
         extra: { input_mod: STRICT_HALF_DUPLEX_INPUT_MODE, model: this.config.model, strict_audit: true, enable_loudness_norm: true },

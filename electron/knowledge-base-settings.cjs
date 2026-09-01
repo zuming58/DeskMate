@@ -21,12 +21,12 @@ function createKnowledgeBaseSettings({ safeStorage, userDataPath } = {}) {
   };
   const status = () => {
     const value = read();
-    if (!value.root) return { configured: false, storage: safeStorage?.isEncryptionAvailable?.() ? "windows-encrypted" : "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "pending" };
+    if (!value.root) return { configured: false, storage: safeStorage?.isEncryptionAvailable?.() ? "windows-encrypted" : "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" };
     try {
       const root = decryptRoot(value.root);
       const valid = path.isAbsolute(root) && fs.statSync(root).isDirectory();
-      return { configured: valid, storage: "windows-encrypted", label: valid ? path.basename(root) : "", projection: "markdown-double-link-v1", embedding: "pending", reason: valid ? "" : "knowledge-base-location-unavailable" };
-    } catch { return { configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "pending", reason: "knowledge-base-location-unavailable" }; }
+      return { configured: valid, storage: "windows-encrypted", label: valid ? path.basename(root) : "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1", reason: valid ? "" : "knowledge-base-location-unavailable" };
+    } catch { return { configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1", reason: "knowledge-base-location-unavailable" }; }
   };
   const saveRoot = (input) => {
     requireEncryption(safeStorage);

@@ -1,5 +1,13 @@
 # Decisions
 
+## D058 - Persona, reviewed memory and desktop actions have separate trust boundaries
+
+- Date: 2026-09-02
+- Decision: a companion session freezes one versioned persona and a bounded snapshot of accepted memories. Persona and memory are context only; neither can grant execution authority. Raw turns remain in SQLite, model-generated facts remain pending until explicit review, and complete forgetting deletes source data plus rebuildable derivatives.
+- Knowledge boundary: SQLite is authoritative. DeskMate writes only a managed `DeskMate/` subtree in the encrypted user-selected root. Markdown double links and the deterministic local hash embedding index are disposable derivatives; externally edited files fail closed as conflicts.
+- Action boundary: realtime speech is classified by a separate text-model bridge into a closed intent set. Opening an application is possible only through an existing opaque AppAction UUID and a one-use visible confirmation. Codex status uses official lifecycle metadata and never invents progress or reads content.
+- Acceptance: automated tests may close validation, persistence, projection, index, confirmation and privacy gates. Persona quality, memory usefulness, packaged model behavior, real app launch and real Codex lifecycle remain user-present UX gates.
+
 ## D057 - Custom provider endpointing explicitly enables the official VAD gate
 
 - Date: 2026-09-02

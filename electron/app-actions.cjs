@@ -97,6 +97,10 @@ class AppActionStore {
     return item ? { id: value, label: item.label } : null;
   }
 
+  listRegistered({ limit = 100 } = {}) {
+    return [...this.actions.entries()].slice(0, Math.max(1, Math.min(200, Number(limit) || 100))).map(([id, item]) => ({ id, label: item.label }));
+  }
+
   async choose(parentWindow) {
     const result = await this.dialog.showOpenDialog(parentWindow, {
       title: "选择要打开的应用",

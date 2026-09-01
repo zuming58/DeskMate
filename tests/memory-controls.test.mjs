@@ -67,7 +67,7 @@ test("forget confirmations are one-use, revision-bound and whole-store erasure i
   const all = control.prepareForget({ scope: "all" });
   const forgotten = control.confirmForget({ token: all.token });
   assert.equal(forgotten.ok, true);
-  assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0 });
+  assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0 });
   assert.equal(store.db.prepare("SELECT COUNT(*) AS value FROM companion_memory_outbox").get().value, 0);
 }));
 
@@ -103,7 +103,7 @@ test("knowledge-base location is encrypted and renderer status never exposes the
     assert.equal(settings.status().configured, false);
     assert.throws(() => settings.saveRoot("relative-folder"), /knowledge-base-location-invalid/);
     const status = settings.saveRoot(root);
-    assert.deepEqual(status, { configured: true, storage: "windows-encrypted", label: "MyKnowledgeBase", projection: "markdown-double-link-v1", embedding: "pending", reason: "" });
+    assert.deepEqual(status, { configured: true, storage: "windows-encrypted", label: "MyKnowledgeBase", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1", reason: "" });
     assert.equal(settings.loadRoot(), root);
     const stored = fs.readFileSync(path.join(userDataPath, "knowledge-base-settings.json"), "utf8");
     assert.doesNotMatch(stored, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -118,8 +118,8 @@ test("memory UI exposes real controls while keeping raw storage and paths in Ele
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
   const memoryPage = page.slice(page.indexOf("function MemoryManagementPage"), page.indexOf("export function DashboardPage"));
-  for (const copy of ["导出摘要与已审核记忆", "彻底忘记全部", "保存纠正", "永久删除", "知识库位置", "[[双向链接]]", "T12C"]) assert.match(memoryPage, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const api of ["updateMemoryCandidate", "prepareMemoryForget", "confirmMemoryForget", "exportReviewedMemories", "getKnowledgeBaseStatus", "chooseKnowledgeBaseLocation"]) assert.match(preload, new RegExp(api));
+  for (const copy of ["导出摘要与已审核记忆", "彻底忘记全部", "保存纠正", "永久删除", "知识库位置", "[[双向链接]]", "混合检索"]) assert.match(memoryPage, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const api of ["updateMemoryCandidate", "prepareMemoryForget", "confirmMemoryForget", "exportReviewedMemories", "getKnowledgeBaseStatus", "chooseKnowledgeBaseLocation", "generatePendingMemories", "rebuildMemoryIndex", "syncKnowledgeBase"]) assert.match(preload, new RegExp(api));
   assert.match(main, /showSaveDialog/);
   assert.match(main, /showOpenDialog/);
   assert.doesNotMatch(preload, /loadRoot|databasePath|conversationTurns|outboxPayload/);

@@ -1,5 +1,6 @@
 const { randomUUID } = require("crypto");
 const { COMPANION_PREFERENCES_DEFAULT, isValidEndSmoothWindowMs, isValidIdleTimeoutMs } = require("./companion-preferences.cjs");
+const { normalizePersona } = require("./companion-persona.cjs");
 
 const STATES = Object.freeze(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
 const STATE_TO_AGENT = Object.freeze({ idle: "idle", connecting: "waiting", listening: "listening", thinking: "thinking", speaking: "working", completed: "completed", error: "error" });
@@ -122,6 +123,8 @@ class CompanionConversationController {
     this.idleTimer = null;
     this.lastStopReason = "never";
     this.sessionProviderPreferences = Object.freeze({ revision: 0, ...COMPANION_PREFERENCES_DEFAULT });
+    this.sessionPersona = normalizePersona();
+    this.sessionMemoryContext = Object.freeze([]);
     this.sessionApplied = null;
     this.lastPartialAt = null;
     this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
@@ -301,6 +304,8 @@ class CompanionConversationController {
       endSmoothWindowMs,
       idleTimeoutMs,
     });
+    this.sessionPersona = normalizePersona(candidate.persona);
+    this.sessionMemoryContext = Object.freeze(Array.isArray(candidate.memoryContext) ? candidate.memoryContext.slice(0, 20).map((item) => Object.freeze({ day: boundedText(item?.day, 10), kind: boundedText(item?.kind, 60), summary: boundedText(item?.summary, 500) })).filter((item) => item.summary.trim()) : []);
     this.sessionApplied = Object.freeze({ ...this.sessionProviderPreferences });
     return { ok: true, status: this.snapshot() };
   }
@@ -472,7 +477,7 @@ class CompanionConversationController {
 
   createProvider(token) {
     const providerEpoch = ++this.providerEpoch;
-    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, onEvent: (event) => {
+    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, onEvent: (event) => {
       const providerArrival = this.recordProviderArrival(event);
       const arrival = Object.freeze({
         ...providerArrival,
