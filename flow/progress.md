@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - T12B.1 official custom-VAD gate repaired; second exact-package HIL pending
+
+- Reopened after the user requested a deeper official-source audit. Volcengine's current realtime dialogue API document defines `StartSession.asr.extra.enable_custom_vad` as the switch that enables custom user-stop detection and states that it defaults to `false`; the same ASR object carries `end_smooth_window_ms`. DeskMate was sending the requested 8000 ms value while leaving that gate at its default, which explains the real two-second behavior without implicating preference persistence, session freeze or `keep_alive`.
+- Repair commit `5977ad531e7e3f0c89b29cc79f968dde1b08c9c1` now sends exactly `{"end_smooth_window_ms":8000,"enable_custom_vad":true}` for an eight-second session. Unrelated two-pass ASR and audio descriptors remain absent. D053's accepted `dialog.extra.input_mod=keep_alive`, strict half-duplex, microphone selection, wake boundary, idle timeout, firmware and hardware behavior are unchanged. Build ID is `t12b1-provider-custom-vad-v2`.
+- Verification: `npm ci --include=dev` installed 398 packages; focused endpointing/controller tests passed `60/60`; full `npm test` passed `270/270`; `npm run build:desktop` passed; `git diff --check` passed. `DeskMate.exe` is 202690560 bytes / SHA-256 `239B569DB4F956CDEB9BFB6284F83B9A942758E3B00E109DAA494E72853A99F8`; `app.asar` is 112680179 bytes / SHA-256 `81D2C4FD1600A285A40D74ACB309AD0E6F2C30C1D45D6E065079456F316A3C54`.
+- Safety and next: no application, credential, transcript, PCM, port/device, firmware, Flash/NVS, OLED, servo or hardware operation occurred. Status is `SOURCE_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`. Fully exit the old package, start build ID `t12b1-provider-custom-vad-v2`, save 8 seconds, start a new conversation and test one 3-7 second mid-sentence pause. The prior entry's conclusion that the provider ignored a complete request is superseded; the request was missing the documented default-false activation gate.
+
 ## 2026-09-02 - T12B.1 eight-second provider endpointing HIL rejected; stop speculative repair
 
 - Exact user-present result: after starting the T12B.1 package and a new conversation, the configured eight-second intra-utterance pause still did not control turn ending. Doubao began replying after roughly two seconds, before three seconds, matching its low-latency automatic endpoint rather than the requested duration.

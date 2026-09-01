@@ -1,5 +1,13 @@
 # Decisions
 
+## D057 - Custom provider endpointing explicitly enables the official VAD gate
+
+- Date: 2026-09-02
+- Decision: every Doubao realtime companion session sends `StartSession.asr.extra.enable_custom_vad=true` together with the validated `end_smooth_window_ms`. The gate is not exposed as a separate user option because it is required to make the existing pause preference operational.
+- Evidence: the current official realtime dialogue API document defines `enable_custom_vad` as the flag that enables custom user-stop detection and states that its default is `false`. The first eight-second HIL used the correct persisted/session value but omitted this flag and observed the provider's roughly two-second default behavior.
+- Boundary: D053's `dialog.extra.input_mod=keep_alive` remains unchanged and compatible with temporary half-duplex microphone silence. `enable_asr_twopass`, `audio_info`, local VAD, `push_to_talk` and EndASR remain out of this repair. D057 supersedes D056's one-field request rule; D056 remains as historical evidence for the rejected first package.
+- Acceptance: automated request vectors prove only the exact outbound configuration. One new user-present session must hold a 3-7 second mid-sentence pause when configured for 8 seconds before endpointing is accepted.
+
 ## D056 - Provider endpointing requests stay minimal and preserve the accepted keep-alive mode
 
 - Date: 2026-09-02
