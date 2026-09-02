@@ -38,10 +38,10 @@ The T12 software line contains newer Windows behavior but is not descended from 
 
 ### 2. DeskMate Windows software
 
-- Current candidate: `codex/t13-desktop-persona-memory-intent@35e627389282d8279d82646787f509681474c048`; implementation commit `04f1fc06e0021fd44dbe2a9ba99bcadb599714bf`, based on `710595f0b8b4bd209721fef9c6a96d5b80f43481`.
+- Current candidate: `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`; implementation commit `695c47d255ccfc8b09e1fd2e9644735b7c0c1017`, based on T13 `35e627389282d8279d82646787f509681474c048`.
 - Implemented bounds: persona configuration, reviewed/correctable/forgettable local memory, managed knowledge projection plus embeddings, allowlisted user-confirmed application intent, and a bounded Codex lifecycle summary that does not read chat text.
-- Code/build evidence: `npm ci`, full `276/276`, desktop build and Windows package passed. User-facing behavior remains `USER_ACCEPTANCE_PENDING` and this branch is not yet merged with T11F/T10D-A.
-- T10D-B is now the next software motion slice: consume the frozen EasyInput `0x16/0x17` contract, query status first, then provide yaw/pitch, short-lease ARM, provisional center, fixed ±1° step, recenter, e-stop and clear with three-layer evidence.
+- T10D-B adds strict `0x16/0x17` codec/native validation, one request per USB epoch, status-first readiness, four safety attestations, one-use ARM, yaw/pitch fixed ±1° control, provisional center/recenter/e-stop/clear and separate intent/accepted/terminal evidence. Current production `NOT_READY` is intentionally truthful and keeps motion disabled.
+- Code/build evidence: focused `14/14`, full `283/283`, desktop build and Windows package passed. `DeskMate.exe` SHA-256 is `2DD0ECB13782AE5287977A13A34EFAA9711D7655D71DF67A6C1364EF0428F101`; `app.asar` SHA-256 is `E03DB4A22E3695496108159FDAF4F34E3708713D3AF7EECDE3497962E23150E1`. Application/device/HIL were not run, and this branch is not yet merged with T11F/T10D-A.
 
 ### 3. Xiaozhi yuntai firmware
 
@@ -56,12 +56,13 @@ The T12 software line contains newer Windows behavior but is not descended from 
 | Gate | Entry condition | Exit evidence | Owner |
 | --- | --- | --- | --- |
 | T13 software HIL | Exact T13 package | Persona, memory/forget, knowledge rebuild, safe intent confirmation and Codex summary matrix | DeskMate software task + user |
-| T10D-B manual UI | Frozen `0x16/0x17` contract and vectors | Software tests/package; status-first controls and three-layer evidence | DeskMate software task |
-| Post-HIL three-end integration | T13 and T10D-B accepted | One common branch, conflict audit, Desktop full test/package, both firmware Host+IDF builds | Main Agent |
+| T10D-B manual UI | Frozen `0x16/0x17` contract and vectors | Code/build complete at `6732503`; HIL not run | DeskMate software task |
+| T10D integration candidate | T10D-A and T10D-B code/build complete | One common candidate branch, conflict audit, Desktop full test/package, both firmware Host+IDF builds | Main Agent |
+| Integrated software HIL | Exact integrated package | T13 feature matrix plus truthful T10D-B NOT_READY/status gating | Main Agent + user |
 | EasyInput speaker HIL | Separate explicit app-only authorization and exact image audit | Low-volume local probe plus microphone-priority evidence; no layout regression | Main Agent + user |
-| Motion route code | T10C contract remains unchanged | T10D-A complete; T10D-B pending; production motion still disabled | Main Agent / DeskMate software task |
+| Motion route code | T10C contract remains unchanged | T10D-A and T10D-B code/build complete; production motion still disabled | Main Agent / DeskMate software task |
 | Real servo calibration | All electrical/mechanical blockers documented and user present | Stage-by-stage recoverable HIL with physical cutoff and measured safe limits | Main Agent + user |
 
 ## Immediate next action
 
-Deliver the frozen T10D-A report schema and golden vectors to the DeskMate software task for T10D-B. In parallel, run the T13 user gate. Do not merge either candidate into T11F merely because tests and packaging are green. The main Agent creates the next common integration branch only after both software gates are accepted.
+Create a new isolated T10D integration candidate from the main control branch, integrate the exact T10D-B software history, rerun all three module gates, and only then launch the exact package for user acceptance. Do not enable production motion or begin T10D-C from code/build evidence alone.

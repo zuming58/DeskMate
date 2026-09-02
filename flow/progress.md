@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T10D-B Windows manual calibration UI delivered; integration candidate is next
+
+- Verified the software task handoff and remote ancestry: `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`, implementation `695c47d255ccfc8b09e1fd2e9644735b7c0c1017`, is based on T13 `35e627389282d8279d82646787f509681474c048` and consumes the EasyInput frozen contract from control HEAD `1645bf688b11d2f0d7ba3dfa7900f552886cb404`.
+- Delivered Windows scope: strict HID `0x16/0x17` codec, .NET write/response validation, single request and USB mount epoch, status-first gate, four safety attestations, one-use ARM token, fixed yaw/pitch ±1° control, provisional center/recenter/e-stop/clear, and independent user-intent/EasyInput-accepted/Xiaozhi-terminal evidence. Production `NOT_READY` stays visible and disables output.
+- Verification reported and handoff inspected: focused `14/14`, full `283/283`, desktop build/package and source-boundary checks pass. `DeskMate.exe` is `202690560` bytes / `2DD0ECB13782AE5287977A13A34EFAA9711D7655D71DF67A6C1364EF0428F101`; `app.asar` is `112760685` bytes / `E03DB4A22E3695496108159FDAF4F34E3708713D3AF7EECDE3497962E23150E1`.
+- Classification remains `CONTRACT_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. No application, device, firmware, Flash/NVS, OLED, audio or servo operation occurred. The software handoff remains on its branch at `docs/handoffs/t10d-b-desktop-manual-calibration-ui-2026-09-02.md`.
+- Next: main Agent creates a new isolated integration candidate joining T10D-B/T13 Windows history with T11F + T10D-A, resolves shared Flow/docs once, and reruns Desktop package plus both firmware Host/IDF gates. T10D-C real adapter and Stage 0 remain user-present and separately authorized.
+
 ## 2026-09-02 - T10D-A EasyInput manual-motion bridge code/build gate complete
 
 - Delivered `codex/t10d-easyinput-manual-motion-bridge` implementation commit `0c69d9b3d89b99a2f29d502586b46ad40dd7131e`. The additive `EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN` contract assigns Feature `0x16` and Input `0x17`, both with 63-byte payloads, strict CRC/padding/semantic checks and committed golden vectors.
