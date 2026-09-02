@@ -82,8 +82,13 @@ recenter and emergency stop. Startup, status, selection and ARM emit no PWM. Hos
 CTest passes `12/12`, and an independent generated-config ESP-IDF v5.5.3
 fixed-layout build passes. A first build that reused the source-tree Stage 0
 `sdkconfig` was detected and rejected before device access. Exact committed
-source/artifact identity is recorded in the follow-up Flow entry before any
-authorization request.
+source is `4a0eeccf8d077ae8899602354ec1f6f26280a48d`. The app-only image is
+`212720` bytes with SHA-256
+`752ABFAB73E431084913AD5F85E429E9AE5816C79D0571DD6A2C470B6F2E3EC2` and
+`app-flash_args` contains only `0x100000 deskmate_xiaozhi_yuntai.bin`. The
+unchanged `3072`-byte partition table has SHA-256
+`4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0` and is
+not part of the app-only write.
 
 Classification:
 `STAGE1_REFERENCE_BASELINE_CODE_BUILD_CONFIRMED / FLASH_NOT_AUTHORIZED / SERVO_MOTION_NOT_RUN`.
