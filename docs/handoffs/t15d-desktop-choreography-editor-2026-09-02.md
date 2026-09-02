@@ -68,4 +68,4 @@ The user's first visual review rejected the oversized full-width start action an
 - preview and automatic-motion boundaries are short footnotes;
 - the T15D action group uses the same compact hierarchy.
 
-The final follow-up evidence is `359/359` Desktop tests, a passing Windows package/native bridge self-test and `design-qa.md` with `final result: passed`. Updated package hashes are recorded in the newest `flow/progress.md` entry.
+The final follow-up evidence is `359/359` Desktop tests, a passing Windows package/native bridge self-test and `docs/reviews/t15d-motion-page-compact-design-qa-2026-09-02.md` with `final result: passed`. Updated package hashes are recorded in the newest `flow/progress.md` entry.
