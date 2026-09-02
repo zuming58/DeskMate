@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - Main Agent accepted the compact T15D editor into the current integration
+
+- Current integration is `codex/t15-t16-integration`; the tested merge before this Flow pointer is `a3b6ae2`. It includes the complete software delivery `codex/t15d-desktop-choreography-editor@2d7e0c0111e36d3cb0eca63c91670d0e069385d3` and preserves both firmware trees byte-for-byte relative to the earlier `32c5540` integration baseline.
+- Main-Agent scope review found no new raw angle, PWM, pulse-width, duty-cycle or GPIO path and no fallback to repeated manual `+/-1 degree` commands. Custom choreography stays a strict local Windows document and truthful software preview; entity execution is disabled until a separate additive three-end contract is frozen after T15 preset HIL.
+- Independent final-tree verification passed focused motion/editor/UI tests `14/14`, full `npm test` `359/359`, `npm run build:desktop`, packaged native bridge self-test with exit `0`, `git diff --check` and the delivered 1440x1024 compact-design QA. The rebuilt package is: `DeskMate.exe` `202690560` bytes / SHA-256 `ABF2922264F68EF829342F1638C88E23AFD6B2F9E850DD0C93BAC3AFCF334B77`; input bridge `153516937` bytes / `C22A568D5019367C8CAF73A853EB6FEF063DFF994F108FF3ECE4654875A03DDF`; `app.asar` `112921293` bytes / `DD88791CD4B737B19FFA6003CDD576812C60F6E9003FABD6D32FAF9ADD6D94C2`.
+- The previous exact package was stopped only after every process was matched to `release/win-unpacked/DeskMate.exe`; the rebuilt package was then launched successfully as the sole current candidate. No Flash/NVS/eFuse write, firmware change or servo movement command occurred.
+- Classification: `T15D_WINDOWS_EDITOR_MERGED / MAIN_AGENT_CODE_BUILD_AUDIT_CONFIRMED / EXACT_PACKAGE_RUNNING / ENTITY_EXECUTION_FAIL_CLOSED / WIRE_NOT_FROZEN / HIL_NOT_RUN`. Next: complete the already-flashed T15 quick-action HIL before opening the T15D wire/firmware slice.
+
 ## 2026-09-02 - T15D motion UI density repaired after user visual rejection
 
 - User review rejected the motion page hierarchy because the full-width 54 px primary action dominated the right card and three large explanatory cards consumed too much space. The repair keeps behavior and protocol boundaries unchanged while reducing visual weight.
