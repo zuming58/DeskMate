@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A protocol epoch can outlive its desktop client process
+
+- Symptom: the Windows UI reconnects successfully and both HID collections plus the downstream Link are healthy, yet the first request after restarting DeskMate is rejected as `stale`.
+- Practice: identify which side owns duplicate suppression and how long that epoch survives. Persist the client high-water before use, reserve IDs in blocks, recover redundant journals deterministically and keep any upgrade rebase bounded to a harmless read-only request.
+- Rule: a process-local counter is unsafe whenever the peer retains its maximum request ID across client restarts. Never resolve that mismatch by replaying a command, wrapping the counter or weakening the endpoint's stale-request defense.
+
 ## A safe hold control is a terminal-gated scheduler, not repeated button clicks
 
 - Symptom: simplifying a calibration console into four direction buttons can accidentally create overlapping ARM/step requests, queued movement after release, a repeat rate above the intended ceiling or a UI that stays armed after transport failure.

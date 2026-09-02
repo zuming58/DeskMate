@@ -1,5 +1,12 @@
 # Decisions
 
+## D073 - Manual-calibration request IDs outlive the Windows process
+
+- Date: 2026-09-02
+- Decision: the Electron main process owns one persistent, monotonic manual-calibration request-ID sequence. It reserves a checksummed block to both a primary and backup `userData` journal before issuing any ID, resumes above the recorded high-water after restart and never wraps from `uint32` maximum to a lower value.
+- Upgrade boundary: the first persistent release starts at a high nonzero floor. A stale read-only status request may trigger only a bounded advance through predefined higher floors; commands are never automatically replayed. Corrupt journals, persistence failure and exhausted recovery space fail closed.
+- Reason: EasyInput's duplicate/stale guard belongs to the USB mount epoch, which can outlive a DeskMate process. A process-local counter therefore cannot satisfy the frozen monotonic request contract after a desktop restart.
+
 ## D072 - Simple manual control is a Windows orchestration over the frozen calibration wire
 
 - Date: 2026-09-02
