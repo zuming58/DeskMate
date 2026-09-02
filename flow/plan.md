@@ -1,6 +1,6 @@
 # Development plan
 
-## Current stage: T15 three-end physical acceptance and T16 software acceptance
+## Current stage: T15 physical preset acceptance, T15D choreography design and T16 software acceptance
 
 目标：以已经完成用户真机验收的 T10D-D 双舵机手动控制为硬件基线，冻结并实现四个高层实体预设动作，经 Windows → EasyInput → 小智三端完成状态、执行、终态、回中与急停闭环；Windows 软件并行实现白名单应用语音直开和隐私安全的 Codex 任务简报。任何新固件在独立构建与审计完成后，仍需用户逐板确认才能 app-only 烧录。
 
@@ -42,7 +42,8 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 8. **T10D-D user-present HIL — ACCEPTED AND FROZEN.** The exact recovery package completed all four directions, release, recenter, emergency-stop latch and explicit recovery. This closes the calibration-style manual-control gate and permits design of bounded semantic presets; it does not by itself prove any preset, autonomous or voice-triggered movement.
 9. **T15 runtime preset motion — CODE/BUILD/FLASH COMPLETE; PHYSICAL HIL PENDING.** Additive HID `0x18/0x19` and DeskMate Link `0x22/0x23` are frozen and implemented. Xiaozhi owns the local trajectories; EasyInput only validates and forwards one request; Windows exposes four bounded real preset tests. Default repeat is one for attention/search and two for nod/dance, configurable only from 1 through 3. Both boards now contain T15 candidates: EasyInput was app-only flashed and independently read back byte-for-byte by the main Agent; Xiaozhi flash success is user-reported. Voice and automatic motion remain disabled until the ordered physical preset test passes.
 10. **T16 desktop actions and Codex briefing — CODE/BUILD COMPLETE; USER HIL PENDING.** Direct launch is implemented only for explicitly voice-enabled registered applications; deterministic Codex status answers and the opt-in content-bounded task brief reporter are merged into the current integration. Real application launch, reporter ingestion, automatic announcement and voice query remain user-controlled acceptance items.
-11. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
+11. **T15D custom choreography — DESIGN ACCEPTED; SOFTWARE EDITOR IN PROGRESS; WIRE NOT FROZEN.** The user selected a three-row beat editor: Yaw, Pitch and synchronized expression across 2–8 columns, with same-column values executing simultaneously, fixed semantic poses, 400–1000 ms bounded beat duration and 1–3 loops. This is moderate rather than high complexity, but real execution is still a three-end slice. The Windows editor is delegated to `DeskMate软件开发`; new Host/Link IDs and firmware execution remain blocked on the current four-preset physical HIL so the accepted T15 baseline is not destabilized. Design: [`t15d-choreography-editor-v1.md`](../docs/design/t15d-choreography-editor-v1.md).
+12. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
 
 #### Ownership and reporting
 

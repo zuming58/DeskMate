@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - T15 preset UX clarified and T15D choreography design opened
+
+- User review found two competing actions on the preset page: the left-side arrow buttons executed immediately while the right-side selection had no visible start action. That ambiguity is removed on `codex/t15-t16-integration@5d0e0ce`: one selection, one repeat selection and one explicit `开始执行` button; the preview has no directional buttons; status has a visible retry; transient startup status reads retry three times and use Chinese recovery copy.
+- Focused Desktop verification passed `26/26`. The first full `npm test` run found one stale literal assertion after the truthful preview heading changed; that test was updated and its focused regression now passes. A fresh complete run and package are still required before this UI repair is handed to the user.
+- A read-only native bridge diagnostic proved the EasyInput motion HID collection is currently enumerated and writable. Therefore the screenshot's `motion-status-unavailable` was a Windows startup/read timing state rather than evidence that the already-flashed EasyInput T15 interface was absent. No HID command, firmware write or servo action was sent during that diagnostic.
+- The user accepted opening T15D custom choreography if it remains reasonably bounded and added a synchronized expression row. The accepted product model is a 2–8 beat grid with aligned Yaw, Pitch and Expression rows; same-column values start together; fixed semantic poses, 400/600/800/1000 ms beat durations, 1–3 loops, final center and external-expression restore. Design is `docs/design/t15d-choreography-editor-v1.md`; wire remains explicitly `NOT_FROZEN` until the four existing T15 presets pass physical HIL.
+- The independent `DeskMate软件开发` task was given the Windows editor/local-storage/strict-compiler/preview package from base `5d0e0ce`. It must return branch, HEAD, tests, package and unaccepted items and must not claim real execution while the adapter is unavailable. Main Agent retains the additive Host/Link contract, both firmware implementations and final integration.
+- Classification: `T15_PRESET_UX_REPAIR_FOCUSED_TESTED / FULL_RETEST_PENDING`; `T15D_DESIGN_ACCEPTED / SOFTWARE_EDITOR_IN_PROGRESS / WIRE_NOT_FROZEN`. Next: finish full Desktop/package verification, run the ordered four-preset HIL on the current flashed firmware, then freeze T15D vectors and implement the two firmware ends.
+
 ## 2026-09-02 - T15/T16 three-end integration built; both firmware candidates flashed
 
 - The integration branch is `codex/t15-t16-integration`; tested implementation before this Flow closure is `871206c`. It merges the frozen T15 Windows transport/page, EasyInput forwarding endpoint, Xiaozhi trajectory endpoint and the T16 Windows delivery. T10D-D remains the accepted manual-motion safety baseline.

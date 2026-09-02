@@ -1,5 +1,13 @@
 # Decisions
 
+## D078 - Custom choreography is a bounded endpoint-owned beat program
+
+- Date: 2026-09-02
+- Decision: T15D adds a separate Custom dance editor while retaining the four T15 quick actions. A program contains 2–8 aligned beats across Yaw, Pitch and Expression rows. Same-column values start together; columns run sequentially at one bounded 400/600/800/1000 ms beat duration and the full program repeats 1–3 times.
+- Motion semantics: Yaw is hold/left/center/right and Pitch is hold/up/center/down. Xiaozhi maps those tokens to its Stage 2 safe poses; Windows never sends angle, range, speed, PWM, pulse width, duty cycle or GPIO and never simulates choreography by replaying manual one-degree commands.
+- Expression semantics: each beat may hold or select one of the existing seven Agent display states. Xiaozhi temporarily owns a choreography display lease, then restores the latest external Agent state on normal completion, stop or recovery. Emergency stop and fault remain highest priority.
+- Sequencing: the Windows editor, persistence, validation and software preview may proceed in parallel, but real execution controls stay fail closed. New Host/Link report IDs and firmware wire are not frozen until the current four T15 fixed presets pass user-present physical HIL; every new firmware image still needs separate app-only authorization.
+
 ## D076 - Runtime presets are semantic endpoint-owned trajectories
 
 - Date: 2026-09-02
