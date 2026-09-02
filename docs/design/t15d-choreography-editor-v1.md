@@ -17,10 +17,13 @@ control or the still-pending T15 physical preset acceptance.
 
 - One choreography contains 2 through 8 beats; the default is 6 beats.
 - Three aligned rows share the same beat columns:
-  - `Yaw`: hold, left, center, right.
-  - `Pitch`: hold, up, center, down.
-  - `Expression`: hold, idle, listening, thinking, working, waiting, completed,
-    or error.
+  - `Yaw`: three compact choices, left, center, right.
+  - `Pitch`: three compact choices, up, center, down.
+  - `Expression`: three dance-friendly choices, completed/happy,
+    thinking/curious, and working/focused. Each uses the shipped expression
+    image asset rather than an emoji or synthetic face.
+- In every row, no selected choice means `hold`. Clicking the selected choice
+  again clears it back to `hold`; no extra hold button occupies the grid.
 - All non-hold values in one column begin together. Columns execute in order.
 - One global beat duration is selected from 400, 600, 800, or 1000 ms.
 - The full choreography repeats 1 through 3 times.
@@ -35,12 +38,16 @@ control or the still-pending T15 physical preset acceptance.
 
 1. Choose **Quick actions** or **Custom dance**.
 2. In Custom dance, choose one semantic token in each row for every beat.
-3. Use **Software preview** to inspect timing without claiming hardware output.
+3. Use **Software preview** to inspect the compact beat cursor and three-track
+   text summary without rendering a second large face or claiming hardware
+   output.
 4. Use one primary **Run on Xiaozhi** button only when the complete real chain is
    ready. Keep **Stop and center** and **Emergency stop** visible.
 5. Show one progress cursor over the current beat and one truthful terminal
    result. Never use arrow-shaped preset buttons that can be mistaken for manual
    directional control.
+6. Keep Save, Software preview, Run on Xiaozhi, Stop and center, and Emergency
+   stop in one compact wrapping action bar immediately below the editor grid.
 
 ## Safety and validation
 
@@ -81,4 +88,3 @@ complete physical acceptance. The candidate is:
    scheduling/display lease and EasyInput one-request forwarding.
 4. Merge Windows transport, rebuild all three ends, request separate app-only
    flash authorization for each board, and perform custom choreography HIL.
-

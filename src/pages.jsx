@@ -1560,6 +1560,10 @@ export function MotionPage({ notify, embedded = false }) {
     return () => { active = false; if (retryTimer) clearTimeout(retryTimer); unsubscribe?.(); };
   }, [refreshStatus]);
   const runPreset = async (nextPreset) => {
+    if (!motionAvailable) {
+      notify("动作未开始：真实动作链尚未检测成功，请先重新检测。");
+      return;
+    }
     const nextRepeat = nextPreset === preset ? repeatCount : (["nod", "dance"].includes(nextPreset) ? 2 : 1);
     if (nextPreset !== preset) selectPreset(nextPreset);
     setRunningPreset(nextPreset);
@@ -1591,7 +1595,7 @@ export function MotionPage({ notify, embedded = false }) {
   const endpoint = motionStatus?.endpoint || {};
   const endpointState = String(endpoint.state || "unavailable").toLowerCase();
   const emergencyStopped = endpoint.emergencyStopped === true || endpoint.emergencyStopLatched === true;
-  const motionAvailable = motionStatus?.ok === true || endpointState !== "unavailable";
+  const motionAvailable = motionStatus?.ok === true || motionStatus?.available === true;
   const unavailableMessage = ({
     "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经重新上电并连接。",
     "motion-preset-interface-unavailable": "已检测到 EasyInput，但没有找到实体动作接口。请重新检测；若仍失败，需要核对当前固件。",
@@ -1612,7 +1616,7 @@ export function MotionPage({ notify, embedded = false }) {
     <div className={embedded ? "companion-embedded" : "page"}>
       {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
       {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>选择动作和次数，再点击一次“开始执行”。正常结束后会自动回中。</p></div><span className="motion-heading-actions"><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>重新检测动作链</Button></span></div>}
-      <div className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
+      <div id="motion-chain-status" className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
         <MotionStatusIcon size={17} stroke={1.8} />
         <strong>{statusTitle}</strong>
         <span>{statusDescription}</span>
@@ -1628,7 +1632,7 @@ export function MotionPage({ notify, embedded = false }) {
           <label className="field-label">次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label>
           <p className="motion-default-summary"><strong>默认</strong>关注、寻找 1 次；点头、跳舞 2 次。</p>
           <div className="motion-action-bar">
-            <Button icon={PlayerPlay} variant="primary" className="motion-run-button" disabled={Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${repeatCount}` : `开始 · ${presetLabel} × ${repeatCount}`}</Button>
+            <Button icon={PlayerPlay} variant="primary" className="motion-run-button" aria-describedby="motion-chain-status" disabled={!motionAvailable || Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${repeatCount}` : `开始 · ${presetLabel} × ${repeatCount}`}</Button>
             <Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
             <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
             {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}

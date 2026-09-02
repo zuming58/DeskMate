@@ -355,25 +355,31 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
 .choreography-settings .segmented button { min-width: 0; }
 .choreography-beat-tools { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 12px 0 9px; }
 .choreography-beat-tools strong { color: #405064; font-size: 11px; }
+.choreography-beat-tools strong small { margin-left: 7px; color: #8a96a5; font-size: 9px; font-weight: 500; }
 .choreography-beat-tools > span { display: flex; align-items: center; gap: 8px; }
 .choreography-beat-tools .button { min-height: 34px; padding-inline: 10px; font-size: 10px; }
 .choreography-table-wrap { overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
-.choreography-table { display: grid; grid-template-columns: 112px repeat(var(--beat-count), minmax(94px,1fr)); min-width: 880px; border: 1px solid #dfe7ef; border-radius: 14px; overflow: hidden; background: #fbfcfe; }
+.choreography-table { display: grid; grid-template-columns: 96px repeat(var(--beat-count), minmax(134px,1fr)); width: max-content; min-width: 100%; border: 1px solid #dfe7ef; border-radius: 14px; overflow: hidden; background: #fbfcfe; }
 .choreography-table > div:not(.choreography-row), .choreography-row > strong { min-height: 40px; display: grid; place-items: center; border-right: 1px solid #e5ebf1; border-bottom: 1px solid #e5ebf1; color: #748195; font-size: 9px; }
 .choreography-table > div.is-active { color: #285fd4; background: #eaf2ff; }
 .choreography-row { display: contents; }
 .choreography-row > strong { justify-items: start; padding-left: 13px; color: #465569; background: #f4f7fa; font-size: 10px; }
-.choreography-table select { min-width: 0; margin: 6px; padding: 0 7px; }
 .choreography-corner { background: #f4f7fa; }
-.choreography-preview-layout { display: grid; grid-template-columns: minmax(300px,1fr) minmax(260px,.65fr); align-items: center; gap: 22px; margin-top: 18px; padding: 18px; border: 1px solid #e0e8f1; border-radius: 17px; background: #f8fbff; }
-.choreography-preview-face { min-height: 260px; display: grid; place-items: center; gap: 10px; perspective: 900px; }
-.choreography-preview-face .companion-face { width: min(420px,90%); aspect-ratio: 3/2; transform: rotateY(var(--preview-yaw)) rotateX(var(--preview-pitch)); transform-origin: center bottom; transition: transform .22s ease; box-shadow: 0 18px 42px rgba(22,46,77,.17); }
-.choreography-preview-face small { color: #718095; font-size: 9px; }
-.choreography-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: stretch; gap: 9px; }
-.choreography-actions > .button { width: 100%; min-height: 40px; padding-inline: 11px; font-size: 10px; }
-.choreography-actions .motion-safety-actions { grid-column: 1/-1; margin-top: 3px; }
-.choreography-actions .motion-safety-actions .button { flex: 1; }
-.choreography-boundary-note { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #e6edf5; color: #7a88a0; font-size: 9px; }.choreography-boundary-note strong { margin-right: 7px; color: #4d65a1; font-size: 10px; }
+.choreography-track-choices { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; align-items: center; margin: 5px; padding: 3px; border-radius: 10px; background: #f1f4f8; }
+.choreography-choice { min-width: 0; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid transparent; border-radius: 8px; padding: 0 5px; color: #718096; background: transparent; font-size: 9px; font-weight: 600; white-space: nowrap; transition: background .14s ease,color .14s ease,border-color .14s ease,box-shadow .14s ease; }
+.choreography-choice:hover { color: #3f5e82; background: rgba(255,255,255,.82); }
+.choreography-choice[aria-pressed="true"] { color: #2c62dc; border-color: #aec5f4; background: #fff; box-shadow: 0 2px 7px rgba(43,92,178,.12); }
+.choreography-choice:focus-visible { outline: 3px solid rgba(53,109,243,.22); outline-offset: 1px; }
+.choreography-track-choices.is-expression { gap: 3px; }
+.choreography-track-choices.is-expression .choreography-choice { min-height: 46px; flex-direction: column; gap: 1px; padding-block: 3px; }
+.choreography-choice img { width: 26px; height: 17px; display: block; border-radius: 4px; object-fit: cover; background: #0d1721; }
+.choreography-preview-summary { min-height: 40px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; padding: 8px 12px; border: 1px solid #e0e8f1; border-radius: 11px; color: #6c7a8d; background: #f8fbff; font-size: 9px; }
+.choreography-preview-summary strong { margin-right: auto; color: #40526a; font-size: 10px; }
+.choreography-preview-summary span { white-space: nowrap; }
+.choreography-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.choreography-actions > .button { min-height: 36px; padding-inline: 11px; font-size: 10px; }
+.choreography-actions > .button:first-child { min-width: 92px; }
+.choreography-boundary-note { display: flex; align-items: center; gap: 7px; margin-top: 9px; color: #7a88a0; font-size: 9px; }.choreography-boundary-note strong { margin-right: 6px; color: #4d65a1; font-size: 9px; }
 @keyframes attentive { 30% { transform: rotateY(-10deg); } 60% { transform: rotateY(9deg); } }
 @keyframes nod { 35% { transform: rotateX(13deg); } 70% { transform: rotateX(-5deg); } }
 @keyframes search { 30% { transform: rotateY(-18deg); } 60% { transform: rotateY(18deg); } }
@@ -421,7 +427,6 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
   .mobile-scrim { display: block; position: fixed; inset: 0; z-index: 25; border: 0; background: rgba(18,27,39,.35); backdrop-filter: blur(2px); }
   .sidebar__collapse { display: none; }.sidebar__nav button span, .device-card__status, .device-card small { display: initial !important; }
   .app-header { padding-inline: 22px; }.app-content { padding-inline: 22px; }
-  .choreography-preview-layout { grid-template-columns: 1fr; }
   .two-column, .vocabulary-layout, .sensor-layout, .settings-layout { grid-template-columns: 1fr; }
   .settings-nav { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
   .connection-cards, .agent-grid { grid-template-columns: 1fr; }
@@ -445,7 +450,7 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
   .companion-hardware-state-test__header, .companion-hardware-state-test__footer, .companion-expression-preview-heading { align-items: stretch; flex-direction: column; }.companion-hardware-state-test__footer .button { width: 100%; }.agent-state-evidence { grid-template-columns: 1fr; }
   .setting-row { align-items: flex-start; flex-direction: column; }.setting-row__control { width: 100%; max-width: none; justify-content: flex-start; }.segmented { max-width: 100%; overflow-x: auto; }.slider-control { width: 100%; min-width: 0; }.settings-nav { grid-template-columns: 1fr; }.service-config-grid { grid-template-columns: 1fr; }.service-config-block { padding: 14px; }
   .confirmation-overlay { padding: 12px; }.confirmation-dialog { border-radius: 20px; }.confirmation-dialog__header { grid-template-columns: 42px minmax(0,1fr); gap: 12px; padding: 20px 18px 16px; }.confirmation-dialog__icon { width: 42px; height: 42px; border-radius: 13px; }.confirmation-dialog__body { padding: 0 18px 18px; }.confirmation-dialog__footer { padding: 14px 18px; }.confirmation-dialog__footer .button { flex: 1; }
-  .embedded-heading { align-items: flex-start; flex-direction: column; }.motion-heading-actions { width: 100%; justify-content: flex-start; }.motion-status-strip { grid-template-columns: 20px minmax(0,1fr); }.motion-status-strip span { grid-column: 2; white-space: normal; }.motion-action-bar { align-items: stretch; flex-direction: column; }.motion-action-bar .button, .motion-run-button { width: 100%; }.motion-preview-caption > span { align-items: flex-start; flex-direction: column; gap: 2px; }.motion-preview-caption small { white-space: normal; }.choreography-actions { grid-template-columns: 1fr; }.choreography-actions .motion-safety-actions { grid-column: 1; }.companion-stage__face { min-height: 0; height: auto; }.companion-stage__face .companion-face { min-height: 0; height: 100%; }.companion-expression-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .embedded-heading { align-items: flex-start; flex-direction: column; }.motion-heading-actions { width: 100%; justify-content: flex-start; }.motion-status-strip { grid-template-columns: 20px minmax(0,1fr); }.motion-status-strip span { grid-column: 2; white-space: normal; }.motion-action-bar { align-items: stretch; flex-direction: column; }.motion-action-bar .button, .motion-run-button { width: 100%; }.motion-preview-caption > span { align-items: flex-start; flex-direction: column; gap: 2px; }.motion-preview-caption small { white-space: normal; }.choreography-preview-summary { align-items: flex-start; flex-direction: column; gap: 4px; }.choreography-preview-summary strong { margin-right: 0; }.choreography-actions > .button { flex: 1 1 130px; }.companion-stage__face { min-height: 0; height: auto; }.companion-stage__face .companion-face { min-height: 0; height: 100%; }.companion-expression-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .companion-dialogue-actions { align-items: stretch; flex-direction: column; }.companion-dialogue-actions .button { width: 100%; }.companion-session-evidence { grid-template-columns: 1fr; }
   .memory-metrics { grid-template-columns: 1fr; }
   .manual-calibration-panel__header, .manual-calibration-query { align-items: stretch; flex-direction: column; }.manual-calibration-panel__status { align-items: flex-start; }.manual-calibration-grid { grid-template-columns: 1fr; }

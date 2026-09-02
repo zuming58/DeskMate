@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { choreographyPreviewFrame, createChoreographyDraft, validateChoreographyDraft } from "../src/domain/choreography.js";
+import { CHOREOGRAPHY_EXPRESSIONS, CHOREOGRAPHY_LABELS, choreographyPreviewFrame, createChoreographyDraft, validateChoreographyDraft } from "../src/domain/choreography.js";
 
 const require = createRequire(import.meta.url);
 const { ChoreographyStore, PendingChoreographyAdapter, validateChoreography } = require("../electron/choreography-store.cjs");
@@ -42,6 +42,8 @@ test("renderer draft uses six columns and preview applies all three tracks simul
   assert.deepEqual(frame, { yaw: "left", pitch: "down", expression: "completed" });
   draft.beats[0] = { yaw: "right", pitch: "up", expression: "working" };
   assert.equal(validateChoreographyDraft(draft).ok, true);
+  assert.deepEqual(CHOREOGRAPHY_EXPRESSIONS, ["hold", "completed", "thinking", "working"]);
+  assert.equal(validateChoreographyDraft(action({ beats: [{ yaw: "left", pitch: "hold", expression: "listening" }, action().beats[1]] })).reason, "choreography-beat-invalid");
 });
 
 test("Electron store persists at most eight actions and supports rename, copy and delete without exposing a path", (context) => {
@@ -89,9 +91,25 @@ test("T15D preload and renderer expose editor persistence while real execution s
   assert.doesNotMatch(editor, /<Notice/);
   assert.match(editor, /Yaw 左右/);
   assert.match(editor, /Pitch 上下/);
-  assert.match(editor, /最新外部表情/);
+  assert.match(editor, /未选择 = 保持/);
+  assert.match(editor, /aria-pressed={selected}/);
+  assert.match(editor, /onChange\(selected \? "hold" : item\)/);
+  assert.match(editor, /expressionAssetUrl\(EXPRESSION_ASSETS\[item\]\)/);
+  assert.match(editor, /choreography-preview-summary/);
+  assert.doesNotMatch(editor, /<CompanionFace/);
+  assert.doesNotMatch(editor, /<Select key={`\$\{key\}/);
+  assert.deepEqual(CHOREOGRAPHY_EXPRESSIONS.slice(1).map((value) => CHOREOGRAPHY_LABELS.expression[value]), ["开心", "好奇", "专注"]);
   assert.match(fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8"), /title="快速动作"/);
   assert.doesNotMatch(editor, /setServoAngle|setMotionPwm|writeGpio|pulseWidth/);
   assert.doesNotMatch(editor, /ArrowLeft|ArrowRight|ArrowUp|ArrowDown/);
   assert.doesNotMatch(preload, /choreograph.*Path/i);
+});
+
+test("quick actions fail closed until the real motion chain is detected", () => {
+  const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(pages, /motionStatus\?\.ok === true \|\| motionStatus\?\.available === true/);
+  assert.match(pages, /disabled={!motionAvailable \|\| Boolean\(runningPreset\)/);
+  assert.match(pages, /aria-describedby="motion-chain-status"/);
+  assert.match(pages, /id="motion-chain-status"/);
+  assert.match(pages, /真实动作链尚未检测成功，请先重新检测/);
 });
