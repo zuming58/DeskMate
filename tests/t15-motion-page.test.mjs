@@ -7,11 +7,11 @@ const adapters = fs.readFileSync(new URL("../src/adapters/voiceAdapters.js", imp
 
 test("T15 motion page exposes only bounded real presets and endpoint controls", () => {
   assert.match(page, /runPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
-  assert.match(page, /3\. 开始执行：/);
+  assert.match(page, /开始 · \$\{presetLabel\} × \$\{repeatCount\}/);
   assert.match(page, /runPreset\(preset\)/);
   assert.match(page, /重新检测动作链/);
   assert.match(page, /readWithRetry/);
-  assert.match(page, /这里没有上下左右控制/);
+  assert.match(page, /只显示画面，不代表小智已经动作/);
   for (const label of ["关注", "点头", "寻找", "跳舞"]) assert.match(page, new RegExp(`value: "[a-z]+", label: "${label}"`));
   assert.match(page, /停止并回中/);
   assert.match(page, /立即急停/);
@@ -30,10 +30,21 @@ test("T15 renderer adapter uses semantic operations without motion primitives", 
 
 test("T15 UI keeps endpoint completion separate from physical HIL", () => {
   assert.match(page, /端点报告本次动作已完成/);
-  assert.match(page, /是否真实转动、方向和机械回中仍以你现场观察为准/);
-  assert.match(page, /自动动作暂未开放/);
+  assert.match(page, /实体结果仍以现场观察为准/);
+  assert.match(page, /自动联动待验收/);
   assert.match(page, /endpoint\.completedRepeat/);
   assert.match(page, /endpoint\.requestedRepeat/);
   assert.doesNotMatch(page, /endpoint\.repeatCompleted/);
   assert.doesNotMatch(page, /endpoint\.repeatTotal/);
+});
+
+test("T15 motion page keeps actions compact and replaces repeated notice cards with concise evidence", () => {
+  const motionPage = page.slice(page.indexOf("export function MotionPage"), page.indexOf("export function SensorsPage"));
+  assert.match(motionPage, /motion-status-strip/);
+  assert.match(motionPage, /motion-action-bar/);
+  assert.match(motionPage, /motion-preview-caption/);
+  assert.doesNotMatch(motionPage, /button--wide motion-run-button/);
+  assert.doesNotMatch(motionPage, /title="默认次数"/);
+  assert.doesNotMatch(motionPage, /title="自动动作暂未开放"/);
+  assert.doesNotMatch(motionPage, /title="这里只显示软件画面预览"/);
 });

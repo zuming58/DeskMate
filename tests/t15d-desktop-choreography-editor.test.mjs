@@ -84,7 +84,9 @@ test("T15D preload and renderer expose editor persistence while real execution s
   assert.doesNotMatch(main.match(/desktop:run-choreography[\s\S]{0,500}/)?.[0] || "", /motionPresetService\.runPreset/);
   assert.match(editor, /disabled={!adapter\.ready/);
   assert.match(editor, /if \(adapter\.ready !== true\)/);
+  assert.match(editor, /choreography-boundary-note/);
   assert.match(editor, /软件预览不等于实体执行/);
+  assert.doesNotMatch(editor, /<Notice/);
   assert.match(editor, /Yaw 左右/);
   assert.match(editor, /Pitch 上下/);
   assert.match(editor, /最新外部表情/);

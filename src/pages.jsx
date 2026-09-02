@@ -1594,14 +1594,41 @@ export function MotionPage({ notify, embedded = false }) {
     "motion-status-unavailable": "软件暂时没有读到实体动作状态，请点击“重新检测动作链”。",
   })[motionStatus?.reason] || "实体动作状态暂时不可用，请重新检测动作链。";
   const statusLabel = emergencyStopped ? "急停已锁存" : runningPreset || endpointState === "running" ? "实体动作运行中" : motionStatus?.endpointReportedComplete ? "端点已完成 · 待人眼确认" : motionAvailable ? "真实动作链已响应" : "真实动作链未就绪";
+  const statusTone = motionStatus?.endpointReportedComplete ? "success" : motionAvailable ? "info" : "warning";
+  const statusTitle = motionStatus?.endpointReportedComplete ? "端点报告本次动作已完成" : motionAvailable ? "真实动作控制待人工观察" : "真实动作链尚未就绪";
+  const statusDescription = motionStatus?.endpointReportedComplete
+    ? "协议已确认循环结束并接受回中；实体结果仍以现场观察为准。"
+    : motionAvailable
+      ? "一次只执行一个动作，忙碌时不排队或补发。"
+      : unavailableMessage;
+  const MotionStatusIcon = motionStatus?.endpointReportedComplete ? Check : AlertCircle;
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
       {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
       {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>选择动作和次数，再点击一次“开始执行”。正常结束后会自动回中。</p></div><span className="motion-heading-actions"><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>重新检测动作链</Button></span></div>}
-      <Notice tone={motionStatus?.endpointReportedComplete ? "success" : motionAvailable ? "info" : "warning"} title={motionStatus?.endpointReportedComplete ? "端点报告本次动作已完成" : motionAvailable ? "真实动作控制待人工观察" : "真实动作链尚未就绪"}>{motionStatus?.endpointReportedComplete ? "协议已确认全部循环和最终回中命令被小智适配器接受；是否真实转动、方向和机械回中仍以你现场观察为准。" : motionAvailable ? "选择一个动作和重复次数，再点击“开始执行”。一次只执行一个动作，忙碌时不会排队或稍后重放。" : unavailableMessage}</Notice>
+      <div className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
+        <MotionStatusIcon size={17} stroke={1.8} />
+        <strong>{statusTitle}</strong>
+        <span>{statusDescription}</span>
+      </div>
       <div className="motion-grid">
-        <Card className="motion-stage"><div className={`motion-avatar ${runningPreset ? `is-playing is-${runningPreset === "attention" ? "attentive" : runningPreset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="软件画面预览；实体动作以真机观察为准" /></div><Notice tone="demo" title="这里只显示软件画面预览">这里没有上下左右控制，也不能证明舵机已经动作；实体结果以右侧执行按钮和你看到的小智真机为准。</Notice></Card>
-        <Card><SectionTitle index="01" title="快速动作" description="第一步选固定动作，第二步选次数，第三步点击开始；轨迹、限幅和回中都在小智端固定。" /><label className="field-label">1. 选择动作<Segmented value={preset} onChange={selectPreset} options={[{ value: "attention", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><label className="field-label">2. 选择重复次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label><Notice tone="info" title="默认次数">关注和寻找默认 1 次；点头和跳舞默认完整重复 2 次。每一轮都会先回到逻辑中心，再计入完成次数。</Notice><Button icon={PlayerPlay} variant="primary" className="button--wide motion-run-button" disabled={Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `正在执行：${presetLabel} × ${repeatCount}` : `3. 开始执行：${presetLabel} × ${repeatCount}`}</Button><div className="motion-safety-actions"><Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button><Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>{emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}</div><Notice tone="demo" title="自动动作暂未开放">语音动作和情境自动动作必须等四个实体按钮完成真机验收后再启用；当前不会因连接、对话或空闲自动运动。</Notice></Card>
+        <Card className="motion-stage">
+          <div className={`motion-avatar ${runningPreset ? `is-playing is-${runningPreset === "attention" ? "attentive" : runningPreset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="软件画面预览；实体动作以真机观察为准" /></div>
+          <div className="motion-preview-caption"><Sparkles size={17} stroke={1.8} /><span><strong>软件预览</strong><small>只显示画面，不代表小智已经动作。</small></span></div>
+        </Card>
+        <Card className="motion-preset-card">
+          <SectionTitle index="01" title="快速动作" description="选择预设与次数，执行结束后自动回中。" />
+          <label className="field-label">动作<Segmented value={preset} onChange={selectPreset} options={[{ value: "attention", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label>
+          <label className="field-label">次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label>
+          <p className="motion-default-summary"><strong>默认</strong>关注、寻找 1 次；点头、跳舞 2 次。</p>
+          <div className="motion-action-bar">
+            <Button icon={PlayerPlay} variant="primary" className="motion-run-button" disabled={Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${repeatCount}` : `开始 · ${presetLabel} × ${repeatCount}`}</Button>
+            <Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
+            <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
+            {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}
+          </div>
+          <div className="motion-automation-note"><Sparkles size={16} stroke={1.8} /><span><strong>自动联动待验收</strong>语音与情境动作保持关闭。</span></div>
+        </Card>
       </div>
       <ChoreographyEditor currentExpression={state.currentExpression} notify={notify} />
       <Card><SectionTitle index="03" title="本次协议状态" description="这里不显示原始设备路径、PWM、GPIO 或舵机脉宽。" /><div className="diagnostic-list"><div><span><Check size={18} /></span><strong>端点状态</strong><StatusBadge tone={motionStatus?.ok ? "success" : "demo"}>{endpointState}</StatusBadge></div><div><span><Check size={18} /></span><strong>循环进度</strong><StatusBadge tone="neutral">{Number(endpoint.completedRepeat) || 0} / {Number(endpoint.requestedRepeat) || 0}</StatusBadge></div><div><span><Check size={18} /></span><strong>逻辑回中命令</strong><StatusBadge tone={endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "success" : "neutral"}>{endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "已接受" : "未确认"}</StatusBadge></div></div></Card>

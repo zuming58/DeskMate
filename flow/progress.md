@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T15D motion UI density repaired after user visual rejection
+
+- User review rejected the motion page hierarchy because the full-width 54 px primary action dominated the right card and three large explanatory cards consumed too much space. The repair keeps behavior and protocol boundaries unchanged while reducing visual weight.
+- Fixed actions now use compact labels and one aligned 40 px action row for start, stop/center and emergency stop. Default repeats are a one-line summary; the page status is a compact strip; software-preview and automatic-link boundaries are low-emphasis footnotes. The T15D preview/entity action group receives the same two-column compact hierarchy.
+- Visual comparison at `1440 × 1024` passes in `docs/reviews/t15d-motion-page-compact-design-qa-2026-09-02.md`. Focused tests pass `9/9`; full `npm test` passes `359/359`; `npm run build:desktop` and packaged native bridge self-test pass. Firmware trees remain unchanged.
+- Updated package evidence: `DeskMate.exe` `202690560` bytes / SHA-256 `ABF2922264F68EF829342F1638C88E23AFD6B2F9E850DD0C93BAC3AFCF334B77`; input bridge `153516937` bytes / `03B0ED4254C94F9929DB7C2DA5759F38F2DCE3F20AA6D260DB719559D81CBB01`; `app.asar` `112921293` bytes / `DD88791CD4B737B19FFA6003CDD576812C60F6E9003FABD6D32FAF9ADD6D94C2`.
+- Classification remains `T15D_WINDOWS_EDITOR_CODE_BUILD_CONFIRMED / ENTITY_EXECUTION_FAIL_CLOSED / WIRE_NOT_FROZEN / HIL_NOT_RUN`. No user application or hardware was controlled.
+
 ## 2026-09-02 - Main Agent integrated, rebuilt and launched the T15D Windows editor
 
 - Main integration branch `codex/t15-t16-integration` fast-forwarded the reviewed software delivery through `0d079a5d72349c7468db8d2c01215b021c026a29`. An ancestry check proved it contains the main-Agent design/Flow baseline `32c5540`; both firmware directories have zero diff from that baseline.
