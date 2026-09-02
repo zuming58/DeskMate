@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [Windows pitch direction semantics recovery](handoffs/t10d-desktop-pitch-direction-recovery-2026-09-02.md)
 - [Windows manual-control request ID restart recovery](handoffs/t10d-desktop-request-id-recovery-2026-09-02.md)
 - [T10D-D simplified manual-control three-end integration](handoffs/t10d-d-three-end-simplified-control-integration-2026-09-02.md)
 - [Windows simplified manual-control UX and orchestration](handoffs/t10d-desktop-simplified-manual-control-2026-09-02.md)

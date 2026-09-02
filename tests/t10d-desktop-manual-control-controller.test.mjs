@@ -67,21 +67,30 @@ test("one environment confirmation establishes both centers through hidden froze
   controller.end("test-complete");
 });
 
-test("a hold tick selects the semantic axis, creates one fresh ARM and confirms output count", async (t) => {
-  const calibration = new FakeCalibration();
-  const controller = new ManualControlCoordinator({ calibration });
-  t.after(() => controller.end("test-complete"));
-  controller.handleBridgeStatus({ boardConnected: true, calibrationCollectionWritable: true, linkDiagnostics: { state: "connected" } });
-  await controller.begin({ environmentConfirmed: true });
-  calibration.commands.length = 0;
-  controller.press("left");
-  await flush();
-  controller.release("left");
-  assert.deepEqual(calibration.commands.map((item) => item.operation), ["selectAxis", "arm", "singleStep"]);
-  assert.equal(calibration.commands[0].axis, "yaw");
-  assert.equal(calibration.commands[2].direction, -1);
-  assert.equal(controller.snapshot().completedSteps, 1);
-  controller.end("test-complete");
+test("all four semantic directions select the expected axis and observed physical sign", async (t) => {
+  const cases = [
+    { direction: "left", axis: "yaw", sign: -1 },
+    { direction: "right", axis: "yaw", sign: 1 },
+    { direction: "up", axis: "pitch", sign: -1 },
+    { direction: "down", axis: "pitch", sign: 1 },
+  ];
+  for (const expected of cases) {
+    await t.test(expected.direction, async (child) => {
+      const calibration = new FakeCalibration();
+      const controller = new ManualControlCoordinator({ calibration });
+      child.after(() => controller.end("test-complete"));
+      controller.handleBridgeStatus({ boardConnected: true, calibrationCollectionWritable: true, linkDiagnostics: { state: "connected" } });
+      await controller.begin({ environmentConfirmed: true });
+      calibration.commands.length = 0;
+      controller.press(expected.direction);
+      await flush();
+      controller.release(expected.direction);
+      const output = calibration.commands.find((item) => item.operation === "singleStep");
+      assert.deepEqual(output && { axis: output.axis, direction: output.direction }, { axis: expected.axis, direction: expected.sign });
+      assert.equal(calibration.commands.filter((item) => item.operation === "arm").length, 1);
+      assert.equal(controller.snapshot().completedSteps, 1);
+    });
+  }
 });
 
 test("release during internal ARM prevents the single-step wire request", async (t) => {

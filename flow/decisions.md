@@ -1,5 +1,12 @@
 # Decisions
 
+## D074 - Manual direction labels follow observed mechanism semantics, not wire-sign intuition
+
+- Date: 2026-09-02
+- Decision: for the accepted Stage 2 assembled mechanism, Windows maps left/right to Yaw `-1/+1` and up/down to Pitch `-1/+1`. The frozen T10C direction field remains a signed one-step wire value and does not itself define words such as “raise” or “nod”.
+- Evidence: user-present HIL proved the earlier up → Pitch `+1`, down → Pitch `-1` mapping inverted the visible vertical result while the route, centers and horizontal mapping worked.
+- Boundary: this is a Windows semantic correction only. It does not change firmware, pulse direction, center, limits, step size, rate, ARM or safety lifecycle. Any future mechanism with different installation direction needs an explicit calibrated semantic transform; UI labels must not be inverted or inferred from raw sign alone.
+
 ## D073 - Manual-calibration request IDs outlive the Windows process
 
 - Date: 2026-09-02

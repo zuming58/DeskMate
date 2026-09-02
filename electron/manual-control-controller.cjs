@@ -8,8 +8,8 @@ const LINK_STATES = new Set(["connected", "waiting", "faulted", "disabled", "una
 const DIRECTION_COMMANDS = Object.freeze({
   left: Object.freeze({ axis: "yaw", direction: -1 }),
   right: Object.freeze({ axis: "yaw", direction: 1 }),
-  up: Object.freeze({ axis: "pitch", direction: 1 }),
-  down: Object.freeze({ axis: "pitch", direction: -1 }),
+  up: Object.freeze({ axis: "pitch", direction: -1 }),
+  down: Object.freeze({ axis: "pitch", direction: 1 }),
 });
 
 function endpointSucceeded(endpoint) {

@@ -52,6 +52,8 @@ Each semantic tick maps to one fixed output:
 - up: Pitch `+1`;
 - down: Pitch `-1`.
 
+Post-HIL correction: the mapping above records this historical branch's initial implementation. User-present Stage 2 observation later proved the vertical semantics were reversed. The follow-on `codex/t10d-desktop-pitch-direction-recovery` changes only the Windows semantic transform to up → Pitch `-1` and down → Pitch `+1`; see `t10d-desktop-pitch-direction-recovery-2026-09-02.md`. The frozen wire and both firmware images remain unchanged.
+
 For each tick the coordinator selects the axis only when needed, creates a fresh ARM and requests exactly one frozen single-step. The next tick is scheduled only after the prior Xiaozhi terminal. The minimum interval is 250 ms, so the rate never exceeds 4 Hz. No pending step is queued or replayed.
 
 The continuation predicate is checked between select, ARM and output. Releasing while ARM is in flight prevents the later single-step request.
