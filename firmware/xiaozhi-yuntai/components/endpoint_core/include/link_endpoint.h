@@ -13,6 +13,7 @@ namespace deskmate::xiaozhi {
 inline constexpr std::uint32_t kCapabilityLinkCore = 1u << 0;
 inline constexpr std::uint32_t kCapabilityAgentState = 1u << 1;
 inline constexpr std::uint32_t kCapabilityDisplay = 1u << 2;
+inline constexpr std::uint32_t kCapabilityMotion = 1u << 3;
 inline constexpr std::uint32_t kBaseCapabilities =
     kCapabilityLinkCore | kCapabilityAgentState;
 
@@ -39,12 +40,13 @@ class XiaozhiLinkEndpoint {
 public:
     explicit XiaozhiLinkEndpoint(
         DisplayOwner& display_owner,
-        ManualCalibrationOwner* manual_calibration_owner = nullptr) noexcept
+        MotionCoordinator* motion_coordinator = nullptr) noexcept
         : display_owner_(display_owner),
-          manual_calibration_owner_(manual_calibration_owner) {}
+          motion_coordinator_(motion_coordinator) {}
 
     void Start(std::uint32_t peer_boot_id, std::uint32_t now_ms) noexcept;
     void OnLinkDisconnected() noexcept;
+    void Tick(std::uint32_t now_ms) noexcept;
     bool Handle(const LinkFrame& request, std::uint32_t now_ms,
                 LinkWireFrame& response) noexcept;
     LinkEndpointSnapshot snapshot() const noexcept;
@@ -88,7 +90,7 @@ private:
     static constexpr std::size_t kCacheEntries = 8;
     std::array<CacheEntry, kCacheEntries> cache_{};
     DisplayOwner& display_owner_;
-    ManualCalibrationOwner* manual_calibration_owner_{};
+    MotionCoordinator* motion_coordinator_{};
     std::size_t cache_cursor_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t controller_boot_id_{};
@@ -96,6 +98,7 @@ private:
     AgentState agent_state_{AgentState::kIdle};
     LinkErrorCode last_error_{LinkErrorCode::kNone};
     bool link_ready_{};
+    bool motion_capability_enabled_{};
     EndpointDiagnostics diagnostics_{};
 };
 

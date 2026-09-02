@@ -184,6 +184,19 @@ MotionStep MotionSafetyCore::Tick(std::uint64_t now_ms) noexcept {
     return step;
 }
 
+void MotionSafetyCore::CancelSource(MotionSource source) noexcept {
+    if (!SourceIsValid(source)) return;
+    slots_[SourceIndex(source)] = {};
+    state_ = faulted_ ? MotionRuntimeState::kFaulted
+             : emergency_stop_latched_
+                 ? MotionRuntimeState::kEmergencyStopped
+                 : !calibration_ready_
+                     ? MotionRuntimeState::kCalibrationRequired
+                     : recenter_required_
+                         ? MotionRuntimeState::kRecenterRequired
+                         : MotionRuntimeState::kReady;
+}
+
 void MotionSafetyCore::EmergencyStop() noexcept {
     emergency_stop_latched_ = true;
     recenter_required_ = true;

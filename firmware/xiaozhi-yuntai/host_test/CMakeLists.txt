@@ -15,6 +15,7 @@ set(CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_preset_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
 )
 
@@ -52,6 +53,24 @@ add_test(NAME manual_calibration_owner_tests
     COMMAND manual_calibration_owner_tests
 )
 
+add_executable(motion_preset_owner_tests
+    motion_preset_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
+)
+target_include_directories(motion_preset_owner_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(MSVC)
+    target_compile_options(motion_preset_owner_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(motion_preset_owner_tests PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+    )
+endif()
+add_test(NAME motion_preset_owner_tests COMMAND motion_preset_owner_tests)
+
 add_executable(calibrated_servo_adapter_tests
     calibrated_servo_adapter_tests.cpp
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
@@ -82,6 +101,17 @@ target_compile_definitions(manual_calibration_link_tests PRIVATE
 add_test(NAME manual_calibration_link_tests
     COMMAND manual_calibration_link_tests
 )
+
+add_executable(motion_preset_link_tests
+    motion_preset_link_tests.cpp ${CORE_SOURCES}
+)
+target_include_directories(motion_preset_link_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_compile_definitions(motion_preset_link_tests PRIVATE
+    T15_GOLDEN_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t15-motion-presets-v1.json"
+)
+add_test(NAME motion_preset_link_tests COMMAND motion_preset_link_tests)
 
 add_executable(display_owner_tests
     display_owner_tests.cpp
@@ -146,6 +176,9 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     MANUAL_OWNER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
     MANUAL_PROTOCOL_HEADER_PATH="${CORE_INCLUDE_DIR}/manual_calibration_protocol.h"
     MANUAL_PROTOCOL_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_protocol.cpp"
+    MOTION_PRESET_HEADER_PATH="${CORE_INCLUDE_DIR}/motion_preset.h"
+    MOTION_PRESET_PROTOCOL_HEADER_PATH="${CORE_INCLUDE_DIR}/motion_preset_protocol.h"
+    MOTION_PRESET_PROTOCOL_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_preset_protocol.cpp"
     SERVO_ADAPTER_HEADER_PATH="${CORE_INCLUDE_DIR}/servo_adapter.h"
     SERVO_ADAPTER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
     SERVO_HARDWARE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_servo_adapter.h"
@@ -163,5 +196,7 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-v1.json"
     T10C_LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/t10c-manual-calibration-v1.md"
     T10C_LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json"
+    T15_LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/t15-motion-presets-v1.md"
+    T15_LINK_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t15-motion-presets-v1.json"
 )
 add_test(NAME scaffold_source_contract_tests COMMAND scaffold_source_contract_tests)

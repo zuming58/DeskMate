@@ -66,6 +66,11 @@ int main() {
     const auto manual_owner_source = ReadAll(MANUAL_OWNER_SOURCE_PATH);
     const auto manual_protocol_header = ReadAll(MANUAL_PROTOCOL_HEADER_PATH);
     const auto manual_protocol_source = ReadAll(MANUAL_PROTOCOL_SOURCE_PATH);
+    const auto motion_preset_header = ReadAll(MOTION_PRESET_HEADER_PATH);
+    const auto motion_preset_protocol_header =
+        ReadAll(MOTION_PRESET_PROTOCOL_HEADER_PATH);
+    const auto motion_preset_protocol_source =
+        ReadAll(MOTION_PRESET_PROTOCOL_SOURCE_PATH);
     const auto servo_adapter_header = ReadAll(SERVO_ADAPTER_HEADER_PATH);
     const auto servo_adapter_source = ReadAll(SERVO_ADAPTER_SOURCE_PATH);
     const auto servo_hardware_header = ReadAll(SERVO_HARDWARE_HEADER_PATH);
@@ -85,6 +90,8 @@ int main() {
     const auto link_vectors = ReadAll(LINK_VECTORS_PATH);
     const auto t10c_link_contract = ReadAll(T10C_LINK_CONTRACT_PATH);
     const auto t10c_link_vectors = ReadAll(T10C_LINK_VECTORS_PATH);
+    const auto t15_link_contract = ReadAll(T15_LINK_CONTRACT_PATH);
+    const auto t15_link_vectors = ReadAll(T15_LINK_VECTORS_PATH);
 
     CHECK(Contains(root_cmake, "set(IDF_TARGET esp32s3)"));
     CHECK(Contains(root_cmake, "idf_build_set_property(MINIMAL_BUILD ON)"));
@@ -190,9 +197,17 @@ int main() {
     CHECK(Contains(endpoint_source, "DisplayAcceptResult::kNotReady"));
     CHECK(Contains(endpoint_source, "kManualCalibrationCommand"));
     CHECK(Contains(endpoint_source, "kGetManualCalibrationStatus"));
+    CHECK(Contains(protocol_header, "kRunMotionPreset = 0x22"));
+    CHECK(Contains(protocol_header, "kGetMotionStatus = 0x23"));
+    CHECK(Contains(endpoint_header, "kCapabilityMotion = 1u << 3"));
+    CHECK(Contains(endpoint_header, "motion_capability_enabled_"));
+    CHECK(Contains(endpoint_source, "RuntimeMotionReady"));
+    CHECK(Contains(endpoint_source, "EncodeMotionPresetResponse"));
+    CHECK(Contains(endpoint_source, "EncodeMotionPresetStatus"));
     CHECK(Contains(owner_header, "kReadChunkBytes = 64"));
     CHECK(Contains(owner_header, "kMaxReadsPerService = 4"));
     CHECK(Occurrences(owner_source, "transport_.Send(") == 1);
+    CHECK(Contains(owner_source, "endpoint_.Tick(now_ms)"));
 
     CHECK(Contains(uart_source,
                    "constexpr uart_port_t kDeskMateLinkUart = UART_NUM_0"));
@@ -217,8 +232,8 @@ int main() {
     CHECK(Contains(uart_header, "kHardwarePinoutBlocked"));
     CHECK(Contains(main_source, "InitializeDeskMateDisplayOwner()"));
     CHECK(Contains(main_source, "GetDeskMateServoAdapter()"));
-    CHECK(Contains(main_source, "ManualCalibrationOwner manual_calibration_owner"));
-    CHECK(Contains(main_source, "&manual_calibration_owner"));
+    CHECK(Contains(main_source, "MotionCoordinator motion_coordinator"));
+    CHECK(Contains(main_source, "&motion_coordinator"));
     CHECK(Contains(main_source, "StartDeskMateLinkUart(endpoint)"));
     CHECK(Contains(main_source, "StartDeskMateDisplayOwnerTask()"));
     const auto display_initialize_position =
@@ -278,7 +293,7 @@ int main() {
     CHECK(!Contains(motion_production, "ledc_"));
     CHECK(!Contains(motion_production, "GPIO_NUM_"));
     CHECK(!Contains(main_source, "MotionSafetyCore"));
-    CHECK(Contains(main_source, "ManualCalibrationOwner"));
+    CHECK(Contains(main_source, "MotionCoordinator"));
     CHECK(Contains(main_source, "ServoAdapter"));
     CHECK(Contains(motion_header, "kEmergencyStopped"));
     CHECK(Contains(motion_header, "power_path_verified"));
@@ -290,6 +305,21 @@ int main() {
                                   manual_protocol_header +
                                   manual_protocol_source +
                                   servo_adapter_header + servo_adapter_source;
+    CHECK(Contains(motion_preset_header, "kAttention = 1"));
+    CHECK(Contains(motion_preset_header, "kDance = 4"));
+    CHECK(Contains(motion_preset_protocol_header,
+                   "kMotionPresetCommandPayloadBytes = 16"));
+    CHECK(Contains(motion_preset_protocol_header,
+                   "kMotionPresetStatusPayloadBytes = 20"));
+    CHECK(Contains(motion_preset_protocol_source, "ReservedIsZero"));
+    CHECK(Contains(manual_owner_source, "kAttentionWaypoints"));
+    CHECK(Contains(manual_owner_source, "kDanceWaypoints"));
+    CHECK(Contains(manual_owner_source, "preset_watchdog_deadline_ms_"));
+    CHECK(Contains(manual_owner_source, "CancelRuntimeForManual"));
+    CHECK(Contains(t15_link_contract,
+                   "T15_MOTION_PRESETS_LINK_V1_FROZEN"));
+    CHECK(Contains(t15_link_vectors,
+                   "run_nod_twice_completed_status_payload"));
     CHECK(Contains(servo_adapter_header, "kYawGpio = 11"));
     CHECK(Contains(servo_adapter_header, "kPitchGpio = 12"));
     CHECK(Contains(servo_adapter_header, "kFrequencyHz = 50"));

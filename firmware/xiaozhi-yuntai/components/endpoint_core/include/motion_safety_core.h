@@ -114,6 +114,7 @@ public:
     MotionResult Submit(const MotionIntent& intent,
                         std::uint64_t now_ms) noexcept;
     MotionStep Tick(std::uint64_t now_ms) noexcept;
+    void CancelSource(MotionSource source) noexcept;
 
     void EmergencyStop() noexcept;
     MotionResult ClearEmergencyStop(std::uint32_t session_epoch) noexcept;

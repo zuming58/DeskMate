@@ -1,5 +1,6 @@
 #pragma once
 
+#include "motion_preset.h"
 #include "motion_safety_core.h"
 #include "servo_adapter.h"
 
@@ -79,9 +80,9 @@ struct ManualCalibrationSnapshot {
     ManualCalibrationResult last_error{ManualCalibrationResult::kAccepted};
 };
 
-class ManualCalibrationOwner {
+class MotionCoordinator {
 public:
-    explicit ManualCalibrationOwner(ServoAdapter& adapter) noexcept;
+    explicit MotionCoordinator(ServoAdapter& adapter) noexcept;
 
     void StartSession(std::uint32_t session_id) noexcept;
     void OnLinkDisconnected() noexcept;
@@ -90,17 +91,53 @@ public:
                                     std::uint32_t now_ms) noexcept;
     MotionResult SubmitNormalMotion(const MotionIntent& intent,
                                     std::uint64_t now_ms) noexcept;
+    MotionPresetResult ExecuteMotionPreset(
+        const MotionPresetCommand& command, std::uint32_t now_ms) noexcept;
+    bool RuntimeMotionAvailable() const noexcept;
+    bool RuntimeMotionReady() const noexcept;
     ManualCalibrationSnapshot snapshot() const noexcept;
+    MotionPresetSnapshot motion_preset_snapshot() const noexcept;
 
 private:
+    enum class RuntimeAction : std::uint8_t {
+        kNone,
+        kRun,
+        kRecenter,
+    };
+
+    struct PresetActionRecord {
+        MotionPresetCommand command{};
+        bool valid{};
+    };
+
     static bool IsValidAxis(std::uint8_t axis) noexcept;
     static bool SameCommand(const ManualCalibrationCommand& left,
                             const ManualCalibrationCommand& right) noexcept;
+    static bool SamePresetCommand(const MotionPresetCommand& left,
+                                  const MotionPresetCommand& right) noexcept;
     ManualCalibrationResult CheckAction(
         const ManualCalibrationCommand& command) const noexcept;
+    MotionPresetResult CheckPresetAction(
+        const MotionPresetCommand& command) const noexcept;
     void RecordAction(const ManualCalibrationCommand& command) noexcept;
+    void RecordPresetAction(const MotionPresetCommand& command) noexcept;
     void ConsumeArm() noexcept;
     void RefreshState() noexcept;
+    void RefreshPresetState() noexcept;
+    bool ConfigureNormalMotion() noexcept;
+    void ResetNormalMotion() noexcept;
+    void ResetPresetSession() noexcept;
+    void CancelRuntimeForManual() noexcept;
+    void BeginRuntimeRecenter(const MotionPresetCommand& command,
+                              std::uint32_t now_ms) noexcept;
+    void BeginRuntimePreset(const MotionPresetCommand& command,
+                            std::uint32_t now_ms) noexcept;
+    void AdvanceRuntimeAction(std::uint32_t now_ms) noexcept;
+    void CompleteRuntimeAction() noexcept;
+    void LatchRuntimeFault(MotionPresetResult result) noexcept;
+    ServoAdapterResult ApplyRuntimeTarget(
+        const MotionTarget& target) noexcept;
+    MotionPresetResult RejectPreset(MotionPresetResult result) noexcept;
     ManualCalibrationResult Reject(ManualCalibrationResult result) noexcept;
     ManualCalibrationResult ApplyOutput(
         const ManualCalibrationCommand& command,
@@ -122,6 +159,38 @@ private:
     bool recenter_required_{true};
     bool emergency_stop_latched_{};
     bool faulted_{};
+
+    static constexpr std::size_t kPresetActionHistorySize = 8;
+    std::array<PresetActionRecord, kPresetActionHistorySize>
+        preset_action_history_{};
+    std::size_t preset_action_history_cursor_{};
+    MotionPresetResult preset_result_{MotionPresetResult::kNotReady};
+    MotionPresetState preset_state_{MotionPresetState::kNotReady};
+    MotionPresetOperation preset_operation_{MotionPresetOperation::kNone};
+    MotionPreset active_or_last_preset_{MotionPreset::kNone};
+    MotionPresetSource preset_source_{MotionPresetSource::kNone};
+    RuntimeAction runtime_action_{RuntimeAction::kNone};
+    MotionTarget runtime_target_{};
+    MotionTarget runtime_last_applied_target_{};
+    std::array<bool, 2> runtime_axis_initialized_{};
+    std::uint32_t preset_action_id_{};
+    std::uint32_t last_normal_preset_action_id_{};
+    std::uint32_t completed_preset_count_{};
+    std::uint32_t preset_watchdog_deadline_ms_{};
+    std::uint32_t next_runtime_tick_ms_{};
+    std::uint32_t waypoint_hold_deadline_ms_{};
+    std::uint32_t normal_motion_sequence_{};
+    std::uint8_t requested_repeats_{};
+    std::uint8_t completed_repeats_{};
+    std::uint8_t waypoint_index_{};
+    bool normal_motion_configured_{};
+    bool runtime_target_submitted_{};
+    bool waypoint_arrived_{};
+    bool runtime_centered_{};
+    bool runtime_servo_output_enabled_{};
+    bool preset_operation_terminal_{};
 };
+
+using ManualCalibrationOwner = MotionCoordinator;
 
 }  // namespace deskmate::xiaozhi

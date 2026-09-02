@@ -31,6 +31,7 @@ void LinkUartOwner::Service(std::uint32_t now_ms) noexcept {
         return;
     }
     transport_was_open_ = true;
+    endpoint_.Tick(now_ms);
 
     for (std::size_t read_index = 0; read_index < kMaxReadsPerService;
          ++read_index) {

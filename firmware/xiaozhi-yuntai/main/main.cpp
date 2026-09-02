@@ -31,10 +31,10 @@ extern "C" void app_main() {
         deskmate::xiaozhi::InitializeDeskMateDisplayOwner();
 
     auto& servo_adapter = deskmate::xiaozhi::GetDeskMateServoAdapter();
-    static deskmate::xiaozhi::ManualCalibrationOwner manual_calibration_owner(
+    static deskmate::xiaozhi::MotionCoordinator motion_coordinator(
         servo_adapter);
     static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(
-        display_owner, &manual_calibration_owner);
+        display_owner, &motion_coordinator);
     endpoint.Start(NewBootEpoch(), MonotonicMilliseconds());
 
     const auto link_result =

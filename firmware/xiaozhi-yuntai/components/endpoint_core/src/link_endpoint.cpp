@@ -1,6 +1,7 @@
 #include "link_endpoint.h"
 
 #include "manual_calibration_protocol.h"
+#include "motion_preset_protocol.h"
 
 #include <algorithm>
 #include <limits>
@@ -37,8 +38,17 @@ void XiaozhiLinkEndpoint::Start(std::uint32_t peer_boot_id,
     diagnostics_ = {};
     ClearCache();
     display_owner_.ResetSession();
-    if (manual_calibration_owner_ != nullptr) {
-        manual_calibration_owner_->OnLinkDisconnected();
+    if (motion_coordinator_ != nullptr) {
+        motion_coordinator_->OnLinkDisconnected();
+    }
+    motion_capability_enabled_ =
+        motion_coordinator_ != nullptr &&
+        motion_coordinator_->RuntimeMotionAvailable();
+}
+
+void XiaozhiLinkEndpoint::Tick(std::uint32_t now_ms) noexcept {
+    if (motion_coordinator_ != nullptr) {
+        motion_coordinator_->Tick(now_ms);
     }
 }
 
@@ -58,8 +68,8 @@ void XiaozhiLinkEndpoint::ResetControllerSession() noexcept {
     agent_state_ = AgentState::kIdle;
     ClearCache();
     display_owner_.ResetSession();
-    if (manual_calibration_owner_ != nullptr) {
-        manual_calibration_owner_->OnLinkDisconnected();
+    if (motion_coordinator_ != nullptr) {
+        motion_coordinator_->OnLinkDisconnected();
     }
 }
 
@@ -71,12 +81,14 @@ void XiaozhiLinkEndpoint::OnLinkDisconnected() noexcept {
 std::uint32_t XiaozhiLinkEndpoint::ImplementedCapabilities() const noexcept {
     const auto display = display_owner_.snapshot();
     return kBaseCapabilities |
-           (display.implemented ? kCapabilityDisplay : 0u);
+           (display.implemented ? kCapabilityDisplay : 0u) |
+           (motion_capability_enabled_ ? kCapabilityMotion : 0u);
 }
 
 std::uint32_t XiaozhiLinkEndpoint::EnabledCapabilities() const noexcept {
     const auto display = display_owner_.snapshot();
-    return kBaseCapabilities | (display.enabled ? kCapabilityDisplay : 0u);
+    return kBaseCapabilities | (display.enabled ? kCapabilityDisplay : 0u) |
+           (motion_capability_enabled_ ? kCapabilityMotion : 0u);
 }
 
 XiaozhiLinkEndpoint::CacheLookup XiaozhiLinkEndpoint::LookupCache(
@@ -163,11 +175,10 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
             link_ready_ = true;
-            if (manual_calibration_owner_ != nullptr) {
-                const auto manual = manual_calibration_owner_->snapshot();
+            if (motion_coordinator_ != nullptr) {
+                const auto manual = motion_coordinator_->snapshot();
                 if (manual.session_id != controller_boot_id_) {
-                    manual_calibration_owner_->StartSession(
-                        controller_boot_id_);
+                    motion_coordinator_->StartSession(controller_boot_id_);
                 }
             }
             std::array<std::uint8_t, 8> payload{};
@@ -207,6 +218,10 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
             const auto display = display_owner_.snapshot();
             payload[9] = static_cast<std::uint8_t>(
                 0x01u | (display.enabled ? 0x02u : 0u) |
+                (motion_coordinator_ != nullptr &&
+                         motion_coordinator_->RuntimeMotionReady()
+                     ? 0x04u
+                     : 0u) |
                 (display.implemented && !display.enabled ? 0x80u : 0u));
             payload[10] = static_cast<std::uint8_t>(last_error_);
             return Respond(request, payload.data(), payload.size(), response);
@@ -233,7 +248,7 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                            request.payload_length, response);
         }
         case LinkMessageType::kManualCalibrationCommand: {
-            if (!link_ready_ || manual_calibration_owner_ == nullptr) {
+            if (!link_ready_ || motion_coordinator_ == nullptr) {
                 return Error(request, LinkErrorCode::kNotReady, response);
             }
             ManualCalibrationCommand command{};
@@ -241,21 +256,50 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
             const auto result =
-                manual_calibration_owner_->Execute(command, now_ms);
+                motion_coordinator_->Execute(command, now_ms);
             const auto payload = EncodeManualCalibrationResponse(
-                command, result, manual_calibration_owner_->snapshot());
+                command, result, motion_coordinator_->snapshot());
             return Respond(request, payload.data(), payload.size(), response);
         }
         case LinkMessageType::kGetManualCalibrationStatus: {
-            if (!link_ready_ || manual_calibration_owner_ == nullptr) {
+            if (!link_ready_ || motion_coordinator_ == nullptr) {
                 return Error(request, LinkErrorCode::kNotReady, response);
             }
             if (request.payload_length != 0) {
                 return Error(request, LinkErrorCode::kBadPayload, response);
             }
-            manual_calibration_owner_->Tick(now_ms);
+            motion_coordinator_->Tick(now_ms);
             const auto payload = EncodeManualCalibrationStatus(
-                manual_calibration_owner_->snapshot());
+                motion_coordinator_->snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kRunMotionPreset: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            MotionPresetCommand command{};
+            if (!DecodeMotionPresetCommand(request, command)) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            const auto result =
+                motion_coordinator_->ExecuteMotionPreset(command, now_ms);
+            const auto payload = EncodeMotionPresetResponse(
+                command, result,
+                motion_coordinator_->motion_preset_snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kGetMotionStatus: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            if (request.payload_length != 0) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            motion_coordinator_->Tick(now_ms);
+            const auto payload = EncodeMotionPresetStatus(
+                motion_coordinator_->motion_preset_snapshot());
             return Respond(request, payload.data(), payload.size(), response);
         }
     }
