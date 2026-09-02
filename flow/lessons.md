@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A generic transport failure must not erase a frozen endpoint error
+
+- Symptom: a read-only request is accepted by EasyInput, but the Windows panel only shows `link-error` and falls back to an undifferentiated unavailable state, hiding whether the peer lacks the message or merely has an unready owner.
+- Practice: keep the stable generic transport result and decode only the protocol's frozen error enum as a bounded second layer. Validate the flag, code/name pairing, request correlation and absence of an endpoint payload before exposing it; export only the latest sanitized fact.
+- Rule: intent, controller acceptance, Link transport and endpoint result are separate evidence layers. More precise failure evidence may improve diagnosis, but it must never unlock output or become movement-success evidence.
+
 ## Composite HID devices must be selected by top-level collection, not VID/PID alone
 
 - Symptom: one EasyInput function fails with `HidD_SetFeature` while ordinary keys and another vendor report still work; reconnect events can also make the whole board appear unavailable even though only one collection changed.

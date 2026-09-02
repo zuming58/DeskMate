@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-09-02 - Windows manual-calibration Link error diagnostics repaired
+
+- Created Windows-only repair branch `codex/t10d-desktop-calibration-link-errors` from the accepted status-stream HEAD `7208b20236d585ced59aa6c4f6553e228efaa8b1`; implementation commit is `a712c90011dc966b99472b07d2cf0c9c45703ff5`. EasyInput and Xiaozhi source are unchanged.
+- Preserved the generic transport result `link-error` while strictly decoding the frozen DeskMate Link error values `UNKNOWN_TYPE`, `BAD_PAYLOAD`, `NOT_READY`, `BUSY`, `SEQUENCE_CONFLICT` and `INTERNAL`. Unknown codes and inconsistent transport/flag/error combinations now fail closed.
+- The manual-calibration panel now distinguishes “current Xiaozhi firmware does not support the protocol” from “protocol exists but owner/adapter is not ready”, shows the exact bounded Link error evidence, and keeps every movement control disabled. It never treats an EasyInput acceptance or Link error as Xiaozhi movement success or unlock evidence.
+- Sanitized diagnostics now include one bounded `manualCalibration` latest fact: request kind/id, accepted boolean, generic transport, frozen Link error name/code, allowlisted endpoint result/state when present, and timestamp. No device identifiers, paths, network data, payloads or user content are exported.
+- Verification passed: focused codec/controller/UI/diagnostics regression `30/30`; full `npm test` `299/299`; native bridge Release publish and protocol self-test; full `npm run build:desktop -- --config.directories.output=release-calibration-link-errors-npm`; `git diff --check`. The default output directory was locked by an existing process, which was not stopped or controlled. The isolated package `DeskMate.exe` is `202690560` bytes / SHA-256 `3D5B0C9022FA31CB46D302DDB88A4D3805592071FB16A649BB6783A08AC48F03`; bundled `DeskMate.InputBridge.exe` is `153512841` bytes / `88A7B980BE6185B6D272F0AFB9DE49272706D2AAB2C8E1EAD89E113C82A0C4C8`; `app.asar` is `112783381` bytes / `6D4222FC402BC5A7CDC3F2086ADFF4C379B6195DC27A0D398E356C58FBAFD6EB`.
+- Classification is `HIL_INPUT_CONFIRMED / SOFTWARE_REPAIR_TESTED / BUILD_CONFIRMED / HIL_NOT_RERUN`. No application, port/device, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred.
+- Next: with the old DeskMate instance closed, run the exact isolated package and issue one read-only status query. `UNKNOWN_TYPE` identifies a Xiaozhi firmware protocol gap; `NOT_READY` identifies an implemented protocol whose calibration owner/real adapter is unavailable. Both remain status-only and keep movement disabled.
+
 ## 2026-09-02 - Windows status-stream bounds aligned with EasyInput
 
 - Created Windows-only repair branch `codex/t10d-desktop-status-stream-bounds` from the accepted HID routing HEAD `72ee0e499f7afa551498654e3062f66112b88cab`; implementation commit is `60584bc5427c2a0840342a79e7909587d8bb4a58`. EasyInput and Xiaozhi source are unchanged.

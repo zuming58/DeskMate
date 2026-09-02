@@ -1,5 +1,12 @@
 # Decisions
 
+## D070 - Generic calibration transport preserves a bounded frozen Link error subtype
+
+- 日期：2026-09-02
+- 决策：Windows 手动校准继续把跨板失败归类为通用 `link-error` transport，同时只向控制器、UI 和脱敏诊断传递冻结 DeskMate Link v1 的六个错误名及对应数值。未知值、名称/数值不一致、非 error flag 携带错误值或非 `link-error` transport 携带错误值全部 fail closed。
+- 原因：EasyInput accepted 只证明请求进入总控；通用 transport 只证明板间请求失败。保留受限的端点错误子类，才能不靠猜测区分“小智固件不支持消息”和“协议存在但校准 owner/真实适配器未就绪”，同时避免把任一层证据冒充机械动作结果。
+- 边界：该错误只用于状态查询诊断和可操作提示，不解锁、不启用输出、不构成舵机运动或安全验收。诊断只保存最新请求的有界元数据，不保存 HID 原始报告、Link payload、设备标识或用户数据。
+
 ## D069 - Native status-stream bounds follow the frozen producer capacity
 
 - Date: 2026-09-02

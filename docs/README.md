@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [Windows manual-calibration Link error diagnostics repair](handoffs/t10d-desktop-calibration-link-errors-2026-09-02.md)
 - [Windows status-stream bounds repair](handoffs/t10d-desktop-status-stream-bounds-2026-09-02.md)
 - [Windows HID multi-collection routing repair](handoffs/t10d-desktop-hid-collection-routing-2026-09-02.md)
 - [T10D three-end integration candidate and verification](handoffs/t10d-three-end-integration-candidate-2026-09-02.md)
