@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - Windows HID multi-collection routing repair complete
+
+- Created Windows-only repair branch `codex/t10d-desktop-hid-collection-routing` from exact accepted software HEAD `8578f0cc8bef40ba269bb0960adbaf04c66432ed`; implementation commit is `7333cf3f43635cb7b14fdb868a4967da81c3aed5`. The dirty primary checkout and both firmware modules were not modified.
+- Root cause was confirmed in the native bridge: reports `0x10..0x15` and manual calibration `0x16/0x17` are separate EasyInput top-level collections, but Windows selected the first VID/PID/length-compatible path and subscribed Raw Input only to `FF00:0002`. The repair freezes exact VID/PID, Usage Page, Usage and 64-byte platform lengths; config/Agent State routes to `FF00:0002`, calibration routes to `FF00:0007`, and Raw Input registers both collections.
+- Enumeration evidence now separates any EasyInput HID, writable config collection and writable calibration collection. A calibration-only removal no longer tears down config/Agent State; a returning config collection triggers one bounded Link refresh. Diagnostics/UI and exported JSON expose only these booleans/closed states, never paths or identifiers, and never infer Xiaozhi Link connectivity.
+- Verification passed: focused native/routing regression `41/41`; full desktop `npm test` `295/295`; .NET Release build; renderer build; `git diff --check`; independent Windows package at `release-hid-routing/win-unpacked`. `DeskMate.exe` SHA-256 is `154C5BA813B25472A1920FDCC766F49BB4A5A4B99744ECEEBEDF71E0E59B6C4F`; bundled `DeskMate.InputBridge.exe` SHA-256 is `8FA5FB1D093F2C44285334C3D0019845EC9E8D7626F47AF649ACF7E370A36386`; `app.asar` SHA-256 is `3E33558D926994C7250142AA72EBC8759FBE74B146615018E25CC296864F872F`.
+- Classification is `ROOT_CAUSE_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. The default package directory was locked by an already-running DeskMate process, so it was not overwritten or terminated; the identical package step passed in the independent output directory. No app control, device/port access, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred.
+- Next: close the old DeskMate instance and launch only the exact independent package. Confirm both HID collection rows become writable, then send one real Agent State and issue one read-only manual calibration status query. Observe EasyInput ACK, real Link state and the Xiaozhi terminal separately; do not claim motion or proceed to a movement command.
+
 ## 2026-09-02 - T14A Windows Hermes lifecycle adapter code/build gate complete
 
 - Created isolated Windows-only branch `codex/t14-desktop-agent-adapter-framework` from the accepted three-end integration HEAD `1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`; tested implementation is `be1a0afccc87aa32479d9cc8faeba916864d7091`. The dirty primary checkout was not modified.

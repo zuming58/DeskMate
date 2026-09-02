@@ -1,5 +1,13 @@
 # Decisions
 
+## D068 - Windows routes EasyInput reports by exact top-level HID collection
+
+- Date: 2026-09-02
+- Decision: VID/PID alone never selects an EasyInput Feature path. Reports `0x10..0x15` require VID `303A`, PID `1006`, Usage Page `FF00`, Usage `0002`, and exact 64-byte Input/Feature platform lengths. Manual calibration Feature `0x16` and Input `0x17` require the same VID/PID and lengths on Usage `0007`.
+- Lifecycle: Raw Input subscribes to both vendor usages. Runtime evidence separates any enumerated EasyInput interface, config collection writable and calibration collection writable. Losing `0007` closes only calibration; losing `0002` closes config/Agent State and Link-status reads. Returning `0002` triggers one bounded status refresh without replaying stale actions.
+- Truth boundary: EasyInput enumeration and writable collections are local Windows transport facts only. They never imply DeskMate Link connected, Xiaozhi receipt, terminal completion or physical movement. Exported evidence stays bounded and excludes device paths and identifiers.
+- Acceptance: pure contract tests must prove `0x14→0002`, `0x16→0007`, wrong-collection rejection, dual Raw Input registration and re-enumeration recovery. Real Link/Xiaozhi observation remains a separate HIL gate.
+
 ## D067 - External Agent automation requires an authoritative opt-in lifecycle adapter
 
 - Date: 2026-09-02

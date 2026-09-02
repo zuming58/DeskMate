@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Composite HID devices must be selected by top-level collection, not VID/PID alone
+
+- Symptom: one EasyInput function fails with `HidD_SetFeature` while ordinary keys and another vendor report still work; reconnect events can also make the whole board appear unavailable even though only one collection changed.
+- Practice: freeze VID, PID, Usage Page, Usage and exact `HIDP_CAPS` report lengths for each report family. Register every Input-bearing vendor collection with Raw Input, and expose enumeration plus per-collection writable evidence independently.
+- Rule: multiple top-level collections belonging to one USB device are separate Windows interfaces. “Same VID/PID and large enough buffer” is not a routing contract, and one missing collection must not fabricate total device or downstream Link failure.
+
 ## A persisted provider setting is not proof of provider behavior
 
 - Symptom: settings and new-session diagnostics both show an eight-second endpoint, yet the cloud service still answers after its short default pause.
