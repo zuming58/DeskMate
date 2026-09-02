@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-09-02 - T10D three-end integration candidate rebuilt and ready for software HIL
+
+- Created isolated branch `codex/t10d-three-end-integration` from control HEAD `b0a95d1c254d8fb8fad62933f76fa71fe7da10a3` and merged the exact Windows delivery `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`. The tested implementation merge is `fd3204a2b294535a1f865d9a2901e16e257179d8`; the dirty primary checkout was not modified.
+- Shared Flow/document conflicts were reconciled once. The Windows decisions that collided with the hardware branch's D053-D059 range were renumbered to D060-D066 without changing behavior. Implementation directories had no cross-module conflict, and firmware source is byte-for-byte unchanged from the T10D-A control baseline.
+- Desktop verification passed: `npm ci --include=dev`, full `npm test` `283/283`, and the exact Windows package with build ID `t10d-three-end-integration-v1`. `DeskMate.exe` is `202690560` bytes / SHA-256 `F0257A6FEC1221815FB9EF07A4191402C8BDF06D00A3780E0F2F6ECEB595DFC5`; `app.asar` is `112760686` bytes / SHA-256 `FB0E727AEC47753845CCE407D2C249AAF764CC48620FD515281A01DEA768692E`.
+- EasyInput verification passed Host CTest `13/13` and exact ESP-IDF v5.5.5 fixed-layout build. App size is `0xD2F60`; app SHA-256 is `21D27F5BCF7E818F8778D4DFA0E59809AE3F598F34F3F7036A68512036CC199A`; partition-table SHA-256 is `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`. The required 24 KiB NVS, 4 KiB PHY, 3 MiB factory and two 576 KiB sound banks remain intact.
+- Xiaozhi verification passed Host CTest `11/11` and exact ESP-IDF v5.5.3 fixed-layout build. App size is `0x32660`; app SHA-256 is `582EAF3EA2F09B3EFC279FB6B526D7140B546068B2AB082EEE2B0B6594BC8CFD`; partition-table SHA-256 is `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`.
+- Classification is `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN`. No application was launched, no device or port was enumerated, and no Flash/NVS/eFuse, audio, OLED, PWM or servo operation occurred. Production Xiaozhi still advertises no motion capability, so the T10D-B controls must truthfully remain `NOT_READY` and disabled.
+- Next: launch only `release-t10d-three-end-integration/win-unpacked/DeskMate.exe` for the documented software user matrix. T10D-C electrical/mechanical Stage 0 and any real adapter, flash or physical motion remain separately authorized user-present work.
+
 ## 2026-09-02 - T10D-B Windows manual calibration UI delivered; integration candidate is next
 
 - Verified the software task handoff and remote ancestry: `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`, implementation `695c47d255ccfc8b09e1fd2e9644735b7c0c1017`, is based on T13 `35e627389282d8279d82646787f509681474c048` and consumes the EasyInput frozen contract from control HEAD `1645bf688b11d2f0d7ba3dfa7900f552886cb404`.

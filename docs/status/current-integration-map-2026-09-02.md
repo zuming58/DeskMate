@@ -6,7 +6,7 @@ Purpose: one project-level view of the three implementation tasks. This document
 
 ## Why reconciliation was required
 
-The repository had two valid but incomplete histories:
+The repository had two valid but incomplete histories. They are now joined in one isolated candidate:
 
 ```text
 T11D.4 desktop + T10E/T11E EasyInput + T10C/OLED Xiaozhi
@@ -22,9 +22,22 @@ pre-T11F desktop history
 T11F + T10C
      |
      +-- T10D-A EasyInput manual bridge (current code/build candidate)
+
+T10D-A control + exact T10D-B/T13 Windows history
+     |
+     +-- T10D three-end candidate @ fd3204a
 ```
 
-The T12 software line contains newer Windows behavior but is not descended from T11F. T11F contains the latest integrated firmware facts but not the T12 software line. The dirty primary checkout remains on an older T07C branch and is not used for integration.
+The T12/T13 software line contains newer Windows behavior but is not descended from T11F. The main Agent resolved that divergence in `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8`. The dirty primary checkout remains on an older T07C branch and was not used for integration.
+
+## Current integrated candidate
+
+- Branch/tested merge: `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8`.
+- Desktop: `283/283` plus exact Windows package, build ID `t10d-three-end-integration-v1`.
+- EasyInput: Host `13/13` plus ESP-IDF v5.5.5 fixed-layout build.
+- Xiaozhi: Host `11/11` plus ESP-IDF v5.5.3 fixed-layout build.
+- Classification: `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN`.
+- Safety: no app launch, device/port access, flash, OLED, audio, PWM or servo action. Motion remains `NOT_READY` in production.
 
 ## Three task summaries
 
@@ -57,7 +70,7 @@ The T12 software line contains newer Windows behavior but is not descended from 
 | --- | --- | --- | --- |
 | T13 software HIL | Exact T13 package | Persona, memory/forget, knowledge rebuild, safe intent confirmation and Codex summary matrix | DeskMate software task + user |
 | T10D-B manual UI | Frozen `0x16/0x17` contract and vectors | Code/build complete at `6732503`; HIL not run | DeskMate software task |
-| T10D integration candidate | T10D-A and T10D-B code/build complete | One common candidate branch, conflict audit, Desktop full test/package, both firmware Host+IDF builds | Main Agent |
+| T10D integration candidate | T10D-A and T10D-B code/build complete | Complete at `fd3204a`: Desktop full test/package and both firmware Host+IDF gates passed | Main Agent |
 | Integrated software HIL | Exact integrated package | T13 feature matrix plus truthful T10D-B NOT_READY/status gating | Main Agent + user |
 | EasyInput speaker HIL | Separate explicit app-only authorization and exact image audit | Low-volume local probe plus microphone-priority evidence; no layout regression | Main Agent + user |
 | Motion route code | T10C contract remains unchanged | T10D-A and T10D-B code/build complete; production motion still disabled | Main Agent / DeskMate software task |
@@ -65,4 +78,4 @@ The T12 software line contains newer Windows behavior but is not descended from 
 
 ## Immediate next action
 
-Create a new isolated T10D integration candidate from the main control branch, integrate the exact T10D-B software history, rerun all three module gates, and only then launch the exact package for user acceptance. Do not enable production motion or begin T10D-C from code/build evidence alone.
+Run the software-only user matrix against the exact integrated package. Confirm T13 persona/memory/knowledge/safe-intent/Codex summary behavior and confirm the T10D-B manual-calibration panel truthfully reports `NOT_READY` with output disabled. Do not enable production motion or begin T10D-C from code/build evidence alone.

@@ -1,19 +1,20 @@
 # Development plan
 
-## Current stage: T10D three-end integration candidate and user gates
+## Current stage: T10D integrated software user gates
 
-目标：保持 T11F 两套固件基线稳定，把已经分别完成代码/构建门的 T10D-A EasyInput 桥和 T10D-B Windows 人工控制界面汇入一条新的三端集成候选，重跑三模块门禁后再安排软件人工验收。实体舵机、真实 adapter 和 `MOTION` 能力继续锁闭。
+目标：使用已经完成三模块重建的唯一 T10D 集成包进行软件人工验收，验证 T13 人设/记忆/知识/安全意图与 T10D-B 状态真实性。实体舵机、真实 adapter 和 `MOTION` 能力继续锁闭；本阶段不烧录、不驱动舵机。
 
 ### Current execution point
 
 > **主 Agent 总控快照（2026-09-02，以下内容优先于本节后面的历史分支记录）**
 >
-> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总。当前不存在一条同时包含“最新软件候选”和“T11F 两套固件集成”的代码主线：T11F 是硬件集成基线，T12 软件线从更早的桌面提交继续演进。任何窗口自己的 `flow/` 都只是该分支交接，只有本总控分支负责项目级状态、合并顺序和最终验收。
+> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总，并已在隔离分支形成唯一 T10D 三端集成候选。任何窗口自己的 `flow/` 都只是该分支交接，只有本总控分支负责项目级状态、合并顺序和最终验收。
 
 #### Current source-of-truth map
 
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
+| T10D integrated candidate | `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8` | Desktop `283/283` + exact Windows package; EasyInput Host `13/13` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN` |
 | Main integrated baseline | `codex/t11f-three-end-integration@ee0ac8418b1d7c0497f72e3edc67b5ee39b232d4` | Desktop `246/246` + package; EasyInput Host `12/12` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `INTEGRATED_BASELINE / CODE_BUILD_CONFIRMED` |
 | DeskMate software candidate | `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8` on T13 base `35e627389282d8279d82646787f509681474c048` | T13 persona/memory/knowledge/intent/Codex summary plus T10D-B strict 0x16/0x17 UI; focused `14/14`, full `283/283`, build/package passed | `SOFTWARE_CANDIDATE / HIL_NOT_RUN / NOT_IN_T11F_T10D_A` |
 | EasyInput controller | T10D-A branch `codex/t10d-easyinput-manual-motion-bridge`; T10E capture `7b194ccc8f2e1693b9fdb88e9f4501c94b8fb7f4`; T11E-A speaker `0407ba6dd4f4674ec4ae77c5be1c289ecadc23cf` | T10D-A Host `13/13` + ESP-IDF v5.5.5 fixed-layout build; board microphone accepted; speaker code/build passed | Motion bridge `CODE_BUILD_CONFIRMED / HIL_NOT_RUN`; microphone `HIL_ACCEPTED`; speaker `HIL_NOT_AUTHORIZED` |
@@ -27,8 +28,8 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 1. **T13A mainline control reconciliation — COMPLETE IN THIS BRANCH.** Preserve the dirty primary checkout, establish one clean control branch from T11F, merge the three window-level Flow facts into this plan, and record exact branch/HEAD/evidence without merging unstable implementation code.
 2. **T10D-A EasyInput manual-motion bridge — CODE/BUILD COMPLETE.** HID `0x16/0x17` and the strict one-request translator are frozen and implemented; Host `13/13` plus ESP-IDF v5.5.5 fixed-layout build pass. No hardware was touched and production motion is still unavailable.
 3. **T10D-B Windows manual-control UI — CODE/BUILD COMPLETE.** `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8` implements the strict codec/native bridge, status-first gate, four-attestation short ARM lease, yaw/pitch fixed ±1° controls, center/recenter/e-stop/clear and three separate evidence layers. Focused `14/14`, full `283/283` and Windows build/package pass; application/device/HIL were not run.
-4. **T10D three-end integration candidate — NEXT, owned by main Agent.** Merge the T10D-B/T13 Windows history with the T11F + T10D-A control branch in a new isolated integration branch, resolve only shared Flow/doc conflicts, then rerun Desktop full tests/package, EasyInput Host+IDF and Xiaozhi Host+IDF. This creates a test candidate, not an accepted mainline.
-5. **Software user gates — AFTER STEP 4.** Validate the exact integrated package for T13 persona/memory/knowledge/safe-intent/Codex summary and T10D-B status-first NOT_READY behavior. Actual motion remains unavailable until T10D-C; software HIL must not manufacture readiness from HID presence or EasyInput accepted evidence.
+4. **T10D three-end integration candidate — COMPLETE.** `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8` combines the exact T10D-B/T13 Windows history with T11F + T10D-A. Desktop `283/283` and exact package, EasyInput Host `13/13` + ESP-IDF v5.5.5, and Xiaozhi Host `11/11` + ESP-IDF v5.5.3 all pass. Firmware source is unchanged from the control baseline; no application, port/device, flash or servo action occurred.
+5. **Software user gates — NEXT.** Validate only the exact integrated package for T13 persona/memory/knowledge/safe-intent/Codex summary and T10D-B status-first `NOT_READY` behavior. Actual motion remains unavailable until T10D-C; software HIL must not manufacture readiness from HID presence or EasyInput accepted evidence.
 6. **T10D-C real-adapter calibration — HARDWARE LOCKED.** Only after T10D-B and documented electrical/mechanical Stage 0 evidence may Xiaozhi add a separately reviewed real adapter and begin user-present single-axis calibration. Preset gestures, dancing and expression-linked motion wait until both axes have accepted centers, directions and limits.
 7. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
 
