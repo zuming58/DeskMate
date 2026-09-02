@@ -231,13 +231,21 @@ void TestSafetyFlagsUnavailableAndAdapterFailureFailSoft() {
     adapter.available = true;
     assert(owner.Execute(Arm(4, 0), 4) ==
            ManualCalibrationResult::kAccepted);
-    adapter.fail_next_apply = true;
+    adapter.out_of_range_next_apply = true;
     assert(owner.Execute(Output(5, ManualCalibrationOperation::kProvisionalCenter,
-                                0),
-                         5) == ManualCalibrationResult::kAdapterFailure);
+                                 0),
+                         5) == ManualCalibrationResult::kStepOutOfRange);
+    assert(!owner.snapshot().faulted);
+    assert(!owner.snapshot().armed);
+    assert(owner.Execute(Arm(6, 0), 6) ==
+           ManualCalibrationResult::kAccepted);
+    adapter.fail_next_apply = true;
+    assert(owner.Execute(Output(7, ManualCalibrationOperation::kProvisionalCenter,
+                                 0),
+                         7) == ManualCalibrationResult::kAdapterFailure);
     assert(owner.snapshot().faulted);
     assert(adapter.commands.empty());
-    assert(owner.Execute(Select(6, 0), 6) ==
+    assert(owner.Execute(Select(8, 0), 8) ==
            ManualCalibrationResult::kFaulted);
 }
 

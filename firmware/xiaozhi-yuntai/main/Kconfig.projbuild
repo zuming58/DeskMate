@@ -1,0 +1,118 @@
+menu "DeskMate T10D-C servo calibration gate"
+
+config DESKMATE_T10DC_SERVO_CALIBRATION_ENABLE
+    bool "Enable the T10D-C hardware calibration adapter"
+    default n
+    help
+        Keep disabled for the Stage 0 protocol/status image. Enable only after
+        the Stage 0 checklist has recorded every electrical and mechanical
+        verification below. Enabling this option does not bypass the runtime
+        one-axis, four-attestation, short one-use ARM gate.
+
+config DESKMATE_T10DC_INSTALLED_PINOUT_VERIFIED
+    bool "Installed board GPIO11/GPIO12 mapping physically verified"
+    default n
+
+config DESKMATE_T10DC_POWER_PATH_VERIFIED
+    bool "Independent servo power path verified"
+    default n
+
+config DESKMATE_T10DC_COMMON_GROUND_VERIFIED
+    bool "Common ground verified"
+    default n
+
+config DESKMATE_T10DC_EMERGENCY_CUTOFF_VERIFIED
+    bool "Immediate servo power cutoff verified"
+    default n
+
+menu "Yaw axis measured profile"
+
+config DESKMATE_T10DC_YAW_CENTER_PULSE_US
+    int "Verified provisional center pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_YAW_MINIMUM_PULSE_US
+    int "Verified conservative minimum pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_YAW_MAXIMUM_PULSE_US
+    int "Verified conservative maximum pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_YAW_PULSE_PER_DEGREE_US
+    int "Verified pulse delta for one degree (us)"
+    range 0 100
+    default 0
+
+config DESKMATE_T10DC_YAW_DIRECTION
+    int "Verified logical-to-physical direction (-1 or 1)"
+    range -1 1
+    default 0
+
+config DESKMATE_T10DC_YAW_CENTER_VERIFIED
+    bool "Yaw center value verified"
+    default n
+
+config DESKMATE_T10DC_YAW_DIRECTION_VERIFIED
+    bool "Yaw direction verified"
+    default n
+
+config DESKMATE_T10DC_YAW_LIMITS_VERIFIED
+    bool "Yaw conservative limits verified"
+    default n
+
+config DESKMATE_T10DC_YAW_PULSE_SCALE_VERIFIED
+    bool "Yaw one-degree pulse scale verified"
+    default n
+
+endmenu
+
+menu "Pitch axis measured profile"
+
+config DESKMATE_T10DC_PITCH_CENTER_PULSE_US
+    int "Verified provisional center pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_PITCH_MINIMUM_PULSE_US
+    int "Verified conservative minimum pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_PITCH_MAXIMUM_PULSE_US
+    int "Verified conservative maximum pulse (us)"
+    range 0 2500
+    default 0
+
+config DESKMATE_T10DC_PITCH_PULSE_PER_DEGREE_US
+    int "Verified pulse delta for one degree (us)"
+    range 0 100
+    default 0
+
+config DESKMATE_T10DC_PITCH_DIRECTION
+    int "Verified logical-to-physical direction (-1 or 1)"
+    range -1 1
+    default 0
+
+config DESKMATE_T10DC_PITCH_CENTER_VERIFIED
+    bool "Pitch center value verified"
+    default n
+
+config DESKMATE_T10DC_PITCH_DIRECTION_VERIFIED
+    bool "Pitch direction verified"
+    default n
+
+config DESKMATE_T10DC_PITCH_LIMITS_VERIFIED
+    bool "Pitch conservative limits verified"
+    default n
+
+config DESKMATE_T10DC_PITCH_PULSE_SCALE_VERIFIED
+    bool "Pitch one-degree pulse scale verified"
+    default n
+
+endmenu
+
+endmenu

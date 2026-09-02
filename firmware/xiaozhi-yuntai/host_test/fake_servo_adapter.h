@@ -10,19 +10,26 @@ class FakeServoAdapter final : public ServoAdapter {
 public:
     bool IsAvailable() const noexcept override { return available; }
 
-    bool Apply(const ServoAdapterCommand& command) noexcept override {
+    ServoAdapterResult Apply(
+        const ServoAdapterCommand& command) noexcept override {
         if (!available || fail_next_apply) {
             fail_next_apply = false;
-            return false;
+            return available ? ServoAdapterResult::kFailure
+                             : ServoAdapterResult::kUnavailable;
+        }
+        if (out_of_range_next_apply) {
+            out_of_range_next_apply = false;
+            return ServoAdapterResult::kOutOfRange;
         }
         commands.push_back(command);
-        return true;
+        return ServoAdapterResult::kApplied;
     }
 
     void DisableOutputs() noexcept override { ++disable_calls; }
 
     bool available{true};
     bool fail_next_apply{};
+    bool out_of_range_next_apply{};
     std::uint32_t disable_calls{};
     std::vector<ServoAdapterCommand> commands{};
 };

@@ -3,6 +3,7 @@
 #include "link_endpoint.h"
 #include "link_protocol.h"
 #include "manual_calibration_owner.h"
+#include "manual_calibration_protocol.h"
 
 #include <algorithm>
 #include <cctype>
@@ -249,6 +250,33 @@ void ProductionNullOwnerIsNotReady() {
           static_cast<std::uint8_t>(LinkErrorCode::kNotReady));
 }
 
+void StageZeroOwnerRecognizesStatusButKeepsHardwareLocked() {
+    using namespace deskmate::xiaozhi;
+    test::FakeDisplayRenderer display_renderer;
+    DisplayOwner display(display_renderer);
+    DisabledServoAdapter servo;
+    ManualCalibrationOwner motion(servo);
+    XiaozhiLinkEndpoint endpoint(display, &motion);
+    endpoint.Start(1, 0);
+    LinkWireFrame response{};
+    CHECK(endpoint.Handle(Hello(1, 0x11223344), 1, response));
+
+    CHECK(endpoint.Handle(Request(0x21, 2), 2, response));
+    auto decoded = Decode(response);
+    CHECK(decoded.flag == LinkFrameFlag::kResponse);
+    CHECK(decoded.payload_length == kManualCalibrationStatusPayloadBytes);
+    CHECK(decoded.payload[12] ==
+          static_cast<std::uint8_t>(ManualCalibrationState::kLocked));
+    CHECK((decoded.payload[14] & 0x20u) == 0);
+
+    const auto select = Parse(FromHex(GoldenHex("select_request")));
+    CHECK(endpoint.Handle(select, 3, response));
+    decoded = Decode(response);
+    CHECK(decoded.flag == LinkFrameFlag::kResponse);
+    CHECK(decoded.payload[12] == static_cast<std::uint8_t>(
+                                     ManualCalibrationResult::kAdapterUnavailable));
+}
+
 }  // namespace
 
 int main() {
@@ -256,6 +284,7 @@ int main() {
     LinkAndActionIdempotencyDoNotRepeatOutput();
     DisconnectRestartMalformedAndFaultRemainFailSoft();
     ProductionNullOwnerIsNotReady();
+    StageZeroOwnerRecognizesStatusButKeepsHardwareLocked();
     if (failures != 0) {
         std::cerr << "manual_calibration_link_tests: " << failures
                   << " failure(s)\n";

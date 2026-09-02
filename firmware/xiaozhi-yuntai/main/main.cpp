@@ -1,6 +1,8 @@
 #include "deskmate_link_uart.h"
 #include "deskmate_oled.h"
+#include "deskmate_servo_adapter.h"
 #include "link_endpoint.h"
+#include "manual_calibration_owner.h"
 
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -28,7 +30,11 @@ extern "C" void app_main() {
     const auto display_initialize_result =
         deskmate::xiaozhi::InitializeDeskMateDisplayOwner();
 
-    static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(display_owner);
+    auto& servo_adapter = deskmate::xiaozhi::GetDeskMateServoAdapter();
+    static deskmate::xiaozhi::ManualCalibrationOwner manual_calibration_owner(
+        servo_adapter);
+    static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(
+        display_owner, &manual_calibration_owner);
     endpoint.Start(NewBootEpoch(), MonotonicMilliseconds());
 
     const auto link_result =

@@ -68,6 +68,9 @@ int main() {
     const auto manual_protocol_source = ReadAll(MANUAL_PROTOCOL_SOURCE_PATH);
     const auto servo_adapter_header = ReadAll(SERVO_ADAPTER_HEADER_PATH);
     const auto servo_adapter_source = ReadAll(SERVO_ADAPTER_SOURCE_PATH);
+    const auto servo_hardware_header = ReadAll(SERVO_HARDWARE_HEADER_PATH);
+    const auto servo_hardware_source = ReadAll(SERVO_HARDWARE_SOURCE_PATH);
+    const auto servo_kconfig = ReadAll(SERVO_KCONFIG_PATH);
     const auto oled_header = ReadAll(OLED_HEADER_PATH);
     const auto oled_source = ReadAll(OLED_SOURCE_PATH);
     const auto transport_header = ReadAll(TRANSPORT_HEADER_PATH);
@@ -88,6 +91,9 @@ int main() {
     CHECK(Contains(root_cmake, "partitions/v1/16m.csv"));
     CHECK(Contains(main_cmake, "deskmate_link_uart.cpp"));
     CHECK(Contains(main_cmake, "deskmate_oled.cpp"));
+    CHECK(Contains(main_cmake, "deskmate_servo_adapter.cpp"));
+    CHECK(Contains(main_cmake, "esp_driver_gpio"));
+    CHECK(Contains(main_cmake, "esp_driver_ledc"));
     CHECK(Contains(main_cmake, "esp_driver_i2c"));
     CHECK(Contains(main_cmake, "esp_driver_uart"));
     CHECK(Contains(main_cmake, "esp_lcd"));
@@ -107,6 +113,8 @@ int main() {
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_UART_DEFAULT=y"));
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_UART_CUSTOM=y"));
     CHECK(!Contains(sdkconfig_defaults, "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y"));
+    CHECK(Contains(sdkconfig_defaults,
+                   "# CONFIG_DESKMATE_T10DC_SERVO_CALIBRATION_ENABLE is not set"));
     CHECK(Contains(partition_table,
                    "nvs,      data, nvs,     0x9000,    0x4000,"));
     CHECK(Contains(partition_table,
@@ -162,7 +170,9 @@ int main() {
     CHECK(Contains(pinout_header, "install_allowed"));
     CHECK(Contains(uart_header, "kHardwarePinoutBlocked"));
     CHECK(Contains(main_source, "InitializeDeskMateDisplayOwner()"));
-    CHECK(Contains(main_source, "XiaozhiLinkEndpoint endpoint(display_owner)"));
+    CHECK(Contains(main_source, "GetDeskMateServoAdapter()"));
+    CHECK(Contains(main_source, "ManualCalibrationOwner manual_calibration_owner"));
+    CHECK(Contains(main_source, "&manual_calibration_owner"));
     CHECK(Contains(main_source, "StartDeskMateLinkUart(endpoint)"));
     CHECK(Contains(main_source, "StartDeskMateDisplayOwnerTask()"));
     const auto display_initialize_position =
@@ -222,8 +232,8 @@ int main() {
     CHECK(!Contains(motion_production, "ledc_"));
     CHECK(!Contains(motion_production, "GPIO_NUM_"));
     CHECK(!Contains(main_source, "MotionSafetyCore"));
-    CHECK(!Contains(main_source, "ManualCalibrationOwner"));
-    CHECK(!Contains(main_source, "ServoAdapter"));
+    CHECK(Contains(main_source, "ManualCalibrationOwner"));
+    CHECK(Contains(main_source, "ServoAdapter"));
     CHECK(Contains(motion_header, "kEmergencyStopped"));
     CHECK(Contains(motion_header, "power_path_verified"));
     CHECK(Contains(motion_header, "direction_verified"));
@@ -252,6 +262,24 @@ int main() {
     CHECK(!Contains(manual_candidate, "ledc_"));
     CHECK(!Contains(manual_candidate, "GPIO_NUM_"));
     CHECK(!Contains(manual_candidate, "uart_"));
+    CHECK(Contains(servo_adapter_header, "CalibratedServoAdapter"));
+    CHECK(Contains(servo_adapter_header, "emergency_cutoff_verified"));
+    CHECK(Contains(servo_adapter_header, "pulse_scale_verified"));
+    CHECK(Contains(servo_hardware_header, "GetDeskMateServoAdapter"));
+    CHECK(Contains(servo_hardware_source, "driver/ledc.h"));
+    CHECK(Contains(servo_hardware_source, "LEDC_LOW_SPEED_MODE"));
+    CHECK(Contains(servo_hardware_source, "LEDC_TIMER_14_BIT"));
+    CHECK(Contains(servo_hardware_source, "LEDC_CHANNEL_0"));
+    CHECK(Contains(servo_hardware_source, "LEDC_CHANNEL_1"));
+    CHECK(Contains(servo_hardware_source, "kServoPeriodUs = 20000"));
+    CHECK(Contains(servo_hardware_source, "ledc_stop"));
+    CHECK(Contains(servo_kconfig,
+                   "DESKMATE_T10DC_SERVO_CALIBRATION_ENABLE"));
+    CHECK(Contains(servo_kconfig, "default n"));
+    CHECK(Contains(servo_kconfig, "INSTALLED_PINOUT_VERIFIED"));
+    CHECK(Contains(servo_kconfig, "POWER_PATH_VERIFIED"));
+    CHECK(Contains(servo_kconfig, "COMMON_GROUND_VERIFIED"));
+    CHECK(Contains(servo_kconfig, "EMERGENCY_CUTOFF_VERIFIED"));
     CHECK(!Contains(production, "driver/i2s"));
     CHECK(!Contains(production, "i2s_"));
     CHECK(!Contains(production, "esp_codec"));

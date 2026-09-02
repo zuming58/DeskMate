@@ -164,7 +164,14 @@ ManualCalibrationResult ManualCalibrationOwner::ApplyOutput(
             command.step_direction *
             kManualCalibrationMaximumStepTenthsDegree)};
     ConsumeArm();
-    if (!adapter_.Apply(adapter_command)) {
+    const auto adapter_result = adapter_.Apply(adapter_command);
+    if (adapter_result == ServoAdapterResult::kOutOfRange) {
+        return Reject(ManualCalibrationResult::kStepOutOfRange);
+    }
+    if (adapter_result == ServoAdapterResult::kUnavailable) {
+        return Reject(ManualCalibrationResult::kAdapterUnavailable);
+    }
+    if (adapter_result != ServoAdapterResult::kApplied) {
         adapter_.DisableOutputs();
         faulted_ = true;
         normal_motion_.LatchFault();

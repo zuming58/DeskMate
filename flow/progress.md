@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - T10D-C Xiaozhi real servo adapter Stage 0 package complete
+
+- Real HIL established that the installed Xiaozhi board responds `UNKNOWN_TYPE (1)` to T10C manual-calibration status because its latest authorized image is T09.1: T09 app-only was flashed on 2026-08-30 (`b26e99e...`), T09.1 app-only on 2026-08-31 (`65144a1...`) with exact readback and normal boot, and no T10A/T10C/T10D manual-motion change was flashed afterward. It is neither stock/葡萄 firmware nor an unflashed board.
+- Branch `codex/xiaozhi-t10d-c-real-servo-adapter` attaches the frozen T10C manual owner in production and adds a real dual-axis ESP-IDF backend from fixed reference evidence: yaw GPIO11/channel 0, pitch GPIO12/channel 1, low-speed timer 0, 14-bit, 50 Hz. DeskMate Link framing/messages, UART, OLED, audio, Wi-Fi, partitions, EasyInput and Desktop are unchanged.
+- The committed Stage 0 configuration is fail-closed: calibration enable is off, all values are zero and all evidence flags are false. Status is recognized and reports locked/adapter unavailable, but construction, boot, status, select-axis and ARM cannot initialize LEDC or output PWM. Normal `MOTION` remains disabled.
+- An enabled profile requires installed mapping, independent servo power, common ground, physical cutoff and both axes' measured center/direction/conservative limits/pulse-per-degree. The first possible backend call remains one selected-axis, four-attestation, short one-use-ARM provisional-center request; every output attempt consumes ARM, and range/backend faults fail closed while Link remains live.
+- Verification passed Xiaozhi Host CTest `12/12` and exact ESP-IDF v5.5.3 / `esp32s3` fixed-partition build. The exact post-commit HEAD, image size and SHA-256 are reported in the handoff response; source/license, privacy/secret, ASCII path, build-output and scope checks are part of the final gate.
+- Classification: `STAGE0_CODE_BUILD_COMPLETE / DEFAULT_LOCKED / STAGE1_PROFILE_BLOCKED / HIL_NOT_RUN`. No application, device/port, wiring, Flash/NVS/eFuse, erase, flash, monitor, OLED, audio, PWM/GPIO or servo operation occurred. The package may request separate Stage 0 app-only flash authorization after cross-audit; it cannot request physical motion.
+
 ## 2026-09-02 - T14A Hermes Agent adapter delivery verified and queued as a Windows follow-on
 
 - Received and independently checked `codex/t14-desktop-agent-adapter-framework@8578f0cc8bef40ba269bb0960adbaf04c66432ed`; tested implementation is `be1a0afccc87aa32479d9cc8faeba916864d7091`. Git ancestry proves it starts from the exact T10D integrated Flow HEAD `1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`.

@@ -52,6 +52,24 @@ add_test(NAME manual_calibration_owner_tests
     COMMAND manual_calibration_owner_tests
 )
 
+add_executable(calibrated_servo_adapter_tests
+    calibrated_servo_adapter_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
+)
+target_include_directories(calibrated_servo_adapter_tests PRIVATE
+    "${CORE_INCLUDE_DIR}"
+)
+if(MSVC)
+    target_compile_options(calibrated_servo_adapter_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(calibrated_servo_adapter_tests PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+    )
+endif()
+add_test(NAME calibrated_servo_adapter_tests
+    COMMAND calibrated_servo_adapter_tests
+)
+
 add_executable(manual_calibration_link_tests
     manual_calibration_link_tests.cpp ${CORE_SOURCES}
 )
@@ -130,6 +148,9 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     MANUAL_PROTOCOL_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_protocol.cpp"
     SERVO_ADAPTER_HEADER_PATH="${CORE_INCLUDE_DIR}/servo_adapter.h"
     SERVO_ADAPTER_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
+    SERVO_HARDWARE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_servo_adapter.h"
+    SERVO_HARDWARE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_servo_adapter.cpp"
+    SERVO_KCONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/Kconfig.projbuild"
     OLED_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.h"
     OLED_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"
