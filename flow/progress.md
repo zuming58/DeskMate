@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - T14A Windows Hermes lifecycle adapter code/build gate complete
+
+- Created isolated Windows-only branch `codex/t14-desktop-agent-adapter-framework` from the accepted three-end integration HEAD `1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`; the dirty primary checkout was not modified.
+- Froze `T14A_DESKTOP_AGENT_ADAPTER_V1_FROZEN`. Added a strict `deskmate-hermes-status-v1` receiver, official Hermes lifecycle mapping and one generic sanitized provider status surface while preserving the existing Codex pipe and IPC aliases. Both providers reuse the single `AgentStatePublisher`; VoiceWorkflow and the active companion conversation remain higher priority.
+- Added a repository-owned Hermes plugin template using documented `plugin.yaml`/`__init__.py` structure and ships it only as a read-only package resource. It queues only allowlisted event/tool/outcome metadata, drops when DeskMate is absent, and was not installed or enabled in user configuration. WorkBuddy remains manual because the exact product/version and authoritative lifecycle contract are unknown.
+- Verification passed: `npm ci --include=dev`; full `npm test` `289/289`; `npm run build:desktop`; `git diff --check`; secret-pattern, ASCII path and unchanged-firmware checks. Package build ID is `t14a-hermes-agent-adapter-v1`; `DeskMate.exe` is `202690560` bytes / SHA-256 `95989A35243FA3AC4ED7B8FE83B36C5DE4035F07BA5502E860EFAD2DF89C1E99`; `app.asar` is `112772428` bytes / SHA-256 `7A27CDFCDE369CD60F8AB6EAF08A7E7144B1C9FB56A6DC585F90DD4A27BFDA43`.
+- Classification is `CONTRACT_FROZEN / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. No application, port/device, global Hook/plugin configuration, firmware, Flash, OLED, servo or audio hardware was accessed.
+- Next: after the user explicitly reviews and enables the Hermes plugin, run one real lifecycle acceptance for thinking/working/waiting/completed/error and verify Codex remains unchanged. WorkBuddy automatic support waits for exact product identity instead of process/window guessing.
+
 ## 2026-09-02 - T10D three-end integration candidate rebuilt and ready for software HIL
 
 - Created isolated branch `codex/t10d-three-end-integration` from control HEAD `b0a95d1c254d8fb8fad62933f76fa71fe7da10a3` and merged the exact Windows delivery `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`. The tested implementation merge is `fd3204a2b294535a1f865d9a2901e16e257179d8`; the dirty primary checkout was not modified.

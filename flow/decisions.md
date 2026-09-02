@@ -1,5 +1,13 @@
 # Decisions
 
+## D067 - External Agent automation requires an authoritative opt-in lifecycle adapter
+
+- Date: 2026-09-02
+- Decision: Codex and Hermes may publish automatic status only through their documented lifecycle hooks and the existing single `AgentStatePublisher`. Hermes uses an optional user-enabled plugin and a strict content-free local pipe. Provider identity never reaches firmware; VoiceWorkflow and companion conversation remain higher priority.
+- Privacy: adapters may send only an allowlisted event name, bounded tool name and closed final outcome. Prompts, replies, commands, tool payloads/results, paths, identifiers, model/provider routing and raw errors are forbidden.
+- Manual boundary: WorkBuddy names multiple unrelated products and no exact user product/version contract has been selected. It remains manual; DeskMate does not infer status from windows, processes, logs or traffic.
+- Acceptance: host tests and packaging can close the software gate. Installing/enabling the Hermes plugin and observing real lifecycle/OLED behavior remain explicit user-controlled acceptance.
+
 ## D066 - Manual servo calibration requires a terminal status gate and three separate evidence layers
 
 - Date: 2026-09-02

@@ -32,6 +32,7 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 5. **Software user gates — NEXT.** Validate only the exact integrated package for T13 persona/memory/knowledge/safe-intent/Codex summary and T10D-B status-first `NOT_READY` behavior. Actual motion remains unavailable until T10D-C; software HIL must not manufacture readiness from HID presence or EasyInput accepted evidence.
 6. **T10D-C real-adapter calibration — HARDWARE LOCKED.** Only after T10D-B and documented electrical/mechanical Stage 0 evidence may Xiaozhi add a separately reviewed real adapter and begin user-present single-axis calibration. Preset gestures, dancing and expression-linked motion wait until both axes have accepted centers, directions and limits.
 7. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
+8. **T14A Windows Hermes lifecycle adapter — CODE/BUILD COMPLETE.** Preserve Codex compatibility, add an opt-in content-free Hermes plugin/pipe, reuse the single Agent state publisher, and keep WorkBuddy manual until exact product identity is known. Desktop `289/289` and Windows packaging pass. Real plugin enablement remains user-controlled; this package changes no firmware or hardware state.
 
 #### Ownership and reporting
 

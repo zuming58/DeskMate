@@ -1317,7 +1317,7 @@ export function AgentsPage({ notify, embedded = false }) {
   const mapping = state.agentExpressionMapping;
   const control = normalizeAgentControl(state.agentControl);
   const [sendState, setSendState] = useState({ status: "idle", label: "尚未发送" });
-  const [codexStatus, setCodexStatus] = useState({ receiver: "starting", connected: false, state: "idle", delivery: "not-received" });
+  const [providerStatus, setProviderStatus] = useState({ provider: control.agentId, receiver: "starting", connected: false, state: "idle", delivery: "not-received" });
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
   const eventLabel = { idle: "待命", listening: "倾听中", thinking: "思考中", working: "工作中", waiting_user: "等待用户", completed: "已完成", error: "异常" };
   const updateMapping = (agentId, value) => {
@@ -1327,22 +1327,24 @@ export function AgentsPage({ notify, embedded = false }) {
   const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
   useEffect(() => {
     let active = true;
-    const selectedProvider = control.automaticStatusEnabled ? control.agentId : "disabled";
+    const supportsAutomaticStatus = ["codex", "hermes"].includes(control.agentId);
+    const selectedProvider = supportsAutomaticStatus && control.automaticStatusEnabled ? control.agentId : "disabled";
     void voiceAdapters.desktop.setActiveAgentProvider(selectedProvider).then((result) => {
-      if (active && result?.status) setCodexStatus(result.status);
+      if (active && result?.status) setProviderStatus(result.status);
     });
-    void voiceAdapters.desktop.getCodexAgentStatus().then((result) => { if (active && result) setCodexStatus(result); });
+    void voiceAdapters.desktop.getAgentProviderStatus(control.agentId).then((result) => { if (active && result) setProviderStatus(result); });
     return () => { active = false; };
   }, [control.agentId, control.automaticStatusEnabled]);
-  useEffect(() => voiceAdapters.desktop.onCodexAgentState((payload) => {
-    if (!payload || payload.provider !== "codex") return;
-    setCodexStatus(payload);
-    if (control.agentId !== "codex" || !control.automaticStatusEnabled || !payload.connected) return;
+  useEffect(() => voiceAdapters.desktop.onAgentProviderState((payload) => {
+    if (!payload || payload.provider !== control.agentId) return;
+    setProviderStatus(payload);
+    if (!["codex", "hermes"].includes(control.agentId) || !control.automaticStatusEnabled || !payload.connected) return;
     const stateId = payload.state === "waiting" ? "waiting_user" : payload.state;
     const selected = manualAgentState(stateId);
+    const agentName = manualAgentName(control);
     patch({ agentControl: normalizeAgentControl({ ...control, state: stateId }) });
-    event({ type: stateId, agent: "Codex", progress: stateId === "completed" ? 100 : stateId === "idle" ? 0 : state.aiEvent.progress, detail: `Codex Hook · ${selected.label}` });
-    const deliveryLabel = payload.delivery === "voice-workflow-active" ? "语音流程优先，未发送到小智" : payload.delivery === "not-selected" ? "Codex 当前未选中" : `Codex 自动 · ${selected.label}`;
+    event({ type: stateId, agent: agentName, progress: stateId === "completed" ? 100 : stateId === "idle" ? 0 : state.aiEvent.progress, detail: `${agentName} 生命周期 · ${selected.label}` });
+    const deliveryLabel = payload.delivery === "voice-workflow-active" ? "语音流程优先，未发送到小智" : payload.delivery === "not-selected" ? `${agentName} 当前未选中` : `${agentName} 自动 · ${selected.label}`;
     setSendState({ status: payload.delivery === "sent" || payload.delivery === "suppressed" ? "success" : "idle", label: deliveryLabel });
   }), [control.agentId, control.automaticStatusEnabled, control.customName, event, patch, state.aiEvent.progress]);
   const sendManualState = async (requestedState = control.state) => {
@@ -1366,18 +1368,18 @@ export function AgentsPage({ notify, embedded = false }) {
   };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把真实或手动工作状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button>} />}
-      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>Codex 已支持真实生命周期；其他 Agent 暂用手动状态。</p></div><Button icon={Plus} onClick={() => notify("WorkBuddy、Hermes 与 Claude Code 自动适配器仍待接入")}>添加适配器</Button></div>}
-      <Notice tone="info" title="Codex 真实状态已接入">选择 Codex 并启用自动状态后，官方 Hook 会把开始任务、工具执行、等待授权/输入和任务结束映射为表情；不会读取或上传提示词、回复正文、工具参数、工作目录或对话记录。官方生命周期暂不提供可靠的整轮失败事件，因此“遇到问题”继续保留人工发送。语音输入始终优先。</Notice>
+      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把真实或手动工作状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("Codex 与 Hermes 已有自动适配基础；WorkBuddy 需先确认具体产品和版本")}>适配器说明</Button>} />}
+      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>Codex 与 Hermes 支持真实生命周期；其他 Agent 保留手动状态。</p></div><Button icon={Plus} onClick={() => notify("Hermes 插件必须由用户显式启用；WorkBuddy 暂不猜测接入")}>适配器说明</Button></div>}
+      <Notice tone="info" title="Codex 与 Hermes 生命周期适配">Codex 使用官方 Hook；Hermes 使用需由用户显式启用的本地插件 Hook。两者只传开始任务、模型/工具执行、等待授权和每轮结果等事件名，不读取或上传提示词、回复正文、工具参数、命令、工作目录、会话标识或错误详情。WorkBuddy 产品身份未确认，当前只提供手动状态。语音输入和陪伴会话始终优先。</Notice>
       <Card className="manual-agent-control">
-        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="Codex 可自动更新；七个按钮继续保留为人工校验和其他 Agent 的手动入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
+        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="Codex 与 Hermes 可自动更新；七个按钮继续保留为人工校验和其他 Agent 的手动入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
         <div className="manual-agent-control__agent">
           <label>当前 Agent<Select value={control.agentId} onChange={(agentId) => { updateControl({ agentId }); setSendState({ status: "idle", label: "尚未发送" }); }} ariaLabel="当前 Agent">{MANUAL_AGENT_OPTIONS.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</Select></label>
           {control.agentId === "custom" && <label>Agent 名称<input maxLength={48} value={control.customName} onChange={(changeEvent) => updateControl({ customName: changeEvent.target.value })} placeholder="例如 Cursor、OpenCode" /></label>}
-          {control.agentId === "codex" && <SettingRow title="Codex 自动状态" description={control.automaticStatusEnabled ? "使用 codex-hook-v1；语音与陪伴会话优先" : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>}
+          {["codex", "hermes"].includes(control.agentId) && <SettingRow title={`${manualAgentName(control)} 自动状态`} description={control.automaticStatusEnabled ? `使用 ${control.agentId === "codex" ? "codex-hook-v1" : "hermes-plugin-hooks-v1"}；语音与陪伴会话优先` : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>}
         </div>
         <div className="manual-agent-state-grid" aria-label="选择并发送 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={sendState.status === "sending"} key={item.id} onClick={() => { void sendManualState(item.id); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
-        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{control.agentId === "codex" ? !control.automaticStatusEnabled ? "Codex 自动状态已禁用" : codexStatus.connected ? `${codexStatus.work?.summary || "Codex Hook 已连接"} · ${codexStatus.sourceVersion || "codex-hook-v1"}` : codexStatus.receiver === "listening" ? "DeskMate 正在等待 Codex Hook 的首个真实事件" : "Codex Hook 接收器不可用" : "点击任意状态会立即发送；重复点击当前状态可在小智重启后重新发送"}</small>{control.agentId === "codex" && codexStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
+        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{["codex", "hermes"].includes(control.agentId) ? !control.automaticStatusEnabled ? `${manualAgentName(control)} 自动状态已禁用` : providerStatus.connected ? `${providerStatus.work?.summary || `${manualAgentName(control)} 生命周期已连接`} · ${providerStatus.sourceVersion}` : providerStatus.receiver === "listening" ? `DeskMate 正在等待 ${manualAgentName(control)} 的首个真实事件${control.agentId === "hermes" ? "；需先在 Hermes 中显式启用插件" : ""}` : `${manualAgentName(control)} 生命周期接收器不可用` : "自动适配未启用；点击任意状态会立即手动发送"}</small>{["codex", "hermes"].includes(control.agentId) && providerStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
       </Card>
       <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <div className="agent-grid">{agents.map((agent) => {
@@ -1392,7 +1394,7 @@ export function AgentsPage({ notify, embedded = false }) {
           <Button icon={active ? Check : Refresh} variant={active ? "soft" : "secondary"} onClick={() => { updateControl({ agentId: agent.id }); setSendState({ status: "idle", label: "待发送" }); }}>{active ? "当前 Agent" : "切换到此 Agent"}</Button>
         </Card>;
       })}</div>
-      <Card><SectionTitle index="03" title="状态来源边界" description="Codex 使用官方生命周期 Hook；其他 Agent 仍为人工选择，最终统一为同一套七状态。" /><div className="state-flow"><span>Codex Hook / 手动状态</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
+      <Card><SectionTitle index="03" title="状态来源边界" description="Codex 与 Hermes 使用官方生命周期 Hook；其余 Agent 仍为人工选择，最终统一为同一套七状态。" /><div className="state-flow"><span>Codex / Hermes Hook / 手动状态</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
     </div>
   );
 }

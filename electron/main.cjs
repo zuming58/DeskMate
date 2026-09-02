@@ -20,7 +20,7 @@ const { CompanionMemoryPipeline } = require("./companion-memory-pipeline.cjs");
 const { KnowledgeBaseProjection } = require("./knowledge-base-projection.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
-const { summarizeCodexWork } = require("./codex-work-summary.cjs");
+const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
 const { PrestartFallbackCompanionAudioSource } = require("./companion-audio.cjs");
 const { ComputerCompanionAudioSession } = require("./companion-computer-audio.cjs");
@@ -42,6 +42,7 @@ const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 const { AgentStatePublisher } = require("./agent-state-hid.cjs");
 const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
+const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
@@ -49,7 +50,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t10d-three-end-integration-v1";
+const DESKMATE_BUILD_ID = "t14a-hermes-agent-adapter-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -99,8 +100,10 @@ let lastVoiceToggleAt = 0;
 let pendingEditShortcutTimer = null;
 let activeAgentProvider = "codex";
 let codexHookServer;
+let hermesHookServer;
 let manualCalibrationController;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
+let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
 let linkStatusPollTimer = null;
 let linkStatusRefreshInFlight = false;
@@ -427,23 +430,62 @@ async function openEasyInputAudioSetup() {
   return { ok: true };
 }
 
-function sanitizedCodexHookStatus() {
-  return { provider: "codex", sourceVersion: "codex-hook-v1", selected: activeAgentProvider === "codex", ...codexHookStatus, work: summarizeCodexWork(codexHookStatus) };
+function providerHookStatus(provider) {
+  if (provider === "codex") return codexHookStatus;
+  if (provider === "hermes") return hermesHookStatus;
+  return {};
 }
 
-async function handleCodexHookState(value) {
+function setProviderHookStatus(provider, value) {
+  if (provider === "codex") codexHookStatus = value;
+  if (provider === "hermes") hermesHookStatus = value;
+}
+
+function sanitizedAgentProviderStatus(provider = activeAgentProvider) {
+  return sanitizedProviderStatus(provider, providerHookStatus(provider), activeAgentProvider);
+}
+
+function sanitizedCodexHookStatus() {
+  return sanitizedAgentProviderStatus("codex");
+}
+
+function emitAgentProviderStatus(provider) {
+  const status = sanitizedAgentProviderStatus(provider);
+  sendToMain("agent-provider-state", status);
+  if (provider === "codex") sendToMain("codex-agent-state", status);
+  return status;
+}
+
+async function handleAutomaticAgentHookState(provider, value) {
   const updatedAt = new Date().toISOString();
-  let delivery = activeAgentProvider === "codex" ? "pending" : "not-selected";
-  if (activeAgentProvider === "codex") {
+  let delivery = activeAgentProvider === provider ? "pending" : "not-selected";
+  if (activeAgentProvider === provider) {
     if (companionIsActive()) delivery = "companion-conversation-active";
     else if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) delivery = "voice-workflow-active";
     else {
-      const result = await agentStatePublisher.publishProviderState({ source: "codex-hook-v1", state: value.state });
+      const result = await agentStatePublisher.publishProviderState({ source: sourceVersionForProvider(provider), state: value.state });
       delivery = result?.ok ? (result.suppressed ? "suppressed" : "sent") : result?.reason || "send-failed";
     }
   }
-  codexHookStatus = { receiver: "listening", connected: true, state: value.state, event: value.event, toolName: value.toolName, updatedAt, delivery };
-  sendToMain("codex-agent-state", sanitizedCodexHookStatus());
+  setProviderHookStatus(provider, {
+    receiver: "listening",
+    connected: true,
+    state: value.state,
+    event: value.event,
+    toolName: value.toolName || "",
+    outcome: value.outcome || "",
+    updatedAt,
+    delivery,
+  });
+  emitAgentProviderStatus(provider);
+}
+
+async function handleCodexHookState(value) {
+  await handleAutomaticAgentHookState("codex", value);
+}
+
+async function handleHermesHookState(value) {
+  await handleAutomaticAgentHookState("hermes", value);
 }
 
 async function emitVoiceToggle(source = "global-shortcut", label = shortcut, requestedWorkflow = "input") {
@@ -684,7 +726,7 @@ function createWindow() {
   mainWindow.webContents.on("did-finish-load", () => {
     emitInputBridgeStatus();
     sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
-    sendToMain("codex-agent-state", sanitizedCodexHookStatus());
+    emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
   mainWindow.on("close", (event) => {
@@ -927,6 +969,9 @@ app.whenReady().then(async () => {
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
   const codexReceiver = await codexHookServer.start();
   codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
+  hermesHookServer = new HermesHookStateServer({ onState: (value) => { void handleHermesHookState(value); } });
+  const hermesReceiver = await hermesHookServer.start();
+  hermesHookStatus = { ...hermesHookStatus, receiver: hermesReceiver.ok ? "listening" : "unavailable" };
   if (bailianTestAudio) { await runBailianConnectionTest(bailianTestAudio); return; }
   if (bailianTestOrganizer) { await runBailianOrganizerTest(bailianTestOrganizer); return; }
   createWindow();
@@ -1018,9 +1063,13 @@ app.whenReady().then(async () => {
     const provider = typeof value === "string" ? value : "";
     if (!["disabled", "codex", "workbody", "hermes", "claude", "custom"].includes(provider)) return { ok: false, reason: "agent-provider-invalid" };
     activeAgentProvider = provider;
-    const status = sanitizedCodexHookStatus();
-    sendToMain("codex-agent-state", status);
+    const status = emitAgentProviderStatus(provider);
     return { ok: true, provider, status };
+  });
+  handleTrusted("desktop:get-agent-provider-status", (provider) => {
+    const requested = typeof provider === "string" && provider ? provider : activeAgentProvider;
+    if (!["disabled", "codex", "workbody", "hermes", "claude", "custom"].includes(requested)) return sanitizedAgentProviderStatus("disabled");
+    return sanitizedAgentProviderStatus(requested);
   });
   handleTrusted("desktop:get-codex-agent-status", () => sanitizedCodexHookStatus());
   handleTrusted("desktop:clipboard-write", (value) => { const text = String(value || ""); if (text.length > 100000) return { ok: false, reason: "text-too-long" }; clipboard.writeText(text); return { ok: true, mode: "clipboard" }; });
@@ -1154,6 +1203,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });
