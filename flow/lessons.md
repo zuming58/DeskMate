@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A safe hold control is a terminal-gated scheduler, not repeated button clicks
+
+- Symptom: simplifying a calibration console into four direction buttons can accidentally create overlapping ARM/step requests, queued movement after release, a repeat rate above the intended ceiling or a UI that stays armed after transport failure.
+- Practice: keep one main-process session owner, let each semantic tick finish select/ARM/output before scheduling the next, and make the continuation predicate observable between those internal requests. Release cancels the next tick; failures other than an explicit center gate end the session; emergency stop waits only for the current terminal and then wins.
+- Rule: renderer pointer state is never movement authority. A hold gesture grants permission for one terminal-gated step at a time, at a bounded cadence, and every focus/lifecycle/disconnect boundary revokes future permission without replay.
+
 ## A generic transport failure must not erase a frozen endpoint error
 
 - Symptom: a read-only request is accepted by EasyInput, but the Windows panel only shows `link-error` and falls back to an undifferentiated unavailable state, hiding whether the peer lacks the message or merely has an unready owner.

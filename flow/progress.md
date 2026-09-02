@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-09-02 - Windows simplified manual-control UX and orchestration complete
+
+- Created Windows-only branch `codex/t10d-desktop-manual-control-ux` from the accepted calibration diagnostics HEAD `e9c23c1dd2a23631a9bd809b53e94188ea3a364b`; implementation commit is `76d33f44bb6211130c4b9ed97c17aaeb926d89fd`. EasyInput and Xiaozhi source are unchanged.
+- Replaced the expert calibration form with one environment confirmation, one start action, four press-and-hold direction controls, recenter, always-visible immediate stop and a collapsed diagnostic detail. The renderer no longer exposes four attestations, lease/token management, axis selection or individual ±1° click controls.
+- Added one Electron-owned `ManualControlCoordinator` and terminal-gated scheduler. It expands each semantic action through the existing frozen `0x16/0x17` HID and T10C `0x20/0x21` path: hidden complete safety confirmation, fresh one-use ARM with 5000 ms lease, axis selection only when needed, then exactly one fixed step. At most one request is in flight, repeat cadence is at most 4 Hz, and there is no queue or replay.
+- Session start serially establishes Yaw and Pitch centers; recenter serially handles both axes. Pointer release/cancel, lost capture, window blur, hidden document, page leave, device/Link disconnect and 60 seconds of inactivity stop future output and lock the session. Only `center-required` remains recoverable in-session; other transport/endpoint failures exit fail closed. Emergency stop remains available whenever the calibration interface is available.
+- Effective Link presentation now accepts a correlated successful Xiaozhi terminal as bounded connected evidence when the generic diagnostic snapshot is stale/unavailable, but continues to keep user intent, EasyInput accepted and Xiaozhi terminal evidence separate. None of these facts is physical-motion evidence.
+- Verification passed: `npm ci --include=dev`; focused manual-control/routing regression `41/41`; full `npm test` `310/310`; native packaged bridge `--protocol-self-test`; isolated `npm run build:desktop -- --config.directories.output=release-manual-control-ux`; `git diff --check`; firmware diff empty. Package hashes are recorded in `docs/handoffs/t10d-desktop-simplified-manual-control-2026-09-02.md`.
+- Classification is `SOFTWARE_ORCHESTRATION_TESTED / BUILD_CONFIRMED / HIL_NOT_RUN`. No application was launched or controlled; no device, port, Flash/NVS/eFuse, firmware, OLED, audio, PWM or servo was accessed.
+- Next: the main integration owner records this exact branch/HEAD. Real direction, center, limit, hold/release, recenter and emergency-stop behavior remain a user-present T10D hardware acceptance after the electrical/mechanical gates are satisfied.
+
 ## 2026-09-02 - Windows manual-calibration Link error diagnostics repaired
 
 - Created Windows-only repair branch `codex/t10d-desktop-calibration-link-errors` from the accepted status-stream HEAD `7208b20236d585ced59aa6c4f6553e228efaa8b1`; implementation commit is `a712c90011dc966b99472b07d2cf0c9c45703ff5`. EasyInput and Xiaozhi source are unchanged.

@@ -1,5 +1,13 @@
 # Decisions
 
+## D071 - Manual servo control is a semantic hold session, not an expert calibration console
+
+- Date: 2026-09-02
+- Decision: the normal Windows surface contains one environment confirmation, one start action, four press-and-hold directions, recenter and immediate stop. Electron main owns one `ManualControlCoordinator`; the renderer cannot create ARM tokens, choose leases, select axes or construct raw calibration commands.
+- Orchestration: start serially establishes Yaw and Pitch centers using the existing select → fresh one-use ARM → provisional-center operations. Each held-direction tick selects the axis only when necessary, creates another fresh ARM with the complete frozen safety flags and a 5000 ms lease, then issues exactly one fixed 1° step. Recenter serially runs both axes through select → ARM → recenter. No HID or DeskMate Link wire value changes.
+- Safety lifecycle: at most one semantic request is in flight and the repeat interval is at least 250 ms. Release, pointer cancellation, capture loss, window blur, hidden/page leave, device/Link loss and 60 seconds idle suppress all future output and lock the session. A center-required result keeps only the center-recovery path; every other movement/transport failure exits fail closed. Emergency stop stays available whenever the interface exists.
+- Evidence: user intent, EasyInput accepted and Xiaozhi terminal remain distinct. A correlated completed endpoint may repair a stale generic Link label, but neither protocol completion nor `completed_output_count` proves direction, angle, mechanical clearance or safe physical motion. Those remain user-present HIL.
+
 ## D070 - Generic calibration transport preserves a bounded frozen Link error subtype
 
 - 日期：2026-09-02
