@@ -1,5 +1,20 @@
 # Decisions
 
+## D080 - Runtime motion uses its own FF00:0009 Windows HID collection
+
+- Date: 2026-09-03
+- Decision: EasyInput runtime motion Feature/Input reports `0x18/0x19` belong exclusively to top-level collection `FF00:0009`. Manual calibration `0x16/0x17` remains exclusively on `FF00:0007`; configuration `0x10..0x15` remains on `FF00:0002`. The Windows native bridge must select the exact collection tuple and report lengths for each family and expose their availability separately.
+- Evidence: on the flashed T15 device, a frozen manual status request succeeds through `FF00:0007`, while a frozen motion status request fails at `HidD_SetFeature` before firmware because the native contract incorrectly routes `0x18` to `FF00:0007`. The descriptor and firmware already expose motion on `FF00:0009`, so this is a Windows-only correction and does not authorize or require a firmware write.
+- Boundary: collection enumeration proves only that the Windows interface exists. Preset success still requires correlated Windows intent, EasyInput acceptance, DeskMate Link terminal state and user-observed physical motion; a writable collection must not be treated as endpoint or mechanical evidence.
+
+## D079 - Companion and dictation memory share one reviewed store but remain separate sources
+
+- Date: 2026-09-03
+- Decision: DeskMate extends its existing Electron-owned SQLite memory store instead of adding a second memory subsystem. Every source event is explicitly `companion` or `dictation`; daily summaries, pending candidates, review state, deletion and knowledge-base projection retain the source so the user can manage them together or separately.
+- Capture: companion uses completed real conversation turns. Dictation uses only the final text already committed by DeskMate voice input/organization and never reopens the microphone or captures audio, clipboard contents, target-window titles or paths. Existing rows migrate to `companion`; ingestion and daily processing are idempotent.
+- Scheduling: each source has an independent participation switch. A local daily time defaults to 23:30 while the app is running; missed dates are processed on the next start. Summary generation is keyed by source, local day and an input digest, produces no empty documents and remains retryable when the configured model is unavailable.
+- Trust and projection: model output is a candidate only and cannot enter long-term context until the user reviews it. Source text is untrusted data, not instructions. SQLite stays authoritative; Markdown is written only below the managed `DeskMate/` directory selected by the user, with stable IDs, source metadata, conflict protection and no scan of unrelated content.
+
 ## D078 - Custom choreography is a bounded endpoint-owned beat program
 
 - Date: 2026-09-02
