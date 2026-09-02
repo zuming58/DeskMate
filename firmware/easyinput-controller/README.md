@@ -12,7 +12,9 @@ T10E 在三端 T09 验收基线上增加 EasyInput 板载麦克风上行：完�
 
 T11E-A 冻结并实现本地扬声器硬件底座：I2S1 使用 `GPIO14/13/15`、48 kHz/16-bit/mono-left、既有 GPIO8 `Speaker` 租约，并由 generation 仲裁保证麦克风绝对优先。当前只有一次低音量合成开机双提示音用于后续真机门；没有桌面实时下行协议，不读取或写入声音 bank，也不触碰 BLE、小智音频或舵机。Host/构建通过不等于扬声器真机通过。
 
-T10D-A 冻结并实现手动校准转发桥：Windows 通过 Feature `0x16` 提交一个有 CRC、确认 ID 和单调请求 ID 的 63-byte 请求，EasyInput 通过 Input `0x17` 分别报告已接收与小智终态。总控只逐字节转发既有 T10C `0x20/0x21`，保持 250 ms/三次发送、断线/重启清空和单请求门禁。它没有角度、PWM、脉宽、GPIO 或实体舵机 adapter；生产小智 `MOTION` 仍关闭，所以代码/构建通过不是运动真机通过。
+T10D-A 冻结并实现手动校准转发桥：Windows 通过 Feature `0x16` 提交一个有 CRC、确认 ID 和单调请求 ID 的 63-byte 请求，EasyInput 通过 Input `0x17` 分别报告已接收与小智终态。总控只逐字节转发既有 T10C `0x20/0x21`，保持 250 ms/三次发送、断线/重启清空和单请求门禁。它没有角度、PWM、脉宽、GPIO 或实体舵机 adapter。
+
+T15B 在同一总控上实现动作预设转发候选：Feature `0x18` / Input `0x19` 使用 63-byte payload，Link `0x22` 使用 16 bytes，`0x23` 请求为空且返回冻结的 20-byte 状态。EasyInput 只校验来源/操作矩阵、维护一个请求槽、关联 controller/peer boot 与 action，并逐字节转发 preset/repeat；nod/dance 的 repeat=2 不会在本板展开为轨迹。MOTION bit 3 现在是已知可选能力，T09 `SET_AGENT_STATE` 与 T10D `0x20/0x21` 在该 bit 存在时继续可用，AUDIO bit 4 仍禁止。长动作只立即获得 endpoint acknowledgement，Windows 另发 `0x23` 轮询并仅可表述为“Xiaozhi endpoint reported complete”。该候选尚未获 flash/HIL 授权，不证明物理或机械完成。
 
 所有 DeskMate EasyInput 构建必须使用仓内 `partitions.csv`，逐项保留现有板载合同：24 KiB NVS、4 KiB PHY、3 MiB factory app，以及两个 576 KiB 的 `sound_a` / `sound_b` bank。T03 不使用声音 bank，但不得为了最小构建退回 ESP-IDF 默认 1 MiB 分区表；CMake 和 Host source-contract test 会对该布局 fail closed。
 
@@ -26,6 +28,8 @@ T10D-A 冻结并实现手动校准转发桥：Windows 通过 Feature `0x16` 提�
 - [T11E-A speaker output contract](../../docs/contracts/easyinput-speaker-output-v1.md)
 - [T11E-A Maker reference audit](../../docs/provenance/t11e-a-easyinput-speaker-reference-audit.md)
 - [T10D-A manual calibration host transport](../../contracts/deskmate-host/easyinput-manual-calibration-v1.md)
+- [T15B motion preset host transport](../../contracts/deskmate-host/easyinput-motion-presets-v1.md)
+- [T15 motion preset Link contract](../../contracts/deskmate-link/t15-motion-presets-v1.md)
 - 本机只读参考：`F:\Codex\easyinput-wzm\easy-input-maker`
 
 不要把外部参考目录、其 `build/`、固件镜像、NVS、录音或本机设备信息复制到本目录。
@@ -54,4 +58,4 @@ firmware/easyinput-controller/tools/write-release-manifest.ps1 `
   -OutputPath firmware/easyinput-controller/build/release-manifest.json
 ```
 
-T09 三端候选必须在最终 HEAD 干净重建并列出两块板各自的 app 地址、大小、SHA-256、写入与扇区范围后，逐板取得明确授权。T09 只允许点亮 OLED 和传递七种状态；不得驱动舵机或初始化小智音频。
+任何三端候选必须在最终 HEAD 干净重建并列出两块板各自的 app 地址、大小、SHA-256、写入与扇区范围后，逐板取得明确授权。本目录的 T15B 结果仍只属于代码、Host 和构建证据；不得据此烧录、宣称 HIL 通过或宣称实体动作完成。

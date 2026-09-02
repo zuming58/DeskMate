@@ -84,7 +84,8 @@ bool DeskMateLinkUart::queue_manual_calibration(
     const bool accepted =
         published_status_.state == LinkControllerState::Connected &&
         !manual_calibration_active_ &&
-        !manual_calibration_result_pending_ && request.host_request_id != 0 &&
+        !manual_calibration_result_pending_ && !motion_preset_active_ &&
+        !motion_preset_result_pending_ && request.host_request_id != 0 &&
         (request.message_type == static_cast<std::uint8_t>(
                                      LinkMessageType::
                                          ManualCalibrationCommand) ||
@@ -100,6 +101,27 @@ bool DeskMateLinkUart::queue_manual_calibration(
     return accepted;
 }
 
+bool DeskMateLinkUart::queue_motion_preset(
+    const MotionPresetLinkRequest& request) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool accepted =
+        published_status_.state == LinkControllerState::Connected &&
+        !motion_preset_active_ && !motion_preset_result_pending_ &&
+        !manual_calibration_active_ &&
+        !manual_calibration_result_pending_ && request.host_request_id != 0 &&
+        (request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::MotionPresetCommand) ||
+         request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::GetMotionPresetStatus));
+    if (accepted) {
+        queued_motion_preset_ = request;
+        motion_preset_command_pending_ = true;
+        motion_preset_active_ = true;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return accepted;
+}
+
 bool DeskMateLinkUart::take_manual_calibration_result(
     ManualCalibrationLinkResult& result) {
     portENTER_CRITICAL(&status_mux_);
@@ -109,6 +131,20 @@ bool DeskMateLinkUart::take_manual_calibration_result(
         manual_calibration_result_ = {};
         manual_calibration_result_pending_ = false;
         manual_calibration_active_ = false;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return ready;
+}
+
+bool DeskMateLinkUart::take_motion_preset_result(
+    MotionPresetLinkResult& result) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool ready = motion_preset_result_pending_;
+    if (ready) {
+        result = motion_preset_result_;
+        motion_preset_result_ = {};
+        motion_preset_result_pending_ = false;
+        motion_preset_active_ = false;
     }
     portEXIT_CRITICAL(&status_mux_);
     return ready;
@@ -193,6 +229,34 @@ void DeskMateLinkUart::mark_task_create_failure() {
             portEXIT_CRITICAL(&status_mux_);
         }
 
+        MotionPresetLinkRequest motion_request{};
+        bool motion_request_ready = false;
+        portENTER_CRITICAL(&status_mux_);
+        if (motion_preset_command_pending_) {
+            motion_request = queued_motion_preset_;
+            queued_motion_preset_ = {};
+            motion_preset_command_pending_ = false;
+            motion_request_ready = true;
+        }
+        portEXIT_CRITICAL(&status_mux_);
+        if (motion_request_ready &&
+            !controller_.queue_motion_preset(motion_request)) {
+            MotionPresetLinkResult rejected{};
+            rejected.host_request_id = motion_request.host_request_id;
+            rejected.controller_boot_id =
+                controller_.snapshot().controller_boot_id;
+            rejected.peer_boot_id = controller_.snapshot().peer_boot_id;
+            rejected.message_type = motion_request.message_type;
+            rejected.terminal =
+                controller_.snapshot().state == LinkControllerState::Connected
+                    ? MotionPresetLinkTerminalKind::Internal
+                    : MotionPresetLinkTerminalKind::Disconnected;
+            portENTER_CRITICAL(&status_mux_);
+            motion_preset_result_ = rejected;
+            motion_preset_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
+        }
+
         LinkWireFrame outgoing{};
         if (controller_.poll(now_ms, outgoing)) {
             const int written = uart_write_bytes(
@@ -204,6 +268,13 @@ void DeskMateLinkUart::mark_task_create_failure() {
             portENTER_CRITICAL(&status_mux_);
             manual_calibration_result_ = manual_result;
             manual_calibration_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
+        }
+        MotionPresetLinkResult motion_result{};
+        if (controller_.take_motion_preset_result(motion_result)) {
+            portENTER_CRITICAL(&status_mux_);
+            motion_preset_result_ = motion_result;
+            motion_preset_result_pending_ = true;
             portEXIT_CRITICAL(&status_mux_);
         }
         publish_status();

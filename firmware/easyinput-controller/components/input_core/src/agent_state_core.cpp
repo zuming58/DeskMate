@@ -117,7 +117,7 @@ bool AgentStateBridge::link_ready(const LinkStatusSnapshot& link) {
     return link.state == LinkControllerState::Connected &&
            (link.enabled_capabilities & kLinkT09RequiredCapabilities) ==
                kLinkT09RequiredCapabilities &&
-           (link.enabled_capabilities & kLinkT09ForbiddenCapabilities) == 0;
+           (link.enabled_capabilities & kLinkT15ForbiddenCapabilities) == 0;
 }
 
 bool AgentStateBridge::due(std::uint32_t now_ms,

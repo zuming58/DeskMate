@@ -93,6 +93,12 @@ int main() {
     const std::string manual_host_contract = read_all(MANUAL_HOST_CONTRACT_PATH);
     const std::string manual_host_vectors = read_all(MANUAL_HOST_VECTORS_PATH);
     const std::string manual_link_contract = read_all(MANUAL_LINK_CONTRACT_PATH);
+    const std::string motion_bridge_header = read_all(MOTION_BRIDGE_HEADER_PATH);
+    const std::string motion_bridge_source = read_all(MOTION_BRIDGE_SOURCE_PATH);
+    const std::string motion_host_contract = read_all(MOTION_HOST_CONTRACT_PATH);
+    const std::string motion_host_vectors = read_all(MOTION_HOST_VECTORS_PATH);
+    const std::string motion_link_contract = read_all(MOTION_LINK_CONTRACT_PATH);
+    const std::string motion_link_vectors = read_all(MOTION_LINK_VECTORS_PATH);
     const std::string audio_core_header = read_all(AUDIO_CORE_HEADER_PATH);
     const std::string audio_core_source = read_all(AUDIO_CORE_SOURCE_PATH);
     const std::string audio_service_header = read_all(AUDIO_SERVICE_HEADER_PATH);
@@ -383,6 +389,55 @@ int main() {
     CHECK(!contains(manual_bridge_header, "gpio"));
     CHECK(!contains(manual_bridge_source, "ledc"));
     CHECK(!contains(manual_bridge_source, "servo"));
+
+    // T15B is a bounded semantic forwarding bridge. EasyInput validates and
+    // correlates one request but never expands endpoint-owned trajectories.
+    CHECK(contains(motion_host_contract,
+                   "EASYINPUT_MOTION_PRESETS_HOST_V1_FROZEN"));
+    CHECK(contains(motion_link_contract,
+                   "T15_MOTION_PRESETS_LINK_V1_FROZEN"));
+    CHECK(contains(motion_bridge_header,
+                   "kMotionPresetRequestReportId = 0x18"));
+    CHECK(contains(motion_bridge_header,
+                   "kMotionPresetStatusReportId = 0x19"));
+    CHECK(contains(motion_bridge_header,
+                   "kMotionPresetHostPayloadBytes = 63"));
+    CHECK(contains(motion_bridge_header,
+                   "kMotionPresetCommandPayloadBytes = 16"));
+    CHECK(contains(motion_bridge_header,
+                   "kMotionPresetStatusPayloadBytes = 20"));
+    CHECK(contains(motion_bridge_source, "{'D', 'M', 'R', 'Q'}"));
+    CHECK(contains(motion_bridge_source, "{'D', 'M', 'R', 'S'}"));
+    CHECK(contains(main_source, "kMotionPresetRequestReportId"));
+    CHECK(contains(main_source, "kMotionPresetStatusReportId"));
+    CHECK(contains(main_source,
+                   "deskmate_link_uart.queue_motion_preset(dispatch)"));
+    CHECK(contains(link_uart_source,
+                   "controller_.queue_motion_preset(motion_request)"));
+    CHECK(contains(link_core_header, "MotionPresetCommand = 0x22"));
+    CHECK(contains(link_core_header, "GetMotionPresetStatus = 0x23"));
+    CHECK(contains(link_core_header,
+                   "kLinkT15ForbiddenCapabilities =\n    kLinkCapabilityAudio"));
+    CHECK(!contains(link_core_header, "kLinkT09ForbiddenCapabilities"));
+    CHECK(contains(link_core_header, "kDeskMateLinkRequestTimeoutMs = 250"));
+    CHECK(contains(link_core_header, "kDeskMateLinkMaxAttempts = 3"));
+    CHECK(contains(motion_host_vectors, "run_nod_twice_request"));
+    CHECK(contains(motion_host_vectors, "run_terminal_ack"));
+    CHECK(contains(motion_host_vectors, "status_completed"));
+    CHECK(contains(motion_link_vectors,
+                   "4433221104030201000000000003010202000111"));
+    CHECK(contains(motion_link_vectors,
+                   "4433221104030201010000000202010202020123"));
+    CHECK(!contains(motion_bridge_header, "pwm"));
+    CHECK(!contains(motion_bridge_header, "angle"));
+    CHECK(!contains(motion_bridge_header, "pulse"));
+    CHECK(!contains(motion_bridge_header, "gpio"));
+    CHECK(!contains(motion_bridge_source, "pwm"));
+    CHECK(!contains(motion_bridge_source, "angle"));
+    CHECK(!contains(motion_bridge_source, "pulse"));
+    CHECK(!contains(motion_bridge_source, "gpio"));
+    CHECK(!contains(motion_bridge_source, "waypoint"));
+    CHECK(!contains(motion_bridge_source, "servo"));
 
     // T10E is the only EasyInput microphone implementation. It keeps GPIO8
     // ownership centralized, uses a bounded PSRAM queue and never guesses a

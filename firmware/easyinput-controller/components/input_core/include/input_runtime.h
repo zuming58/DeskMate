@@ -230,11 +230,14 @@ struct ConfigTransferState {
     bool advances_status_stream{false};
     bool advances_host_command{false};
     bool advances_manual_response{false};
+    bool advances_motion_response{false};
     bool completed{false};
     bool completed_status{false};
     bool completed_manual{false};
+    bool completed_motion{false};
     bool failed{false};
     bool failed_manual{false};
+    bool failed_motion{false};
     void clear() {
         active = false;
         report = {};
@@ -242,13 +245,16 @@ struct ConfigTransferState {
         advances_status_stream = false;
         advances_host_command = false;
         advances_manual_response = false;
+        advances_motion_response = false;
     }
     void reset_outcome() {
         completed = false;
         completed_status = false;
         completed_manual = false;
+        completed_motion = false;
         failed = false;
         failed_manual = false;
+        failed_motion = false;
     }
 };
 
