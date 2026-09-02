@@ -75,6 +75,11 @@ internal static class VendorReportProtocol
         var invalidAgentPadding = agentState.ToArray();
         invalidAgentPadding[17] = 1;
         var invalidAgentTtl = MakeAgentStateReport(0, 1, 1, 0);
+        var motionRun = PrependReportId(0x18, "444d5251010101010403020102020000d366000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+        var motionAccepted = PrependReportId(0x19, "444d52530101010004030201000000002200000000000000000000000000000000000000000000000100000000000000443322118877665501010202e3fd00");
+        var motionTerminal = PrependReportId(0x19, "444d525301020100040302011000000022020014443322110403020100000000000301020200011101000000010000004433221188776655010102029c7d00");
+        var motionInvalidPadding = motionRun.ToArray();
+        motionInvalidPadding[63] = 1;
 
         return statusReports.Length == 3 &&
                statusReports.All(report => HasValidEnvelope(report)) &&
@@ -108,7 +113,11 @@ internal static class VendorReportProtocol
                !HasValidEnvelope(outOfRangeChunk) &&
                IsValidAgentStateReport(agentState) &&
                !IsValidAgentStateReport(invalidAgentPadding) &&
-               !IsValidAgentStateReport(invalidAgentTtl);
+               !IsValidAgentStateReport(invalidAgentTtl) &&
+               IsValidMotionPresetRequest(motionRun) &&
+               IsValidMotionPresetResponse(motionAccepted) &&
+               IsValidMotionPresetResponse(motionTerminal) &&
+               !IsValidMotionPresetRequest(motionInvalidPadding);
     }
 
     public static bool IsValidAgentStateReport(ReadOnlySpan<byte> report)
@@ -155,6 +164,75 @@ internal static class VendorReportProtocol
         if (report[8] == 0)
             return report[22] == 0x02 && length == (report[7] == 1 ? 19 : 18) && IsValidManualCalibrationEndpoint(report.Slice(25, length), report[21]);
         return length == 0;
+    }
+
+    public static bool IsValidMotionPresetRequest(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x18 ||
+            !report.Slice(1, 4).SequenceEqual("DMRQ"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || BitConverter.ToUInt32(report.Slice(9, 4)) == 0 ||
+            report[15] != 0 || report[16] != 0 || report.Slice(19).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(17, 2)) != Crc16Ccitt(report.Slice(1, 16))) return false;
+        var kind = report[6];
+        var source = report[7];
+        var operation = report[8];
+        var preset = report[13];
+        var repeat = report[14];
+        if (kind == 2) return source == 0 && operation == 0 && preset == 0 && repeat == 0;
+        return IsValidMotionCommandFields(source, operation, preset, repeat);
+    }
+
+    public static bool IsValidMotionPresetResponse(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x19 ||
+            !report.Slice(1, 4).SequenceEqual("DMRS"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[7] is < 1 or > 2 || report[8] > 11 ||
+            BitConverter.ToUInt32(report.Slice(9, 4)) == 0 ||
+            report[17] != (report[7] == 1 ? 0x22 : 0x23) ||
+            report[18] is not (0 or 0x02 or 0x04) || report[19] > 6 ||
+            report[20] is not (0 or 20) || report[63] != 0 ||
+            BitConverter.ToUInt16(report.Slice(61, 2)) != Crc16Ccitt(report.Slice(1, 60))) return false;
+        var length = report[20];
+        if (report.Slice(21 + length, 20 - length).ContainsAnyExcept((byte)0)) return false;
+        if (report[7] == 2)
+        {
+            if (report[57] != 0 || report[58] != 0 || report[59] != 0 || report[60] != 0) return false;
+        }
+        else if (!IsValidMotionCommandFields(report[57], report[58], report[59], report[60])) return false;
+        if (report[6] == 1) return report[8] == 0 && report[18] == 0 && report[19] == 0 && length == 0;
+        if (report[8] == 0) return report[18] == 0x02 && report[19] == 0 && length == 20 && IsValidMotionEndpoint(report.Slice(21, 20));
+        if (report[8] == 8) return report[18] == 0x04 && report[19] is >= 1 and <= 6 && length == 0;
+        return report[18] == 0 && report[19] == 0 && length == 0;
+    }
+
+    private static bool IsValidMotionCommandFields(byte source, byte operation, byte preset, byte repeat)
+    {
+        if (operation == 1) return source is >= 1 and <= 4 && preset is >= 1 and <= 4 && repeat is >= 1 and <= 3;
+        if (operation is 2 or 3) return source is 1 or 2 && preset == 0 && repeat == 0;
+        if (operation == 4) return source == 1 && preset == 0 && repeat == 0;
+        return false;
+    }
+
+    private static bool IsValidMotionEndpoint(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length != 20 || BitConverter.ToUInt32(payload.Slice(0, 4)) == 0 || payload[12] > 14 || payload[13] > 5 || payload[14] > 4 || payload[15] > 4 || payload[16] > 3 || payload[17] > 3 || payload[18] > 4 || (payload[19] & 0x80) != 0 || payload[17] > payload[16]) return false;
+        var action = BitConverter.ToUInt32(payload.Slice(4, 4));
+        var operation = payload[14];
+        var preset = payload[15];
+        var repeat = payload[16];
+        var completed = payload[17];
+        var source = payload[18];
+        var flags = payload[19];
+        if (operation == 0)
+        {
+            if (action != 0 || preset != 0 || repeat != 0 || completed != 0 || source != 0) return false;
+        }
+        else if (action == 0 || !IsValidMotionCommandFields(source, operation, preset, repeat)) return false;
+        if (((flags & 0x40) != 0) != (payload[12] == 1)) return false;
+        if (operation == 1 && payload[12] == 2 && (payload[13] != 2 || completed != repeat || (flags & 0x20) == 0)) return false;
+        if (operation is 2 or 4 && payload[12] == 2 && (payload[13] != 2 || (flags & 0x02) == 0 || (flags & 0x20) == 0)) return false;
+        if (operation == 3 && payload[12] == 10 && (payload[13] != 4 || (flags & 0x04) == 0 || (flags & 0x20) == 0)) return false;
+        return true;
     }
 
     private static bool IsValidManualCalibrationCommand(ReadOnlySpan<byte> payload)
@@ -232,6 +310,16 @@ internal static class VendorReportProtocol
         BitConverter.TryWriteBytes(report.AsSpan(5, 4), transitionId);
         BitConverter.TryWriteBytes(report.AsSpan(9, 4), ttlMs);
         BitConverter.TryWriteBytes(report.AsSpan(13, 4), sourceHash);
+        return report;
+    }
+
+    private static byte[] PrependReportId(byte reportId, string payloadHex)
+    {
+        var payload = Convert.FromHexString(payloadHex);
+        if (payload.Length != 63) throw new InvalidOperationException("invalid-motion-golden-vector");
+        var report = new byte[64];
+        report[0] = reportId;
+        payload.CopyTo(report, 1);
         return report;
     }
 }

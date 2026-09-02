@@ -1544,7 +1544,7 @@ export function MotionPage({ notify, embedded = false }) {
     if (nextPreset !== preset) selectPreset(nextPreset);
     setRunningPreset(nextPreset);
     try {
-      const result = await voiceAdapters.desktop.runMotionPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
+      const result = await voiceAdapters.desktop.runPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
       if (result) setMotionStatus(result);
       notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${result?.reason || "endpoint-not-complete"}`);
     } catch (error) {
@@ -1557,7 +1557,7 @@ export function MotionPage({ notify, embedded = false }) {
   const runSafetyAction = async (kind) => {
     setSafetyAction(kind);
     try {
-      const action = kind === "stop" ? voiceAdapters.desktop.stopMotionAndCenter("UI") : kind === "estop" ? voiceAdapters.desktop.emergencyStopMotion("UI") : voiceAdapters.desktop.clearMotionEmergencyStopAndCenter("UI");
+      const action = kind === "stop" ? voiceAdapters.desktop.stopAndCenter("UI") : kind === "estop" ? voiceAdapters.desktop.emergencyStop("UI") : voiceAdapters.desktop.clearEmergencyStopAndCenter("UI");
       const result = await action;
       if (result) setMotionStatus(result);
       notify(result?.ok ? ({ stop: "已停止并发送回中命令", estop: "急停已锁存", clear: "急停已解除并发送回中命令" })[kind] : `操作失败：${result?.reason || "motion-operation-failed"}`);

@@ -47,6 +47,7 @@ const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
 const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
 const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
+const { MotionPresetService } = require("./motion-preset-service.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -108,6 +109,7 @@ let codexTaskBriefStore;
 let hermesHookServer;
 let manualCalibrationController;
 let manualControlCoordinator;
+let motionPresetService;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
@@ -128,8 +130,8 @@ function safeAgentStateReason(value) {
 }
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
-  const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
-  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null } };
+  const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
+  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" } };
 }
 
 function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
@@ -734,6 +736,7 @@ function createWindow() {
     emitInputBridgeStatus();
     sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
     sendToMain("manual-control-status", manualControlCoordinator?.snapshot?.() || { available: false, active: false, phase: "unavailable", linkState: "unavailable" });
+    sendToMain("motion-preset-status", motionPresetService?.snapshot?.() || { available: false, phase: "unavailable", busy: false, endpointReportedComplete: false });
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -751,13 +754,14 @@ function startInputBridge() {
   if (process.platform !== "win32") return;
   const executable = getInputBridgeExecutable();
   if (!fs.existsSync(executable)) {
-    sendToMain("input-bridge-status", { available: false, process: "missing", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, error: "input-bridge-not-built" });
+    sendToMain("input-bridge-status", { available: false, process: "missing", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, error: "input-bridge-not-built" });
     return;
   }
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => {
     manualCalibrationController?.handleBridgeStatus(value);
     manualControlCoordinator?.handleBridgeStatus(value);
+    motionPresetService?.handleBridgeStatus(value);
     emitInputBridgeStatus(value);
     const linkAction = linkRecoveryGate.observe(value);
     if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
@@ -951,6 +955,12 @@ app.whenReady().then(async () => {
   manualCalibrationController.on("status", (value) => { sendToMain("manual-calibration-status", value); emitInputBridgeStatus(); });
   manualControlCoordinator = new ManualControlCoordinator({ calibration: manualCalibrationController });
   manualControlCoordinator.on("status", (value) => sendToMain("manual-control-status", value));
+  motionPresetService = new MotionPresetService({
+    send: (report, options) => inputBridge?.sendMotionPreset?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    requestIdSequence: manualCalibrationRequestIds,
+    isManualControlActive: () => manualControlCoordinator?.snapshot?.().active === true,
+  });
+  motionPresetService.on("status", (value) => { sendToMain("motion-preset-status", value); emitInputBridgeStatus(); });
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();
@@ -1005,15 +1015,20 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
   handleTrusted("desktop:get-manual-calibration-status", () => manualCalibrationController.snapshot());
   handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
-  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => manualCalibrationController.command(value));
+  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => motionPresetService?.snapshot?.().busy ? { ok: false, reason: "motion-preset-active" } : manualCalibrationController.command(value));
   handleTrusted("desktop:get-manual-control-status", () => manualControlCoordinator.snapshot());
-  handleTrusted("desktop:start-manual-control", (value = {}) => manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }));
+  handleTrusted("desktop:start-manual-control", (value = {}) => { motionPresetService?.close("motion-operation-cancelled"); return manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }); });
   handleTrusted("desktop:manual-control-establish-center", () => manualControlCoordinator.establishCenter());
   handleTrusted("desktop:manual-control-press", (direction) => manualControlCoordinator.press(String(direction || "")));
   handleTrusted("desktop:manual-control-release", (direction) => manualControlCoordinator.release(String(direction || "")));
   handleTrusted("desktop:manual-control-recenter", () => manualControlCoordinator.recenter());
   handleTrusted("desktop:manual-control-emergency-stop", () => manualControlCoordinator.emergencyStop());
   handleTrusted("desktop:end-manual-control", (reason) => manualControlCoordinator.end(["document-hidden", "page-leave"].includes(reason) ? reason : "page-leave"));
+  handleTrusted("desktop:get-motion-status", () => motionPresetService.getStatus());
+  handleTrusted("desktop:run-motion-preset", (value = {}) => motionPresetService.runPreset(String(value.preset || ""), value.repeat, String(value.source || "")));
+  handleTrusted("desktop:stop-motion-and-center", (source) => motionPresetService.stopAndCenter(String(source || "UI")));
+  handleTrusted("desktop:emergency-stop-motion", (source) => motionPresetService.emergencyStop(String(source || "UI")));
+  handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")));
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
@@ -1237,6 +1252,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

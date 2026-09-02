@@ -25,7 +25,7 @@ internal static class Program
             writer.HostAction("00000000-0000-0000-0000-000000000001");
             writer.FixedTextReady("fixed-00000000000000000000000000000000", 12);
             writer.ConfigAck(true, true, 120, 0x1234, 2);
-            writer.Status(new HidCollectionAvailability(false, false, false));
+            writer.Status(new HidCollectionAvailability(false, false, false, false));
             return;
         }
 
@@ -49,7 +49,8 @@ internal sealed class EventWriter
         1, "status", "easyinput-hid", "Device", availability.AnyEnumerated ? "connected" : "disconnected",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), availability.AnyEnumerated,
         configCollectionWritable: availability.ConfigWritable,
-        calibrationCollectionWritable: availability.CalibrationWritable));
+        calibrationCollectionWritable: availability.CalibrationWritable,
+        motionCollectionWritable: availability.MotionWritable));
 
     public void HostAction(string id) => Write(new BridgeEvent(
         1, "host-action", "easyinput-hid", "HostAction", "invoke",
@@ -91,6 +92,16 @@ internal sealed class EventWriter
 
     public void ManualCalibrationReport(ReadOnlySpan<byte> report) => Write(new BridgeEvent(
         1, "manual-calibration-report", "easyinput-hid", "ManualCalibration", "report",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        reportBase64: Convert.ToBase64String(report)));
+
+    public void MotionPresetWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
+        1, "motion-preset-write", "easyinput-hid", "MotionPreset", ok ? "written" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, ok: ok, reason: reason));
+
+    public void MotionPresetReport(ReadOnlySpan<byte> report) => Write(new BridgeEvent(
+        1, "motion-preset-report", "easyinput-hid", "MotionPreset", "report",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         reportBase64: Convert.ToBase64String(report)));
 
@@ -149,6 +160,7 @@ internal sealed record BridgeEvent(
     bool? boardConnected,
     bool? configCollectionWritable = null,
     bool? calibrationCollectionWritable = null,
+    bool? motionCollectionWritable = null,
     string? hostActionId = null,
     string? requestId = null,
     bool? ok = null,
@@ -213,11 +225,20 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
             commandType = type.GetString()!;
+            if (commandType == "motion-preset-request")
+            {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-motion-preset-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (!VendorReportProtocol.IsValidMotionPresetRequest(report)) throw new InvalidOperationException("invalid-motion-preset-report");
+                var motionResult = HidFeatureDevice.WriteMotionPresetRequest(report);
+                _writer.MotionPresetWrite(requestId, motionResult.ok, motionResult.reason);
+                return Task.CompletedTask;
+            }
             if (commandType == "manual-calibration-request")
             {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-manual-calibration-report");
@@ -295,6 +316,7 @@ internal sealed class ConfigCommandListener : IDisposable
             var reason = error.Message.Length <= 80 ? error.Message : "invalid-command";
             if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
             else if (commandType == "manual-calibration-request") _writer.ManualCalibrationWrite(requestId, false, reason);
+            else if (commandType == "motion-preset-request") _writer.MotionPresetWrite(requestId, false, reason);
             else _writer.ConfigWrite(requestId, false, reason);
         }
         return Task.CompletedTask;
@@ -336,28 +358,34 @@ internal readonly record struct HidCollectionContract(
 internal readonly record struct HidCollectionAvailability(
     bool AnyEnumerated,
     bool ConfigWritable,
-    bool CalibrationWritable);
+    bool CalibrationWritable,
+    bool MotionWritable);
 
 internal static class HidCollectionContracts
 {
     // Frozen EasyInput descriptor: reports 0x10..0x15 share FF00:0002;
-    // manual calibration 0x16/0x17 lives on the separate FF00:0007 collection.
+    // manual calibration 0x16/0x17 and runtime motion 0x18/0x19 live on the
+    // separate FF00:0007 motion collection.
     public static readonly HidCollectionContract Config = new(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64);
     public static readonly HidCollectionContract ManualCalibration = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
+    public static readonly HidCollectionContract MotionPresets = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
 
     public static HidCollectionContract ForFeatureReport(byte reportId) => reportId switch
     {
         >= 0x10 and <= 0x15 => Config,
         0x16 => ManualCalibration,
+        0x18 => MotionPresets,
         _ => throw new ArgumentOutOfRangeException(nameof(reportId), "unsupported-feature-report"),
     };
 
     public static bool RunSelfTest() =>
         ForFeatureReport(0x14) == Config &&
         ForFeatureReport(0x16) == ManualCalibration &&
+        ForFeatureReport(0x18) == MotionPresets &&
         Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
+        MotionPresets.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 63, 64) &&
         !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 65);
@@ -415,11 +443,22 @@ internal static class HidFeatureDevice
             : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
     }
 
+    public static (bool ok, string reason) WriteMotionPresetRequest(byte[] report)
+    {
+        if (!VendorReportProtocol.IsValidMotionPresetRequest(report)) return (false, "invalid-motion-preset-report");
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
+        if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
+        return HidD_SetFeature(handle, report, report.Length)
+            ? (true, "")
+            : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
+    }
+
     public static HidCollectionAvailability InspectCollectionAvailability()
     {
         var anyEnumerated = false;
         var configWritable = false;
         var calibrationWritable = false;
+        var motionWritable = false;
         foreach (var devicePath in EnumerateDevicePaths())
         {
             if (!devicePath.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase)) continue;
@@ -428,8 +467,9 @@ internal static class HidFeatureDevice
             if (handle.IsInvalid) continue;
             configWritable |= MatchesContract(handle, HidCollectionContracts.Config);
             calibrationWritable |= MatchesContract(handle, HidCollectionContracts.ManualCalibration);
+            motionWritable |= MatchesContract(handle, HidCollectionContracts.MotionPresets);
         }
-        return new HidCollectionAvailability(anyEnumerated, configWritable, calibrationWritable);
+        return new HidCollectionAvailability(anyEnumerated, configWritable, calibrationWritable, motionWritable);
     }
 
     private static SafeFileHandle? OpenInterface(HidCollectionContract contract)
@@ -606,6 +646,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private bool _boardConnected;
     private bool _configCollectionWritable;
     private bool _calibrationCollectionWritable;
+    private bool _motionCollectionWritable;
     private bool _hookControlDown;
     private bool _hookShiftDown;
     private bool _hookVoiceEditDown;
@@ -774,6 +815,11 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
+        if (report.Length == 64 && report[0] == 0x19)
+        {
+            if (VendorReportProtocol.IsValidMotionPresetResponse(report)) _writer.MotionPresetReport(report);
+            return;
+        }
         if (report.Length == 64 && report[0] == 0x17)
         {
             if (VendorReportProtocol.IsValidManualCalibrationResponse(report)) _writer.ManualCalibrationReport(report);
@@ -983,10 +1029,12 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         if (!force &&
             availability.AnyEnumerated == _boardConnected &&
             availability.ConfigWritable == _configCollectionWritable &&
-            availability.CalibrationWritable == _calibrationCollectionWritable) return;
+            availability.CalibrationWritable == _calibrationCollectionWritable &&
+            availability.MotionWritable == _motionCollectionWritable) return;
         _boardConnected = availability.AnyEnumerated;
         _configCollectionWritable = availability.ConfigWritable;
         _calibrationCollectionWritable = availability.CalibrationWritable;
+        _motionCollectionWritable = availability.MotionWritable;
         if (!availability.AnyEnumerated)
         {
             _boardControlDown = false;

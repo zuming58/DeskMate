@@ -6,7 +6,7 @@ const page = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8
 const adapters = fs.readFileSync(new URL("../src/adapters/voiceAdapters.js", import.meta.url), "utf8");
 
 test("T15 motion page exposes only bounded real presets and endpoint controls", () => {
-  assert.match(page, /runMotionPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
+  assert.match(page, /runPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
   for (const preset of ["attention", "nod", "search", "dance"]) assert.match(page, new RegExp(`runPreset\\("${preset}"\\)`));
   assert.match(page, /停止并回中/);
   assert.match(page, /立即急停/);
@@ -16,10 +16,10 @@ test("T15 motion page exposes only bounded real presets and endpoint controls", 
 
 test("T15 renderer adapter uses semantic operations without motion primitives", () => {
   assert.match(adapters, /getMotionStatus\(\)/);
-  assert.match(adapters, /runMotionPreset\(value\)/);
-  assert.match(adapters, /stopMotionAndCenter/);
-  assert.match(adapters, /emergencyStopMotion/);
-  assert.match(adapters, /clearMotionEmergencyStopAndCenter/);
+  assert.match(adapters, /runPreset\(value\)/);
+  assert.match(adapters, /stopAndCenter/);
+  assert.match(adapters, /emergencyStop/);
+  assert.match(adapters, /clearEmergencyStopAndCenter/);
   assert.doesNotMatch(adapters, /setMotionPwm|setServoAngle|writeGpio|pulseWidth/);
 });
 

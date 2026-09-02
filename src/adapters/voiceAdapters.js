@@ -49,6 +49,11 @@ export class DesktopBridgeAdapter {
   async recenterManualControl() { return this.bridge?.recenterManualControl ? this.bridge.recenterManualControl() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async emergencyStopManualControl() { return this.bridge?.emergencyStopManualControl ? this.bridge.emergencyStopManualControl() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async endManualControl(reason) { return this.bridge?.endManualControl ? this.bridge.endManualControl(reason) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async getMotionStatus() { return this.bridge?.getMotionStatus ? this.bridge.getMotionStatus() : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
+  async runPreset(value) { return this.bridge?.runPreset ? this.bridge.runPreset(value) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
+  async stopAndCenter(source = "UI") { return this.bridge?.stopAndCenter ? this.bridge.stopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
+  async emergencyStop(source = "UI") { return this.bridge?.emergencyStop ? this.bridge.emergencyStop(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
+  async clearEmergencyStopAndCenter(source = "UI") { return this.bridge?.clearEmergencyStopAndCenter ? this.bridge.clearEmergencyStopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -69,12 +74,6 @@ export class DesktopBridgeAdapter {
   async getCodexTaskBriefStatus() { return this.bridge?.getCodexTaskBriefStatus ? this.bridge.getCodexTaskBriefStatus() : { receiver: "unavailable", tasks: [] }; }
   onCodexTaskBriefStatus(listener) { return this.bridge?.onCodexTaskBriefStatus ? this.bridge.onCodexTaskBriefStatus(listener) : () => {}; }
   onCodexTaskBriefAnnouncement(listener) { return this.bridge?.onCodexTaskBriefAnnouncement ? this.bridge.onCodexTaskBriefAnnouncement(listener) : () => {}; }
-  async getMotionStatus() { return this.bridge?.getMotionStatus ? this.bridge.getMotionStatus() : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
-  async runMotionPreset(value) { return this.bridge?.runPreset ? this.bridge.runPreset(value) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
-  async stopMotionAndCenter(source = "UI") { return this.bridge?.stopAndCenter ? this.bridge.stopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
-  async emergencyStopMotion(source = "UI") { return this.bridge?.emergencyStop ? this.bridge.emergencyStop(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
-  async clearMotionEmergencyStopAndCenter(source = "UI") { return this.bridge?.clearEmergencyStopAndCenter ? this.bridge.clearEmergencyStopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
-  onMotionPresetStatus(listener) { return this.bridge?.onMotionPresetStatus ? this.bridge.onMotionPresetStatus(listener) : () => {}; }
   async readKeyboardConfig() { return this.bridge?.readKeyboardConfig ? this.bridge.readKeyboardConfig() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async previewKeyboardConfigPatch(patch) { return this.bridge?.previewKeyboardConfigPatch ? this.bridge.previewKeyboardConfigPatch(patch) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async commitKeyboardConfig(token) { return this.bridge?.commitKeyboardConfig ? this.bridge.commitKeyboardConfig(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -110,6 +109,7 @@ export class DesktopBridgeAdapter {
   onInputBridgeStatus(listener) { return this.bridge?.onInputBridgeStatus ? this.bridge.onInputBridgeStatus(listener) : () => {}; }
   onManualCalibrationStatus(listener) { return this.bridge?.onManualCalibrationStatus ? this.bridge.onManualCalibrationStatus(listener) : () => {}; }
   onManualControlStatus(listener) { return this.bridge?.onManualControlStatus ? this.bridge.onManualControlStatus(listener) : () => {}; }
+  onMotionPresetStatus(listener) { return this.bridge?.onMotionPresetStatus ? this.bridge.onMotionPresetStatus(listener) : () => {}; }
   onHostActionResult(listener) { return this.bridge?.onHostActionResult ? this.bridge.onHostActionResult(listener) : () => {}; }
   onAgentProviderState(listener) { return this.bridge?.onAgentProviderState ? this.bridge.onAgentProviderState(listener) : () => {}; }
   onCodexAgentState(listener) { return this.bridge?.onCodexAgentState ? this.bridge.onCodexAgentState(listener) : () => {}; }

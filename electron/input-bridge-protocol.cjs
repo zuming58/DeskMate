@@ -5,6 +5,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
 const LINK_STATES = new Set(["disabled", "waiting", "connected", "faulted"]);
 const { decodeManualCalibrationInputReport } = require("./manual-calibration-hid.cjs");
+const { decodeMotionPresetInputReport } = require("./motion-presets-hid.cjs");
 
 function isUInt32(value) {
   return Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
@@ -15,6 +16,18 @@ function parseBridgeLine(line) {
   let value;
   try { value = JSON.parse(line); } catch { return null; }
   if (!value || value.version !== 1) return null;
+  if (value.type === "motion-preset-report") {
+    if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    try {
+      const report = Buffer.from(value.reportBase64, "base64");
+      if (report.toString("base64") !== value.reportBase64) return null;
+      return Object.freeze({ version: 1, type: "motion-preset-report", source: "easyinput-hid", motionPreset: decodeMotionPresetInputReport(report), time: value.time, sequence: value.sequence });
+    } catch { return null; }
+  }
+  if (value.type === "motion-preset-write") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "motion-preset-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: typeof value.reason === "string" ? value.reason.slice(0, 80) : "", time: value.time, sequence: value.sequence });
+  }
   if (value.type === "manual-calibration-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     try {
@@ -87,7 +100,7 @@ function parseBridgeLine(line) {
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
   if (value.type === "status") {
-    for (const field of ["configCollectionWritable", "calibrationCollectionWritable"]) {
+    for (const field of ["configCollectionWritable", "calibrationCollectionWritable", "motionCollectionWritable"]) {
       if (Object.hasOwn(value, field) && typeof value[field] !== "boolean") return null;
     }
   }
@@ -103,6 +116,7 @@ function parseBridgeLine(line) {
       boardConnected: Boolean(value.boardConnected),
       ...(typeof value.configCollectionWritable === "boolean" ? { configCollectionWritable: value.configCollectionWritable } : {}),
       ...(typeof value.calibrationCollectionWritable === "boolean" ? { calibrationCollectionWritable: value.calibrationCollectionWritable } : {}),
+      ...(typeof value.motionCollectionWritable === "boolean" ? { motionCollectionWritable: value.motionCollectionWritable } : {}),
     } : {}),
   });
 }
@@ -136,7 +150,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
-    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) {
         this.reset("easyinput-hid", "F22");
