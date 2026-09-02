@@ -122,7 +122,7 @@ function safeAgentStateReason(value) {
 }
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
-  const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCapabilities: null, linkDiagnostics: null };
+  const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
   return { ...bridge, agentStateDelivery: { ...agentStateDelivery } };
 }
 
@@ -741,7 +741,7 @@ function startInputBridge() {
   if (process.platform !== "win32") return;
   const executable = getInputBridgeExecutable();
   if (!fs.existsSync(executable)) {
-    sendToMain("input-bridge-status", { available: false, process: "missing", boardConnected: false, error: "input-bridge-not-built" });
+    sendToMain("input-bridge-status", { available: false, process: "missing", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, error: "input-bridge-not-built" });
     return;
   }
   inputBridge = new InputBridgeManager({ executable });

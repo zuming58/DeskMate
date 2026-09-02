@@ -26,7 +26,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingAgentState = null;
     this.queuedAgentState = null;
     this.pendingManualCalibration = null;
-    this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
+    this.status = { available: false, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
   configure(value) { return this.filter.configure(value); }
@@ -57,12 +57,32 @@ class InputBridgeManager extends EventEmitter {
     const result = this.filter.accept(event);
     if (result.kind === "status") {
       this.restartAttempts = 0;
-      this.status = { ...this.status, boardConnected: event.boardConnected, error: "", ...(event.boardConnected ? {} : { configCapabilities: null, linkDiagnostics: null }) };
+      const configCollectionWritable = event.boardConnected
+        ? (event.configCollectionWritable ?? (this.status.boardConnected ? this.status.configCollectionWritable : null))
+        : false;
+      const calibrationCollectionWritable = event.boardConnected
+        ? (event.calibrationCollectionWritable ?? (this.status.boardConnected ? this.status.calibrationCollectionWritable : null))
+        : false;
+      this.status = {
+        ...this.status,
+        boardConnected: event.boardConnected,
+        configCollectionWritable,
+        calibrationCollectionWritable,
+        error: "",
+        ...(!event.boardConnected || configCollectionWritable === false ? { configCapabilities: null, linkDiagnostics: null } : {}),
+      };
       this.emit("status", this.snapshot());
       if (!event.boardConnected) {
         this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
         this.failAllAgentStates("easyinput-disconnected");
         this.finishManualCalibration({ ok: false, reason: "easyinput-disconnected" });
+      } else {
+        if (configCollectionWritable === false) {
+          this.finishConfig({ ok: false, reason: "config-interface-unavailable" });
+          this.finishRead({ ok: false, reason: "config-interface-unavailable" });
+          this.failAllAgentStates("config-interface-unavailable");
+        }
+        if (calibrationCollectionWritable === false) this.finishManualCalibration({ ok: false, reason: "manual-calibration-interface-unavailable" });
       }
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
@@ -127,6 +147,7 @@ class InputBridgeManager extends EventEmitter {
     if (this.pendingRead) return Promise.resolve({ ok: false, reason: "config-read-in-progress" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.configCollectionWritable === false) return Promise.resolve({ ok: false, reason: "config-interface-unavailable" });
     if (!this.status.configCapabilities) {
       const checked = await this.readCapabilities();
       if (!checked.ok) return checked;
@@ -199,6 +220,7 @@ class InputBridgeManager extends EventEmitter {
     if (!report || report.length !== 64 || report[0] !== 0x12) return Promise.resolve({ ok: false, reason: "agent-state-report-invalid" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.configCollectionWritable === false) return Promise.resolve({ ok: false, reason: "config-interface-unavailable" });
 
     return new Promise((resolve) => {
       const entry = { requestId: `agent-${randomUUID()}`, report, resolve, timeout: null };
@@ -218,6 +240,7 @@ class InputBridgeManager extends EventEmitter {
     if (this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.calibrationCollectionWritable === false) return Promise.resolve({ ok: false, reason: "manual-calibration-interface-unavailable" });
     const bridgeRequestId = `motion-${randomUUID()}`;
     return new Promise((resolve) => {
       const timeout = this.setTimer(() => this.finishManualCalibration({ ok: false, reason: "manual-calibration-timeout" }), 2500);
@@ -235,8 +258,8 @@ class InputBridgeManager extends EventEmitter {
   }
 
   dispatchAgentState(entry) {
-    if (!this.child?.stdin?.writable || !this.status.boardConnected) {
-      entry.resolve({ ok: false, reason: this.status.boardConnected ? "input-bridge-unavailable" : "easyinput-not-connected" });
+    if (!this.child?.stdin?.writable || !this.status.boardConnected || this.status.configCollectionWritable === false) {
+      entry.resolve({ ok: false, reason: !this.status.boardConnected ? "easyinput-not-connected" : this.status.configCollectionWritable === false ? "config-interface-unavailable" : "input-bridge-unavailable" });
       return;
     }
     entry.timeout = this.setTimer(() => this.finishAgentState({ ok: false, reason: "agent-state-write-timeout" }, entry.requestId), 1500);
@@ -256,7 +279,7 @@ class InputBridgeManager extends EventEmitter {
     const queued = this.queuedAgentState;
     this.queuedAgentState = null;
     if (!queued) return;
-    if (!this.child?.stdin?.writable || !this.status.boardConnected) queued.resolve({ ok: false, reason: "easyinput-disconnected" });
+    if (!this.child?.stdin?.writable || !this.status.boardConnected || this.status.configCollectionWritable === false) queued.resolve({ ok: false, reason: !this.status.boardConnected ? "easyinput-disconnected" : "config-interface-unavailable" });
     else this.dispatchAgentState(queued);
   }
 
@@ -277,6 +300,7 @@ class InputBridgeManager extends EventEmitter {
     if (this.pendingConfig) return Promise.resolve({ ok: false, reason: "config-sync-in-progress" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.configCollectionWritable === false) return Promise.resolve({ ok: false, reason: "config-interface-unavailable" });
     const requestId = `read-${randomUUID()}`;
     return new Promise((resolve) => {
       this.pendingRead = { requestId, timeout: null, resolve, mode };
@@ -346,7 +370,7 @@ class InputBridgeManager extends EventEmitter {
     this.failAllAgentStates("input-bridge-exited");
     this.finishManualCalibration({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
-    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
+    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
     if (this.stopping || this.restartTimer) return;
     const delay = Math.min(30000, 1000 * (2 ** Math.min(this.restartAttempts, 5)));
@@ -370,7 +394,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishManualCalibration({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
-    this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null, linkDiagnostics: null };
+    this.status = { ...this.status, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
     this.emit("status", this.snapshot());
   }
 }

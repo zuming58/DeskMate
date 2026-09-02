@@ -3,17 +3,20 @@ const LINK_STATES = new Set(["disabled", "waiting", "connected", "faulted"]);
 class LinkRecoveryGate {
   constructor() {
     this.boardConnected = false;
+    this.configCollectionWritable = false;
     this.linkState = "unavailable";
   }
 
   observe(value = {}) {
     const boardConnected = value.boardConnected === true;
-    const linkState = boardConnected && LINK_STATES.has(value.linkDiagnostics?.state)
+    const configCollectionWritable = boardConnected && value.configCollectionWritable !== false;
+    const linkState = configCollectionWritable && LINK_STATES.has(value.linkDiagnostics?.state)
       ? value.linkDiagnostics.state
       : "unavailable";
-    const refresh = boardConnected && !this.boardConnected;
+    const refresh = configCollectionWritable && !this.configCollectionWritable;
     const recover = linkState === "connected" && this.linkState !== "connected";
     this.boardConnected = boardConnected;
+    this.configCollectionWritable = configCollectionWritable;
     this.linkState = linkState;
     return Object.freeze({ refresh, recover, boardConnected, linkState });
   }

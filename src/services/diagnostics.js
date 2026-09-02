@@ -26,6 +26,13 @@ export function createDiagnosticReport(input = {}) {
     counters: Object.fromEntries(["heartbeats", "audioFrames", "droppedFrames", "sequenceGaps", "malformedPackets", "sourceRejects", "controlRetries", "controlTimeouts"].map((key) => [key, Number.isInteger(counters[key]) ? counters[key] : 0])),
   };
   const bridge = input.inputBridge || {};
+  const enumerated = bridge.boardConnected === true;
+  const collectionState = (value) => !enumerated ? "not-enumerated" : typeof value === "boolean" ? (value ? "writable" : "unavailable") : "unknown";
+  const easyInputHid = {
+    enumerated,
+    configCollection: collectionState(bridge.configCollectionWritable),
+    calibrationCollection: collectionState(bridge.calibrationCollectionWritable),
+  };
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
   const conversationSource = input.conversation || {};
@@ -111,5 +118,5 @@ export function createDiagnosticReport(input = {}) {
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, deskMateLink: link, agentStateDelivery };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery };
 }

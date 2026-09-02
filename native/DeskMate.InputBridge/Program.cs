@@ -14,7 +14,7 @@ internal static class Program
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
         {
-            Environment.ExitCode = VendorReportProtocol.RunSelfTest() ? 0 : 1;
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && HidCollectionContracts.RunSelfTest() ? 0 : 1;
             return;
         }
         var writer = new EventWriter();
@@ -25,7 +25,7 @@ internal static class Program
             writer.HostAction("00000000-0000-0000-0000-000000000001");
             writer.FixedTextReady("fixed-00000000000000000000000000000000", 12);
             writer.ConfigAck(true, true, 120, 0x1234, 2);
-            writer.Status(false);
+            writer.Status(new HidCollectionAvailability(false, false, false));
             return;
         }
 
@@ -45,9 +45,11 @@ internal sealed class EventWriter
     public void Input(string source, string key, string action) => Write(new BridgeEvent(
         1, "input", source, key, action, DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null));
 
-    public void Status(bool connected) => Write(new BridgeEvent(
-        1, "status", "easyinput-hid", "Device", connected ? "connected" : "disconnected",
-        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), connected));
+    public void Status(HidCollectionAvailability availability) => Write(new BridgeEvent(
+        1, "status", "easyinput-hid", "Device", availability.AnyEnumerated ? "connected" : "disconnected",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), availability.AnyEnumerated,
+        configCollectionWritable: availability.ConfigWritable,
+        calibrationCollectionWritable: availability.CalibrationWritable));
 
     public void HostAction(string id) => Write(new BridgeEvent(
         1, "host-action", "easyinput-hid", "HostAction", "invoke",
@@ -145,6 +147,8 @@ internal sealed record BridgeEvent(
     DateTimeOffset time,
     long sequence,
     bool? boardConnected,
+    bool? configCollectionWritable = null,
+    bool? calibrationCollectionWritable = null,
     string? hostActionId = null,
     string? requestId = null,
     bool? ok = null,
@@ -308,6 +312,57 @@ internal sealed class ConfigCommandListener : IDisposable
     public void Dispose() => _cancellation.Cancel();
 }
 
+internal readonly record struct HidCollectionContract(
+    ushort VendorId,
+    ushort ProductId,
+    ushort UsagePage,
+    ushort Usage,
+    ushort InputReportByteLength,
+    ushort FeatureReportByteLength)
+{
+    public bool Matches(
+        ushort vendorId,
+        ushort productId,
+        ushort usagePage,
+        ushort usage,
+        ushort inputReportByteLength,
+        ushort featureReportByteLength) =>
+        vendorId == VendorId && productId == ProductId &&
+        usagePage == UsagePage && usage == Usage &&
+        inputReportByteLength == InputReportByteLength &&
+        featureReportByteLength == FeatureReportByteLength;
+}
+
+internal readonly record struct HidCollectionAvailability(
+    bool AnyEnumerated,
+    bool ConfigWritable,
+    bool CalibrationWritable);
+
+internal static class HidCollectionContracts
+{
+    // Frozen EasyInput descriptor: reports 0x10..0x15 share FF00:0002;
+    // manual calibration 0x16/0x17 lives on the separate FF00:0007 collection.
+    public static readonly HidCollectionContract Config = new(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64);
+    public static readonly HidCollectionContract ManualCalibration = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
+
+    public static HidCollectionContract ForFeatureReport(byte reportId) => reportId switch
+    {
+        >= 0x10 and <= 0x15 => Config,
+        0x16 => ManualCalibration,
+        _ => throw new ArgumentOutOfRangeException(nameof(reportId), "unsupported-feature-report"),
+    };
+
+    public static bool RunSelfTest() =>
+        ForFeatureReport(0x14) == Config &&
+        ForFeatureReport(0x16) == ManualCalibration &&
+        Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
+        !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
+        ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
+        !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
+        !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 63, 64) &&
+        !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 65);
+}
+
 internal static class HidFeatureDevice
 {
     private const uint DigcfPresent = 0x00000002;
@@ -317,17 +372,16 @@ internal static class HidFeatureDevice
     private const uint FileShareRead = 0x00000001;
     private const uint FileShareWrite = 0x00000002;
     private const uint OpenExisting = 3;
-    private const ushort VendorId = 0x303A;
-    private const ushort ProductId = 0x1006;
     private const int HidpStatusSuccess = 0x00110000;
+    private const string BoardVidPid = "VID_303A&PID_1006";
 
     public static (bool ok, string reason) WriteConfigReports(IReadOnlyList<byte[]> reports)
     {
-        using var handle = OpenConfigInterface();
+        if (reports.Count == 0 || reports.Any(report => report.Length != 64 || report[0] != 0x10)) return (false, "invalid-config-report");
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(reports[0][0]));
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         foreach (var report in reports)
         {
-            if (report.Length != 64 || report[0] != 0x10) return (false, "invalid-config-report");
             if (!HidD_SetFeature(handle, report, report.Length)) return (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
             Thread.Sleep(12);
         }
@@ -336,14 +390,15 @@ internal static class HidFeatureDevice
 
     public static bool RequestConfigRead(byte[] report)
     {
-        using var handle = OpenConfigInterface();
+        if (report.Length != 64 || report[0] != 0x13) return false;
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
         return handle is not null && !handle.IsInvalid && HidD_SetFeature(handle, report, report.Length);
     }
 
     public static (bool ok, string reason) WriteAgentStateReport(byte[] report)
     {
         if (!VendorReportProtocol.IsValidAgentStateReport(report)) return (false, "invalid-agent-state-report");
-        using var handle = OpenConfigInterface();
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         return HidD_SetFeature(handle, report, report.Length)
             ? (true, "")
@@ -353,18 +408,67 @@ internal static class HidFeatureDevice
     public static (bool ok, string reason) WriteManualCalibrationRequest(byte[] report)
     {
         if (!VendorReportProtocol.IsValidManualCalibrationRequest(report)) return (false, "invalid-manual-calibration-report");
-        using var handle = OpenConfigInterface();
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         return HidD_SetFeature(handle, report, report.Length)
             ? (true, "")
             : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
     }
 
-    private static SafeFileHandle? OpenConfigInterface()
+    public static HidCollectionAvailability InspectCollectionAvailability()
     {
+        var anyEnumerated = false;
+        var configWritable = false;
+        var calibrationWritable = false;
+        foreach (var devicePath in EnumerateDevicePaths())
+        {
+            if (!devicePath.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase)) continue;
+            anyEnumerated = true;
+            using var handle = CreateFile(devicePath, GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+            if (handle.IsInvalid) continue;
+            configWritable |= MatchesContract(handle, HidCollectionContracts.Config);
+            calibrationWritable |= MatchesContract(handle, HidCollectionContracts.ManualCalibration);
+        }
+        return new HidCollectionAvailability(anyEnumerated, configWritable, calibrationWritable);
+    }
+
+    private static SafeFileHandle? OpenInterface(HidCollectionContract contract)
+    {
+        foreach (var devicePath in EnumerateDevicePaths())
+        {
+            if (!devicePath.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase)) continue;
+            var handle = CreateFile(devicePath, GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+            if (handle.IsInvalid) { handle.Dispose(); continue; }
+            if (MatchesContract(handle, contract)) return handle;
+            handle.Dispose();
+        }
+        return null;
+    }
+
+    private static bool MatchesContract(SafeFileHandle handle, HidCollectionContract contract)
+    {
+        var attributes = new HidAttributes { Size = Marshal.SizeOf<HidAttributes>() };
+        if (!HidD_GetAttributes(handle, ref attributes)) return false;
+        if (!HidD_GetPreparsedData(handle, out var preparsed)) return false;
+        try
+        {
+            return HidP_GetCaps(preparsed, out var capabilities) == HidpStatusSuccess && contract.Matches(
+                attributes.VendorId,
+                attributes.ProductId,
+                capabilities.UsagePage,
+                capabilities.Usage,
+                capabilities.InputReportByteLength,
+                capabilities.FeatureReportByteLength);
+        }
+        finally { HidD_FreePreparsedData(preparsed); }
+    }
+
+    private static IReadOnlyList<string> EnumerateDevicePaths()
+    {
+        var paths = new List<string>();
         HidD_GetHidGuid(out var hidGuid);
         var info = SetupDiGetClassDevs(ref hidGuid, null, IntPtr.Zero, DigcfPresent | DigcfDeviceInterface);
-        if (info == new IntPtr(-1)) return null;
+        if (info == new IntPtr(-1)) return paths;
         try
         {
             for (uint index = 0; ; index++)
@@ -379,29 +483,13 @@ internal static class HidFeatureDevice
                     Marshal.WriteInt32(detail, IntPtr.Size == 8 ? 8 : 6);
                     if (!SetupDiGetDeviceInterfaceDetail(info, ref interfaceData, detail, required, out _, IntPtr.Zero)) continue;
                     var devicePath = Marshal.PtrToStringUni(IntPtr.Add(detail, 4));
-                    if (string.IsNullOrWhiteSpace(devicePath)) continue;
-                    var handle = CreateFile(devicePath, GenericRead | GenericWrite, FileShareRead | FileShareWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
-                    if (handle.IsInvalid) { handle.Dispose(); continue; }
-                    if (MatchesConfigContract(handle)) return handle;
-                    handle.Dispose();
+                    if (!string.IsNullOrWhiteSpace(devicePath)) paths.Add(devicePath);
                 }
                 finally { Marshal.FreeHGlobal(detail); }
             }
         }
         finally { SetupDiDestroyDeviceInfoList(info); }
-        return null;
-    }
-
-    private static bool MatchesConfigContract(SafeFileHandle handle)
-    {
-        var attributes = new HidAttributes { Size = Marshal.SizeOf<HidAttributes>() };
-        if (!HidD_GetAttributes(handle, ref attributes) || attributes.VendorId != VendorId || attributes.ProductId != ProductId) return false;
-        if (!HidD_GetPreparsedData(handle, out var preparsed)) return false;
-        try
-        {
-            return HidP_GetCaps(preparsed, out var capabilities) == HidpStatusSuccess && capabilities.FeatureReportByteLength >= 64 && capabilities.InputReportByteLength >= 64;
-        }
-        finally { HidD_FreePreparsedData(preparsed); }
+        return paths;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -486,6 +574,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort HidUsageGenericKeyboard = 0x06;
     private const ushort HidUsagePageVendor = 0xFF00;
     private const ushort HidUsageVendorCommands = 0x02;
+    private const ushort HidUsageVendorManualCalibration = 0x07;
     private const uint RidevInputSink = 0x00000100;
     private const uint RidevDeviceNotify = 0x00002000;
     private const ushort RiKeyBreak = 0x0001;
@@ -515,6 +604,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private readonly LowLevelKeyboardProc _keyboardProc;
     private IntPtr _keyboardHook;
     private bool _boardConnected;
+    private bool _configCollectionWritable;
+    private bool _calibrationCollectionWritable;
     private bool _hookControlDown;
     private bool _hookShiftDown;
     private bool _hookVoiceEditDown;
@@ -573,6 +664,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             {
                 UsagePage = HidUsagePageVendor,
                 Usage = HidUsageVendorCommands,
+                Flags = RidevInputSink | RidevDeviceNotify,
+                Target = Handle,
+            },
+            new RawInputDevice
+            {
+                UsagePage = HidUsagePageVendor,
+                Usage = HidUsageVendorManualCalibration,
                 Flags = RidevInputSink | RidevDeviceNotify,
                 Target = Handle,
             },
@@ -881,10 +979,15 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void RefreshBoardStatus(bool force)
     {
-        var connected = EnumerateDeviceNames().Any(name => name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase));
-        if (!force && connected == _boardConnected) return;
-        _boardConnected = connected;
-        if (!connected)
+        var availability = HidFeatureDevice.InspectCollectionAvailability();
+        if (!force &&
+            availability.AnyEnumerated == _boardConnected &&
+            availability.ConfigWritable == _configCollectionWritable &&
+            availability.CalibrationWritable == _calibrationCollectionWritable) return;
+        _boardConnected = availability.AnyEnumerated;
+        _configCollectionWritable = availability.ConfigWritable;
+        _calibrationCollectionWritable = availability.CalibrationWritable;
+        if (!availability.AnyEnumerated)
         {
             _boardControlDown = false;
             _boardShiftDown = false;
@@ -897,7 +1000,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
                 _pendingFixedText = null;
             }
         }
-        _writer.Status(connected);
+        _writer.Status(availability);
     }
 
     private IntPtr KeyboardHook(int code, IntPtr message, IntPtr data)
@@ -934,27 +1037,6 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return CallNextHookEx(_keyboardHook, code, message, data);
     }
 
-    private static IEnumerable<string> EnumerateDeviceNames()
-    {
-        uint count = 0;
-        var itemSize = (uint)Marshal.SizeOf<RawInputDeviceList>();
-        if (GetRawInputDeviceList(IntPtr.Zero, ref count, itemSize) != 0 || count == 0) yield break;
-        var buffer = Marshal.AllocHGlobal(checked((int)(count * itemSize)));
-        try
-        {
-            if (GetRawInputDeviceList(buffer, ref count, itemSize) == uint.MaxValue) yield break;
-            for (var index = 0; index < count; index++)
-            {
-                var item = Marshal.PtrToStructure<RawInputDeviceList>(IntPtr.Add(buffer, checked((int)(index * itemSize))));
-                if (item.Type == RimTypeKeyboard) yield return GetDeviceName(item.Device);
-            }
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
     private static string GetDeviceName(IntPtr device)
     {
         uint length = 0;
@@ -975,9 +1057,6 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RawInputDevice { public ushort UsagePage; public ushort Usage; public uint Flags; public IntPtr Target; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RawInputDeviceList { public IntPtr Device; public uint Type; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RawInputHeader { public uint Type; public uint Size; public IntPtr Device; public IntPtr WParam; }
@@ -1056,9 +1135,6 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetRawInputData(IntPtr input, uint command, IntPtr data, ref uint size, uint headerSize);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint GetRawInputDeviceList(IntPtr list, ref uint count, uint size);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetRawInputDeviceInfo(IntPtr device, uint command, StringBuilder? data, ref uint size);
