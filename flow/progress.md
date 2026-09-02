@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - Windows status-stream bounds aligned with EasyInput
+
+- Created Windows-only repair branch `codex/t10d-desktop-status-stream-bounds` from the accepted HID routing HEAD `72ee0e499f7afa551498654e3062f66112b88cab`; implementation commit is `60584bc5427c2a0840342a79e7909587d8bb4a58`. EasyInput and Xiaozhi source are unchanged.
+- Root cause was confirmed from read-only HIL evidence and source contracts: a full config read completed `26/26`, while the approximately 1104-byte status response emitted no progress because the native bridge rejected its first `0x11` status chunk against stale `1023`-byte / `21`-chunk limits. Firmware owns a 1536-byte status buffer, so the Windows defensive ceiling is now 1536 bytes / 31 chunks at 50 data bytes per report.
+- Regression vectors now cover a real-size 1104-byte / 23-chunk stream, the 1535-byte / 31-chunk effective JSON edge, explicit 1536-byte acceptance, and 32-chunk / 1537-byte rejection. Full-config and status limits remain independent.
+- Verification passed: focused native/bridge regression `35/35`; full `npm test` `296/296`; .NET Release build and protocol self-test with zero warnings/errors; `npm run build:desktop`; `git diff --check`. Package is `release/win-unpacked`; `DeskMate.exe` SHA-256 is `154C5BA813B25472A1920FDCC766F49BB4A5A4B99744ECEEBEDF71E0E59B6C4F`; bundled `DeskMate.InputBridge.exe` SHA-256 is `DFE27722DFAF1CA7A59B881511C7E39C258BCBD2068F429F2D73AB035571FC0D`; `app.asar` SHA-256 is `3E33558D926994C7250142AA72EBC8759FBE74B146615018E25CC296864F872F`.
+- Classification is `ROOT_CAUSE_CONFIRMED / TEST_CONFIRMED / BUILD_CONFIRMED / HIL_NOT_RUN`. No application, device/port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred.
+- Next: main task launches only the exact package after closing any old instance, reads status once, and confirms config progress reaches about `23/23`, Link evidence becomes available, and Agent State evidence remains separate. Do not infer Xiaozhi display or motion from a successful Windows read.
+
 ## 2026-09-02 - Windows HID multi-collection routing repair complete
 
 - Created Windows-only repair branch `codex/t10d-desktop-hid-collection-routing` from exact accepted software HEAD `8578f0cc8bef40ba269bb0960adbaf04c66432ed`; implementation commit is `7333cf3f43635cb7b14fdb868a4967da81c3aed5`. The dirty primary checkout and both firmware modules were not modified.

@@ -229,8 +229,8 @@
 
 ## A growing bounded status payload requires consumer-boundary regression vectors
 
-- Symptom: firmware added privacy-safe T09 Link and Agent counters to an existing status JSON. The producer stayed below its 1024-byte buffer, but the Windows consumer silently retained the older 512-byte / 11-chunk limit and discarded the first 561-byte / 12-chunk response.
-- Practice: define the producer's usable byte limit, derived maximum chunk count and per-kind limits once in the consumer protocol module. Test both the newly observed expanded payload and the exact reject boundary. Do not treat a successful full-config stream as evidence that the independent status stream is accepted.
+- Symptom: firmware added privacy-safe Link, Agent and later diagnostics to an existing status JSON. The producer grew to about 1104 bytes inside its 1536-byte buffer, but the Windows consumer silently retained a stale 1023-byte / 21-chunk limit and discarded the first 23-chunk response. A separate full-config read still completed, hiding the mismatch.
+- Practice: define the producer's buffer ceiling, effective usable JSON limit, derived maximum chunk count and per-kind limits once in the consumer protocol module. Test the observed 1024+ byte payload, the 31-chunk edge and the first rejected byte/chunk. Do not treat a successful full-config stream as evidence that the independent status stream is accepted.
 - Rule: whenever fields are added to a bounded cross-end diagnostic payload, rerun a near-current-size golden vector through the actual native consumer. Sanitized counters must remain explicitly enumerated; raw JSON, user content and device identifiers must not be forwarded merely to simplify diagnosis.
 
 ## An app-only candidate must not hide a failed bootloader rebuild

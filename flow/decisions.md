@@ -1,5 +1,12 @@
 # Decisions
 
+## D069 - Native status-stream bounds follow the frozen producer capacity
+
+- Date: 2026-09-02
+- Decision: Windows accepts EasyInput `0x11` status streams up to the firmware-owned 1536-byte buffer ceiling and at most 31 chunks of 50 data bytes. Full-config `0x13` retains its independent 2048-byte / 42-chunk ceiling.
+- Boundary: 1536 bytes is the defensive wire ceiling; the current NUL-terminated firmware JSON is effectively at most 1535 bytes. Chunk count, declared length, sequence, request identity, CRC, padding, schema and enumerated fields all remain fail-closed.
+- Acceptance: native regression must include a payload larger than 1023 bytes, the 31-chunk edge, and explicit rejection at 32 chunks or 1537 bytes. A successful config read is not evidence that the separate status stream was accepted, and a successful status read is not evidence of Xiaozhi display or motion.
+
 ## D068 - Windows routes EasyInput reports by exact top-level HID collection
 
 - Date: 2026-09-02
