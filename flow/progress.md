@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Direction HIL accepted; explicit emergency-stop recovery missing
+
+- The user reports the Pitch-fixed exact package now controls directions without the prior semantic problem. Immediate stop also works and the UI/endpoint remain correctly latched as `emergency-stopped`.
+- A subsequent explicit attempt to start manual control is rejected as `急停已锁定`. Source audit confirms the frozen `clearEmergencyStop` operation exists, but the simplified `ManualControlCoordinator.begin()` performs only status and center establishment; the normal UI exposes neither a clear action nor a clear-and-restart orchestration. This is a Windows flow omission, not a firmware or Link defect.
+- Sent a minimal Windows-only repair to `DeskMate软件开发` from integration HEAD `20a241b`: show an explicit “解除急停并重新开始（会先回中）” action only for the latched state, and only on that user-confirmed click perform fresh status → clear → terminal verification → locked → two-axis center establishment. Startup, reconnect and passive status must never clear a latched stop.
+- Classification: `DIRECTION_HIL_ACCEPTED / E_STOP_LATCH_HIL_ACCEPTED / WINDOWS_RECOVERY_PATH_MISSING / FIX_IN_PROGRESS`. No reflash is required. Next: audit/merge/launch the recovery package and verify clear/restart, center, release and another immediate stop before freezing manual control.
+
 ## 2026-09-02 - Pitch semantic repair merged and exact Windows package launched
 
 - Audited and merged `codex/t10d-desktop-pitch-direction-recovery@d2abb09d11fec0d8f8bddbe71673285307844bfa` into the integration branch as `329b654`. The implementation changes only `up → pitch -1` and `down → pitch +1`; left/right, frozen HID/Link encoding, request-ID recovery, center, limits, fixed step, ARM, rate, release cancellation, emergency stop and both firmware trees are unchanged.
