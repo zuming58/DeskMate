@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-09-02 - Windows manual-control request ID restart recovery complete
+
+- Exact delivery is `codex/t10d-desktop-request-id-recovery` from integrated baseline `b5673e203adc482cff658d84cab343f96b366b0b`; implementation commit is `d587626c1fb8c60b03eb64da72df640ee8382876`. The final documentation pointer is the branch HEAD containing this record.
+- User-present HIL had already proved EasyInput connected, both required HID collections writable and DeskMate Link connected, but the first manual-control status request returned `stale` for request ID `8`. Root cause was Windows process-local request numbering: the desktop restarted from a low counter while EasyInput correctly retained its higher `max_request_id_` for the current USB mount epoch.
+- Added one Electron-owned persistent request-ID sequence. It reserves a 4096-ID block before use, writes a checksummed primary and backup journal under Electron `userData`, resumes strictly above the persisted high-water after desktop restart and never wraps at `uint32` exhaustion. A valid journal copy can recover the other; two invalid copies, persistence failure or exhaustion fail closed before any device request is sent.
+- First deployment begins at `0x40000000`. If the already-mounted EasyInput still rejects a read-only status request as stale, the same explicit user action may advance through a bounded sequence of higher floors and retry only that status query. It never guesses an unbounded value, replays a movement command or changes the frozen HID/DeskMate Link encoding.
+- Verification passed: focused request-ID/manual-control tests `27/27`; `npm ci --include=dev`; full `npm test` `316/316`; packaged native bridge `--protocol-self-test`; `git diff --check`; and isolated Windows packaging at `release-t10d-request-id-recovery/win-unpacked`. Firmware diffs from the exact base are empty.
+- Package evidence: `DeskMate.exe` is `202690560` bytes / SHA-256 `B70ECB55106BAE84C257BB02DCF6298F2EDEB96FF8DB5935860A00F092D39A2D`; `resources/input-bridge/DeskMate.InputBridge.exe` is `153512841` bytes / `3B0C0936D3A81CBFBAD400E1B635A51C09435872A8FCEBFB88293780E1B7B014`; `resources/app.asar` is `112816342` bytes / `06FE4D2FBAC62AD59139435B64A89AD1562AA2F222FE2277F7471152C0E23BD0`.
+- Classification: `WINDOWS_ROOT_CAUSE_FIXED / CODE_BUILD_CONFIRMED / EXACT_PACKAGE_READY / HIL_RERUN_PENDING`. No application was launched, no device or port was accessed, and no firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred. Next: the integration owner launches this exact package, and the user presses start once without unplugging EasyInput to confirm the prior `stale` response is replaced by an accepted status result.
+
 ## 2026-09-02 - Xiaozhi Stage 2 app-only flash verified; movement HIL underway
 
 - After the exact `COM13` Xiaozhi target was freshly identified as ESP32-S3, the user explicitly confirmed `确认烧录 COM13 小智`. The same private hardware identity matched again immediately before and after the write; it was not persisted in this repository or diagnostics.
