@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A protocol direction sign is not a user-facing motion label
+
+- Symptom: the full control route succeeds and horizontal buttons behave correctly, but `上` visibly nods down and `下` raises the head even though all requests complete.
+- Practice: keep the frozen signed wire primitive unchanged, then bind product words to signs only from user-present observation of the installed mechanism. Cover every semantic direction through the real coordinator path rather than testing a single representative sign.
+- Rule: numeric axis polarity is transport data, not physical meaning. Correct semantic inversion at one explicit transform boundary; do not compensate in firmware, labels, limits or several duplicated call sites.
+
 ## A protocol epoch can outlive its desktop client process
 
 - Symptom: the Windows UI reconnects successfully and both HID collections plus the downstream Link are healthy, yet the first request after restarting DeskMate is rejected as `stale`.
