@@ -25,7 +25,7 @@ function normalizeResult(value = {}) {
   value = value && typeof value === "object" ? value : {};
   return Object.freeze({
     day: /^\d{4}-\d{2}-\d{2}$/.test(String(value.day || "")) ? String(value.day) : "",
-    status: ["never", "completed", "no-pending", "failed"].includes(value.status) ? value.status : "never",
+    status: ["never", "completed", "no-pending", "warning", "failed"].includes(value.status) ? value.status : "never",
     inputDigest: /^[a-f0-9]{64}$/i.test(String(value.inputDigest || "")) ? String(value.inputDigest).toLowerCase() : "",
     at: Number.isNaN(new Date(value.at || "").getTime()) ? "" : new Date(value.at).toISOString(),
     reason: /^[a-z0-9-]{0,80}$/.test(String(value.reason || "")) ? String(value.reason || "") : "memory-generation-failed",
@@ -142,7 +142,7 @@ class CompanionMemoryDigestScheduler {
         }
         const at = new Date(this.now()).toISOString();
         const normalized = last?.ok
-          ? { day: last.day || eligible.at(-1), status: last.skipped ? "no-pending" : "completed", inputDigest: last.inputDigest || "", at, reason: last.reason || "" }
+          ? { day: last.day || eligible.at(-1), status: last.warning ? "warning" : last.skipped ? "no-pending" : "completed", inputDigest: last.inputDigest || "", at, reason: last.warning ? last.warningReason || "knowledge-base-projection-failed" : last.reason || "" }
           : { day: last?.day || eligible[0], status: "failed", inputDigest: last?.inputDigest || "", at, reason: String(last?.reason || "memory-generation-failed") };
         this.policyStore.markResult(source, normalized);
         results[source] = last || { ok: true, skipped: true, reason: "memory-no-unprocessed-turns" };

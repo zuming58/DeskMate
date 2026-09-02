@@ -521,6 +521,7 @@ function MemoryManagementPage({ notify }) {
     const result = memoryPolicy.lastResults?.[source];
     if (!result || result.status === "never") return "尚未运行";
     if (result.status === "failed") return `${result.day || "最近"} 失败 · 可立即重试`;
+    if (result.status === "warning") return `${result.day || "最近"} 摘要已保存 · 双链待重试`;
     if (result.status === "no-pending") return `${result.day} 无待整理内容`;
     return `${result.day} 已完成`;
   };
@@ -596,7 +597,7 @@ function MemoryManagementPage({ notify }) {
     try {
       const result = await globalThis.desktopBridge?.generatePendingMemories?.();
       if (!result?.ok) throw new Error(result?.reason || "memory-generation-failed");
-      notify(result.skipped ? "当前没有待整理的真实对话回合" : `已生成每日摘要和 ${result.candidates} 条待审核候选`);
+      notify(result.skipped ? "当前没有待整理的真实对话回合" : result.warning ? `已生成每日摘要和 ${result.candidates} 条候选；双链同步未完成，可在知识库区域重试` : `已生成每日摘要和 ${result.candidates} 条待审核候选`);
       await refreshMemory();
     } catch (error) { notify(`记忆整理失败：${error.message}`); }
     finally { setBusy(false); }
@@ -617,6 +618,7 @@ function MemoryManagementPage({ notify }) {
       const result = await globalThis.desktopBridge?.syncKnowledgeBase?.();
       if (!result?.ok && !Number.isInteger(result?.conflicts)) throw new Error(result?.reason || "knowledge-base-sync-failed");
       notify(result.conflicts ? `双链同步完成，但保留了 ${result.conflicts} 个用户修改冲突` : `已同步 ${result.files} 个受管 Markdown 双链文件`);
+      await refreshMemory();
     } catch (error) { notify(`知识库同步失败：${error.message}`); }
     finally { setBusy(false); }
   };
@@ -655,7 +657,7 @@ function MemoryManagementPage({ notify }) {
           <label className="field-label">整理方式<select value={memoryPolicy.schedule} onChange={(event) => setMemoryPolicy((current) => ({ ...current, schedule: event.target.value }))}><option value="daily">每天自动整理</option><option value="manual">仅手动整理</option></select></label>
           <label className="field-label">本地整理时间<input type="time" step="60" disabled={memoryPolicy.schedule !== "daily"} value={memoryPolicy.dailyTime} onChange={(event) => setMemoryPolicy((current) => ({ ...current, dailyTime: event.target.value }))} /></label>
         </div>
-        <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
+        <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
         <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
       </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>

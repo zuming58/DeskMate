@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { CompanionMemoryPipeline } = require("../electron/companion-memory-pipeline.cjs");
 const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("../electron/companion-memory-policy.cjs");
+const { CompanionMemoryGenerationCoordinator } = require("../electron/companion-memory-generation.cjs");
 const { KnowledgeBaseProjection, dailyDocument, memoryDocument } = require("../electron/knowledge-base-projection.cjs");
 const { DatabaseSync } = require("node:sqlite");
 
@@ -138,16 +139,74 @@ test("knowledge projection writes separate same-day source notes", () => tempora
   assert.equal(fs.existsSync(path.join(root, "DeskMate", "daily", "dictation", "2026-09-03.md")), true);
 }));
 
+test("scheduled digest automatically projects the source-day note when a knowledge base is configured", async () => temporary("deskmate-t15e-auto-projection-", async (directory) => {
+  const root = path.join(directory, "knowledge-base");
+  fs.mkdirSync(root, { recursive: true });
+  const now = new Date(2026, 8, 3, 12, 0, 0).getTime();
+  const store = new CompanionMemoryStore({ userDataPath: directory, now: () => now });
+  try {
+    store.commitConversationTurn({ eventId: "auto:1", sessionId: "auto:1", role: "user", content: "自动投影这条摘要", source: "companion", createdAt: new Date(now).toISOString() });
+    const pipeline = new CompanionMemoryPipeline({ store, loadSecret: () => ({ apiKey: "test" }), requestJson: async () => ({ summary: "自动摘要", candidates: [] }) });
+    const generation = new CompanionMemoryGenerationCoordinator({ pipeline, store, knowledgeBaseSettings: { status: () => ({ configured: true }), loadRoot: () => root } });
+    const policy = new CompanionMemoryPolicyStore({ userDataPath: directory });
+    policy.save({ version: 1, enabledSources: ["companion"], schedule: "daily", dailyTime: "12:00" });
+    const scheduler = new CompanionMemoryDigestScheduler({ policyStore: policy, now: () => now, pendingDays: (source) => store.unprocessedDays({ source }), process: (value) => generation.processSourceDay(value) });
+    const result = await scheduler.tick();
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.sources.companion.projection, { ok: true, skipped: false, warning: false, reason: "", files: 1, written: 1, removed: 0, conflicts: 0 });
+    assert.equal(fs.existsSync(path.join(root, "DeskMate", "daily", "companion", "2026-09-03.md")), true);
+  } finally { store.close(); }
+}));
+
+test("unconfigured projection is explicitly skipped without affecting digest success or writing files", async () => temporary("deskmate-t15e-unconfigured-projection-", async (directory) => {
+  const root = path.join(directory, "must-not-exist");
+  const now = new Date(2026, 8, 3, 12, 0, 0).getTime();
+  const store = new CompanionMemoryStore({ userDataPath: directory, now: () => now });
+  try {
+    store.commitConversationTurn({ eventId: "unconfigured:1", sessionId: "unconfigured:1", role: "user", content: "只保存到本地数据库", source: "dictation", createdAt: new Date(now).toISOString() });
+    const pipeline = new CompanionMemoryPipeline({ store, loadSecret: () => ({ apiKey: "test" }), requestJson: async () => ({ summary: "本地摘要", candidates: [] }) });
+    const generation = new CompanionMemoryGenerationCoordinator({ pipeline, store, knowledgeBaseSettings: { status: () => ({ configured: false }), loadRoot: () => { throw new Error("must-not-load-root"); } } });
+    const result = await generation.processSourceDay({ source: "dictation", day: "2026-09-03" });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.projection, { ok: true, skipped: true, warning: false, reason: "knowledge-base-not-configured" });
+    assert.equal(store.list({ filter: "daily", source: "dictation" }).length, 1);
+    assert.equal(fs.existsSync(root), false);
+  } finally { store.close(); }
+}));
+
+test("projection failure preserves the committed digest and becomes a bounded scheduler warning", async () => temporary("deskmate-t15e-projection-warning-", async (directory) => {
+  const root = path.join(directory, "knowledge-base");
+  fs.mkdirSync(root, { recursive: true });
+  const now = new Date(2026, 8, 3, 23, 30, 0).getTime();
+  const store = new CompanionMemoryStore({ userDataPath: directory, now: () => now });
+  try {
+    store.commitConversationTurn({ eventId: "warning:1", sessionId: "warning:1", role: "user", content: "摘要不能因投影失败消失", source: "companion", createdAt: new Date(now).toISOString() });
+    const pipeline = new CompanionMemoryPipeline({ store, loadSecret: () => ({ apiKey: "test" }), requestJson: async () => ({ summary: "仍然提交的摘要", candidates: [] }) });
+    const generation = new CompanionMemoryGenerationCoordinator({ pipeline, store, knowledgeBaseSettings: { status: () => ({ configured: true }), loadRoot: () => root }, projectionFactory: () => ({ sync: () => { throw new Error("private-path-or-provider-detail"); } }) });
+    const policy = new CompanionMemoryPolicyStore({ userDataPath: directory });
+    policy.save({ version: 1, enabledSources: ["companion"], schedule: "daily", dailyTime: "23:30" });
+    const scheduler = new CompanionMemoryDigestScheduler({ policyStore: policy, now: () => now, pendingDays: (source) => store.unprocessedDays({ source }), process: (value) => generation.processSourceDay(value) });
+    const result = await scheduler.tick();
+    assert.equal(result.ok, true);
+    assert.equal(result.sources.companion.warning, true);
+    assert.equal(store.list({ filter: "daily", source: "companion" })[0].content, "仍然提交的摘要");
+    assert.deepEqual(policy.snapshot().lastResults.companion, { day: "2026-09-03", status: "warning", inputDigest: result.sources.companion.inputDigest, at: new Date(now).toISOString(), reason: "knowledge-base-projection-failed" });
+    assert.doesNotMatch(JSON.stringify(result.sources.companion.projection), /private-path|provider-detail|knowledge-base\\/);
+  } finally { store.close(); }
+}));
+
 test("renderer contract only ingests successful real dictation and exposes source controls", async () => {
   const [page, preload, main] = await Promise.all([
     readFile(new URL("../src/pages.jsx", import.meta.url), "utf8"),
     readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
-  for (const copy of ["来源与自动整理", "陪伴对话", "语音输入", "每天 23:30", "下次整理", "上次结果", "可立即重试", "保存记忆策略"]) assert.match(page, new RegExp(copy));
+  for (const copy of ["来源与自动整理", "陪伴对话", "语音输入", "每天 23:30", "下次整理", "上次结果", "可立即重试", "双链待重试", "保存记忆策略"]) assert.match(page, new RegExp(copy));
   assert.match(page, /workflow === "input" && result\.status === "success" && state\.settings\.sttMode !== "mock"/);
   assert.match(page, /commitDictationMemory/);
   for (const api of ["getMemoryPolicy", "setMemoryPolicy", "commitDictationMemory"]) assert.match(preload, new RegExp(api));
   assert.match(main, /source: "dictation"/);
+  assert.match(main, /companionMemoryGenerationCoordinator\.processSourceDay/);
+  assert.match(main, /companionMemoryGenerationCoordinator\.projectIfConfigured/);
   assert.doesNotMatch(preload, /inputDigest|memory_digest_runs|source_turn_ids/);
 });

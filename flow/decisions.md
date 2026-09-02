@@ -7,6 +7,7 @@
 - Schedule: both sources default enabled but can be disabled independently, including both off. Daily processing defaults to local 23:30. Startup catches up missed source-days; each source keeps an independent result and retry lifecycle.
 - Identity: summaries are keyed by source plus local day. Model runs are idempotent by source, local day and a digest of the stable ordered input events. Empty input never invokes the model.
 - Projection: SQLite stays authoritative. Managed notes use `DeskMate/daily/<source>/YYYY-MM-DD.md`; reviewed memories carry their source and link to the matching source-day note.
+- Projection trigger: after a scheduled or manual digest commits, Electron automatically projects the current SQLite snapshot when a knowledge-base directory is configured. Missing configuration is an explicit non-error skip. Projection conflicts or write failures never roll back the digest and surface only fixed, bounded warning codes with manual retry through “同步双链”.
 - Boundary: this is Windows-only. It does not change either firmware, audio transport, HID, DeskMate Link, OLED or servo behavior.
 
 ## D078 - Custom choreography is a bounded endpoint-owned beat program

@@ -18,7 +18,7 @@ const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
 const { CompanionMemoryPipeline } = require("./companion-memory-pipeline.cjs");
 const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("./companion-memory-policy.cjs");
-const { KnowledgeBaseProjection } = require("./knowledge-base-projection.cjs");
+const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
@@ -80,6 +80,7 @@ let aiServiceStore;
 let companionMemoryStore;
 let companionMemoryControl;
 let companionMemoryPipeline;
+let companionMemoryGenerationCoordinator;
 let companionMemoryPolicyStore;
 let companionMemoryDigestScheduler;
 let memoryDigestTimer;
@@ -251,7 +252,7 @@ async function commitCompanionTurn(turn) {
 
 async function generateConfiguredMemories() {
   const sources = companionMemoryPolicyStore.snapshot().enabledSources;
-  if (!sources.length) return { ok: true, skipped: true, reason: "memory-no-enabled-sources", turns: 0, candidates: 0, sources: {} };
+  if (!sources.length) return { ok: true, skipped: true, reason: "memory-no-enabled-sources", turns: 0, candidates: 0, sources: {}, projection: skippedProjection() };
   const results = {};
   let turns = 0;
   let candidates = 0;
@@ -267,7 +268,9 @@ async function generateConfiguredMemories() {
     }
     results[source] = last;
   }
-  return { ok: Object.values(results).every((result) => result?.ok), skipped: turns === 0, reason: turns === 0 ? "memory-no-unprocessed-turns" : "", turns, candidates, sources: results };
+  const ok = Object.values(results).every((result) => result?.ok);
+  const projection = ok && turns > 0 ? companionMemoryGenerationCoordinator.projectIfConfigured() : skippedProjection();
+  return { ok, skipped: turns === 0, reason: turns === 0 ? "memory-no-unprocessed-turns" : "", warning: projection.warning, warningReason: projection.warning ? projection.reason : "", turns, candidates, sources: results, projection };
 }
 
 function loadTextModelSecret() {
@@ -993,10 +996,11 @@ app.whenReady().then(async () => {
   });
   motionPresetService.on("status", (value) => { sendToMain("motion-preset-status", value); emitInputBridgeStatus(); });
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
+  companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
   companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
     policyStore: companionMemoryPolicyStore,
     pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }),
-    process: ({ source, day }) => companionMemoryPipeline.processPending({ sources: [source], day }),
+    process: ({ source, day }) => companionMemoryGenerationCoordinator.processSourceDay({ source, day }),
   });
   memoryDigestTimer = setInterval(() => { void companionMemoryDigestScheduler.tick(); }, 60_000);
   memoryDigestTimer.unref?.();
@@ -1218,9 +1222,14 @@ app.whenReady().then(async () => {
   handleTrusted("memory:rebuild-index", () => companionMemoryStore.rebuildLocalIndex());
   handleTrusted("memory:search-index", (value = {}) => companionMemoryStore.searchLongTermMemory(value));
   handleTrusted("memory:sync-knowledge-base", () => {
-    let root;
-    try { root = knowledgeBaseSettings.loadRoot(); } catch (error) { return { ok: false, reason: error?.message || "knowledge-base-location-unavailable" }; }
-    return new KnowledgeBaseProjection({ root }).sync(companionMemoryStore.projectionItems());
+    const result = companionMemoryGenerationCoordinator.projectIfConfigured();
+    if (result.ok && !result.skipped) {
+      const snapshot = companionMemoryPolicyStore.snapshot();
+      for (const [source, previous] of Object.entries(snapshot.lastResults)) {
+        if (previous?.status === "warning") companionMemoryPolicyStore.markResult(source, { ...previous, status: "completed", reason: "" });
+      }
+    }
+    return result;
   });
   handleTrusted("memory:prepare-forget", (value = {}) => companionMemoryControl.prepareForget(value));
   handleTrusted("memory:confirm-forget", (value = {}) => companionMemoryControl.confirmForget(value));

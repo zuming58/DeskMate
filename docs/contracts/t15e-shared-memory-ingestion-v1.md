@@ -20,6 +20,8 @@ Voice edit, mock STT, failed/cancelled/empty transcription, raw audio, credentia
 - Each source owns an independent last result and startup catch-up path. A failed source remains retryable without rerunning a completed source.
 - Empty input never calls the model and never creates an empty summary.
 - The memory page shows the next local run and each source's latest completed, no-pending, or failed result in compact status rows; a failed result explicitly points to manual retry.
+- After a scheduled or manual digest commits successfully, Electron automatically projects the current SQLite snapshot when a knowledge-base directory is configured. Without a configured directory, projection returns a clear skipped result and digest completion remains successful.
+- Projection conflicts or write failures never roll back a committed digest. Scheduled results use a bounded `warning` state and fixed reason code, and the existing manual double-link sync is the explicit retry path.
 
 ## Storage and idempotency
 
