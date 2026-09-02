@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Xiaozhi Stage 1 reference-baseline app-only flash and exact verification confirmed
+
+- After the exact authorization card was shown, the operator explicitly authorized the identified Xiaozhi target for app-only flashing. A same-operation preflight reconfirmed one ESP32-S3 target and the candidate SHA-256 before any write; private device identity was not persisted in Git or diagnostics.
+- `esptool.py v4.12.0` wrote only the `212720`-byte app image at `0x100000` and verified the exact image digest successfully. Source implementation is `4a0eeccf8d077ae8899602354ec1f6f26280a48d`; app SHA-256 is `752ABFAB73E431084913AD5F85E429E9AE5816C79D0571DD6A2C470B6F2E3EC2`. No bootloader, partition table, OTA data, NVS or eFuse was written.
+- The tool hard-reset the board after write and verify. This does not yet prove normal application boot, DeskMate Link readiness or servo motion. The candidate is structurally no-PWM at boot/status/select/ARM, and no manual output command was issued.
+- Classification: `STAGE1_REFERENCE_BASELINE_APP_FLASH_CONFIRMED / EXACT_VERIFY_CONFIRMED / NORMAL_BOOT_PENDING / SERVO_MOTION_NOT_RUN`. Next: user-present software status read; if the endpoint reports the enabled adapter, select only yaw, complete the four attestations, generate one-use ARM, issue provisional center, observe, and stop before any one-degree excursion if there is noise, jump, stall, collision, reset or Link loss.
+
 ## 2026-09-02 - Xiaozhi reference-baseline Stage 1 micro-trial candidate prepared; flash not authorized
 
 - The operator supplied the missing real-board evidence rather than unknown engineering numbers: this exact assembled Xiaozhi unit previously completed nod and rotation normally with the fixed reference firmware. The fixed source was re-read and establishes yaw GPIO11, pitch GPIO12, 50 Hz, 1500 us at 90 degrees and an approximately 11 us one-degree delta.
