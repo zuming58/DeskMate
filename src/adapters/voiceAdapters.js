@@ -54,6 +54,12 @@ export class DesktopBridgeAdapter {
   async stopAndCenter(source = "UI") { return this.bridge?.stopAndCenter ? this.bridge.stopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
   async emergencyStop(source = "UI") { return this.bridge?.emergencyStop ? this.bridge.emergencyStop(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
   async clearEmergencyStopAndCenter(source = "UI") { return this.bridge?.clearEmergencyStopAndCenter ? this.bridge.clearEmergencyStopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false }; }
+  async listChoreographies() { return this.bridge?.listChoreographies ? this.bridge.listChoreographies() : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
+  async getChoreographyStatus() { return this.bridge?.getChoreographyStatus ? this.bridge.getChoreographyStatus() : { ready: false, state: "not-ready", reason: "desktop-bridge-unavailable" }; }
+  async saveChoreography(value) { return this.bridge?.saveChoreography ? this.bridge.saveChoreography(value) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
+  async copyChoreography(name) { return this.bridge?.copyChoreography ? this.bridge.copyChoreography(name) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
+  async deleteChoreography(name) { return this.bridge?.deleteChoreography ? this.bridge.deleteChoreography(name) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
+  async runChoreography(value) { return this.bridge?.runChoreography ? this.bridge.runChoreography(value) : { ok: false, ready: false, state: "not-ready", reason: "desktop-bridge-unavailable" }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }

@@ -48,13 +48,14 @@ const { ManualCalibrationController } = require("./manual-calibration-controller
 const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
 const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
 const { MotionPresetService } = require("./motion-preset-service.cjs");
+const { ChoreographyStore, PendingChoreographyAdapter } = require("./choreography-store.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t16-desktop-actions-briefing-v1";
+const DESKMATE_BUILD_ID = "t15d-desktop-choreography-editor-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -110,6 +111,8 @@ let hermesHookServer;
 let manualCalibrationController;
 let manualControlCoordinator;
 let motionPresetService;
+let choreographyStore;
+let choreographyAdapter;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
@@ -947,6 +950,8 @@ app.whenReady().then(async () => {
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
+  choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
+  choreographyAdapter = new PendingChoreographyAdapter();
   const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
@@ -1029,6 +1034,24 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:stop-motion-and-center", (source) => motionPresetService.stopAndCenter(String(source || "UI")));
   handleTrusted("desktop:emergency-stop-motion", (source) => motionPresetService.emergencyStop(String(source || "UI")));
   handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")));
+  handleTrusted("desktop:list-choreographies", () => ({ ok: true, actions: choreographyStore.list() }));
+  handleTrusted("desktop:get-choreography-status", () => choreographyAdapter.status());
+  handleTrusted("desktop:save-choreography", (value = {}) => {
+    try { return choreographyStore.save(value.action, value.previousName); }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", actions: choreographyStore.list() }; }
+  });
+  handleTrusted("desktop:copy-choreography", (name) => {
+    try { return choreographyStore.copy(name); }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-copy-failed", actions: choreographyStore.list() }; }
+  });
+  handleTrusted("desktop:delete-choreography", (name) => {
+    try { return choreographyStore.delete(name); }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-delete-failed", actions: choreographyStore.list() }; }
+  });
+  handleTrusted("desktop:run-choreography", async (value = {}) => {
+    try { return await choreographyAdapter.execute(value); }
+    catch (error) { return { ok: false, ready: false, state: "not-ready", reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-execute-failed" }; }
+  });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
