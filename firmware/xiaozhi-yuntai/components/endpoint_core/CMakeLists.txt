@@ -8,6 +8,7 @@ idf_component_register(
         "src/manual_calibration_owner.cpp"
         "src/manual_calibration_protocol.cpp"
         "src/motion_safety_core.cpp"
+        "src/motion_preset_protocol.cpp"
         "src/servo_adapter.cpp"
     INCLUDE_DIRS "include"
 )

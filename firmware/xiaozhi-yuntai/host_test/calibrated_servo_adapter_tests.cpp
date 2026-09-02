@@ -173,6 +173,38 @@ void BackendFailuresDisableOutputsAndRemainFailSoft() {
     assert(backend.disables.size() == 2);
 }
 
+void RuntimeEnvelopeIsFixedAndStrictlyChecked() {
+    FakePwmBackend backend;
+    CalibratedServoAdapter adapter(backend, SafeProfile());
+    ServoRuntimeEnvelope envelope{};
+    assert(adapter.GetRuntimeEnvelope(envelope));
+    assert(envelope.yaw_minimum_tenths_degree == -100);
+    assert(envelope.yaw_maximum_tenths_degree == 100);
+    assert(envelope.pitch_minimum_tenths_degree == -40);
+    assert(envelope.pitch_maximum_tenths_degree == 60);
+    assert(envelope.maximum_step_tenths_degree == 10);
+
+    assert(adapter.Apply(Command(
+               ServoAdapterOperation::kAbsoluteRuntimeTarget,
+               ServoAxis::kYaw, -100)) == ServoAdapterResult::kApplied);
+    assert(backend.writes.back().value == 1400);
+    assert(adapter.Apply(Command(
+               ServoAdapterOperation::kAbsoluteRuntimeTarget,
+               ServoAxis::kPitch, 60)) == ServoAdapterResult::kApplied);
+    assert(backend.writes.back().value == 1452);
+    const auto writes = backend.writes.size();
+    assert(adapter.Apply(Command(
+               ServoAdapterOperation::kAbsoluteRuntimeTarget,
+               ServoAxis::kYaw, 110)) == ServoAdapterResult::kOutOfRange);
+    assert(backend.writes.size() == writes);
+
+    auto narrow = SafeProfile();
+    narrow.yaw.minimum_pulse_us = 1450;
+    CalibratedServoAdapter unavailable(backend, narrow);
+    assert(unavailable.IsAvailable());
+    assert(!unavailable.GetRuntimeEnvelope(envelope));
+}
+
 }  // namespace
 
 int main() {
@@ -180,6 +212,7 @@ int main() {
     OutputIsLazySingleAxisAndFixedOneDegree();
     DirectionLimitsRecenterAndDisableAreConservative();
     BackendFailuresDisableOutputsAndRemainFailSoft();
+    RuntimeEnvelopeIsFixedAndStrictlyChecked();
     std::cout << "calibrated_servo_adapter_tests: PASS\n";
     return 0;
 }

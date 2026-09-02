@@ -26,6 +26,8 @@ enum class LinkMessageType : std::uint8_t {
     kSetAgentState = 0x04,
     kManualCalibrationCommand = 0x20,
     kGetManualCalibrationStatus = 0x21,
+    kRunMotionPreset = 0x22,
+    kGetMotionStatus = 0x23,
 };
 
 enum class LinkErrorCode : std::uint8_t {

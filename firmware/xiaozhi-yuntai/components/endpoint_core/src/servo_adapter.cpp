@@ -15,6 +15,11 @@ ServoAdapterResult DisabledServoAdapter::Apply(
     return ServoAdapterResult::kUnavailable;
 }
 
+bool DisabledServoAdapter::GetRuntimeEnvelope(
+    ServoRuntimeEnvelope&) const noexcept {
+    return false;
+}
+
 void DisabledServoAdapter::DisableOutputs() noexcept {}
 
 namespace {
@@ -41,6 +46,37 @@ bool AxisProfileIsSafe(const ServoAxisCalibrationProfile& profile,
                profile.maximum_pulse_us - profile.center_pulse_us;
 }
 
+bool PulseForLogicalOffset(const ServoAxisCalibrationProfile& profile,
+                           std::int16_t tenths_degree,
+                           std::uint16_t& pulse_us) noexcept {
+    const std::int32_t scaled =
+        static_cast<std::int32_t>(tenths_degree) *
+        static_cast<std::int32_t>(profile.pulse_per_degree_us);
+    if (scaled % kOneDegreeTenths != 0) return false;
+    const std::int32_t target =
+        static_cast<std::int32_t>(profile.center_pulse_us) +
+        (scaled / kOneDegreeTenths) * profile.direction;
+    if (target < profile.minimum_pulse_us ||
+        target > profile.maximum_pulse_us || target < 0 ||
+        target > std::numeric_limits<std::uint16_t>::max()) {
+        return false;
+    }
+    pulse_us = static_cast<std::uint16_t>(target);
+    return true;
+}
+
+bool RuntimeEnvelopeFits(const ServoCalibrationProfile& profile) noexcept {
+    std::uint16_t ignored{};
+    return PulseForLogicalOffset(
+               profile.yaw, kRuntimeYawMinimumTenthsDegree, ignored) &&
+           PulseForLogicalOffset(
+               profile.yaw, kRuntimeYawMaximumTenthsDegree, ignored) &&
+           PulseForLogicalOffset(
+               profile.pitch, kRuntimePitchMinimumTenthsDegree, ignored) &&
+           PulseForLogicalOffset(
+               profile.pitch, kRuntimePitchMaximumTenthsDegree, ignored);
+}
+
 }  // namespace
 
 CalibratedServoAdapter::CalibratedServoAdapter(
@@ -60,6 +96,21 @@ bool CalibratedServoAdapter::ProfileIsSafe(
 
 bool CalibratedServoAdapter::IsAvailable() const noexcept {
     return ProfileIsSafe(profile_);
+}
+
+bool CalibratedServoAdapter::GetRuntimeEnvelope(
+    ServoRuntimeEnvelope& envelope) const noexcept {
+    if (!ProfileIsSafe(profile_) || !RuntimeEnvelopeFits(profile_)) {
+        return false;
+    }
+    envelope = ServoRuntimeEnvelope{
+        kRuntimeYawMinimumTenthsDegree,
+        kRuntimeYawMaximumTenthsDegree,
+        kRuntimePitchMinimumTenthsDegree,
+        kRuntimePitchMaximumTenthsDegree,
+        kRuntimeMaximumStepTenthsDegree,
+    };
+    return true;
 }
 
 std::size_t CalibratedServoAdapter::AxisIndex(ServoAxis axis) noexcept {
@@ -132,6 +183,27 @@ ServoAdapterResult CalibratedServoAdapter::Apply(
                 return ServoAdapterResult::kOutOfRange;
             }
             return Write(command.axis, profile.center_pulse_us);
+        case ServoAdapterOperation::kAbsoluteRuntimeTarget: {
+            const std::int16_t minimum =
+                command.axis == ServoAxis::kYaw
+                    ? kRuntimeYawMinimumTenthsDegree
+                    : kRuntimePitchMinimumTenthsDegree;
+            const std::int16_t maximum =
+                command.axis == ServoAxis::kYaw
+                    ? kRuntimeYawMaximumTenthsDegree
+                    : kRuntimePitchMaximumTenthsDegree;
+            if (command.value_tenths_degree < minimum ||
+                command.value_tenths_degree > maximum) {
+                return ServoAdapterResult::kOutOfRange;
+            }
+            std::uint16_t pulse_us{};
+            if (!PulseForLogicalOffset(profile,
+                                       command.value_tenths_degree,
+                                       pulse_us)) {
+                return ServoAdapterResult::kOutOfRange;
+            }
+            return Write(command.axis, pulse_us);
+        }
     }
     return ServoAdapterResult::kFailure;
 }

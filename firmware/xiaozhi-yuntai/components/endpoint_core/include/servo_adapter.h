@@ -14,6 +14,7 @@ enum class ServoAdapterOperation : std::uint8_t {
     kProvisionalCenter,
     kRelativeStep,
     kRecenter,
+    kAbsoluteRuntimeTarget,
 };
 
 enum class ServoAdapterResult : std::uint8_t {
@@ -27,6 +28,20 @@ struct ServoAdapterCommand {
     ServoAdapterOperation operation{ServoAdapterOperation::kProvisionalCenter};
     ServoAxis axis{ServoAxis::kYaw};
     std::int16_t value_tenths_degree{};
+};
+
+inline constexpr std::int16_t kRuntimeYawMinimumTenthsDegree = -100;
+inline constexpr std::int16_t kRuntimeYawMaximumTenthsDegree = 100;
+inline constexpr std::int16_t kRuntimePitchMinimumTenthsDegree = -40;
+inline constexpr std::int16_t kRuntimePitchMaximumTenthsDegree = 60;
+inline constexpr std::uint16_t kRuntimeMaximumStepTenthsDegree = 10;
+
+struct ServoRuntimeEnvelope {
+    std::int16_t yaw_minimum_tenths_degree{};
+    std::int16_t yaw_maximum_tenths_degree{};
+    std::int16_t pitch_minimum_tenths_degree{};
+    std::int16_t pitch_maximum_tenths_degree{};
+    std::uint16_t maximum_step_tenths_degree{};
 };
 
 struct ServoBoardEvidence {
@@ -77,6 +92,8 @@ public:
     virtual bool IsAvailable() const noexcept = 0;
     virtual ServoAdapterResult Apply(
         const ServoAdapterCommand& command) noexcept = 0;
+    virtual bool GetRuntimeEnvelope(
+        ServoRuntimeEnvelope& envelope) const noexcept = 0;
     virtual void DisableOutputs() noexcept = 0;
 };
 
@@ -85,6 +102,8 @@ public:
     bool IsAvailable() const noexcept override;
     ServoAdapterResult Apply(
         const ServoAdapterCommand& command) noexcept override;
+    bool GetRuntimeEnvelope(
+        ServoRuntimeEnvelope& envelope) const noexcept override;
     void DisableOutputs() noexcept override;
 };
 
@@ -96,6 +115,8 @@ public:
     bool IsAvailable() const noexcept override;
     ServoAdapterResult Apply(
         const ServoAdapterCommand& command) noexcept override;
+    bool GetRuntimeEnvelope(
+        ServoRuntimeEnvelope& envelope) const noexcept override;
     void DisableOutputs() noexcept override;
 
     static bool ProfileIsSafe(
