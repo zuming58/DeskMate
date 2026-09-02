@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A hardware emergency latch needs a deliberate recovery transaction
+
+- Symptom: emergency stop works and the endpoint stays safely latched, but every later start fails forever because the simplified UI removed the only clear operation.
+- Practice: keep stop and clear asymmetric. Stop remains immediately available; recovery requires fresh status, one explicit user action, an exact clear terminal, proof that the latch is gone and re-establishment of every center gate before controls reappear.
+- Rule: never hide emergency clearing inside startup, reconnect, polling or a normal start. A successful transport ACK is insufficient; the endpoint must explicitly report its locked non-emergency state before any motion authority is rebuilt.
+
 ## A protocol direction sign is not a user-facing motion label
 
 - Symptom: the full control route succeeds and horizontal buttons behave correctly, but `上` visibly nods down and `下` raises the head even though all requests complete.
