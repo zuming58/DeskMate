@@ -60,3 +60,32 @@ GPIO or servo operation occurred. This meets the code/build standard to request
 separate authorization for a default-locked Stage 0 app-only image. It does not
 meet the standard for an enabled Stage 1 calibration image or any physical
 motion.
+
+## Stage 1 reference-baseline micro-trial addendum
+
+After Stage 0 protocol HIL passed, the operator supplied the relevant installed
+hardware fact: this exact Xiaozhi assembly previously completed nod and rotation
+normally with the fixed reference firmware. The reference source was re-read and
+establishes yaw GPIO11/channel 0, pitch GPIO12/channel 1, 50 Hz, a 1500 us
+90-degree center and an 11 us 90-to-91-degree delta.
+
+Branch `codex/xiaozhi-t10d-c-reference-baseline-trial` adds a separate reviewed
+overlay at
+`firmware/xiaozhi-yuntai/profiles/stage1-reference-trial.defaults`. It sets both
+centers to 1500 us but restricts both axes to 1489..1511 us with one fixed 11 us
+step. The default build stays Stage 0 locked. Normal `MOTION`, presets, dancing
+and expression-linked movement remain disabled.
+
+The first physical procedure remains one selected axis, four runtime
+attestations, one-use ARM, provisional center, at most one one-degree excursion,
+recenter and emergency stop. Startup, status, selection and ARM emit no PWM. Host
+CTest passes `12/12`, and an independent generated-config ESP-IDF v5.5.3
+fixed-layout build passes. A first build that reused the source-tree Stage 0
+`sdkconfig` was detected and rejected before device access. Exact committed
+source/artifact identity is recorded in the follow-up Flow entry before any
+authorization request.
+
+Classification:
+`STAGE1_REFERENCE_BASELINE_CODE_BUILD_CONFIRMED / FLASH_NOT_AUTHORIZED / SERVO_MOTION_NOT_RUN`.
+No port/device, Flash/NVS/eFuse, erase, flash, monitor, OLED, audio, PWM, GPIO or
+servo operation occurred while preparing this addendum.

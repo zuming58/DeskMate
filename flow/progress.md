@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - Xiaozhi reference-baseline Stage 1 micro-trial candidate prepared; flash not authorized
+
+- The operator supplied the missing real-board evidence rather than unknown engineering numbers: this exact assembled Xiaozhi unit previously completed nod and rotation normally with the fixed reference firmware. The fixed source was re-read and establishes yaw GPIO11, pitch GPIO12, 50 Hz, 1500 us at 90 degrees and an approximately 11 us one-degree delta.
+- Added the separate overlay `firmware/xiaozhi-yuntai/profiles/stage1-reference-trial.defaults`. It enables only the frozen manual-calibration owner/backend with 1500 us centers, 11 us fixed steps and a deliberately narrow 1489..1511 us envelope on each axis. Normal defaults and the source-tree `sdkconfig` remain Stage 0 locked; normal `MOTION`, presets, dancing and expression-linked movement remain disabled.
+- The existing runtime safety sequence is unchanged: status first, one selected axis, four physical attestations, short one-use ARM, provisional center, at most one `-1 degree`/`+1 degree` observation, recenter and emergency stop. Construction, boot, status, axis selection and ARM produce no PWM; only an explicitly armed output can lazily configure the selected axis.
+- Verification passed Xiaozhi Host CTest `12/12` and an independent generated-config ESP-IDF v5.5.3 fixed-partition build. The generated config was inspected and contains every enabled/profile value; `app-flash_args` contains only the app at `0x100000`. An earlier build that silently reused the Stage 0 source-tree `sdkconfig` was identified as a false candidate and rejected before any device access.
+- Classification: `STAGE1_REFERENCE_BASELINE_CODE_BUILD_CONFIRMED / FLASH_NOT_AUTHORIZED / SERVO_MOTION_NOT_RUN`. No port/device, Flash/NVS/eFuse, erase, flash, monitor, OLED, audio, PWM, GPIO or servo operation occurred. Next: commit and rebuild the exact candidate, identify the Xiaozhi serial endpoint read-only, then request one explicit app-only flash authorization before the user-present single-axis test.
+
 ## 2026-09-02 - T10D-C Stage 0 protocol HIL confirmed; servo output remains untested
 
 - Exact firmware source is `codex/xiaozhi-t10d-c-real-servo-adapter@c812ee0668bcdbbe8f640db617e60db02dc1eeac`. The user-authorized app-only image was written at `0x100000`; exact readback matched all `212704` bytes and SHA-256 `C38617DB94E8C17FF7D45EA5B40A8DA69FB29C289D9CC72E20DC666B7E32CCF4`.

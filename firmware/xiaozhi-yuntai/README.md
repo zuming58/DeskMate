@@ -89,4 +89,20 @@ idf.py --version
 idf.py -C firmware/xiaozhi-yuntai build
 ```
 
+The normal defaults and source-tree `sdkconfig` stay Stage 0 locked. A
+separately reviewed, user-present reference-baseline micro-trial uses its own
+generated config file so it cannot silently reuse or overwrite Stage 0:
+
+```powershell
+$trialRoot = (Resolve-Path '.').Path
+$trialSdk = Join-Path $trialRoot 'build-stage1-reference-trial-enabled/sdkconfig'
+idf.py -C firmware/xiaozhi-yuntai -B build-stage1-reference-trial-enabled `
+  -D "SDKCONFIG=$trialSdk" `
+  -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;profiles/stage1-reference-trial.defaults" build
+```
+
+That overlay permits only the frozen one-axis manual-calibration flow and a
+single 11 us step around 1500 us within 1489..1511 us. It is not the production
+motion profile and does not enable presets or expression-linked movement.
+
 干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T10A/T10C 都是 code-only 包，不是烧录候选；任何接线变更、设备识别、Flash 操作或舵机校准仍必须等用户在场并取得新的明确授权。

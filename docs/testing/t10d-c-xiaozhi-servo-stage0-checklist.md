@@ -1,6 +1,6 @@
 # T10D-C Xiaozhi servo Stage 0 and Stage 1 checklist
 
-Status: `NOT_RUN / USER_PRESENT_REQUIRED`
+Status: `STAGE0_PROTOCOL_HIL_CONFIRMED / REFERENCE_BASELINE_TRIAL_PREPARING`
 
 This checklist is a prerequisite for producing an enabled calibration profile.
 It is not a flash command and does not itself authorize wiring, power, PWM or
@@ -71,3 +71,19 @@ enabled calibration image is authorized.
 Completing Stage 1 does not enable preset gestures, dancing, expression-linked
 movement or the normal `MOTION` capability. Those require later accepted
 centers, directions, conservative limits and a separate production package.
+
+## Reference-baseline micro-trial amendment (2026-09-02)
+
+The operator cannot supply engineering parameters, but supplied the relevant
+real-board fact: this exact assembled Xiaozhi unit previously completed nod and
+rotation normally with the fixed reference firmware. The fixed implementation
+has now been re-read rather than guessed. It uses GPIO11/GPIO12, 50 Hz, a 1500 us
+90-degree center and approximately 11 us per degree. DeskMate Link Stage 0 has
+also passed on the current powered installation.
+
+For the first motion observation only, the reviewed candidate narrows both axes
+to 1489..1511 us. Keep the runtime procedure above: one selected axis, four
+attestations, one-use ARM, provisional center, at most one `-1 degree` or
+`+1 degree` excursion, recenter, then emergency stop. Do not select or energize
+both axes together. Any noise, jump, stall, collision, reset or Link loss ends
+the trial immediately and the result remains unaccepted.

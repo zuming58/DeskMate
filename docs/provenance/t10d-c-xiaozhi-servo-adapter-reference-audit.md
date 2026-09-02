@@ -59,3 +59,27 @@ package. Servo supply voltage/current margin, common-ground implementation,
 physical cutoff, both centers, both directions, conservative mechanical pulse
 limits, pulse-per-degree and load/binding behavior remain `UNKNOWN`. The
 committed build therefore keeps every verification flag false and emits no PWM.
+
+## 2026-09-02 reference-baseline trial evidence
+
+The operator subsequently confirmed that this same installed Xiaozhi assembly
+previously ran the fixed reference firmware and completed nod and rotation
+normally. The current two-board installation has also completed DeskMate Link
+HIL after independent power-up, which supplies direct evidence for the installed
+GPIO11/GPIO12 assembly, common logic ground and current power path. The operator
+can remove and restore Xiaozhi power and will be physically present for the
+trial; the runtime still requires the four explicit one-use safety attestations.
+
+The exact reference conversion is `500 + angle * 2000 / 180`: 90 degrees is
+1500 us and the 90-to-91 degree delta is 11 us. The Stage 1 reference trial
+therefore uses 1500 us center, 11 us per fixed step and a deliberately tiny
+1489..1511 us envelope on both axes. This is far narrower than the historical
+reference ranges (yaw 50..130 degrees, pitch 70..110 degrees). It allows only
+one step from center in either direction and does not claim final calibrated
+direction, load margin or mechanical limits.
+
+The reproducible overlay is
+`firmware/xiaozhi-yuntai/profiles/stage1-reference-trial.defaults`. The normal
+`sdkconfig.defaults` remains Stage 0 locked. This overlay is only a user-present
+micro-motion trial candidate; it does not enable normal `MOTION`, presets,
+dancing or expression-linked movement.

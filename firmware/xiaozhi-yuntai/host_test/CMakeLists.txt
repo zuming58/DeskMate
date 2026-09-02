@@ -155,6 +155,7 @@ target_compile_definitions(scaffold_source_contract_tests PRIVATE
     OLED_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_oled.cpp"
     TRANSPORT_HEADER_PATH="${CORE_INCLUDE_DIR}/transport.h"
     SDKCONFIG_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../sdkconfig.defaults"
+    SDKCONFIG_STAGE1_REFERENCE_DEFAULTS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../profiles/stage1-reference-trial.defaults"
     PARTITION_TABLE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../partitions/v1/16m.csv"
     MODULE_GITIGNORE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../.gitignore"
     LINK_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/v1.md"
