@@ -1,0 +1,10 @@
+{
+  "schema": "deskmate-link-t15-motion-presets-v1.golden-vectors",
+  "contract": "T15_MOTION_PRESETS_LINK_V1_FROZEN",
+  "byte_order": "little-endian",
+  "vectors": {
+    "run_nod_twice_request_payload": "44332211040302010102020100000000",
+    "run_nod_twice_ack_payload": "4433221104030201000000000003020200011100",
+    "run_nod_twice_completed_status_payload": "4433221104030201010000000202020202010302"
+  }
+}

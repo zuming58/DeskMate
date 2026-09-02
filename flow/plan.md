@@ -1,8 +1,8 @@
 # Development plan
 
-## Current stage: T10D-D simplified manual control and Xiaozhi Stage 2 reference profile
+## Current stage: T15 runtime motion presets and T16 desktop actions/briefing
 
-目标：保持现有 0x20/0x21 与 HID 0x16/0x17 合同不变，把内部校准仪式封装为一次确认、四向按住、回中和急停；同时把已烧录但仅支持中心左右各 1° 的 Stage 1 微试验配置升级为原固定参考范围的独立 Stage 2 候选。实体舵机输出仍未发生；生产 `MOTION`、预设动作、跳舞和表情联动继续锁闭。
+目标：以已经完成用户真机验收的 T10D-D 双舵机手动控制为硬件基线，冻结并实现四个高层实体预设动作，经 Windows → EasyInput → 小智三端完成状态、执行、终态、回中与急停闭环；Windows 软件并行实现白名单应用语音直开和隐私安全的 Codex 任务简报。任何新固件在独立构建与审计完成后，仍需用户逐板确认才能 app-only 烧录。
 
 ### Current execution point
 
@@ -14,7 +14,7 @@
 
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
-| T10D-D current integrated candidate | `codex/t10d-d-simplified-manual-control@b69c1e0` | Explicit e-stop recovery merged; focused `30/30`, full Desktop `325/325`; exact recovery package running against the retained board latch | `MOTION_HIL_PARTIAL_ACCEPTED / E_STOP_RECOVERY_RERUN_PENDING` |
+| T10D-D accepted baseline | `codex/t10d-d-simplified-manual-control@2efe4e0` | User accepted all four directions, release, recenter, emergency stop and explicit emergency-stop recovery on the exact recovery package | `MOTION_MANUAL_CONTROL_HIL_ACCEPTED / FROZEN_BASELINE` |
 | T10D integrated candidate | `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8` | Desktop `283/283` + exact Windows package; EasyInput Host `13/13` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN` |
 | T14A Windows follow-on | `codex/t14-desktop-agent-adapter-framework@8578f0cc8bef40ba269bb0960adbaf04c66432ed`, now included in T10D-D through the software ancestry | Codex-compatible generic provider status plus strict Hermes lifecycle adapter; integrated Desktop `310/310` + package | `MERGED / CODE_BUILD_CONFIRMED / HIL_NOT_RUN` |
 | Main integrated baseline | `codex/t11f-three-end-integration@ee0ac8418b1d7c0497f72e3edc67b5ee39b232d4` | Desktop `246/246` + package; EasyInput Host `12/12` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `INTEGRATED_BASELINE / CODE_BUILD_CONFIRMED` |
@@ -37,14 +37,16 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 5. **T14A Hermes Agent adapter — MERGED, CODE/BUILD COMPLETE.** Its optional content-free lifecycle adapter is now present through the accepted software ancestry; it remains disabled until separately enabled and has no firmware effect. Real Hermes/OLED observation remains a later user-present gate.
 6. **T10D-C Stage 1 route trial — FLASH/PROTOCOL HIL COMPLETE, OUTPUT NOT RUN.** The exact app-only image was written and verified. Status and yaw selection reached Xiaozhi. The attempted step was rejected as `CENTER_REQUIRED` with `completed_output_count=0`, so no PWM/output occurred; this identified the old UI's missing center orchestration rather than a servo failure.
 7. **T10D-D simplified press-and-hold control — CODE/BUILD COMPLETE.** `codex/t10d-d-simplified-manual-control@514ad6be7a5c54a8574174d26121ac07bdafabbe` merges the simplified Windows delivery and the separate Xiaozhi Stage 2 profile. Desktop `310/310` plus package/native self-test, EasyInput Host `13/13`, Xiaozhi Host `12/12` and exact ESP-IDF v5.5.3 build pass. EasyInput firmware does not change.
-8. **T10D-D user-present HIL — DIRECTIONS ACCEPTED / E-STOP RECOVERY PACKAGE RUNNING.** The explicit recovery patch is merged and running. Page entry performs only a read-only status query so the retained latch is visible; only the user-confirmed “解除急停并重新开始（会先回中）” click may perform fresh status → one clear → locked proof → two-axis center. Focused `30/30` and full Desktop `325/325` pass; firmware and wire bytes are unchanged. Verify one recovery, one ordinary later start without a clear, and another stop latch. If accepted, freeze manual control and proceed to bounded preset movements.
-9. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
+8. **T10D-D user-present HIL — ACCEPTED AND FROZEN.** The exact recovery package completed all four directions, release, recenter, emergency-stop latch and explicit recovery. This closes the calibration-style manual-control gate and permits design of bounded semantic presets; it does not by itself prove any preset, autonomous or voice-triggered movement.
+9. **T15 runtime preset motion — IN PROGRESS.** Freeze new additive HID `0x18/0x19` and DeskMate Link `0x22/0x23` contracts, implement Xiaozhi-local trajectories plus strict EasyInput forwarding, then expose four real preset tests in Windows. Default repeat is one for attention/search and two for nod/dance, configurable only from 1 through 3.
+10. **T16 desktop actions and Codex briefing — IN PROGRESS IN PARALLEL.** Implement direct launch only for explicitly voice-enabled registered applications, deterministic Codex status answers, and an opt-in content-bounded task brief reporter. This package must not guess the still-unfrozen motion wire.
+11. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
 
 #### Ownership and reporting
 
 - `EasyInput固件开发`（本窗口）是主 Agent / integration owner：维护唯一总 `flow/`，审计两个实现窗口，决定合并与人工验收顺序。
 - `DeskMate软件开发` 独立实现 Windows 软件；不直接把自己的 Flow 状态升级为总项目完成，交付时必须返回 exact branch/HEAD、测试、打包、HIL 和未完成项。
-- `小智云台固件开发` 独立实现显示/动作固件；当前没有新改动需求，运动安全门未关闭前不得创建真实 adapter、PWM 或烧录候选。
+- `小智云台固件开发` 独立实现 T15 高层动作执行端；只使用已验收的 Stage 2 adapter 与 `MotionSafetyCore`，不允许把角度、PWM、脉宽或 GPIO 暴露到板间合同。
 - 三个窗口均不得在自己的功能分支里宣布“总项目主线已更新”；主 Agent 完成整合审计后，才在本计划和 `flow/progress.md` 顶部统一记账。
 
 #### Historical detail below

@@ -8,6 +8,7 @@
 - [`easyinput-config-v1.md`](easyinput-config-v1.md)：`CONFIG_V1_FROZEN`，冻结完整配置读取、无损主进程合并、脱敏确认、双槽 NVS、恢复与回读；只开放纯 HID 映射，Windows 主机动作仍未冻结。
 - [`easyinput-host-action-v1.md`](easyinput-host-action-v1.md)：`HOST_ACTION_V1_FROZEN`，冻结固定文字与 UUID 打开应用的 Maker 兼容 AppCommand、USB 生命周期和 Windows 主进程安全执行边界。
 - [`easyinput-manual-calibration-v1.md`](easyinput-manual-calibration-v1.md)：`EASYINPUT_MANUAL_CALIBRATION_HOST_V1_FROZEN`，冻结 HID `0x16/0x17` 手动校准传输、单请求生命周期、三层证据与失败关闭语义；只允许转发既有 T10C 高层操作。
+- [`easyinput-motion-presets-v1.md`](easyinput-motion-presets-v1.md) 与[黄金向量](golden-vectors-easyinput-motion-presets-v1.json)：`EASYINPUT_MOTION_PRESETS_HOST_V1_FROZEN`，冻结 HID `0x18/0x19` 语义动作传输、1～3 次重复、单请求转发和断线不重放；不含角度、PWM、脉宽或 GPIO。
 
 现有 Maker `ai_keyboard.v1`、厂商 HID 和 Host Action 证据仍以 [`docs/contracts/easyinput-maker-protocol.md`](../../docs/contracts/easyinput-maker-protocol.md) 为来源合同。切片冻结不等于整份 Host Contract 已冻结。
 

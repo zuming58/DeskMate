@@ -1,5 +1,20 @@
 # Decisions
 
+## D076 - Runtime presets are semantic endpoint-owned trajectories
+
+- Date: 2026-09-02
+- Decision: the accepted T10D-D `0x16/0x17` and `0x20/0x21` path remains a manual calibration/control surface. T15 adds a separate semantic runtime-motion path; Windows names a bounded preset and repeat count, EasyInput validates and forwards one request, and Xiaozhi alone expands it into calibrated trajectory targets through the existing `MotionSafetyCore` and real adapter.
+- Presets: `attention`, `nod`, `search`, and `dance`. Repeat count is the only exposed motion parameter and is restricted to `1..3`; defaults are one for attention/search and two for nod/dance. Normal completion returns both axes to the accepted center.
+- Safety/lifecycle: one preset at a time, no backlog, no replay after disconnect/restart, and no automatic motion on connection. Emergency stop/fault, recovery/recenter, manual control, explicit presets, dialogue actions and idle actions retain descending priority. The wire never contains an angle, PWM, pulse width, duty cycle or GPIO.
+- Product sequencing: real preset buttons and user-present HIL precede voice or autonomous triggers. Automatic motion stays disabled until preset HIL passes.
+
+## D077 - Voice app launch and Codex briefing use explicit bounded authorities
+
+- Date: 2026-09-02
+- Decision: a registered Windows application may launch without a per-command confirmation only after the user explicitly enables voice launch for that opaque AppAction. Existing registrations migrate disabled; raw paths, arguments, URLs, shell commands and unregistered targets remain invalid.
+- Codex: `codex-hook-v1` remains authoritative for coarse lifecycle. Richer progress is accepted only from an opt-in `codex-task-brief-v1` reporter carrying an opaque task key, explicit user-facing task label, seven-state value, bounded milestone and sequence. DeskMate does not inspect prompts, replies, tool parameters/results, paths or window titles.
+- Presentation: task start speaks once, ordinary milestones are throttled to at most one per 15 seconds, and waiting/completed/error may speak immediately. Voice status questions use deterministic stored facts and never ask the language model to invent progress or completion percentages.
+
 ## D075 - Emergency-stop clearing is an explicit verified restart transaction
 
 - Date: 2026-09-02

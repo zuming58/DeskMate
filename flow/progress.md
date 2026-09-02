@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T10D-D manual motion HIL accepted; T15/T16 opened
+
+- 用户在精确急停恢复软件包与已烧录 Stage 2 双板固件上完成真机复验，并明确确认“可以了，没问题了，验收通过”。接受范围包括 Yaw/Pitch 四向语义、按住连续移动、松手停止继续发步、双轴回中、急停锁存，以及显式解除急停后回中并重新进入手动控制。
+- 这项证据把 `codex/t10d-d-simplified-manual-control@2efe4e0` 升级为 `MOTION_MANUAL_CONTROL_HIL_ACCEPTED / FROZEN_BASELINE`。它只关闭手动控制门，不证明预设、语音或自动动作已经实现。
+- 用户批准下一阶段计划：T15 把 attention/nod/search/dance 做成小智本机高层轨迹，EasyInput 只转发，Windows 先做真实按钮验收再接语音和情境联动；T16 并行完成白名单应用语音直开、Codex 生命周期状态和显式脱敏里程碑简报。
+- 动作默认进一步确认：attention/search 一次，nod/dance 完整循环两次；动作页只开放 1..3 次的重复设置，不开放任意角度、PWM、脉宽或 GPIO。
+- 当前工作分支：`codex/t15-t16-integration`，基线 `2efe4e0`。没有扫描端口、读取设备、发送舵机命令或执行 Flash/NVS/eFuse 写入。下一步：冻结 T15 host/Link 合同并并行启动小智、EasyInput 和 Windows 代码包。
+
 ## 2026-09-02 - Explicit emergency-stop recovery merged and package launched
 
 - Audited and merged `codex/t10d-desktop-emergency-stop-recovery@1b174e50df5d146af2e33454affb153d25dba817` into the integration branch as `b69c1e0`. The page can discover a retained emergency latch through a read-only status query, while only the explicit environment-confirmed recovery action may issue one clear, verify `locked`/not-latched and then establish both centers.
