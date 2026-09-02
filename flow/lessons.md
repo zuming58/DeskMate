@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Rich task progress needs a smaller trust boundary than conversation text
+
+- Symptom: a coarse lifecycle hook can say that Codex is working or waiting, but it cannot truthfully answer which task or milestone is active without reading broad task content.
+- Practice: keep the coarse hook authoritative, and add a separate opt-in reporter with an exact allowlist, opaque key, bounded user-facing label/milestone, monotonic sequence and fixed deterministic response templates. Reject extra fields and content-shaped paths, commands, URLs and credentials.
+- Rule: do not turn prompts, transcripts, tool calls or window/process inspection into status telemetry. Retain only the minimum current snapshots, throttle non-urgent speech and drop announcements displaced by active conversation ownership.
+
 ## A hardware emergency latch needs a deliberate recovery transaction
 
 - Symptom: emergency stop works and the endpoint stays safely latched, but every later start fails forever because the simplified UI removed the only clear operation.

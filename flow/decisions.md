@@ -1,5 +1,12 @@
 # Decisions
 
+## D076 - Voice actions and rich task progress require separate explicit opt-ins
+
+- Date: 2026-09-02
+- Decision: a companion utterance may open an application without another per-call confirmation only when the target is an already registered opaque AppAction and its persisted `voiceEnabled` policy is explicitly true. Existing and new registrations default to false; raw paths, arguments, URLs, shell commands and unregistered labels remain invalid.
+- Status boundary: `codex-hook-v1` remains the authoritative content-free lifecycle signal. Optional richer progress uses the exact `codex-task-brief-v1` schema from an opt-in repository-local reporter, with deterministic answers, bounded retention and speech throttling. The language model never invents progress or completion percentage.
+- Compatibility: this supersedes D065's per-call confirmation only for explicitly voice-enabled registered applications. It does not weaken AppAction target validation or authorize a global Codex plugin. Motion intents remain data-only until the separate frozen T15 transport is integrated.
+
 ## D075 - Emergency-stop clearing is an explicit verified restart transaction
 
 - Date: 2026-09-02

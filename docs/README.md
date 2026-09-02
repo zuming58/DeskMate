@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T16 desktop actions and Codex task briefing](handoffs/t16-desktop-actions-briefing-2026-09-02.md)
+- [T16 desktop actions and task brief frozen contract](contracts/t16-desktop-actions-and-task-brief-v1.md)
 - [Windows explicit emergency-stop recovery](handoffs/t10d-desktop-emergency-stop-recovery-2026-09-02.md)
 - [Windows pitch direction semantics recovery](handoffs/t10d-desktop-pitch-direction-recovery-2026-09-02.md)
 - [Windows manual-control request ID restart recovery](handoffs/t10d-desktop-request-id-recovery-2026-09-02.md)
