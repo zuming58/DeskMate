@@ -7,7 +7,12 @@ const adapters = fs.readFileSync(new URL("../src/adapters/voiceAdapters.js", imp
 
 test("T15 motion page exposes only bounded real presets and endpoint controls", () => {
   assert.match(page, /runPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
-  for (const preset of ["attention", "nod", "search", "dance"]) assert.match(page, new RegExp(`runPreset\\("${preset}"\\)`));
+  assert.match(page, /3\. 开始执行：/);
+  assert.match(page, /runPreset\(preset\)/);
+  assert.match(page, /重新检测动作链/);
+  assert.match(page, /readWithRetry/);
+  assert.match(page, /这里没有上下左右控制/);
+  for (const label of ["关注", "点头", "寻找", "跳舞"]) assert.match(page, new RegExp(`value: "[a-z]+", label: "${label}"`));
   assert.match(page, /停止并回中/);
   assert.match(page, /立即急停/);
   assert.match(page, /解除急停并回中/);

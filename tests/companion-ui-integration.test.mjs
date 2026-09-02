@@ -78,7 +78,7 @@ test("companion UI is a real main-process session entry and does not create a re
   assert.match(app, /createComputerCompanionAudioEngine/);
   assert.match(preload, /onCompanionConversationEvent/);
   assert.doesNotMatch(companion, /getUserMedia|MediaRecorder|useRecorder/);
-  assert.match(pages, /上方仅是软件画面预览/);
+  assert.match(pages, /这里只显示软件画面预览/);
   assert.match(pages, /是否真实转动、方向和机械回中仍以你现场观察为准/);
   assert.match(pages, /runPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
 });
