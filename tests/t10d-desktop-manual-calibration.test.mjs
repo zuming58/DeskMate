@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { readFile } from "node:fs/promises";
+import { createDiagnosticReport } from "../src/services/diagnostics.js";
 
 const require = createRequire(import.meta.url);
 const vectors = require("../contracts/deskmate-host/golden-vectors-easyinput-manual-calibration-v1.json").vectors;
@@ -11,6 +12,7 @@ const {
   decodeManualCalibrationFeatureReport,
   decodeManualCalibrationInputReport,
   encodeManualCalibrationFeatureReport,
+  crc16CcittFalse,
 } = require("../electron/manual-calibration-hid.cjs");
 const { ManualCalibrationController } = require("../electron/manual-calibration-controller.cjs");
 const { InputBridgeManager } = require("../electron/input-bridge.cjs");
@@ -18,6 +20,17 @@ const { parseBridgeLine } = require("../electron/input-bridge-protocol.cjs");
 
 const vector = (name) => Buffer.from(vectors.find((item) => item.name === name).hex, "hex");
 const at = "2026-09-02T10:00:00.000Z";
+
+function linkErrorReport(code, { kind = "status" } = {}) {
+  const report = vector(kind === "status" ? "status_terminal" : "select_terminal");
+  report[8] = 8;
+  report[22] = 0x04;
+  report[23] = code;
+  report[24] = 0;
+  report.fill(0, 25, 44);
+  report.writeUInt16LE(crc16CcittFalse(report.subarray(1, 60)), 60);
+  return report;
+}
 
 test("T10D-B codec matches every host golden vector byte for byte", () => {
   assert.deepEqual(encodeManualCalibrationFeatureReport({ kind: "status", requestId: 0x01020304 }), vector("status_request"));
@@ -45,6 +58,22 @@ test("codec fails closed on CRC, padding, arbitrary step and incomplete safety",
   assert.throws(() => decodeManualCalibrationFeatureReport(badPadding), /request-invalid/);
   assert.throws(() => encodeManualCalibrationFeatureReport({ kind: "command", requestId: 1, confirmationId: 2, command: { sessionId: 1, actionId: 1, armToken: 5, operation: "singleStep", axis: "yaw", direction: 2 } }), /output-invalid/);
   assert.throws(() => encodeManualCalibrationFeatureReport({ kind: "command", requestId: 1, confirmationId: 2, command: { sessionId: 1, actionId: 1, armToken: 5, operation: "arm", axis: "yaw", leaseMs: 3000, safetyFlags: 7 } }), /arm-invalid/);
+});
+
+test("codec classifies every frozen Link error and rejects unknown or inconsistent values", () => {
+  const expected = ["UNKNOWN_TYPE", "BAD_PAYLOAD", "NOT_READY", "BUSY", "SEQUENCE_CONFLICT", "INTERNAL"];
+  for (let code = 1; code <= expected.length; code += 1) {
+    const decoded = decodeManualCalibrationInputReport(linkErrorReport(code));
+    assert.equal(decoded.transport, "link-error");
+    assert.equal(decoded.linkError, expected[code - 1]);
+    assert.equal(decoded.linkErrorCode, code);
+    assert.equal(decoded.endpoint, null);
+  }
+  assert.throws(() => decodeManualCalibrationInputReport(linkErrorReport(7)), /report-invalid/);
+  const missingErrorFlag = linkErrorReport(3); missingErrorFlag[22] = 0; missingErrorFlag.writeUInt16LE(crc16CcittFalse(missingErrorFlag.subarray(1, 60)), 60);
+  assert.throws(() => decodeManualCalibrationInputReport(missingErrorFlag), /terminal-invalid/);
+  const errorOnTimeout = linkErrorReport(4); errorOnTimeout[8] = 7; errorOnTimeout.writeUInt16LE(crc16CcittFalse(errorOnTimeout.subarray(1, 60)), 60);
+  assert.throws(() => decodeManualCalibrationInputReport(errorOnTimeout), /terminal-invalid/);
 });
 
 test("controller gates commands on a correlated status terminal and separates all evidence", async () => {
@@ -91,6 +120,39 @@ test("controller requires four attestations, one-use arm token and resets on USB
   assert.equal(controller.snapshot().context, null);
 });
 
+test("status-only Link errors preserve transport evidence and keep output fail closed", async () => {
+  for (const [linkError, linkErrorCode, expectedGate] of [["UNKNOWN_TYPE", 1, "unsupported"], ["NOT_READY", 3, "not-ready"], ["BUSY", 4, "faulted"]]) {
+    const controller = new ManualCalibrationController({ randomUInt32: () => 77, now: () => at, send: async (report, { onAccepted }) => {
+      const request = decodeManualCalibrationFeatureReport(report);
+      onAccepted({ requestId: request.requestId, confirmationId: 0, acceptedCount: 1, linkSequence: 9 });
+      return { ok: false, reason: "link-error", terminal: { stage: "terminal", kind: "status", requestId: request.requestId, transport: "link-error", transportCode: 8, linkError, linkErrorCode, endpoint: null } };
+    } });
+    controller.handleBridgeStatus({ boardConnected: true, calibrationCollectionWritable: true });
+    const result = await controller.queryStatus();
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "link-error");
+    assert.equal(result.status.gate, expectedGate);
+    assert.equal(result.status.controlsEnabled, false);
+    assert.equal(result.status.terminal.linkError, linkError);
+    assert.equal(controller.diagnostics().accepted, true);
+    assert.deepEqual(controller.diagnostics().linkError, { enum: linkError, code: linkErrorCode });
+  }
+});
+
+test("manual calibration diagnostics are bounded, correlated and privacy safe", () => {
+  const controller = new ManualCalibrationController({ send: async () => ({ ok: false }), randomUInt32: () => 10, now: () => at });
+  assert.equal(controller.diagnostics().status, "unavailable");
+  const report = createDiagnosticReport({ inputBridge: { boardConnected: true, manualCalibration: { status: "available", request: { kind: "status", id: 23, devicePath: "private" }, accepted: true, transport: "link-error", linkError: { enum: "NOT_READY", code: 3 }, endpoint: null, at, peerBootId: 99, transcript: "private speech" } } });
+  assert.deepEqual(report.manualCalibration, { status: "available", request: { kind: "status", id: 23 }, accepted: true, transport: "link-error", linkError: { enum: "NOT_READY", code: 3 }, endpoint: null, at });
+  assert.equal(JSON.stringify(report).includes("private"), false);
+  assert.equal(JSON.stringify(report).includes("peerBootId"), false);
+  const invalid = createDiagnosticReport({ inputBridge: { manualCalibration: { request: { kind: "raw", id: -1 }, transport: "link-error", linkError: { enum: "UNKNOWN_7", code: 7 }, endpoint: { result: "moved", state: "ready" }, at: "not-a-time" } } });
+  assert.deepEqual(invalid.manualCalibration, { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null });
+  const mismatched = createDiagnosticReport({ inputBridge: { manualCalibration: { request: { kind: "status", id: 1 }, transport: "link-error", linkError: { enum: "BUSY", code: 3 }, endpoint: null, at } } });
+  assert.equal(mismatched.manualCalibration.transport, "unavailable");
+  assert.deepEqual(mismatched.manualCalibration.linkError, { enum: "NONE", code: 0 });
+});
+
 test("native bridge manager allows one request, relays accepted separately and resolves terminal", async () => {
   const writes = [];
   const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => {};
@@ -129,10 +191,12 @@ test("UI and IPC expose only the frozen safety controls and three evidence layer
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"), readFile(new URL("../native/DeskMate.InputBridge/Program.cs", import.meta.url), "utf8"), readFile(new URL("../native/DeskMate.InputBridge/VendorReportProtocol.cs", import.meta.url), "utf8"),
   ]);
   const panel = pages.slice(pages.indexOf("function ManualCalibrationPanel"), pages.indexOf("export function ConnectionsPage"));
-  for (const copy of ["本人在设备旁", "机械连杆已卸载", "舵机使用独立限流电源", "断电开关可立即触达", "-1°", "+1°", "EasyInput accepted", "小智 terminal", "accepted 不等于已转动或成功"]) assert.match(panel, new RegExp(copy.replace(/[+°]/g, "\\$&")));
+  for (const copy of ["本人在设备旁", "机械连杆已卸载", "舵机使用独立限流电源", "断电开关可立即触达", "-1°", "+1°", "EasyInput accepted", "小智 terminal", "accepted 不等于已转动或成功", "不代表运动成功或可以解锁"]) assert.match(panel, new RegExp(copy.replace(/[+°]/g, "\\$&")));
+  for (const copy of ["当前小智固件不支持手动校准协议", "协议存在，但校准 owner/真实适配器未就绪"]) assert.match(pages, new RegExp(copy));
   assert.doesNotMatch(panel, /type="number"|name="(?:pulse|duty|gpio|angle)|sendManualCalibrationCommand\([^)]*(?:pulseWidth|dutyCycle|gpio|angle)/i);
   assert.match(preload, /getManualCalibrationStatus/); assert.match(preload, /queryManualCalibration/); assert.match(preload, /sendManualCalibrationCommand/);
   assert.match(main, /desktop:get-manual-calibration-status/); assert.match(main, /desktop:send-manual-calibration-command/);
+  assert.match(main, /manualCalibration: manualCalibrationController\?\.diagnostics/);
   assert.match(native, /VendorReportProtocol\.IsValidManualCalibrationRequest\(report\)/); assert.match(native, /VendorReportProtocol\.IsValidManualCalibrationResponse\(report\)/);
   assert.match(protocol, /report\[0\] != 0x16/); assert.match(protocol, /report\[0\] != 0x17/);
 });

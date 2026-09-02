@@ -14,6 +14,7 @@ const OPERATIONS = Object.freeze({ arm: 0, selectAxis: 1, provisionalCenter: 2, 
 const TRANSPORT_RESULTS = Object.freeze([
   "completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal",
 ]);
+const LINK_ERRORS = Object.freeze(["NONE", "UNKNOWN_TYPE", "BAD_PAYLOAD", "NOT_READY", "BUSY", "SEQUENCE_CONFLICT", "INTERNAL"]);
 const ENDPOINT_RESULTS = Object.freeze([
   "completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed",
 ]);
@@ -137,26 +138,28 @@ function decodeManualCalibrationInputReport(value) {
   const report = Buffer.isBuffer(value) ? Buffer.from(value) : value instanceof Uint8Array ? Buffer.from(value) : null;
   if (!report || report.length !== REPORT_BYTES || report[0] !== INPUT_REPORT_ID || report.subarray(1, 5).toString("ascii") !== "DMCS" || report[5] !== PROTOCOL_VERSION) throw new Error("manual-calibration-report-invalid");
   const stageCode = report[6]; const kindCode = report[7]; const transportCode = report[8];
-  if (![STAGE_ACCEPTED, STAGE_TERMINAL].includes(stageCode) || ![KIND_COMMAND, KIND_STATUS].includes(kindCode) || transportCode > 11 || ![0, 0x02, 0x04].includes(report[22]) || report[24] > 19) throw new Error("manual-calibration-report-invalid");
+  const linkFlag = report[22]; const linkErrorCode = report[23];
+  if (![STAGE_ACCEPTED, STAGE_TERMINAL].includes(stageCode) || ![KIND_COMMAND, KIND_STATUS].includes(kindCode) || transportCode > 11 || ![0, 0x02, 0x04].includes(linkFlag) || linkErrorCode >= LINK_ERRORS.length || report[24] > 19) throw new Error("manual-calibration-report-invalid");
   if (report.readUInt16LE(60) !== crc16CcittFalse(report.subarray(1, 60))) throw new Error("manual-calibration-crc-invalid");
   assertZero(report, 62);
   const endpointLength = report[24];
   assertZero(report, 25 + endpointLength, 44);
   const messageType = report[21];
   if (messageType !== (kindCode === KIND_COMMAND ? 0x20 : 0x21)) throw new Error("manual-calibration-message-type-invalid");
-  if (stageCode === STAGE_ACCEPTED && (transportCode !== 0 || report[22] !== 0 || endpointLength !== 0)) throw new Error("manual-calibration-accepted-invalid");
-  if (stageCode === STAGE_TERMINAL && transportCode === 0 && (report[22] !== 0x02 || endpointLength !== (kindCode === KIND_COMMAND ? 19 : 18))) throw new Error("manual-calibration-terminal-invalid");
-  if (stageCode === STAGE_TERMINAL && transportCode !== 0 && endpointLength !== 0) throw new Error("manual-calibration-terminal-invalid");
+  if (stageCode === STAGE_ACCEPTED && (transportCode !== 0 || linkFlag !== 0 || linkErrorCode !== 0 || endpointLength !== 0)) throw new Error("manual-calibration-accepted-invalid");
+  if (stageCode === STAGE_TERMINAL && transportCode === 0 && (linkFlag !== 0x02 || linkErrorCode !== 0 || endpointLength !== (kindCode === KIND_COMMAND ? 19 : 18))) throw new Error("manual-calibration-terminal-invalid");
+  if (stageCode === STAGE_TERMINAL && transportCode === 8 && (linkFlag !== 0x04 || linkErrorCode === 0 || endpointLength !== 0)) throw new Error("manual-calibration-terminal-invalid");
+  if (stageCode === STAGE_TERMINAL && transportCode !== 0 && transportCode !== 8 && (linkFlag !== 0 || linkErrorCode !== 0 || endpointLength !== 0)) throw new Error("manual-calibration-terminal-invalid");
   const endpoint = endpointLength ? parseEndpoint(report.subarray(25, 25 + endpointLength), messageType) : null;
   return Object.freeze({
     stage: stageCode === STAGE_ACCEPTED ? "accepted" : "terminal", stageCode, kind: kindCode === KIND_COMMAND ? "command" : "status", kindCode,
     transport: TRANSPORT_RESULTS[transportCode], transportCode, requestId: report.readUInt32LE(9), confirmationId: report.readUInt32LE(13), linkSequence: report.readUInt32LE(17),
-    messageType, linkFlag: report[22], linkError: report[23], endpoint,
+    messageType, linkFlag, linkError: LINK_ERRORS[linkErrorCode], linkErrorCode, endpoint,
     acceptedCount: report.readUInt32LE(44), terminalCount: report.readUInt32LE(48), controllerBootId: report.readUInt32LE(52), peerBootId: report.readUInt32LE(56),
   });
 }
 
 module.exports = {
-  AXIS, ENDPOINT_RESULTS, FEATURE_REPORT_ID, INPUT_REPORT_ID, KIND_COMMAND, KIND_STATUS, OPERATIONS, OWNER_STATES, PROTOCOL_VERSION, REPORT_BYTES, TRANSPORT_RESULTS,
+  AXIS, ENDPOINT_RESULTS, FEATURE_REPORT_ID, INPUT_REPORT_ID, KIND_COMMAND, KIND_STATUS, LINK_ERRORS, OPERATIONS, OWNER_STATES, PROTOCOL_VERSION, REPORT_BYTES, TRANSPORT_RESULTS,
   crc16CcittFalse, decodeManualCalibrationFeatureReport, decodeManualCalibrationInputReport, encodeCommandPayload, encodeManualCalibrationFeatureReport,
 };

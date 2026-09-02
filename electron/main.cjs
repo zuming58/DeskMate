@@ -123,7 +123,7 @@ function safeAgentStateReason(value) {
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
   const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
-  return { ...bridge, agentStateDelivery: { ...agentStateDelivery } };
+  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null } };
 }
 
 function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
@@ -935,7 +935,7 @@ app.whenReady().then(async () => {
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
   });
-  manualCalibrationController.on("status", (value) => sendToMain("manual-calibration-status", value));
+  manualCalibrationController.on("status", (value) => { sendToMain("manual-calibration-status", value); emitInputBridgeStatus(); });
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();

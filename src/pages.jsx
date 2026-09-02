@@ -1202,10 +1202,11 @@ export function KeymapPage({ notify }) {
   );
 }
 
-const CALIBRATION_GATE_LABELS = Object.freeze({ unavailable: "EasyInput 未连接", "query-required": "需要先读取状态", querying: "正在读取状态", "not-ready": "小智端尚未就绪", faulted: "状态读取失败", ready: "状态已读取" });
+const CALIBRATION_GATE_LABELS = Object.freeze({ unavailable: "EasyInput 未连接", "query-required": "需要先读取状态", querying: "正在读取状态", unsupported: "小智固件不支持校准协议", "not-ready": "小智端尚未就绪", faulted: "状态读取失败", ready: "状态已读取" });
 const CALIBRATION_OPERATION_LABELS = Object.freeze({ status: "读取状态", selectAxis: "选择轴", arm: "安全解锁", provisionalCenter: "暂定中心", singleStep: "单步", recenter: "回到中心", emergencyStop: "紧急停止", clearEmergencyStop: "清除急停" });
 const CALIBRATION_TRANSPORT_LABELS = Object.freeze({ completed: "端点已响应", malformed: "请求格式错误", busy: "EasyInput 正忙", stale: "请求已过期", conflict: "请求 ID 冲突", "link-not-ready": "DeskMate Link 未就绪", "link-queue-busy": "Link 队列正忙", timeout: "请求超时", "link-error": "Link 返回错误", "peer-disconnected-or-restarted": "小智断开或重启", "invalid-response": "小智响应无效", internal: "EasyInput 内部错误" });
 const CALIBRATION_ENDPOINT_LABELS = Object.freeze({ completed: "端点接受本次操作", duplicate: "端点识别为重复请求", "not-ready": "手动校准 owner 未就绪", "bad-payload": "端点拒绝无效载荷", "wrong-session": "会话已经变化", "stale-action": "动作 ID 已过期", "arm-required": "需要重新安全解锁", "arm-expired": "安全解锁已过期", "wrong-axis": "轴选择不一致", "step-out-of-range": "单步超出安全范围", "center-required": "需要先建立中心", "emergency-stopped": "急停已锁定", faulted: "运动 owner 故障锁定", "adapter-unavailable": "真实舵机适配器尚未接入", "adapter-failure": "舵机适配器执行失败", "action-conflict": "动作 ID 冲突", "safety-not-confirmed": "安全声明不完整" });
+const CALIBRATION_LINK_ERROR_LABELS = Object.freeze({ UNKNOWN_TYPE: "当前小智固件不支持手动校准协议", BAD_PAYLOAD: "小智拒绝了校准协议载荷", NOT_READY: "协议存在，但校准 owner/真实适配器未就绪", BUSY: "小智校准 owner 正忙", SEQUENCE_CONFLICT: "DeskMate Link 序列冲突", INTERNAL: "小智端内部错误" });
 
 function ManualCalibrationPanel({ boardConnected, linkState, notify }) {
   const [status, setStatus] = useState({ available: false, gate: "unavailable", controlsEnabled: false, pending: null, context: null, intent: null, accepted: null, terminal: null });
@@ -1244,10 +1245,13 @@ function ManualCalibrationPanel({ boardConnected, linkState, notify }) {
   };
   const terminal = status.terminal;
   const endpoint = terminal?.endpoint;
-  const terminalCopy = terminal ? endpoint ? `${CALIBRATION_ENDPOINT_LABELS[endpoint.result] || "状态响应"} · completed_output_count ${endpoint.completedOutputCount}` : CALIBRATION_TRANSPORT_LABELS[terminal.transport] || terminal.transport : "尚无 terminal";
+  const linkErrorCopy = terminal?.transport === "link-error" && terminal?.linkErrorCode > 0 ? `${CALIBRATION_LINK_ERROR_LABELS[terminal.linkError] || "未知 Link 错误"} · ${terminal.linkError} (${terminal.linkErrorCode})` : "";
+  const terminalCopy = terminal ? endpoint ? `${CALIBRATION_ENDPOINT_LABELS[endpoint.result] || "状态响应"} · completed_output_count ${endpoint.completedOutputCount}` : linkErrorCopy || CALIBRATION_TRANSPORT_LABELS[terminal.transport] || terminal.transport : "尚无 terminal";
+  const noticeTitle = linkErrorCopy ? CALIBRATION_LINK_ERROR_LABELS[terminal.linkError] || "小智返回 Link 错误" : status.gate === "not-ready" ? "当前生产小智返回 NOT_READY 属于真实预期" : "状态查询是动作门禁";
+  const noticeBody = linkErrorCopy ? `${terminal.linkError} (${terminal.linkErrorCode}) 是冻结 DeskMate Link 错误。所有输出保持禁用；此结果不代表运动成功或可以解锁。` : status.gate === "not-ready" ? "小智固件尚未注入 manual owner 或真实舵机适配器。所有动作保持禁用，不能把 EasyInput 已连接描述成舵机可动。" : "只有收到与本次请求关联的小智 0x21 terminal 状态后才启用命令。页面展示的是协议证据，不证明机械角度或供电安全。";
   return <Card className="manual-calibration-panel">
     <div className="manual-calibration-panel__header"><SectionTitle index="02" title="双舵机手动校准 · 安全控制" description="仅通过冻结的 EasyInput → 小智校准合同发送高层操作；软件不接触 PWM、角度目标、脉宽、占空比或 GPIO。" /><div className="manual-calibration-panel__status"><StatusBadge tone={status.gate === "ready" ? "success" : "demo"}>{CALIBRATION_GATE_LABELS[status.gate] || "状态未知"}</StatusBadge><small>DeskMate Link：{linkState || "unavailable"}</small></div></div>
-    <Notice tone={status.gate === "ready" ? "info" : "warning"} title={status.gate === "not-ready" ? "当前生产小智返回 NOT_READY 属于真实预期" : "状态查询是动作门禁"}>{status.gate === "not-ready" ? "小智固件尚未注入 manual owner 或真实舵机适配器。所有动作保持禁用，不能把 EasyInput 已连接描述成舵机可动。" : "只有收到与本次请求关联的小智 0x21 terminal 状态后才启用命令。页面展示的是协议证据，不证明机械角度或供电安全。"}</Notice>
+    <Notice tone={status.gate === "ready" ? "info" : "warning"} title={noticeTitle}>{noticeBody}</Notice>
     <div className="manual-calibration-query"><Button icon={Refresh} disabled={!boardConnected || busy} onClick={query}>{busy && status.pending?.kind === "status" ? "正在读取…" : "重新读取校准状态"}</Button><span>当前 owner：{status.context?.state || "unavailable"} · 已选轴：{status.context?.selectedAxis || "none"} · 固定单步：1°</span></div>
     <div className="manual-calibration-grid">
       <section><h3>1. 选择唯一轴</h3><div className="segmented manual-calibration-axis"><button type="button" className={axis === "yaw" ? "is-active" : ""} onClick={() => setAxis("yaw")}>Yaw · 左右</button><button type="button" className={axis === "pitch" ? "is-active" : ""} onClick={() => setAxis("pitch")}>Pitch · 上下</button></div><Button variant="ghost" disabled={!controlsEnabled} onClick={() => command("selectAxis")}>确认选择 {axis === "yaw" ? "Yaw" : "Pitch"}</Button></section>
