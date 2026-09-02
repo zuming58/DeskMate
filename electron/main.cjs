@@ -995,7 +995,7 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
   handleTrusted("desktop:send-manual-calibration-command", (value = {}) => manualCalibrationController.command(value));
   handleTrusted("desktop:get-manual-control-status", () => manualControlCoordinator.snapshot());
-  handleTrusted("desktop:start-manual-control", (value = {}) => manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true }));
+  handleTrusted("desktop:start-manual-control", (value = {}) => manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }));
   handleTrusted("desktop:manual-control-establish-center", () => manualControlCoordinator.establishCenter());
   handleTrusted("desktop:manual-control-press", (direction) => manualControlCoordinator.press(String(direction || "")));
   handleTrusted("desktop:manual-control-release", (direction) => manualControlCoordinator.release(String(direction || "")));
