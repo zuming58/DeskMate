@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Pitch semantic repair merged and exact Windows package launched
+
+- Audited and merged `codex/t10d-desktop-pitch-direction-recovery@d2abb09d11fec0d8f8bddbe71673285307844bfa` into the integration branch as `329b654`. The implementation changes only `up → pitch -1` and `down → pitch +1`; left/right, frozen HID/Link encoding, request-ID recovery, center, limits, fixed step, ARM, rate, release cancellation, emergency stop and both firmware trees are unchanged.
+- Independent integration verification passed the manual-control/request-ID focused tests `15/15`, including exact axis/sign assertions for all four directions, and the full Desktop suite `320/320` with `git diff --check` clean.
+- The prior request-ID package's seven Electron processes were verified by exact executable path and closed. The exact Pitch-fixed package was hash-checked and launched: `DeskMate.exe` is `202690560` bytes / SHA-256 `B7E5A9B0D3EE4C00F94670B042BED690847DD21724A6F03BC2F467003109A13B`.
+- Classification: `WINDOWS_PITCH_FIX_MERGED / EXACT_PACKAGE_RUNNING / PHYSICAL_DIRECTION_RERUN_PENDING`. No device/port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo command was accessed by the Agent. Next user-present gate: briefly confirm Up raises, Down nods, release stops future ticks, return to center works, and immediate stop locks the session.
+
 ## 2026-09-02 - Manual-control output reached hardware; Pitch up/down semantics reversed
 
 - User-present HIL on the exact request-ID recovery package confirms the former `stale` blocker is closed: manual control starts, the direction pad appears and physical Pitch output occurs through Windows → EasyInput → DeskMate Link → Xiaozhi.
