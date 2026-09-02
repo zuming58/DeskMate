@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - Xiaozhi Stage 2 app-only flash verified; movement HIL underway
+
+- After the exact `COM13` Xiaozhi target was freshly identified as ESP32-S3, the user explicitly confirmed `确认烧录 COM13 小智`. The same private hardware identity matched again immediately before and after the write; it was not persisted in this repository or diagnostics.
+- ESP-IDF v5.5.3 / esptool.py v4.12.0 wrote only `build-stage2-reference-manual-control-integrated/deskmate_xiaozhi_yuntai.bin` at `0x100000`. The app is `212720` bytes with SHA-256 `C47B6037C3424E4902D64B1AC732B8A8B4749B772632CE6C8F965B7EEBAF7AA2`; esptool reported `Hash of data verified`.
+- No bootloader, partition table, OTA data, NVS or eFuse was written, and no erase command was used. The final post-write identity check completed before a hard reset returned the board to normal boot.
+- The independently packaged Windows candidate `release-t10d-d-integrated/win-unpacked/DeskMate.exe` (SHA-256 `AF1F1BE1AD08367B9D2BE424D49A053880748EBBD7D2E8CE5D1B487BBD9BD842`) was then launched with no older DeskMate process present.
+- Classification: `STAGE2_APP_FLASH_VERIFIED / WINDOWS_EXACT_PACKAGE_RUNNING / PHYSICAL_MOVEMENT_HIL_IN_PROGRESS`. No manual center/step/hold command was issued by the Agent. The user-present acceptance is now: start manual control, briefly hold each direction, confirm release stops further steps, return to center, then exercise emergency stop. Any jump, stall, collision, reset, unexpected direction or Link loss ends the test immediately.
+
 ## 2026-09-02 - T10D-D simplified manual control merged and independently verified
 
 - The user explicitly authorized publication, and `codex/t10d-d-simplified-manual-control` through `16059286bc9155c82cccf6a4a3bb891a45030e87` was pushed to `origin` (`https://github.com/zuming58/DeskMate.git`) with the remote HEAD independently matched. This following documentation-only commit replaces the earlier pending-authorization handoff note.
