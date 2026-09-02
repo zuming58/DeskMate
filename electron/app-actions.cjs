@@ -36,7 +36,7 @@ class AppActionStore {
     let value = {};
     try { value = JSON.parse(fs.readFileSync(this.filePath, "utf8")); } catch { value = {}; }
     for (const [id, item] of Object.entries(value)) {
-      if (UUID_PATTERN.test(id) && this.isAllowedTarget(item?.target)) this.actions.set(id, { target: path.resolve(item.target), label: safeLabel(item.label) || path.basename(item.target, path.extname(item.target)) });
+      if (UUID_PATTERN.test(id) && this.isAllowedTarget(item?.target)) this.actions.set(id, { target: path.resolve(item.target), label: safeLabel(item.label) || path.basename(item.target, path.extname(item.target)), voiceEnabled: item.voiceEnabled === true });
     }
   }
 
@@ -76,12 +76,12 @@ class AppActionStore {
   registerTarget(target, label) {
     if (!this.isAllowedTarget(target)) throw new Error("只允许选择 Windows 应用或快捷方式");
     const resolved = path.resolve(target);
-    for (const [id, item] of this.actions) if (item.target.toLocaleLowerCase() === resolved.toLocaleLowerCase()) return { id, label: item.label };
+    for (const [id, item] of this.actions) if (item.target.toLocaleLowerCase() === resolved.toLocaleLowerCase()) return { id, label: item.label, voiceEnabled: item.voiceEnabled === true };
     const id = crypto.randomUUID().toLowerCase();
-    const item = { target: resolved, label: safeLabel(label) || path.basename(resolved, path.extname(resolved)) };
+    const item = { target: resolved, label: safeLabel(label) || path.basename(resolved, path.extname(resolved)), voiceEnabled: false };
     this.actions.set(id, item);
     this.save();
-    return { id, label: item.label };
+    return { id, label: item.label, voiceEnabled: false };
   }
 
   registerDiscovered(token) {
@@ -94,11 +94,21 @@ class AppActionStore {
     const value = String(id || "");
     if (!UUID_PATTERN.test(value)) return null;
     const item = this.actions.get(value);
-    return item ? { id: value, label: item.label } : null;
+    return item ? { id: value, label: item.label, voiceEnabled: item.voiceEnabled === true } : null;
   }
 
   listRegistered({ limit = 100 } = {}) {
-    return [...this.actions.entries()].slice(0, Math.max(1, Math.min(200, Number(limit) || 100))).map(([id, item]) => ({ id, label: item.label }));
+    return [...this.actions.entries()].slice(0, Math.max(1, Math.min(200, Number(limit) || 100))).map(([id, item]) => ({ id, label: item.label, voiceEnabled: item.voiceEnabled === true }));
+  }
+
+  setVoiceEnabled(id, enabled) {
+    const value = String(id || "");
+    if (!UUID_PATTERN.test(value) || typeof enabled !== "boolean") return { ok: false, reason: "application-voice-policy-invalid" };
+    const item = this.actions.get(value);
+    if (!item) return { ok: false, reason: "host-action-not-mapped" };
+    item.voiceEnabled = enabled;
+    this.save();
+    return { ok: true, ...this.describe(value) };
   }
 
   async choose(parentWindow) {
@@ -125,6 +135,13 @@ class AppActionStore {
     }
     const error = await this.shell.openPath(launchTarget);
     return error ? { ok: false, reason: "application-open-failed", label: item.label } : { ok: true, label: item.label };
+  }
+
+  async executeVoice(id) {
+    const item = this.actions.get(String(id || ""));
+    if (!item) return { ok: false, reason: "host-action-not-mapped" };
+    if (item.voiceEnabled !== true) return { ok: false, reason: "application-voice-not-enabled", label: item.label };
+    return this.execute(id);
   }
 }
 

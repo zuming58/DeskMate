@@ -74,17 +74,16 @@ test("Markdown projection uses stable double links and preserves user conflicts"
   assert.equal(fs.readFileSync(note, "utf8"), "user edited");
 }));
 
-test("intent bridge only proposes registered actions and requires one-use confirmation", async () => {
+test("intent bridge directly opens only an explicitly voice-enabled registered action", async () => {
   let opened = 0;
   let now = 1000;
-  const action = { id: "12345678-1234-1234-1234-123456789abc", label: "Codex" };
-  const actions = { listRegistered: () => [action], describe: (id) => id === action.id ? action : null, execute: async () => { opened += 1; return { ok: true, label: "Codex" }; } };
+  const action = { id: "12345678-1234-1234-1234-123456789abc", label: "Codex", voiceEnabled: true };
+  const actions = { listRegistered: () => [action], describe: (id) => id === action.id ? action : null, executeVoice: async () => { opened += 1; return { ok: true, label: "Codex" }; } };
   const bridge = new CompanionIntentBridge({ loadSecret: () => ({ apiKey: "secret" }), appActions: actions, codexStatus: () => ({ state: "waiting" }), requestJson: async () => ({ type: "open_application", actionId: action.id }), now: () => now, createToken: () => "one-use" });
   const analyzed = await bridge.analyze("打开 Codex");
-  assert.equal(opened, 0);
-  assert.equal(analyzed.proposal.label, "打开应用：Codex");
-  assert.equal((await bridge.confirm("one-use")).ok, true);
   assert.equal(opened, 1);
+  assert.equal(analyzed.result.type, "open_application");
+  assert.equal(analyzed.result.ok, true);
   assert.equal((await bridge.confirm("one-use")).reason, "intent-confirmation-expired");
   now += 1;
 });

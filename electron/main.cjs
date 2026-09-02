@@ -42,6 +42,7 @@ const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 const { AgentStatePublisher } = require("./agent-state-hid.cjs");
 const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
+const { CodexTaskBriefServer, CodexTaskBriefStore } = require("./codex-task-brief.cjs");
 const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
 const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
@@ -52,7 +53,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t14a-hermes-agent-adapter-v1";
+const DESKMATE_BUILD_ID = "t16-desktop-actions-briefing-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -102,6 +103,8 @@ let lastVoiceToggleAt = 0;
 let pendingEditShortcutTimer = null;
 let activeAgentProvider = "codex";
 let codexHookServer;
+let codexTaskBriefServer;
+let codexTaskBriefStore;
 let hermesHookServer;
 let manualCalibrationController;
 let manualControlCoordinator;
@@ -230,7 +233,8 @@ async function commitCompanionTurn(turn) {
   if (turn?.role === "user" && companionIntentBridge) {
     void companionIntentBridge.analyze(turn.content).then((analysis) => {
       if (analysis?.proposal) handleCompanionConversationEvent({ type: "intent.proposal", proposal: analysis.proposal });
-      else if (!analysis?.ok) handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() });
+      if (analysis?.result) handleCompanionConversationEvent({ type: "intent.result", result: analysis.result });
+      if (!analysis?.proposal) handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() });
     }).catch(() => {});
   }
   return result;
@@ -975,11 +979,19 @@ app.whenReady().then(async () => {
     onEvent: handleCompanionConversationEvent,
   });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
-  companionIntentBridge = new CompanionIntentBridge({ loadSecret: () => loadTextModelSecret(), appActions: appActionStore, codexStatus: () => codexHookStatus });
+  codexTaskBriefStore = new CodexTaskBriefStore();
+  companionIntentBridge = new CompanionIntentBridge({ loadSecret: () => loadTextModelSecret(), appActions: appActionStore, codexStatus: () => codexHookStatus, codexTasks: codexTaskBriefStore });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
   const codexReceiver = await codexHookServer.start();
   codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
+  codexTaskBriefServer = new CodexTaskBriefServer({ onReport: (report) => {
+    const result = codexTaskBriefStore.ingest(report);
+    if (!result.ok) return;
+    sendToMain("codex-task-brief-status", codexTaskBriefStore.status());
+    if (result.announcement) sendToMain("codex-task-brief-announcement", { ...result.announcement, speak: !companionIsActive() && !isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) });
+  } });
+  const taskBriefReceiver = await codexTaskBriefServer.start();
   hermesHookServer = new HermesHookStateServer({ onState: (value) => { void handleHermesHookState(value); } });
   const hermesReceiver = await hermesHookServer.start();
   hermesHookStatus = { ...hermesHookStatus, receiver: hermesReceiver.ok ? "listening" : "unavailable" };
@@ -1031,6 +1043,9 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
   handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
+  handleTrusted("desktop:get-application-voice-policy", (id) => appActionStore.describe(id) || { ok: false, reason: "host-action-not-mapped" });
+  handleTrusted("desktop:set-application-voice-enabled", (value = {}) => appActionStore.setVoiceEnabled(value.id, value.enabled));
+  handleTrusted("desktop:get-codex-task-brief-status", () => ({ ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable" }));
   handleTrusted("desktop:sync-keyboard-config", () => ({ ok: false, reason: "config-write-requires-preview-and-confirmation" }));
   handleTrusted("desktop:read-keyboard-config", async () => {
     const result = await inputBridge?.readConfig?.() || { ok: false, reason: "input-bridge-unavailable" };
@@ -1222,6 +1237,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

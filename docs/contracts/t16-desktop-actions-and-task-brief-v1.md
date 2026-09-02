@@ -71,4 +71,3 @@ lifecycle and does not acquire content access.
 The first release supports only tasks that explicitly send this contract from
 the DeskMate repository. A global reporter/plugin requires a separate package
 and user authorization.
-

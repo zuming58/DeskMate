@@ -7,9 +7,10 @@ import { mapAiStateToPetIntent } from "../domain/petIntent.js";
 import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 import { COMPANION_DEFAULTS, isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs, normalizeCompanionPreferences } from "../domain/companionPreferences.js";
+import { normalizeMotionState } from "../domain/motionPresets.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -42,6 +43,7 @@ export const defaultState = {
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
     companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
     memory: { ready: false, storage: "unavailable" },
+    codexTasks: { receiver: "unavailable", protocol: "codex-task-brief-v1", tasks: [] },
     lastTrigger: null,
   },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
@@ -49,7 +51,7 @@ export const defaultState = {
   agentControl: { agentId: "codex", customName: "", state: "idle", automaticStatusEnabled: true },
   currentExpression: "focus",
   expressionEditor: { eyeSize: 72, eyeGap: 58, brightness: 80, blink: true, color: "cyan" },
-  motion: { preset: "attentive", speed: 45, range: 55 },
+  motion: { preset: "attention", speed: 45, range: 55, repeatCount: 1 },
   sensors: { autoBrightness: true, faceTracking: false },
   aiEvent: { ...DEFAULT_AI_EVENT },
   aiIntent: mapAiStateToPetIntent({ state: "idle" }),
@@ -68,9 +70,9 @@ function mergeDefaults(value) {
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
     agentControl: normalizeAgentControl(value.agentControl),
     expressionEditor: { ...defaultState.expressionEditor, ...(value.expressionEditor || {}) },
-    motion: { ...defaultState.motion, ...(value.motion || {}) },
+    motion: normalizeMotionState(value.motion),
     sensors: { ...defaultState.sensors, ...(value.sensors || {}) },
-    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) }, easyInputAudio: { ...defaultState.runtime.easyInputAudio, ...(value.runtime?.easyInputAudio || {}) }, companion: { ...defaultState.runtime.companion, ...(value.runtime?.companion || {}) }, memory: { ...defaultState.runtime.memory, ...(value.runtime?.memory || {}) } },
+    runtime: { ...defaultState.runtime, ...(value.runtime || {}), inputBridge: { ...defaultState.runtime.inputBridge, ...(value.runtime?.inputBridge || {}) }, easyInputAudio: { ...defaultState.runtime.easyInputAudio, ...(value.runtime?.easyInputAudio || {}) }, companion: { ...defaultState.runtime.companion, ...(value.runtime?.companion || {}) }, memory: { ...defaultState.runtime.memory, ...(value.runtime?.memory || {}) }, codexTasks: { ...defaultState.runtime.codexTasks, ...(value.runtime?.codexTasks || {}) } },
     aiEvent: { ...defaultState.aiEvent, ...(value.aiEvent || {}) },
     aiIntent: value.aiIntent || defaultState.aiIntent,
   };
@@ -88,6 +90,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 10) raw = { ...raw, agentControl: normalizeAgentControl({ ...(raw.agentControl || {}), automaticStatusEnabled: raw.agentControl?.automaticStatusEnabled !== false }) };
   if ((raw.schemaVersion ?? 0) < 11) raw = { ...raw, runtime: { ...(raw.runtime || {}), companion: { ...(raw.runtime?.companion || {}), audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null } } } };
   if ((raw.schemaVersion ?? 0) < 12) raw = { ...raw, settings: { ...(raw.settings || {}), companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs } };
+  if ((raw.schemaVersion ?? 0) < 13) raw = { ...raw, motion: normalizeMotionState(raw.motion) };
   return mergeDefaults(raw);
 }
 
