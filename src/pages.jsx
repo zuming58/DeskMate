@@ -1522,21 +1522,67 @@ export function ExpressionEditorPage({ notify }) {
 
 export function MotionPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
-  const { preset, speed, range, repeatCount } = state.motion;
+  const { preset, repeatCount } = state.motion;
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
-  const [testing, setTesting] = useState(false);
+  const [motionStatus, setMotionStatus] = useState({ ok: false, reason: "motion-status-not-read", endpointReportedComplete: false, endpoint: null });
+  const [runningPreset, setRunningPreset] = useState("");
+  const [safetyAction, setSafetyAction] = useState("");
   const selectPreset = (nextPreset) => updateMotion({ preset: nextPreset, repeatCount: ["nod", "dance"].includes(nextPreset) ? 2 : 1 });
-  const play = (nextPreset = preset) => { if (nextPreset !== preset) selectPreset(nextPreset); setTesting(true); notify(`正在播放软件动作预览 × ${nextPreset === preset ? repeatCount : ["nod", "dance"].includes(nextPreset) ? 2 : 1}；未发送到小智舵机`); window.setTimeout(() => setTesting(false), 1800); };
+  const refreshStatus = useCallback(async () => {
+    const result = await voiceAdapters.desktop.getMotionStatus();
+    setMotionStatus(result || { ok: false, reason: "motion-status-unavailable", endpointReportedComplete: false, endpoint: null });
+    return result;
+  }, []);
+  useEffect(() => {
+    let active = true;
+    refreshStatus().catch(() => { if (active) setMotionStatus({ ok: false, reason: "motion-status-unavailable", endpointReportedComplete: false, endpoint: null }); });
+    const unsubscribe = voiceAdapters.desktop.onMotionPresetStatus((value) => { if (active && value) setMotionStatus(value); });
+    return () => { active = false; unsubscribe?.(); };
+  }, [refreshStatus]);
+  const runPreset = async (nextPreset) => {
+    const nextRepeat = nextPreset === preset ? repeatCount : (["nod", "dance"].includes(nextPreset) ? 2 : 1);
+    if (nextPreset !== preset) selectPreset(nextPreset);
+    setRunningPreset(nextPreset);
+    try {
+      const result = await voiceAdapters.desktop.runMotionPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
+      if (result) setMotionStatus(result);
+      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${result?.reason || "endpoint-not-complete"}`);
+    } catch (error) {
+      notify(`动作请求失败：${error?.message || "motion-request-failed"}`);
+    } finally {
+      setRunningPreset("");
+      void refreshStatus().catch(() => {});
+    }
+  };
+  const runSafetyAction = async (kind) => {
+    setSafetyAction(kind);
+    try {
+      const action = kind === "stop" ? voiceAdapters.desktop.stopMotionAndCenter("UI") : kind === "estop" ? voiceAdapters.desktop.emergencyStopMotion("UI") : voiceAdapters.desktop.clearMotionEmergencyStopAndCenter("UI");
+      const result = await action;
+      if (result) setMotionStatus(result);
+      notify(result?.ok ? ({ stop: "已停止并发送回中命令", estop: "急停已锁存", clear: "急停已解除并发送回中命令" })[kind] : `操作失败：${result?.reason || "motion-operation-failed"}`);
+    } catch (error) {
+      notify(`操作失败：${error?.message || "motion-operation-failed"}`);
+    } finally {
+      setSafetyAction("");
+      void refreshStatus().catch(() => {});
+    }
+  };
+  const endpoint = motionStatus?.endpoint || {};
+  const endpointState = String(endpoint.state || "unavailable").toLowerCase();
+  const emergencyStopped = endpoint.emergencyStopped === true || endpoint.emergencyStopLatched === true;
+  const motionAvailable = motionStatus?.ok === true || endpointState !== "unavailable";
+  const statusLabel = emergencyStopped ? "急停已锁存" : runningPreset || endpointState === "running" ? "实体动作运行中" : motionStatus?.endpointReportedComplete ? "端点已完成 · 待人眼确认" : motionAvailable ? "真实动作链已响应" : "真实动作链未就绪";
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="动作编排" description="设计左右摇头、上下点头与组合动作" actions={<Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button>} />}
-      {embedded && <div className="embedded-heading"><div><span>MOTION PREVIEW</span><h2>动作编排</h2><p>保留幅度、速度、预设和时间线，当前只驱动软件画面。</p></div><Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button></div>}
-      <Notice tone="demo" title="虚拟动作预览">双轴舵机型号、角度零点和安全限位尚未确定，当前只展示动作编排体验。</Notice>
+      {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
+      {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>四个固定预设由小智本地生成轨迹，正常结束后自动回中。</p></div><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge></div>}
+      <Notice tone={motionStatus?.endpointReportedComplete ? "success" : motionAvailable ? "info" : "warning"} title={motionStatus?.endpointReportedComplete ? "端点报告本次动作已完成" : motionAvailable ? "真实动作控制待人工观察" : "真实动作链尚未就绪"}>{motionStatus?.endpointReportedComplete ? "协议已确认全部循环和最终回中命令被小智适配器接受；是否真实转动、方向和机械回中仍以你现场观察为准。" : motionAvailable ? "第一次运行会自动查询状态并准备回中。一次只执行一个预设，忙碌时不会排队或稍后重放。" : `当前没有取得完整的 Windows → EasyInput → 小智动作状态：${motionStatus?.reason || "motion-status-unavailable"}`}</Notice>
       <div className="motion-grid">
-        <Card className="motion-stage"><div className={`motion-avatar ${testing ? `is-playing is-${preset === "attention" ? "attentive" : preset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="桌宠动作预览" /></div><div className="axis-controls"><Button icon={ArrowLeft} onClick={() => play("search")}>左转</Button><Button icon={ArrowUp} onClick={() => play("attention")}>抬头</Button><Button icon={ArrowDown} onClick={() => play("nod")}>点头</Button><Button icon={ArrowRight} onClick={() => play("search")}>右转</Button></div></Card>
-        <Card><SectionTitle index="01" title="动作参数" /><label className="field-label">动作预设<Segmented value={preset} onChange={selectPreset} options={[{ value: "attention", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><label className="field-label">重复次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label><Notice tone="demo" title="仅保存软件动作意图">重复次数限制为 1–3。当前没有实现或猜测动作 HID/DeskMate Link 合同，不会发送到舵机。</Notice><SettingRow title="动作速度" description="速度越高，运动越利落"><Slider label="动作速度" value={speed} onChange={(value) => updateMotion({ speed: value })} /></SettingRow><SettingRow title="运动范围" description="限制头部最大转动角度"><Slider label="运动范围" value={range} onChange={(value) => updateMotion({ range: value })} min={10} max={80} suffix="°" /></SettingRow><SettingRow title="柔性起停" description="减少舵机突然启动带来的晃动"><Toggle checked onChange={() => notify("柔性起停已保持开启")} /></SettingRow></Card>
+        <Card className="motion-stage"><div className={`motion-avatar ${runningPreset ? `is-playing is-${runningPreset === "attention" ? "attentive" : runningPreset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="软件画面预览；实体动作以真机观察为准" /></div><Notice tone="demo" title="上方仅是软件画面预览">画面动画不是舵机执行证据；下方按钮返回的小智端点状态才是协议证据。</Notice><div className="axis-controls"><Button icon={ArrowUp} variant="primary" disabled={Boolean(runningPreset)} onClick={() => { void runPreset("attention"); }}>关注 × {preset === "attention" ? repeatCount : 1}</Button><Button icon={ArrowDown} variant="primary" disabled={Boolean(runningPreset)} onClick={() => { void runPreset("nod"); }}>点头 × {preset === "nod" ? repeatCount : 2}</Button><Button icon={ArrowLeft} variant="primary" disabled={Boolean(runningPreset)} onClick={() => { void runPreset("search"); }}>寻找 × {preset === "search" ? repeatCount : 1}</Button><Button icon={ArrowRight} variant="primary" disabled={Boolean(runningPreset)} onClick={() => { void runPreset("dance"); }}>跳舞 × {preset === "dance" ? repeatCount : 2}</Button></div></Card>
+        <Card><SectionTitle index="01" title="固定预设" description="只允许选择预设和完整循环次数；轨迹、限幅和回中都在小智端固定。" /><label className="field-label">动作预设<Segmented value={preset} onChange={selectPreset} options={[{ value: "attention", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><label className="field-label">重复次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label><Notice tone="info" title="默认次数">关注和寻找默认 1 次；点头和跳舞默认完整重复 2 次。每一轮都会先回到逻辑中心，再计入完成次数。</Notice><div className="axis-controls"><Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button><Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>{emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}</div><Notice tone="demo" title="自动动作暂未开放">语音动作和情境自动动作必须等四个实体按钮完成真机验收后再启用；当前不会因连接、对话或空闲自动运动。</Notice></Card>
       </div>
-      <Card><SectionTitle index="02" title="动作时间线" description="把表情和动作组合为一段可复用行为。" /><div className="timeline"><span className="timeline-label">0s</span><div className="timeline-track"><i style={{ left: "4%", width: "22%" }}>看向用户</i><i style={{ left: "32%", width: "18%" }}>眨眼</i><i style={{ left: "56%", width: "32%" }}>轻点头 × 2</i></div><span className="timeline-label">4s</span></div></Card>
+      <Card><SectionTitle index="02" title="本次协议状态" description="这里不显示原始设备路径、PWM、GPIO 或舵机脉宽。" /><div className="diagnostic-list"><div><span><Check size={18} /></span><strong>端点状态</strong><StatusBadge tone={motionStatus?.ok ? "success" : "demo"}>{endpointState}</StatusBadge></div><div><span><Check size={18} /></span><strong>循环进度</strong><StatusBadge tone="neutral">{Number(endpoint.repeatCompleted) || 0} / {Number(endpoint.repeatTotal) || 0}</StatusBadge></div><div><span><Check size={18} /></span><strong>逻辑回中命令</strong><StatusBadge tone={endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "success" : "neutral"}>{endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "已接受" : "未确认"}</StatusBadge></div></div></Card>
     </div>
   );
 }

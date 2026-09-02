@@ -69,6 +69,12 @@ export class DesktopBridgeAdapter {
   async getCodexTaskBriefStatus() { return this.bridge?.getCodexTaskBriefStatus ? this.bridge.getCodexTaskBriefStatus() : { receiver: "unavailable", tasks: [] }; }
   onCodexTaskBriefStatus(listener) { return this.bridge?.onCodexTaskBriefStatus ? this.bridge.onCodexTaskBriefStatus(listener) : () => {}; }
   onCodexTaskBriefAnnouncement(listener) { return this.bridge?.onCodexTaskBriefAnnouncement ? this.bridge.onCodexTaskBriefAnnouncement(listener) : () => {}; }
+  async getMotionStatus() { return this.bridge?.getMotionStatus ? this.bridge.getMotionStatus() : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
+  async runMotionPreset(value) { return this.bridge?.runPreset ? this.bridge.runPreset(value) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
+  async stopMotionAndCenter(source = "UI") { return this.bridge?.stopAndCenter ? this.bridge.stopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
+  async emergencyStopMotion(source = "UI") { return this.bridge?.emergencyStop ? this.bridge.emergencyStop(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
+  async clearMotionEmergencyStopAndCenter(source = "UI") { return this.bridge?.clearEmergencyStopAndCenter ? this.bridge.clearEmergencyStopAndCenter(source) : { ok: false, reason: "desktop-bridge-unavailable", endpointReportedComplete: false, endpoint: null }; }
+  onMotionPresetStatus(listener) { return this.bridge?.onMotionPresetStatus ? this.bridge.onMotionPresetStatus(listener) : () => {}; }
   async readKeyboardConfig() { return this.bridge?.readKeyboardConfig ? this.bridge.readKeyboardConfig() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async previewKeyboardConfigPatch(patch) { return this.bridge?.previewKeyboardConfigPatch ? this.bridge.previewKeyboardConfigPatch(patch) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async commitKeyboardConfig(token) { return this.bridge?.commitKeyboardConfig ? this.bridge.commitKeyboardConfig(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
