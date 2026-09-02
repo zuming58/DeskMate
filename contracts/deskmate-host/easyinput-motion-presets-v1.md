@@ -41,6 +41,9 @@ waypoint or velocity field.
 Source is copied into the Link request so Xiaozhi can apply the frozen runtime
 priority. Automatic context and idle actions may use only the four presets and
 are additionally gated by the Windows global automatic-motion switch.
+The source/operation matrix is validated before forwarding: RUN accepts
+sources 1..4; STOP_AND_CENTER and EMERGENCY_STOP accept source 1 or 2;
+CLEAR_ESTOP_AND_CENTER accepts UI source 1 only.
 
 ### Input `0x19` response payload
 
@@ -76,7 +79,8 @@ Link response `10`, and internal failure `11`.
 
 Accepted stage proves only that EasyInput stored the exact request. Stage 2
 proves only the matched Xiaozhi acknowledgement/status was returned. Windows
-must poll `0x23` and match `session_id`, `action_id`, state and completed counter
+must poll `0x23` and match controller boot ID, peer boot ID, `action_id`, state,
+repeat progress and completed counter
 before labelling it `Xiaozhi endpoint reported complete`. With no position
 sensor, software must never label this as measured angle, mechanical arrival or
 physical acceptance; those remain user-observed HIL evidence.
@@ -92,6 +96,9 @@ physical acceptance; those remain user-observed HIL evidence.
   never held in the transport slot; status polling observes its lifecycle.
 - USB unmount, Link disconnect, either reboot or peer boot change clears
   pending/cached volatile state and never replays an action.
+- Windows correlates every lifecycle with
+  `controller_boot_id + peer_boot_id + action_id`. A peer boot change abandons
+  old polling and counters, then requires a fresh status query and recenter.
 - The first run in a Windows session performs a status query and, when needed,
   `STOP_AND_CENTER` before `RUN`. This preparation is orchestration, not a new
   hidden permission dialog.
