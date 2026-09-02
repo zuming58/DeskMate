@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Explicit emergency-stop recovery merged and package launched
+
+- Audited and merged `codex/t10d-desktop-emergency-stop-recovery@1b174e50df5d146af2e33454affb153d25dba817` into the integration branch as `b69c1e0`. The page can discover a retained emergency latch through a read-only status query, while only the explicit environment-confirmed recovery action may issue one clear, verify `locked`/not-latched and then establish both centers.
+- Independent integration verification passed focused calibration/manual-control/request-ID tests `30/30`, full Desktop regression `325/325` and `git diff --check`. HID/Link contracts, request IDs, direction signs, motion limits/rate/gates and both firmware trees remain unchanged.
+- The previous Pitch package's seven Electron processes were verified by exact path and closed. The exact e-stop recovery package was hash-checked and launched: `DeskMate.exe` is `202690560` bytes / SHA-256 `17CE968209DA9B10F7FAD3000E9C1049EA75D129C83DC35BC615A8E77481C706`.
+- Classification: `WINDOWS_ESTOP_RECOVERY_MERGED / EXACT_PACKAGE_RUNNING / HIL_RERUN_PENDING`. No device/port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo command was accessed by the Agent. Next: confirm the retained latch is shown without clearing, click recovery once, verify re-center and controls, then issue another immediate stop.
+
 ## 2026-09-02 - Direction HIL accepted; explicit emergency-stop recovery missing
 
 - The user reports the Pitch-fixed exact package now controls directions without the prior semantic problem. Immediate stop also works and the UI/endpoint remain correctly latched as `emergency-stopped`.
