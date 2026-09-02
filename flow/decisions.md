@@ -1,5 +1,13 @@
 # Decisions
 
+## D059 - Manual servo calibration requires a terminal status gate and three separate evidence layers
+
+- Date: 2026-09-02
+- Decision: Windows may expose only the frozen high-level manual-calibration operations. A correlated Xiaozhi status terminal must open the gate before commands, and every output attempt requires the existing axis/session context plus a fresh one-use arm token. There is no desktop absolute-angle, PWM, pulse-width, duty-cycle or GPIO surface.
+- Evidence: user confirmation, EasyInput `accepted`, and Xiaozhi `terminal` are independent layers. The UI never calls the first two execution and never turns protocol completion into proof of physical motion. `completed_output_count` remains visible terminal evidence.
+- Lifecycle: at most one request is in flight. USB disconnect/remount clears pending work, cached status and volatile authorization; the new mount epoch starts with another status query. Current production `NOT_READY` is truthful and keeps actions disabled.
+- Acceptance: host vectors, malformed reports, safety attestations, one-use tokens, IPC privacy and UI gating may be automated. Enabling a production adapter or moving a servo is T10D-C and requires separate user-present electrical/mechanical authorization.
+
 ## D058 - Persona, reviewed memory and desktop actions have separate trust boundaries
 
 - Date: 2026-09-02

@@ -82,6 +82,16 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, ok: ok, reason: reason));
 
+    public void ManualCalibrationWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
+        1, "manual-calibration-write", "easyinput-hid", "ManualCalibration", ok ? "written" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, ok: ok, reason: reason));
+
+    public void ManualCalibrationReport(ReadOnlySpan<byte> report) => Write(new BridgeEvent(
+        1, "manual-calibration-report", "easyinput-hid", "ManualCalibration", "report",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        reportBase64: Convert.ToBase64String(report)));
+
     public void ConfigAck(bool ok, bool saved, int bytes, int crc16, int phase) => Write(new BridgeEvent(
         1, "config-ack", "easyinput-hid", "Config", ok ? "accepted" : "rejected",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -164,7 +174,8 @@ internal sealed record BridgeEvent(
     uint? agentDroppedDisconnected = null,
     uint? agentForwarded = null,
     uint? agentQueueDrops = null,
-    string? targetWindow = null);
+    string? targetWindow = null,
+    string? reportBase64 = null);
 
 [System.Text.Json.Serialization.JsonSerializable(typeof(BridgeEvent))]
 internal partial class BridgeJsonContext : System.Text.Json.Serialization.JsonSerializerContext;
@@ -198,11 +209,20 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
             commandType = type.GetString()!;
+            if (commandType == "manual-calibration-request")
+            {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-manual-calibration-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (!VendorReportProtocol.IsValidManualCalibrationRequest(report)) throw new InvalidOperationException("invalid-manual-calibration-report");
+                var manualResult = HidFeatureDevice.WriteManualCalibrationRequest(report);
+                _writer.ManualCalibrationWrite(requestId, manualResult.ok, manualResult.reason);
+                return Task.CompletedTask;
+            }
             if (commandType == "set-agent-state")
             {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-agent-state-report");
@@ -270,6 +290,7 @@ internal sealed class ConfigCommandListener : IDisposable
         {
             var reason = error.Message.Length <= 80 ? error.Message : "invalid-command";
             if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
+            else if (commandType == "manual-calibration-request") _writer.ManualCalibrationWrite(requestId, false, reason);
             else _writer.ConfigWrite(requestId, false, reason);
         }
         return Task.CompletedTask;
@@ -322,6 +343,16 @@ internal static class HidFeatureDevice
     public static (bool ok, string reason) WriteAgentStateReport(byte[] report)
     {
         if (!VendorReportProtocol.IsValidAgentStateReport(report)) return (false, "invalid-agent-state-report");
+        using var handle = OpenConfigInterface();
+        if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
+        return HidD_SetFeature(handle, report, report.Length)
+            ? (true, "")
+            : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
+    }
+
+    public static (bool ok, string reason) WriteManualCalibrationRequest(byte[] report)
+    {
+        if (!VendorReportProtocol.IsValidManualCalibrationRequest(report)) return (false, "invalid-manual-calibration-report");
         using var handle = OpenConfigInterface();
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         return HidD_SetFeature(handle, report, report.Length)
@@ -645,6 +676,11 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     private void ParseVendorReport(ReadOnlySpan<byte> report)
     {
+        if (report.Length == 64 && report[0] == 0x17)
+        {
+            if (VendorReportProtocol.IsValidManualCalibrationResponse(report)) _writer.ManualCalibrationReport(report);
+            return;
+        }
         if (!VendorReportProtocol.HasValidEnvelope(report)) return;
         var kind = report[1];
         var length = report[4];

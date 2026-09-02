@@ -1202,6 +1202,63 @@ export function KeymapPage({ notify }) {
   );
 }
 
+const CALIBRATION_GATE_LABELS = Object.freeze({ unavailable: "EasyInput 未连接", "query-required": "需要先读取状态", querying: "正在读取状态", "not-ready": "小智端尚未就绪", faulted: "状态读取失败", ready: "状态已读取" });
+const CALIBRATION_OPERATION_LABELS = Object.freeze({ status: "读取状态", selectAxis: "选择轴", arm: "安全解锁", provisionalCenter: "暂定中心", singleStep: "单步", recenter: "回到中心", emergencyStop: "紧急停止", clearEmergencyStop: "清除急停" });
+const CALIBRATION_TRANSPORT_LABELS = Object.freeze({ completed: "端点已响应", malformed: "请求格式错误", busy: "EasyInput 正忙", stale: "请求已过期", conflict: "请求 ID 冲突", "link-not-ready": "DeskMate Link 未就绪", "link-queue-busy": "Link 队列正忙", timeout: "请求超时", "link-error": "Link 返回错误", "peer-disconnected-or-restarted": "小智断开或重启", "invalid-response": "小智响应无效", internal: "EasyInput 内部错误" });
+const CALIBRATION_ENDPOINT_LABELS = Object.freeze({ completed: "端点接受本次操作", duplicate: "端点识别为重复请求", "not-ready": "手动校准 owner 未就绪", "bad-payload": "端点拒绝无效载荷", "wrong-session": "会话已经变化", "stale-action": "动作 ID 已过期", "arm-required": "需要重新安全解锁", "arm-expired": "安全解锁已过期", "wrong-axis": "轴选择不一致", "step-out-of-range": "单步超出安全范围", "center-required": "需要先建立中心", "emergency-stopped": "急停已锁定", faulted: "运动 owner 故障锁定", "adapter-unavailable": "真实舵机适配器尚未接入", "adapter-failure": "舵机适配器执行失败", "action-conflict": "动作 ID 冲突", "safety-not-confirmed": "安全声明不完整" });
+
+function ManualCalibrationPanel({ boardConnected, linkState, notify }) {
+  const [status, setStatus] = useState({ available: false, gate: "unavailable", controlsEnabled: false, pending: null, context: null, intent: null, accepted: null, terminal: null });
+  const [axis, setAxis] = useState("yaw");
+  const [leaseMs, setLeaseMs] = useState(3000);
+  const [safety, setSafety] = useState({ userPresent: false, linkageUnloaded: false, currentLimitedSupply: false, cutoffReachable: false });
+  const queriedEpoch = useRef(0);
+  useEffect(() => {
+    let active = true;
+    const apply = (value) => { if (active && value) setStatus(value); };
+    const unsubscribe = voiceAdapters.desktop.onManualCalibrationStatus(apply);
+    void voiceAdapters.desktop.getManualCalibrationStatus().then(async (value) => {
+      apply(value);
+      if (value?.available && value.gate === "query-required" && queriedEpoch.current !== value.mountEpoch) {
+        queriedEpoch.current = value.mountEpoch;
+        const result = await voiceAdapters.desktop.queryManualCalibration();
+        if (active && result?.status) setStatus(result.status);
+      }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, [boardConnected]);
+  const busy = Boolean(status.pending);
+  const controlsEnabled = Boolean(status.controlsEnabled);
+  const allSafety = Object.values(safety).every(Boolean);
+  const query = async () => {
+    const result = await voiceAdapters.desktop.queryManualCalibration();
+    if (result?.status) setStatus(result.status);
+    if (!result?.ok) notify(`校准状态读取失败：${result?.reason || "unavailable"}`);
+  };
+  const command = async (operation, extra = {}) => {
+    const result = await voiceAdapters.desktop.sendManualCalibrationCommand({ operation, axis, ...extra });
+    if (operation === "arm") setSafety({ userPresent: false, linkageUnloaded: false, currentLimitedSupply: false, cutoffReachable: false });
+    if (result?.status) setStatus(result.status);
+    if (!result?.ok) notify(`校准请求未完成：${result?.reason || "unknown"}`);
+    else notify("请求已结束；请分别核对用户确认、EasyInput accepted 和小智 terminal 证据");
+  };
+  const terminal = status.terminal;
+  const endpoint = terminal?.endpoint;
+  const terminalCopy = terminal ? endpoint ? `${CALIBRATION_ENDPOINT_LABELS[endpoint.result] || "状态响应"} · completed_output_count ${endpoint.completedOutputCount}` : CALIBRATION_TRANSPORT_LABELS[terminal.transport] || terminal.transport : "尚无 terminal";
+  return <Card className="manual-calibration-panel">
+    <div className="manual-calibration-panel__header"><SectionTitle index="02" title="双舵机手动校准 · 安全控制" description="仅通过冻结的 EasyInput → 小智校准合同发送高层操作；软件不接触 PWM、角度目标、脉宽、占空比或 GPIO。" /><div className="manual-calibration-panel__status"><StatusBadge tone={status.gate === "ready" ? "success" : "demo"}>{CALIBRATION_GATE_LABELS[status.gate] || "状态未知"}</StatusBadge><small>DeskMate Link：{linkState || "unavailable"}</small></div></div>
+    <Notice tone={status.gate === "ready" ? "info" : "warning"} title={status.gate === "not-ready" ? "当前生产小智返回 NOT_READY 属于真实预期" : "状态查询是动作门禁"}>{status.gate === "not-ready" ? "小智固件尚未注入 manual owner 或真实舵机适配器。所有动作保持禁用，不能把 EasyInput 已连接描述成舵机可动。" : "只有收到与本次请求关联的小智 0x21 terminal 状态后才启用命令。页面展示的是协议证据，不证明机械角度或供电安全。"}</Notice>
+    <div className="manual-calibration-query"><Button icon={Refresh} disabled={!boardConnected || busy} onClick={query}>{busy && status.pending?.kind === "status" ? "正在读取…" : "重新读取校准状态"}</Button><span>当前 owner：{status.context?.state || "unavailable"} · 已选轴：{status.context?.selectedAxis || "none"} · 固定单步：1°</span></div>
+    <div className="manual-calibration-grid">
+      <section><h3>1. 选择唯一轴</h3><div className="segmented manual-calibration-axis"><button type="button" className={axis === "yaw" ? "is-active" : ""} onClick={() => setAxis("yaw")}>Yaw · 左右</button><button type="button" className={axis === "pitch" ? "is-active" : ""} onClick={() => setAxis("pitch")}>Pitch · 上下</button></div><Button variant="ghost" disabled={!controlsEnabled} onClick={() => command("selectAxis")}>确认选择 {axis === "yaw" ? "Yaw" : "Pitch"}</Button></section>
+      <section><h3>2. 一次性安全解锁</h3><div className="manual-calibration-safety">{[["userPresent", "本人在设备旁"], ["linkageUnloaded", "机械连杆已卸载"], ["currentLimitedSupply", "舵机使用独立限流电源"], ["cutoffReachable", "断电开关可立即触达"]].map(([key, label]) => <label key={key}><input type="checkbox" checked={safety[key]} onChange={(event) => setSafety((current) => ({ ...current, [key]: event.target.checked }))} />{label}</label>)}</div><label className="manual-calibration-lease">解锁租期<select value={leaseMs} onChange={(event) => setLeaseMs(Number(event.target.value))}>{[1000, 2000, 3000, 4000, 5000].map((value) => <option value={value} key={value}>{value / 1000} 秒</option>)}</select></label><Button icon={Lock} disabled={!controlsEnabled || !allSafety} onClick={() => command("arm", { leaseMs, safety })}>生成一次性解锁</Button></section>
+      <section><h3>3. 固定 1° 输出候选</h3><div className="button-row"><Button variant="ghost" disabled={!controlsEnabled || !status.context?.armed} onClick={() => command("provisionalCenter")}>暂定中心</Button><Button variant="ghost" disabled={!controlsEnabled || !status.context?.armed} onClick={() => command("singleStep", { direction: -1 })}>-1°</Button><Button variant="ghost" disabled={!controlsEnabled || !status.context?.armed} onClick={() => command("singleStep", { direction: 1 })}>+1°</Button><Button variant="ghost" disabled={!controlsEnabled || !status.context?.armed} onClick={() => command("recenter")}>回到中心</Button></div><small>每次输出消耗一次 volatile token；再次操作前必须重新完成安全解锁。</small></section>
+      <section className="manual-calibration-emergency"><h3>4. 急停保持最高优先级</h3><div className="button-row"><Button variant="primary" disabled={!controlsEnabled} onClick={() => command("emergencyStop")}>紧急停止</Button><Button variant="ghost" disabled={!controlsEnabled} onClick={() => command("clearEmergencyStop")}>清除急停锁</Button></div><small>清除后不会自动恢复。必须重新选择轴、安全解锁并建立/回到中心。</small></section>
+    </div>
+    <div className="manual-calibration-evidence" aria-live="polite"><div><small>1 · 用户意图</small><strong>{status.intent ? `${CALIBRATION_OPERATION_LABELS[status.intent.operation] || status.intent.operation} · request ${status.intent.requestId}` : "尚未确认"}</strong><span>{status.intent?.confirmationId ? `confirmation ${status.intent.confirmationId}` : "状态查询 confirmation=0"}</span></div><div><small>2 · EasyInput accepted</small><strong>{status.accepted ? `已进入单请求转发槽 · accepted ${status.accepted.acceptedCount}` : "尚未收到 accepted"}</strong><span>accepted 不等于已转动或成功</span></div><div><small>3 · 小智 terminal</small><strong>{terminalCopy}</strong><span>{endpoint ? `owner ${endpoint.state} · axis ${endpoint.selectedAxis}` : "只有 terminal 才是端点执行/拒绝证据"}</span></div></div>
+  </Card>;
+}
+
 export function ConnectionsPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
   const [tab, setTab] = useState("overview");
@@ -1247,7 +1304,7 @@ export function ConnectionsPage({ notify, embedded = false }) {
         <Card interactive><div className="connection-icon"><Microphone2 size={28} /></div><div><strong>EasyInput 板载麦克风</strong><p>通过冻结的局域网 PCM 合同接收；原始音频只停留在 Electron 主进程内存</p></div><StatusBadge tone={sharedStatus.microphone.tone}>{audioStateLabel}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Brain size={28} /></div><div><strong>千问语音识别</strong><p>停止录音后调用 qwen3-asr-flash</p></div><StatusBadge tone={qwenReady ? "success" : "demo"}>{qwenReady ? "已启用" : "待配置"}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Copy size={28} /></div><div><strong>文字输出</strong><p>先保存历史，再写入原窗口；失败时自动回退剪贴板</p></div><StatusBadge tone={outputReady ? "success" : "demo"}>{outputReady ? "就绪" : "Web 仅历史"}</StatusBadge></Card>
-      </div><Card className="transport-readiness"><SectionTitle index="02" title="浏览器通信能力" description="这里只表示当前浏览器支持哪些接口，不代表硬件已经连接。" /><div className="chips">{transportCaps ? Object.entries(transportCaps).map(([name, supported]) => <span className={`chip chip--status ${supported ? "is-supported" : ""}`} key={name}>{name} · {supported ? "可用" : "不可用"}</span>) : <span>正在检测…</span>}</div></Card></>}
+      </div><ManualCalibrationPanel boardConnected={Boolean(bridge.boardConnected)} linkState={link.state} notify={notify} /><Card className="transport-readiness"><SectionTitle index="03" title="浏览器通信能力" description="这里只表示当前浏览器支持哪些接口，不代表硬件已经连接。" /><div className="chips">{transportCaps ? Object.entries(transportCaps).map(([name, supported]) => <span className={`chip chip--status ${supported ? "is-supported" : ""}`} key={name}>{name} · {supported ? "可用" : "不可用"}</span>) : <span>正在检测…</span>}</div></Card></>}
       {tab === "microphone" && <Card><SectionTitle index="01" title="EasyInput 板载麦克风" description="已接入的可选外部麦克风；诊断不会启动豆包对话，也不会保存录音。" /><Notice tone={audioReady ? "success" : "warning"} title={audioStateLabel}>{audioStatus.micTest ? `实时音量 ${audioStatus.level || 0}% · 丢包 ${audioStatus.counters?.sequenceGaps || 0}` : audioStatus.setup?.configured ? "已配置局域网接收。测试时只把音量等级发送到页面，PCM 不离开主进程。" : "请先在 Wi-Fi 与蓝牙页完成 EasyInput 音频设置。"}</Notice><div className="audio-level" aria-label={`板载麦克风音量 ${audioStatus.level || 0}%`}><span style={{ width: `${Math.max(0, Math.min(100, audioStatus.level || 0))}%` }} /></div><div className="button-row"><Button icon={Microphone2} variant="primary" disabled={!audioStatus.setup?.configured} onClick={toggleMicTest}>{audioStatus.micTest ? "停止麦克风测试" : "测试板载麦克风"}</Button><span className="muted-copy">自动测试最长 30 秒，可提前停止。</span></div></Card>}
       {tab === "network" && <div className="two-column"><Card><SectionTitle index="01" title="网络与音频接收" description="只绑定你明确选择的非回环 IPv4 网卡，不扫描局域网。" /><Notice tone="info" title={networkSummary?.available ? "电脑网络可用" : "等待网络"}>{networkSummary?.available ? `检测到网络类别：${networkSummary.transports.join(" / ") || "unknown"}。` : "未检测到可用网络接口。"}</Notice><Notice tone={audioStatus.setup?.configured ? "success" : "warning"} title={audioStatus.setup?.configured ? "EasyInput 音频已配置" : "EasyInput 音频尚未配置"}>{audioStatus.setup?.configured ? `${audioStatus.setup.adapterLabel || "所选网卡"} · 端口 ${audioStatus.setup.port} · ${audioStateLabel}` : "在隔离设置窗口中填写网络信息；主页面不会接触 Wi-Fi 密码或真实 IP。"}</Notice><Button icon={Send} variant="primary" onClick={async () => { const result = await voiceAdapters.desktop.openEasyInputAudioSetup(); if (!result?.ok) notify(`无法打开音频设置：${result?.reason || "unknown-error"}`); }}>打开 EasyInput 音频设置</Button></Card><Card><SectionTitle index="02" title="蓝牙功能" /><SettingRow icon={Bluetooth} title="蓝牙 HID 输入" description="用于按键和旋钮，不用于传输麦克风音频"><Toggle checked onChange={() => notify("蓝牙状态为模拟能力")}/></SettingRow><Notice tone="info" title="隐私边界">页面只接收状态、音量等级和计数；不接收 PCM、密码、IP、SSID 或设备路径。</Notice></Card></div>}
       {tab === "sound" && <Card><SectionTitle index="03" title="开机提示音" description="选择内置音效或导入最长 8 秒的音频。" /><div className="sound-grid">{["WaytoAGI", "来 WaytoAGI 学 AI 硬件", "又来写 bug 了", "晶亮启动", "柔和启动", "极简启动"].map((name, index) => <button key={name} className={index === 0 ? "is-selected" : ""} onClick={() => notify(`已试听“${name}”`)}><Music size={22} /><strong>{name}</strong><small>{["1.7", "2.8", "2.1", "0.6", "0.8", "0.3"][index]} 秒</small></button>)}</div><SettingRow title="开机音效" description="完整开机时播放已选音效"><Toggle checked={startupSound} onChange={setStartupSound} /></SettingRow></Card>}

@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktopBridge", {
   getCapabilities: () => ipcRenderer.invoke("desktop:get-capabilities"),
   refreshLinkDiagnostics: () => ipcRenderer.invoke("desktop:refresh-link-diagnostics"),
+  getManualCalibrationStatus: () => ipcRenderer.invoke("desktop:get-manual-calibration-status"),
+  queryManualCalibration: () => ipcRenderer.invoke("desktop:query-manual-calibration"),
+  sendManualCalibrationCommand: (value) => ipcRenderer.invoke("desktop:send-manual-calibration-command", value),
+  onManualCalibrationStatus: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("manual-calibration-status", handler); return () => ipcRenderer.removeListener("manual-calibration-status", handler); },
   getNetworkSummary: () => ipcRenderer.invoke("desktop:get-network-summary"),
   getEasyInputAudioStatus: () => ipcRenderer.invoke("desktop:get-easyinput-audio-status"),
   openEasyInputAudioSetup: () => ipcRenderer.invoke("desktop:open-easyinput-audio-setup"),

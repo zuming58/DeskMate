@@ -42,6 +42,7 @@ const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
 const { AgentStatePublisher } = require("./agent-state-hid.cjs");
 const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
+const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -98,6 +99,7 @@ let lastVoiceToggleAt = 0;
 let pendingEditShortcutTimer = null;
 let activeAgentProvider = "codex";
 let codexHookServer;
+let manualCalibrationController;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
 let linkStatusPollTimer = null;
@@ -681,6 +683,7 @@ function createWindow() {
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
     emitInputBridgeStatus();
+    sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
     sendToMain("codex-agent-state", sanitizedCodexHookStatus());
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -701,6 +704,7 @@ function startInputBridge() {
   }
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => {
+    manualCalibrationController?.handleBridgeStatus(value);
     emitInputBridgeStatus(value);
     const linkAction = linkRecoveryGate.observe(value);
     if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
@@ -886,6 +890,10 @@ app.whenReady().then(async () => {
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
+  manualCalibrationController = new ManualCalibrationController({
+    send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+  });
+  manualCalibrationController.on("status", (value) => sendToMain("manual-calibration-status", value));
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();
@@ -927,6 +935,9 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
   handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridgeSnapshot(); return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
+  handleTrusted("desktop:get-manual-calibration-status", () => manualCalibrationController.snapshot());
+  handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
+  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => manualCalibrationController.command(value));
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
