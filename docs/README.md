@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T10D-D simplified manual-control three-end integration](handoffs/t10d-d-three-end-simplified-control-integration-2026-09-02.md)
 - [Windows simplified manual-control UX and orchestration](handoffs/t10d-desktop-simplified-manual-control-2026-09-02.md)
 - [Windows manual-calibration Link error diagnostics repair](handoffs/t10d-desktop-calibration-link-errors-2026-09-02.md)
 - [Windows status-stream bounds repair](handoffs/t10d-desktop-status-stream-bounds-2026-09-02.md)

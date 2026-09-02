@@ -1,6 +1,6 @@
 # T10D-D simple manual control
 
-Status: `CONTRACT_FROZEN / WINDOWS_IN_PROGRESS / XIAOZHI_STAGE2_CODE_BUILD_CONFIRMED / HIL_NOT_RUN`
+Status: `THREE_END_CODE_BUILD_CONFIRMED / HIL_READY_NOT_RUN`
 
 ## Objective
 
@@ -31,3 +31,11 @@ press-and-hold control without changing its frozen wire formats.
    in the normal path.
 
 No flash, hardware action or physical movement is authorized by this task card.
+
+## Current delivery
+
+- Integration implementation: `codex/t10d-d-simplified-manual-control@514ad6be7a5c54a8574174d26121ac07bdafabbe`.
+- Windows source delivery: `codex/t10d-desktop-manual-control-ux@55e929bee6da65ddf2c78efc429834e986995572`.
+- Desktop: full `310/310`, packaged native self-test and isolated Windows package passed.
+- EasyInput: firmware unchanged; final-tree Host CTest `13/13` passed.
+- Xiaozhi: final-tree Host CTest `12/12` and exact ESP-IDF v5.5.3 Stage 2 build passed. The app is still not flashed.
