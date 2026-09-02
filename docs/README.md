@@ -19,6 +19,7 @@
 
 - [T13 Windows persona, memory, knowledge and intent handoff](handoffs/t13-desktop-persona-memory-intent-2026-09-02.md)
 - [T13 Windows persona, memory and intent frozen contract](contracts/t13-desktop-persona-memory-intent-v1.md)
+- [T16 application direct-open and Codex task brief frozen contract](contracts/t16-desktop-actions-and-task-brief-v1.md)
 
 - [T11D.6 strict turn ownership and cancellation diagnostics handoff](handoffs/t11d6-turn-cancel-diagnostics-2026-09-01.md)
 - [T11D.6 turn ownership and cancellation diagnostics contract](contracts/t11d6-turn-cancel-diagnostics-v1.md)
