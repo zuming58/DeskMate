@@ -17,6 +17,19 @@ test("native bridge accepts multi-chunk Maker status and DeskMate config envelop
   assert.equal(result.status, 0, `native protocol self-test failed\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
 });
 
+test("native status stream bounds match the firmware 1536-byte contract", () => {
+  const protocol = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "VendorReportProtocol.cs"), "utf8");
+  assert.match(protocol, /StatusStreamMaxBytes = 1536;/);
+  assert.match(protocol, /StatusStreamMaxChunks = 31;/);
+  assert.match(protocol, /new string\('x', 1104\)/);
+  assert.match(protocol, /new string\('x', 1535\)/);
+  assert.match(protocol, /HasValidStreamBounds\(StatusStreamKind, StatusStreamMaxChunks, StatusStreamMaxBytes\)/);
+  assert.match(protocol, /StatusStreamMaxChunks \+ 1, 1104/);
+  assert.match(protocol, /StatusStreamMaxBytes \+ 1/);
+  assert.doesNotMatch(protocol, /StatusStreamMaxBytes = 1023;/);
+  assert.doesNotMatch(protocol, /StatusStreamMaxChunks = 21;/);
+});
+
 test("Raw Input production path uses the shared vendor envelope validator", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
   assert.match(source, /if \(!VendorReportProtocol\.HasValidEnvelope\(report\)\) return;/);
