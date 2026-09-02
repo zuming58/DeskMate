@@ -144,7 +144,7 @@ test("renderer contract only ingests successful real dictation and exposes sourc
     readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
-  for (const copy of ["来源与自动整理", "陪伴对话", "语音输入", "每天 23:30", "保存记忆策略"]) assert.match(page, new RegExp(copy));
+  for (const copy of ["来源与自动整理", "陪伴对话", "语音输入", "每天 23:30", "下次整理", "上次结果", "可立即重试", "保存记忆策略"]) assert.match(page, new RegExp(copy));
   assert.match(page, /workflow === "input" && result\.status === "success" && state\.settings\.sttMode !== "mock"/);
   assert.match(page, /commitDictationMemory/);
   for (const api of ["getMemoryPolicy", "setMemoryPolicy", "commitDictationMemory"]) assert.match(preload, new RegExp(api));

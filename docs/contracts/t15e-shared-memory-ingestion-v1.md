@@ -19,6 +19,7 @@ Voice edit, mock STT, failed/cancelled/empty transcription, raw audio, credentia
 - The default schedule is daily at local time `23:30`; users may choose another `HH:MM` minute or manual-only mode.
 - Each source owns an independent last result and startup catch-up path. A failed source remains retryable without rerunning a completed source.
 - Empty input never calls the model and never creates an empty summary.
+- The memory page shows the next local run and each source's latest completed, no-pending, or failed result in compact status rows; a failed result explicitly points to manual retry.
 
 ## Storage and idempotency
 
