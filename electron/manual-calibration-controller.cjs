@@ -69,6 +69,11 @@ class ManualCalibrationController extends EventEmitter {
 
   publish() { const value = this.snapshot(); this.emit("status", value); return value; }
 
+  clearVolatileAuthorization() {
+    this.armToken = 0;
+    return this.publish();
+  }
+
   handleBridgeStatus(value = {}) {
     const connected = Boolean(value.boardConnected);
     const calibrationCollectionWritable = connected && value.calibrationCollectionWritable !== false;

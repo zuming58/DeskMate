@@ -191,11 +191,17 @@ test("UI and IPC expose only the frozen safety controls and three evidence layer
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"), readFile(new URL("../native/DeskMate.InputBridge/Program.cs", import.meta.url), "utf8"), readFile(new URL("../native/DeskMate.InputBridge/VendorReportProtocol.cs", import.meta.url), "utf8"),
   ]);
   const panel = pages.slice(pages.indexOf("function ManualCalibrationPanel"), pages.indexOf("export function ConnectionsPage"));
-  for (const copy of ["本人在设备旁", "机械连杆已卸载", "舵机使用独立限流电源", "断电开关可立即触达", "-1°", "+1°", "EasyInput accepted", "小智 terminal", "accepted 不等于已转动或成功", "不代表运动成功或可以解锁"]) assert.match(panel, new RegExp(copy.replace(/[+°]/g, "\\$&")));
+  for (const copy of ["设备周围无阻挡，我在设备旁", "开始手动控制（会先回中）", "按住向", "回到中心", "立即停止", "60 秒无操作自动退出", "调试详情", "EasyInput accepted", "小智 terminal", "accepted 不等于已转动或成功"]) assert.match(panel, new RegExp(copy.replace(/[+°]/g, "\\$&")));
   for (const copy of ["当前小智固件不支持手动校准协议", "协议存在，但校准 owner/真实适配器未就绪"]) assert.match(pages, new RegExp(copy));
-  assert.doesNotMatch(panel, /type="number"|name="(?:pulse|duty|gpio|angle)|sendManualCalibrationCommand\([^)]*(?:pulseWidth|dutyCycle|gpio|angle)/i);
-  assert.match(preload, /getManualCalibrationStatus/); assert.match(preload, /queryManualCalibration/); assert.match(preload, /sendManualCalibrationCommand/);
+  for (const removed of ["机械连杆已卸载", "舵机使用独立限流电源", "断电开关可立即触达", "一次性安全解锁", "生成一次性解锁", "解锁租期", "每次输出消耗一次", ">-1°<", ">+1°<"]) assert.doesNotMatch(panel, new RegExp(removed.replace(/[+°]/g, "\\$&")));
+  assert.doesNotMatch(panel, /type="number"|name="(?:pulse|duty|gpio|angle)|sendManualCalibrationCommand|leaseMs|safetyFlags/i);
+  for (const method of ["getManualControlStatus", "startManualControl", "establishManualControlCenter", "pressManualControlDirection", "releaseManualControlDirection", "recenterManualControl", "emergencyStopManualControl", "endManualControl", "onManualControlStatus"]) assert.match(preload, new RegExp(method));
   assert.match(main, /desktop:get-manual-calibration-status/); assert.match(main, /desktop:send-manual-calibration-command/);
+  for (const channel of ["desktop:get-manual-control-status", "desktop:start-manual-control", "desktop:manual-control-press", "desktop:manual-control-release", "desktop:manual-control-recenter", "desktop:manual-control-emergency-stop", "desktop:end-manual-control"]) assert.match(main, new RegExp(channel));
+  assert.match(main, /mainWindow\.on\("blur"[\s\S]*manualControlCoordinator\?\.end\("window-blur"\)/);
+  assert.match(panel, /manual-control-start__actions[\s\S]*立即停止/);
+  assert.match(panel, /onPointerCancel=/);
+  assert.match(panel, /visibilitychange/);
   assert.match(main, /manualCalibration: manualCalibrationController\?\.diagnostics/);
   assert.match(native, /VendorReportProtocol\.IsValidManualCalibrationRequest\(report\)/); assert.match(native, /VendorReportProtocol\.IsValidManualCalibrationResponse\(report\)/);
   assert.match(protocol, /report\[0\] != 0x16/); assert.match(protocol, /report\[0\] != 0x17/);

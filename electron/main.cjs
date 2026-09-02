@@ -44,6 +44,7 @@ const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
+const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
@@ -102,6 +103,7 @@ let activeAgentProvider = "codex";
 let codexHookServer;
 let hermesHookServer;
 let manualCalibrationController;
+let manualControlCoordinator;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
@@ -726,11 +728,14 @@ function createWindow() {
   mainWindow.webContents.on("did-finish-load", () => {
     emitInputBridgeStatus();
     sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
+    sendToMain("manual-control-status", manualControlCoordinator?.snapshot?.() || { available: false, active: false, phase: "unavailable", linkState: "unavailable" });
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
+  mainWindow.on("blur", () => { manualControlCoordinator?.end("window-blur"); });
   mainWindow.on("close", (event) => {
     if (isQuitting || smokeMode) return;
+    manualControlCoordinator?.end("window-blur");
     event.preventDefault();
     mainWindow.hide();
   });
@@ -747,6 +752,7 @@ function startInputBridge() {
   inputBridge = new InputBridgeManager({ executable });
   inputBridge.on("status", (value) => {
     manualCalibrationController?.handleBridgeStatus(value);
+    manualControlCoordinator?.handleBridgeStatus(value);
     emitInputBridgeStatus(value);
     const linkAction = linkRecoveryGate.observe(value);
     if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
@@ -936,6 +942,8 @@ app.whenReady().then(async () => {
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
   });
   manualCalibrationController.on("status", (value) => { sendToMain("manual-calibration-status", value); emitInputBridgeStatus(); });
+  manualControlCoordinator = new ManualControlCoordinator({ calibration: manualCalibrationController });
+  manualControlCoordinator.on("status", (value) => sendToMain("manual-control-status", value));
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();
@@ -983,6 +991,14 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:get-manual-calibration-status", () => manualCalibrationController.snapshot());
   handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
   handleTrusted("desktop:send-manual-calibration-command", (value = {}) => manualCalibrationController.command(value));
+  handleTrusted("desktop:get-manual-control-status", () => manualControlCoordinator.snapshot());
+  handleTrusted("desktop:start-manual-control", (value = {}) => manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true }));
+  handleTrusted("desktop:manual-control-establish-center", () => manualControlCoordinator.establishCenter());
+  handleTrusted("desktop:manual-control-press", (direction) => manualControlCoordinator.press(String(direction || "")));
+  handleTrusted("desktop:manual-control-release", (direction) => manualControlCoordinator.release(String(direction || "")));
+  handleTrusted("desktop:manual-control-recenter", () => manualControlCoordinator.recenter());
+  handleTrusted("desktop:manual-control-emergency-stop", () => manualControlCoordinator.emergencyStop());
+  handleTrusted("desktop:end-manual-control", (reason) => manualControlCoordinator.end(["document-hidden", "page-leave"].includes(reason) ? reason : "page-leave"));
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
   handleTrusted("desktop:get-easyinput-audio-status", () => easyInputAudioManager.status());
   handleTrusted("desktop:open-easyinput-audio-setup", () => openEasyInputAudioSetup());
@@ -1203,6 +1219,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });
