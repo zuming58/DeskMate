@@ -5,6 +5,8 @@ const { fingerprintEvent, normalizeEvent } = require("./companion-memory-outbox.
 const { MODEL: LOCAL_EMBEDDING_MODEL, DIMENSIONS: LOCAL_EMBEDDING_DIMENSIONS, cosine, decode, embed, encode } = require("./local-memory-embedding.cjs");
 
 const ROLES = new Set(["user", "assistant"]);
+const TURN_SOURCES = new Set(["companion", "dictation"]);
+const ITEM_SOURCES = new Set(["companion", "dictation", "mixed"]);
 const CANDIDATE_STATES = new Set(["pending", "accepted", "rejected"]);
 const ITEM_TYPES = new Set(["daily", "candidate"]);
 
@@ -21,6 +23,34 @@ function boundedId(value, name = "记忆 ID") {
   return id;
 }
 
+function boundedSource(value, { mixed = false } = {}) {
+  const source = String(value || "companion");
+  if (!(mixed ? ITEM_SOURCES : TURN_SOURCES).has(source)) throw new Error("memory-source-invalid");
+  return source;
+}
+
+function sourceScope(sources) {
+  const normalized = [...new Set((sources || []).filter((source) => TURN_SOURCES.has(source)))];
+  return normalized.length > 1 ? "mixed" : normalized[0] || "companion";
+}
+
+function parseDailyItemId(value) {
+  const id = boundedText(value, "摘要 ID", 32);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(id)) return { source: "companion", day: id };
+  const matched = /^(companion|dictation):(\d{4}-\d{2}-\d{2})$/.exec(id);
+  if (!matched) throw new Error("摘要 ID 格式无效");
+  return { source: matched[1], day: matched[2] };
+}
+
+function localDayAt(timestamp = Date.now()) {
+  const value = new Date(Number(timestamp));
+  if (Number.isNaN(value.getTime())) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 class CompanionMemoryStore {
   constructor({ userDataPath, now = () => Date.now() }) {
     this.now = now;
@@ -35,16 +65,19 @@ class CompanionMemoryStore {
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         summary_day TEXT,
-        source_event_id TEXT
+        source_event_id TEXT,
+        source TEXT NOT NULL DEFAULT 'companion'
       );
       CREATE INDEX IF NOT EXISTS idx_turns_created_at ON conversation_turns(created_at);
       CREATE INDEX IF NOT EXISTS idx_turns_summary_day ON conversation_turns(summary_day);
       CREATE TABLE IF NOT EXISTS daily_summaries (
-        day TEXT PRIMARY KEY,
+        day TEXT NOT NULL,
+        source TEXT NOT NULL CHECK(source IN ('companion','dictation')),
         summary TEXT NOT NULL,
         source_turn_count INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(day, source)
       );
       CREATE TABLE IF NOT EXISTS memory_candidates (
         id TEXT PRIMARY KEY,
@@ -54,7 +87,8 @@ class CompanionMemoryStore {
         source_turn_ids TEXT NOT NULL,
         state TEXT NOT NULL CHECK(state IN ('pending','accepted','rejected')),
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'companion'
       );
       CREATE INDEX IF NOT EXISTS idx_candidates_state ON memory_candidates(state, updated_at DESC);
       CREATE TABLE IF NOT EXISTS memory_embeddings (
@@ -96,10 +130,30 @@ class CompanionMemoryStore {
         key TEXT PRIMARY KEY,
         value INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS memory_digest_runs (
+        idempotency_key TEXT PRIMARY KEY,
+        source TEXT NOT NULL CHECK(source IN ('companion','dictation')),
+        day TEXT NOT NULL,
+        input_digest TEXT NOT NULL,
+        source_turn_count INTEGER NOT NULL,
+        completed_at INTEGER NOT NULL,
+        UNIQUE(source, day, input_digest)
+      );
       INSERT OR IGNORE INTO companion_memory_meta (key, value) VALUES ('revision', 0);
     `);
     const turnColumns = new Set(this.db.prepare("PRAGMA table_info(conversation_turns)").all().map((column) => column.name));
     if (!turnColumns.has("source_event_id")) this.db.exec("ALTER TABLE conversation_turns ADD COLUMN source_event_id TEXT");
+    if (!turnColumns.has("source")) this.db.exec("ALTER TABLE conversation_turns ADD COLUMN source TEXT NOT NULL DEFAULT 'companion'");
+    const summaryColumns = new Set(this.db.prepare("PRAGMA table_info(daily_summaries)").all().map((column) => column.name));
+    if (!summaryColumns.has("source")) {
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.exec("ALTER TABLE daily_summaries RENAME TO daily_summaries_legacy; CREATE TABLE daily_summaries (day TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('companion','dictation')), summary TEXT NOT NULL, source_turn_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(day, source)); INSERT INTO daily_summaries (day, source, summary, source_turn_count, created_at, updated_at) SELECT day, 'companion', summary, source_turn_count, created_at, updated_at FROM daily_summaries_legacy; DROP TABLE daily_summaries_legacy;");
+        this.db.exec("COMMIT");
+      } catch (error) { try { this.db.exec("ROLLBACK"); } catch { /* original error wins */ } throw error; }
+    }
+    const candidateColumns = new Set(this.db.prepare("PRAGMA table_info(memory_candidates)").all().map((column) => column.name));
+    if (!candidateColumns.has("source")) this.db.exec("ALTER TABLE memory_candidates ADD COLUMN source TEXT NOT NULL DEFAULT 'companion'");
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_source_event_id ON conversation_turns(source_event_id) WHERE source_event_id IS NOT NULL;");
     const recovered = this.db.prepare("UPDATE companion_memory_outbox SET status='pending' WHERE status='processing'").run();
     if (recovered.changes) this.bumpRevision();
@@ -107,16 +161,17 @@ class CompanionMemoryStore {
 
   bumpRevision() { this.db.prepare("UPDATE companion_memory_meta SET value=value+1 WHERE key='revision'").run(); }
 
-  appendTurn({ sessionId, role, content, createdAt = this.now() } = {}) {
+  appendTurn({ sessionId, role, content, source = "companion", createdAt = this.now() } = {}) {
     const normalizedRole = String(role || "");
     if (!ROLES.has(normalizedRole)) throw new Error("记忆角色无效");
-    const value = { id: randomUUID(), sessionId: boundedText(sessionId, "会话 ID", 120), role: normalizedRole, content: boundedText(content, "会话内容", 50000), createdAt: Math.max(0, Number(createdAt) || this.now()) };
-    this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)").run(value.id, value.sessionId, value.role, value.content, value.createdAt);
+    const value = { id: randomUUID(), sessionId: boundedText(sessionId, "会话 ID", 120), role: normalizedRole, content: boundedText(content, "会话内容", 50000), source: boundedSource(source), createdAt: Math.max(0, Number(createdAt) || this.now()) };
+    this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at, source) VALUES (?, ?, ?, ?, ?, ?)").run(value.id, value.sessionId, value.role, value.content, value.createdAt, value.source);
     this.bumpRevision();
     return { id: value.id, createdAt: value.createdAt };
   }
 
-  commitConversationTurn({ eventId, sessionId, role, content, createdAt = new Date(this.now()).toISOString() } = {}) {
+  commitConversationTurn({ eventId, sessionId, role, content, source = "companion", createdAt = new Date(this.now()).toISOString() } = {}) {
+    const normalizedSource = boundedSource(source);
     const event = normalizeEvent({
       eventId,
       sessionId,
@@ -125,9 +180,9 @@ class CompanionMemoryStore {
       payload: { role, text: content },
     });
     const fingerprint = fingerprintEvent(event);
-    const existing = this.db.prepare("SELECT fingerprint, status FROM companion_memory_outbox WHERE event_id=?").get(event.eventId);
+    const existing = this.db.prepare("SELECT o.fingerprint, o.status, t.source FROM companion_memory_outbox o LEFT JOIN conversation_turns t ON t.source_event_id=o.event_id WHERE o.event_id=?").get(event.eventId);
     if (existing) {
-      if (existing.fingerprint !== fingerprint) throw new Error("memory-event-id-collision");
+      if (existing.fingerprint !== fingerprint || (existing.source && existing.source !== normalizedSource)) throw new Error("memory-event-id-collision");
       return { ok: true, inserted: false, eventId: event.eventId, status: existing.status };
     }
 
@@ -137,8 +192,8 @@ class CompanionMemoryStore {
     try {
       this.db.prepare("INSERT INTO companion_memory_outbox (event_id, session_id, kind, payload_json, fingerprint, status, attempts, created_at) VALUES (?, ?, ?, ?, ?, 'processing', 1, ?)")
         .run(event.eventId, event.sessionId, event.kind, JSON.stringify(event.payload), fingerprint, at);
-      this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at, source_event_id) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(turnId, event.sessionId, event.payload.role, event.payload.text, at, event.eventId);
+      this.db.prepare("INSERT INTO conversation_turns (id, session_id, role, content, created_at, source_event_id, source) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(turnId, event.sessionId, event.payload.role, event.payload.text, at, event.eventId, normalizedSource);
       this.db.prepare("UPDATE companion_memory_outbox SET status='completed', completed_at=? WHERE event_id=?").run(this.now(), event.eventId);
       this.bumpRevision();
       this.db.exec("COMMIT");
@@ -149,75 +204,107 @@ class CompanionMemoryStore {
     return { ok: true, inserted: true, eventId: event.eventId, turnId, status: "completed" };
   }
 
-  upsertDailySummary({ day, summary, sourceTurnCount = 0 } = {}) {
+  upsertDailySummary({ day, summary, sourceTurnCount = 0, source, sources = ["companion"] } = {}) {
     const normalizedDay = boundedText(day, "摘要日期", 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDay)) throw new Error("摘要日期格式无效");
     const text = boundedText(summary, "每日摘要", 30000);
     const at = this.now();
-    this.db.prepare("INSERT INTO daily_summaries (day, summary, source_turn_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(day) DO UPDATE SET summary=excluded.summary, source_turn_count=excluded.source_turn_count, updated_at=excluded.updated_at").run(normalizedDay, text, Math.max(0, Number(sourceTurnCount) || 0), at, at);
+    const normalizedSource = boundedSource(source || (Array.isArray(sources) ? sources[0] : "companion"));
+    this.db.prepare("INSERT INTO daily_summaries (day, source, summary, source_turn_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(day, source) DO UPDATE SET summary=excluded.summary, source_turn_count=excluded.source_turn_count, updated_at=excluded.updated_at").run(normalizedDay, normalizedSource, text, Math.max(0, Number(sourceTurnCount) || 0), at, at);
     this.bumpRevision();
     return { day: normalizedDay, updatedAt: at };
   }
 
-  addCandidate({ day, kind = "preference", summary, sourceTurnIds = [] } = {}) {
+  addCandidate({ day, kind = "preference", summary, sourceTurnIds = [], source = "companion" } = {}) {
     const id = randomUUID();
     const at = this.now();
     const normalizedDay = boundedText(day, "候选日期", 10);
     const normalizedKind = boundedText(kind, "候选类型", 60);
     const sourceIds = Array.isArray(sourceTurnIds) ? sourceTurnIds.slice(0, 200).map((value) => String(value || "")).filter((value) => /^[a-f0-9-]{16,64}$/i.test(value)) : [];
-    this.db.prepare("INSERT INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)").run(id, normalizedDay, normalizedKind, boundedText(summary, "记忆候选", 10000), JSON.stringify(sourceIds), at, at);
+    const normalizedSource = boundedSource(source, { mixed: true });
+    this.db.prepare("INSERT INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)").run(id, normalizedDay, normalizedKind, boundedText(summary, "记忆候选", 10000), JSON.stringify(sourceIds), at, at, normalizedSource);
     this.bumpRevision();
     return { id, state: "pending", createdAt: at };
   }
 
-  listUnprocessedTurns({ limit = 120 } = {}) {
+  listUnprocessedTurns({ limit = 120, sources = ["companion", "dictation"], day = "" } = {}) {
     const boundedLimit = Math.max(1, Math.min(500, Number(limit) || 120));
-    return this.db.prepare("SELECT id, session_id AS sessionId, role, content, created_at AS createdAt FROM conversation_turns WHERE summary_day IS NULL ORDER BY created_at ASC LIMIT ?").all(boundedLimit);
+    const normalizedSources = [...new Set((Array.isArray(sources) ? sources : []).map((source) => boundedSource(source)))];
+    if (!normalizedSources.length) return [];
+    const placeholders = normalizedSources.map(() => "?").join(",");
+    return this.db.prepare(`SELECT id, session_id AS sessionId, role, content, source, created_at AS createdAt FROM conversation_turns WHERE summary_day IS NULL AND source IN (${placeholders}) ORDER BY created_at ASC LIMIT ?`).all(...normalizedSources, boundedLimit)
+      .filter((turn) => !day || localDayAt(turn.createdAt) === day);
   }
 
-  applyGeneratedMemory({ day, summary, candidates = [], turnIds = [] } = {}) {
+  unprocessedDays({ source } = {}) {
+    const normalizedSource = boundedSource(source);
+    return [...new Set(this.db.prepare("SELECT created_at AS createdAt FROM conversation_turns WHERE source=? AND summary_day IS NULL ORDER BY created_at ASC").all(normalizedSource).map((row) => localDayAt(row.createdAt)).filter(Boolean))];
+  }
+
+  hasDigestRun({ source, day, inputDigest } = {}) {
+    const normalizedSource = boundedSource(source);
+    const normalizedDay = /^\d{4}-\d{2}-\d{2}$/.test(String(day || "")) ? String(day) : "";
+    const digest = /^[a-f0-9]{64}$/i.test(String(inputDigest || "")) ? String(inputDigest).toLowerCase() : "";
+    if (!normalizedDay || !digest) return false;
+    return Boolean(this.db.prepare("SELECT 1 AS value FROM memory_digest_runs WHERE source=? AND day=? AND input_digest=?").get(normalizedSource, normalizedDay, digest)?.value);
+  }
+
+  applyGeneratedMemory({ day, summary, candidates = [], turnIds = [], source = "companion", inputDigest, idempotencyKey } = {}) {
     const normalizedDay = boundedText(day, "摘要日期", 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDay)) throw new Error("摘要日期格式无效");
+    const normalizedSource = boundedSource(source);
+    const digest = String(inputDigest || "").toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error("memory-input-digest-invalid");
+    const digestKey = String(idempotencyKey || "").toLowerCase();
+    const expectedKey = createHash("sha256").update(`${normalizedSource}:${normalizedDay}:${digest}`).digest("hex");
+    if (digestKey !== expectedKey) throw new Error("memory-idempotency-key-invalid");
+    if (this.hasDigestRun({ source: normalizedSource, day: normalizedDay, inputDigest: digest })) return { ok: true, skipped: true, reason: "memory-digest-already-completed", day: normalizedDay, inputDigest: digest, source: normalizedSource, turns: 0, candidates: 0 };
     const normalizedSummary = boundedText(summary, "每日摘要", 30000);
     const ids = Array.isArray(turnIds) ? [...new Set(turnIds.map((value) => String(value || "")).filter((value) => /^[a-f0-9-]{16,64}$/i.test(value)))].slice(0, 500) : [];
     if (!ids.length) throw new Error("memory-summary-source-turns-required");
-    const rows = this.db.prepare(`SELECT id FROM conversation_turns WHERE id IN (${ids.map(() => "?").join(",")}) AND summary_day IS NULL`).all(...ids);
+    const rows = this.db.prepare(`SELECT id, source FROM conversation_turns WHERE id IN (${ids.map(() => "?").join(",")}) AND summary_day IS NULL`).all(...ids);
     if (rows.length !== ids.length) throw new Error("memory-summary-source-turns-changed");
+    const sources = [...new Set(rows.map((row) => boundedSource(row.source)))].sort();
+    const scope = sourceScope(sources);
+    if (scope !== normalizedSource || sources.length !== 1) throw new Error("memory-summary-source-mismatch");
     const normalizedCandidates = Array.isArray(candidates) ? candidates.slice(0, 40).map((item) => ({
-      id: createHash("sha256").update(JSON.stringify([normalizedDay, String(item?.kind || "preference"), String(item?.summary || "").trim(), ids])).digest("hex").slice(0, 32),
+      id: createHash("sha256").update(JSON.stringify([normalizedSource, normalizedDay, digest, String(item?.kind || "preference"), String(item?.summary || "").trim(), ids])).digest("hex").slice(0, 32),
       kind: boundedText(item?.kind || "preference", "候选类型", 60),
       summary: boundedText(item?.summary, "记忆候选", 10000),
     })) : [];
     const at = this.now();
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.prepare("INSERT INTO daily_summaries (day, summary, source_turn_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(day) DO UPDATE SET summary=excluded.summary, source_turn_count=daily_summaries.source_turn_count+excluded.source_turn_count, updated_at=excluded.updated_at").run(normalizedDay, normalizedSummary, ids.length, at, at);
-      const insert = this.db.prepare("INSERT OR IGNORE INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)");
-      for (const item of normalizedCandidates) insert.run(item.id, normalizedDay, item.kind, item.summary, JSON.stringify(ids), at, at);
+      const existing = this.db.prepare("SELECT summary FROM daily_summaries WHERE day=? AND source=?").get(normalizedDay, normalizedSource);
+      const combinedSummary = existing?.summary ? `${existing.summary}\n\n${normalizedSummary}` : normalizedSummary;
+      this.db.prepare("INSERT INTO daily_summaries (day, source, summary, source_turn_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(day, source) DO UPDATE SET summary=excluded.summary, source_turn_count=daily_summaries.source_turn_count+excluded.source_turn_count, updated_at=excluded.updated_at").run(normalizedDay, normalizedSource, combinedSummary, ids.length, at, at);
+      const insert = this.db.prepare("INSERT OR IGNORE INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)");
+      for (const item of normalizedCandidates) insert.run(item.id, normalizedDay, item.kind, item.summary, JSON.stringify(ids), at, at, scope);
       this.db.prepare(`UPDATE conversation_turns SET summary_day=? WHERE id IN (${ids.map(() => "?").join(",")}) AND summary_day IS NULL`).run(normalizedDay, ...ids);
+      this.db.prepare("INSERT INTO memory_digest_runs (idempotency_key, source, day, input_digest, source_turn_count, completed_at) VALUES (?, ?, ?, ?, ?, ?)").run(digestKey, normalizedSource, normalizedDay, digest, ids.length, at);
       this.bumpRevision();
       this.db.exec("COMMIT");
     } catch (error) {
       try { this.db.exec("ROLLBACK"); } catch { /* original error wins */ }
       throw error;
     }
-    return { ok: true, day: normalizedDay, turns: ids.length, candidates: normalizedCandidates.length };
+    return { ok: true, day: normalizedDay, turns: ids.length, candidates: normalizedCandidates.length, source: scope, inputDigest: digest };
   }
 
   projectionItems() {
-    const dailySummaries = this.db.prepare("SELECT day, summary, source_turn_count AS sourceTurnCount, updated_at AS updatedAt FROM daily_summaries ORDER BY day ASC").all();
-    const memories = this.db.prepare("SELECT id, day, kind, summary, updated_at AS updatedAt FROM memory_candidates WHERE state='accepted' ORDER BY day ASC, updated_at ASC").all();
+    const dailySummaries = this.db.prepare("SELECT day, source, summary, source_turn_count AS sourceTurnCount, updated_at AS updatedAt FROM daily_summaries ORDER BY day ASC, source ASC").all();
+    const memories = this.db.prepare("SELECT id, day, kind, summary, source, updated_at AS updatedAt FROM memory_candidates WHERE state='accepted' ORDER BY day ASC, updated_at ASC").all();
     return { dailySummaries, memories };
   }
 
   recentAcceptedContext({ limit = 12, maxCharacters = 4000 } = {}) {
-    const rows = this.db.prepare("SELECT id, day, kind, summary FROM memory_candidates WHERE state='accepted' ORDER BY updated_at DESC LIMIT ?").all(Math.max(1, Math.min(30, Number(limit) || 12)));
+    const rows = this.db.prepare("SELECT id, day, kind, summary, source FROM memory_candidates WHERE state='accepted' ORDER BY updated_at DESC LIMIT ?").all(Math.max(1, Math.min(30, Number(limit) || 12)));
     let used = 0;
     const result = [];
     for (const row of rows) {
       const summary = String(row.summary || "").trim();
       if (!summary || used + summary.length > maxCharacters) continue;
-      result.push({ id: row.id, day: row.day, kind: row.kind, summary });
+      result.push({ id: row.id, day: row.day, kind: row.kind, source: boundedSource(row.source, { mixed: true }), summary });
       used += summary.length;
     }
     return result;
@@ -265,18 +352,19 @@ class CompanionMemoryStore {
     }
   }
 
-  searchLongTermMemory({ query, limit = 8 } = {}) {
+  searchLongTermMemory({ query, limit = 8, source = "all" } = {}) {
     const text = String(query || "").trim().slice(0, 500);
     if (!text) return [];
     const target = embed(text);
     const boundedLimit = Math.max(1, Math.min(20, Number(limit) || 8));
-    const rows = this.db.prepare("SELECT c.id AS chunkId, c.candidate_id AS candidateId, c.content, m.day, m.kind, e.dimensions, e.vector FROM memory_chunks c JOIN memory_chunk_embeddings e ON e.chunk_id=c.id JOIN memory_candidates m ON m.id=c.candidate_id WHERE m.state='accepted'").all();
+    const normalizedSource = source === "all" ? "all" : boundedSource(source, { mixed: true });
+    const rows = this.db.prepare("SELECT c.id AS chunkId, c.candidate_id AS candidateId, c.content, m.day, m.kind, m.source, e.dimensions, e.vector FROM memory_chunks c JOIN memory_chunk_embeddings e ON e.chunk_id=c.id JOIN memory_candidates m ON m.id=c.candidate_id WHERE m.state='accepted' AND (?='all' OR m.source=? OR m.source='mixed')").all(normalizedSource, normalizedSource);
     const terms = text.normalize("NFKC").toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return rows.map((row) => {
       const content = String(row.content);
       const keyword = terms.length ? terms.filter((term) => content.toLocaleLowerCase().includes(term)).length / terms.length : 0;
       const vector = cosine(target, decode(row.vector, row.dimensions));
-      return { id: row.candidateId, chunkId: row.chunkId, day: row.day, kind: row.kind, content, score: Math.round((Math.max(0, vector) * 0.75 + keyword * 0.25) * 10000) / 10000 };
+      return { id: row.candidateId, chunkId: row.chunkId, day: row.day, kind: row.kind, source: boundedSource(row.source, { mixed: true }), content, score: Math.round((Math.max(0, vector) * 0.75 + keyword * 0.25) * 10000) / 10000 };
     }).sort((left, right) => right.score - left.score).slice(0, boundedLimit);
   }
 
@@ -309,10 +397,9 @@ class CompanionMemoryStore {
     }
     if (!ITEM_TYPES.has(type)) throw new Error("memory-item-type-invalid");
     if (type === "daily") {
-      const day = boundedText(id, "摘要日期", 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("摘要日期格式无效");
-      const row = this.db.prepare("SELECT updated_at, summary FROM daily_summaries WHERE day=?").get(day);
-      return row ? `daily:${day}:${row.updated_at}:${createHash("sha256").update(row.summary).digest("hex")}` : null;
+      const { day, source } = parseDailyItemId(id);
+      const row = this.db.prepare("SELECT updated_at, summary FROM daily_summaries WHERE day=? AND source=?").get(day, source);
+      return row ? `daily:${source}:${day}:${row.updated_at}:${createHash("sha256").update(row.summary).digest("hex")}` : null;
     }
     const candidateId = boundedId(id);
     const row = this.db.prepare("SELECT updated_at, state, summary FROM memory_candidates WHERE id=?").get(candidateId);
@@ -322,9 +409,8 @@ class CompanionMemoryStore {
   deleteItem({ type, id } = {}) {
     if (!ITEM_TYPES.has(type)) throw new Error("memory-item-type-invalid");
     if (type === "daily") {
-      const day = boundedText(id, "摘要日期", 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("摘要日期格式无效");
-      const deleted = this.db.prepare("DELETE FROM daily_summaries WHERE day=?").run(day).changes === 1;
+      const { day, source } = parseDailyItemId(id);
+      const deleted = this.db.prepare("DELETE FROM daily_summaries WHERE day=? AND source=?").run(day, source).changes === 1;
       if (deleted) this.bumpRevision();
       return { ok: deleted, scope: "item", type };
     }
@@ -337,7 +423,7 @@ class CompanionMemoryStore {
     const before = this.status();
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.exec("DELETE FROM memory_chunk_embeddings; DELETE FROM memory_chunks; DELETE FROM memory_embeddings; DELETE FROM memory_candidates; DELETE FROM daily_summaries; DELETE FROM conversation_turns; DELETE FROM companion_memory_outbox;");
+      this.db.exec("DELETE FROM memory_chunk_embeddings; DELETE FROM memory_chunks; DELETE FROM memory_embeddings; DELETE FROM memory_candidates; DELETE FROM daily_summaries; DELETE FROM conversation_turns; DELETE FROM companion_memory_outbox; DELETE FROM memory_digest_runs;");
       this.bumpRevision();
       this.db.exec("COMMIT");
     } catch (error) {
@@ -350,13 +436,18 @@ class CompanionMemoryStore {
   exportReviewed({ exportedAt = new Date(this.now()).toISOString() } = {}) {
     const instant = new Date(exportedAt);
     if (Number.isNaN(instant.getTime())) throw new Error("memory-export-time-invalid");
-    const dailySummaries = this.db.prepare("SELECT day, summary FROM daily_summaries ORDER BY day ASC").all().map((item) => ({ day: item.day, summary: item.summary }));
-    const longTermMemories = this.db.prepare("SELECT day, kind, summary FROM memory_candidates WHERE state='accepted' ORDER BY day ASC, updated_at ASC").all().map((item) => ({ day: item.day, kind: item.kind, summary: item.summary }));
+    const dailySummaries = this.db.prepare("SELECT day, source, summary FROM daily_summaries ORDER BY day ASC, source ASC").all().map((item) => ({ day: item.day, source: item.source, summary: item.summary }));
+    const longTermMemories = this.db.prepare("SELECT day, source, kind, summary FROM memory_candidates WHERE state='accepted' ORDER BY day ASC, source ASC, updated_at ASC").all().map((item) => ({ day: item.day, source: item.source, kind: item.kind, summary: item.summary }));
     return { schema: "deskmate.memory.export.v1", exportedAt: instant.toISOString(), dailySummaries, longTermMemories };
   }
 
   status() {
     const scalar = (sql) => Number(this.db.prepare(sql).get()?.value || 0);
+    const sourceCounts = {};
+    for (const source of TURN_SOURCES) sourceCounts[source] = {
+      turns: Number(this.db.prepare("SELECT COUNT(*) AS value FROM conversation_turns WHERE source=?").get(source)?.value || 0),
+      unprocessed: Number(this.db.prepare("SELECT COUNT(*) AS value FROM conversation_turns WHERE source=? AND summary_day IS NULL").get(source)?.value || 0),
+    };
     return {
       ready: true,
       storage: "sqlite-wal",
@@ -367,21 +458,23 @@ class CompanionMemoryStore {
       embeddings: scalar("SELECT COUNT(*) AS value FROM memory_chunk_embeddings") + scalar("SELECT COUNT(*) AS value FROM memory_embeddings"),
       unprocessedTurns: scalar("SELECT COUNT(*) AS value FROM conversation_turns WHERE summary_day IS NULL"),
       indexedChunks: scalar("SELECT COUNT(*) AS value FROM memory_chunk_embeddings"),
+      sourceCounts,
     };
   }
 
-  list({ filter = "all", query = "", limit = 100 } = {}) {
+  list({ filter = "all", source = "all", query = "", limit = 100 } = {}) {
     const normalizedQuery = String(query || "").trim().slice(0, 200);
     const boundedLimit = Math.max(1, Math.min(200, Number(limit) || 100));
     const like = `%${normalizedQuery.replace(/[\\%_]/g, (value) => `\\${value}`)}%`;
-    const summaries = ["all", "daily"].includes(filter) ? this.db.prepare("SELECT day AS id, 'daily' AS type, day, summary AS content, updated_at AS updatedAt FROM daily_summaries WHERE (? = '' OR summary LIKE ? ESCAPE '\\') ORDER BY day DESC LIMIT ?").all(normalizedQuery, like, boundedLimit) : [];
+    const normalizedSource = source === "all" ? "all" : boundedSource(source, { mixed: true });
+    const summaries = ["all", "daily"].includes(filter) ? this.db.prepare("SELECT source || ':' || day AS id, 'daily' AS type, day, source, summary AS content, updated_at AS updatedAt FROM daily_summaries WHERE (? = '' OR summary LIKE ? ESCAPE '\\') AND (?='all' OR source=?) ORDER BY day DESC, source ASC LIMIT ?").all(normalizedQuery, like, normalizedSource, normalizedSource, boundedLimit) : [];
     const states = filter === "long-term" ? ["accepted"] : filter === "candidates" ? ["pending"] : ["pending", "accepted", "rejected"];
     const placeholders = states.map(() => "?").join(",");
-    const candidates = ["all", "candidates", "long-term"].includes(filter) ? this.db.prepare(`SELECT id, 'candidate' AS type, day, kind, summary AS content, state, updated_at AS updatedAt FROM memory_candidates WHERE state IN (${placeholders}) AND (? = '' OR summary LIKE ? ESCAPE '\\') ORDER BY updated_at DESC LIMIT ?`).all(...states, normalizedQuery, like, boundedLimit) : [];
+    const candidates = ["all", "candidates", "long-term"].includes(filter) ? this.db.prepare(`SELECT id, 'candidate' AS type, day, kind, summary AS content, state, source, updated_at AS updatedAt FROM memory_candidates WHERE state IN (${placeholders}) AND (? = '' OR summary LIKE ? ESCAPE '\\') AND (?='all' OR source=? OR source='mixed') ORDER BY updated_at DESC LIMIT ?`).all(...states, normalizedQuery, like, normalizedSource, normalizedSource, boundedLimit) : [];
     return [...summaries, ...candidates].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, boundedLimit);
   }
 
   close() { this.db.close(); }
 }
 
-module.exports = { CompanionMemoryStore };
+module.exports = { CompanionMemoryStore, localDayAt };

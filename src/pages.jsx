@@ -498,22 +498,25 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
 
 function MemoryManagementPage({ notify }) {
   const [filter, setFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [forget, setForget] = useState(null);
   const [busy, setBusy] = useState(false);
   const [memoryStatus, setMemoryStatus] = useState({ ready: false, storage: "unavailable", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0 });
+  const [memoryPolicy, setMemoryPolicy] = useState({ version: 1, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", lastResults: {} });
   const [knowledgeBaseStatus, setKnowledgeBaseStatus] = useState({ configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" });
   const [memoryItems, setMemoryItems] = useState([]);
   const [indexResults, setIndexResults] = useState([]);
   const refreshMemory = useCallback(async () => {
     try {
-      const [status, items, knowledgeBase] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.()]);
+      const [status, items, knowledgeBase, policy] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.()]);
       if (status) setMemoryStatus(status);
       setMemoryItems(Array.isArray(items) ? items : []);
       if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
+      if (policy) setMemoryPolicy(policy);
     } catch { setMemoryStatus((current) => ({ ...current, ready: false, storage: "unavailable" })); }
-  }, [filter, query]);
+  }, [filter, sourceFilter, query]);
   useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); return () => window.clearTimeout(timer); }, [refreshMemory]);
   const reviewCandidate = async (id, state) => {
     try {
@@ -604,9 +607,22 @@ function MemoryManagementPage({ notify }) {
   const searchIndex = async () => {
     const text = query.trim();
     if (!text) { setIndexResults([]); notify("请先输入检索内容"); return; }
-    const results = await globalThis.desktopBridge?.searchMemoryIndex?.({ query: text, limit: 8 });
+    const results = await globalThis.desktopBridge?.searchMemoryIndex?.({ query: text, source: sourceFilter, limit: 8 });
     setIndexResults(Array.isArray(results) ? results : []);
     notify(`本地混合检索返回 ${Array.isArray(results) ? results.length : 0} 个切片`);
+  };
+  const toggleMemorySource = (source) => {
+    setMemoryPolicy((current) => ({ ...current, enabledSources: current.enabledSources.includes(source) ? current.enabledSources.filter((value) => value !== source) : [...current.enabledSources, source] }));
+  };
+  const saveMemoryPolicy = async () => {
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.setMemoryPolicy?.({ version: 1, enabledSources: memoryPolicy.enabledSources, schedule: memoryPolicy.schedule, dailyTime: memoryPolicy.dailyTime });
+      if (!result?.version) throw new Error(result?.reason || "memory-policy-save-failed");
+      setMemoryPolicy(result);
+      notify(result.enabledSources.length ? `记忆来源与整理时间已保存：${result.schedule === "daily" ? `每天 ${result.dailyTime}` : "仅手动整理"}` : "记忆来源已全部关闭；不会自动整理新内容");
+    } catch (error) { notify(`记忆策略保存失败：${error.message}`); }
+    finally { setBusy(false); }
   };
   return (
     <div className="companion-embedded memory-management">
@@ -615,6 +631,16 @@ function MemoryManagementPage({ notify }) {
         <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理待处理对话</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
       <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedTurns || 0} 条待整理。模型只生成候选；必须由你审核后才能进入长期记忆。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Card className="memory-policy-card">
+        <SectionTitle index="01" title="来源与自动整理" description="两个来源默认开启且可独立关闭；每天 23:30 按本地时间整理，失败来源会单独重试。" />
+        <div className="memory-policy-grid">
+          <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="记录陪伴对话" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
+          <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="记录成功语音输入" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
+          <label className="field-label">整理方式<select value={memoryPolicy.schedule} onChange={(event) => setMemoryPolicy((current) => ({ ...current, schedule: event.target.value }))}><option value="daily">每天自动整理</option><option value="manual">仅手动整理</option></select></label>
+          <label className="field-label">本地整理时间<input type="time" step="60" disabled={memoryPolicy.schedule !== "daily"} value={memoryPolicy.dailyTime} onChange={(event) => setMemoryPolicy((current) => ({ ...current, dailyTime: event.target.value }))} /></label>
+        </div>
+        <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
+      </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>
       <div className="memory-metrics">
         <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
@@ -624,12 +650,13 @@ function MemoryManagementPage({ notify }) {
       </div>
       <Card className="memory-toolbar">
         <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "全部" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
+        <Segmented compact value={sourceFilter} onChange={setSourceFilter} options={[{ value: "all", label: "全部来源" }, { value: "companion", label: "陪伴" }, { value: "dictation", label: "语音输入" }]} />
         <SearchField value={query} onChange={setQuery} placeholder="搜索日期、主题或记忆内容" /><Button variant="soft" disabled={busy || !memoryStatus.longTermMemories} onClick={() => { void rebuildIndex(); }}>重建本地索引</Button><Button variant="soft" disabled={!query.trim()} onClick={() => { void searchIndex(); }}>混合检索</Button>
       </Card>
       {indexResults.length > 0 && <Card><SectionTitle index="R" title="检索预览" description="关键词与本地可重建 embedding 的有界结果；不会向 React 暴露向量。" /><div className="memory-item-list">{indexResults.map((item) => <article key={item.chunkId}><div><span>{item.kind}</span><time>{item.day} · {Math.round(item.score * 100)}%</time></div><p>{item.content}</p></article>)}</div></Card>}
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。" action={<Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}</span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。" action={<Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
         </Card>
         <Card>
           <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />
@@ -772,6 +799,10 @@ export function VoicePage({ notify }) {
           const transcription = { status: result.status, provider: result.provider || "unknown", durationMs: Number(result.durationMs) || 0, errorType: failure?.code || "", label: failure?.label || "转写成功" };
           const entry = { id, audioId, microphoneSource: item.microphoneSource || "computer", operation: workflow === "edit" ? "voice-edit" : "voice-input", time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
           patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: transcription.provider, status: transcription.status, durationMs: transcription.durationMs, errorType: transcription.errorType }, organizer } });
+          if (workflow === "input" && result.status === "success" && state.settings.sttMode !== "mock" && item.microphoneSource !== "simulation") {
+            try { await voiceAdapters.desktop.commitDictationMemory({ eventId: `dictation:${id}`, sessionId: `dictation:${id}`, content: text, createdAt: new Date().toISOString() }); }
+            catch { /* dictation remains successful even if optional local memory ingestion is unavailable */ }
+          }
           return entry;
         },
       });

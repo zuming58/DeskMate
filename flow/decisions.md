@@ -1,5 +1,14 @@
 # Decisions
 
+## D079 - Long-term memory keeps companion and dictation as independent sources
+
+- Date: 2026-09-03
+- Decision: DeskMate accepts only final companion turns and successful real voice-input history events into the same local memory system, tagged as `companion` or `dictation`. Voice edit, mock STT, failed/cancelled transcription and audio bytes remain excluded.
+- Schedule: both sources default enabled but can be disabled independently, including both off. Daily processing defaults to local 23:30. Startup catches up missed source-days; each source keeps an independent result and retry lifecycle.
+- Identity: summaries are keyed by source plus local day. Model runs are idempotent by source, local day and a digest of the stable ordered input events. Empty input never invokes the model.
+- Projection: SQLite stays authoritative. Managed notes use `DeskMate/daily/<source>/YYYY-MM-DD.md`; reviewed memories carry their source and link to the matching source-day note.
+- Boundary: this is Windows-only. It does not change either firmware, audio transport, HID, DeskMate Link, OLED or servo behavior.
+
 ## D078 - Custom choreography is a bounded endpoint-owned beat program
 
 - Date: 2026-09-02

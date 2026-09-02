@@ -37,8 +37,8 @@ test("reviewed export excludes raw turns, pending/rejected candidates and vector
   assert.deepEqual(exported, {
     schema: "deskmate.memory.export.v1",
     exportedAt: "2026-09-01T12:00:00.000Z",
-    dailySummaries: [{ day: "2026-09-01", summary: "reviewed day" }],
-    longTermMemories: [{ day: "2026-09-01", kind: "preference", summary: "corrected preference" }],
+    dailySummaries: [{ day: "2026-09-01", source: "companion", summary: "reviewed day" }],
+    longTermMemories: [{ day: "2026-09-01", source: "companion", kind: "preference", summary: "corrected preference" }],
   });
   const serialized = JSON.stringify(exported);
   for (const privateValue of ["raw private turn", "pending private candidate", "rejected private candidate", accepted.id, pending.id, "vector", "sourceTurnIds"]) assert.doesNotMatch(serialized, new RegExp(privateValue));
@@ -67,7 +67,7 @@ test("forget confirmations are one-use, revision-bound and whole-store erasure i
   const all = control.prepareForget({ scope: "all" });
   const forgotten = control.confirmForget({ token: all.token });
   assert.equal(forgotten.ok, true);
-  assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0 });
+  assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0, sourceCounts: { companion: { turns: 0, unprocessed: 0 }, dictation: { turns: 0, unprocessed: 0 } } });
   assert.equal(store.db.prepare("SELECT COUNT(*) AS value FROM companion_memory_outbox").get().value, 0);
 }));
 
