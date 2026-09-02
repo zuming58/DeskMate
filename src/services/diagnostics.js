@@ -17,6 +17,12 @@ const MANUAL_CALIBRATION_TRANSPORTS = new Set(["completed", "malformed", "busy",
 const MANUAL_CALIBRATION_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
 const MANUAL_CALIBRATION_ENDPOINT_RESULTS = new Set(["completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed"]);
 const MANUAL_CALIBRATION_OWNER_STATES = new Set(["locked", "axis-selected", "armed", "provisional-center", "emergency-stopped", "faulted"]);
+const MOTION_PHASES = new Set(["unavailable", "query-required", "checking-status", "preparing-center", "starting-preset", "waiting-endpoint-completion", "stopping-and-centering", "emergency-stopping", "emergency-stopped", "clearing-emergency-stop", "ready", "recentering", "running", "not-ready", "faulted", "failed"]);
+const MOTION_OPERATIONS = new Set(["run", "stopAndCenter", "emergencyStop", "clearEmergencyStopAndCenter"]);
+const MOTION_PRESETS = new Set(["attention", "nod", "search", "dance"]);
+const MOTION_SOURCES = new Set(["UI", "voice", "context", "idle"]);
+const MOTION_RESULTS = new Set(["accepted", "duplicate", "completed", "cancelled", "not-ready", "bad-payload", "wrong-session", "stale-action", "busy", "recenter-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict"]);
+const MOTION_STATES = new Set(["not-ready", "recentering", "ready", "running", "emergency-stopped", "faulted"]);
 
 function normalizeManualCalibrationDiagnostics(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -42,6 +48,41 @@ function normalizeManualCalibrationDiagnostics(value) {
     at,
   };
 }
+
+function normalizeMotionPresetDiagnostics(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const endpointSource = source.endpoint && typeof source.endpoint === "object" ? source.endpoint : null;
+  const endpoint = endpointSource && MOTION_RESULTS.has(endpointSource.result) && MOTION_STATES.has(endpointSource.state) ? {
+    actionId: Number.isInteger(endpointSource.actionId) && endpointSource.actionId >= 0 && endpointSource.actionId <= 0xffffffff ? endpointSource.actionId : 0,
+    completedPresetCounter: Number.isInteger(endpointSource.completedPresetCounter) && endpointSource.completedPresetCounter >= 0 && endpointSource.completedPresetCounter <= 0xffffffff ? endpointSource.completedPresetCounter : 0,
+    result: endpointSource.result,
+    state: endpointSource.state,
+    operation: MOTION_OPERATIONS.has(endpointSource.operation) ? endpointSource.operation : null,
+    preset: MOTION_PRESETS.has(endpointSource.preset) ? endpointSource.preset : null,
+    requestedRepeat: Number.isInteger(endpointSource.requestedRepeat) && endpointSource.requestedRepeat >= 0 && endpointSource.requestedRepeat <= 3 ? endpointSource.requestedRepeat : 0,
+    completedRepeat: Number.isInteger(endpointSource.completedRepeat) && endpointSource.completedRepeat >= 0 && endpointSource.completedRepeat <= 3 ? endpointSource.completedRepeat : 0,
+    source: MOTION_SOURCES.has(endpointSource.source) ? endpointSource.source : null,
+    adapterAvailable: endpointSource.adapterAvailable === true,
+    logicalCenterAccepted: endpointSource.logicalCenterAccepted === true,
+    emergencyStopLatched: endpointSource.emergencyStopLatched === true,
+    faulted: endpointSource.faulted === true,
+    servoOutputEnabled: endpointSource.servoOutputEnabled === true,
+    operationTerminal: endpointSource.operationTerminal === true,
+    duplicateResponse: endpointSource.duplicateResponse === true,
+  } : null;
+  return {
+    status: source.status === "available" ? "available" : "unavailable",
+    phase: MOTION_PHASES.has(source.phase) ? source.phase : "unavailable",
+    busy: source.busy === true,
+    operation: MOTION_OPERATIONS.has(source.operation) ? source.operation : null,
+    preset: MOTION_PRESETS.has(source.preset) ? source.preset : null,
+    repeat: Number.isInteger(source.repeat) && source.repeat >= 1 && source.repeat <= 3 ? source.repeat : 0,
+    source: MOTION_SOURCES.has(source.source) ? source.source : null,
+    endpointReportedComplete: source.endpointReportedComplete === true,
+    endpoint,
+    reason: /^[a-z0-9-]{0,80}$/.test(String(source.reason || "")) ? String(source.reason || "") : "internal",
+  };
+}
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -61,10 +102,12 @@ export function createDiagnosticReport(input = {}) {
     enumerated,
     configCollection: collectionState(bridge.configCollectionWritable),
     calibrationCollection: collectionState(bridge.calibrationCollectionWritable),
+    motionCollection: collectionState(bridge.motionCollectionWritable),
   };
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
   const manualCalibration = normalizeManualCalibrationDiagnostics(bridge.manualCalibration);
+  const motionPresets = normalizeMotionPresetDiagnostics(bridge.motionPresets);
   const conversationSource = input.conversation || {};
   const conversationCounters = conversationSource.counters || {};
   const echoGuardSource = conversationSource.echoGuard || {};
@@ -148,5 +191,5 @@ export function createDiagnosticReport(input = {}) {
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets };
 }

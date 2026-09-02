@@ -5,6 +5,7 @@ const { parseBridgeLine, InputTriggerFilter } = require("./input-bridge-protocol
 const { randomUUID } = require("crypto");
 const { encodeKeyboardConfig, encodeConfigReadRequest, parseConfigSnapshot } = require("./easyinput-config.cjs");
 const { decodeManualCalibrationFeatureReport } = require("./manual-calibration-hid.cjs");
+const { decodeMotionPresetFeatureReport } = require("./motion-presets-hid.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -26,7 +27,8 @@ class InputBridgeManager extends EventEmitter {
     this.pendingAgentState = null;
     this.queuedAgentState = null;
     this.pendingManualCalibration = null;
-    this.status = { available: false, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
+    this.pendingMotionPreset = null;
+    this.status = { available: false, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
   configure(value) { return this.filter.configure(value); }
@@ -63,11 +65,15 @@ class InputBridgeManager extends EventEmitter {
       const calibrationCollectionWritable = event.boardConnected
         ? (event.calibrationCollectionWritable ?? (this.status.boardConnected ? this.status.calibrationCollectionWritable : null))
         : false;
+      const motionCollectionWritable = event.boardConnected
+        ? (event.motionCollectionWritable ?? (this.status.boardConnected ? this.status.motionCollectionWritable : null))
+        : false;
       this.status = {
         ...this.status,
         boardConnected: event.boardConnected,
         configCollectionWritable,
         calibrationCollectionWritable,
+        motionCollectionWritable,
         error: "",
         ...(!event.boardConnected || configCollectionWritable === false ? { configCapabilities: null, linkDiagnostics: null } : {}),
       };
@@ -76,6 +82,7 @@ class InputBridgeManager extends EventEmitter {
         this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
         this.failAllAgentStates("easyinput-disconnected");
         this.finishManualCalibration({ ok: false, reason: "easyinput-disconnected" });
+        this.finishMotionPreset({ ok: false, reason: "easyinput-disconnected" });
       } else {
         if (configCollectionWritable === false) {
           this.finishConfig({ ok: false, reason: "config-interface-unavailable" });
@@ -83,6 +90,7 @@ class InputBridgeManager extends EventEmitter {
           this.failAllAgentStates("config-interface-unavailable");
         }
         if (calibrationCollectionWritable === false) this.finishManualCalibration({ ok: false, reason: "manual-calibration-interface-unavailable" });
+        if (motionCollectionWritable === false) this.finishMotionPreset({ ok: false, reason: "motion-preset-interface-unavailable" });
       }
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
@@ -137,6 +145,23 @@ class InputBridgeManager extends EventEmitter {
         const terminal = event.calibration;
         this.emit("manual-calibration", { stage: "terminal", ...terminal });
         this.finishManualCalibration(terminal.transportCode === 0 ? { ok: true, terminal } : { ok: false, reason: terminal.transport, terminal });
+      }
+    }
+    if (result.kind === "motion-preset-write" && this.pendingMotionPreset?.bridgeRequestId === event.requestId && !event.ok) this.finishMotionPreset({ ok: false, reason: event.reason || "motion-preset-write-failed" });
+    if (result.kind === "motion-preset-report" && this.pendingMotionPreset?.numericRequestId === event.motionPreset.requestId) {
+      const pending = this.pendingMotionPreset;
+      const response = event.motionPreset;
+      const matches = response.kindCode === pending.kindCode && response.sourceCode === pending.sourceCode && response.operationCode === pending.operationCode && response.presetCode === pending.presetCode && response.repeat === pending.repeat;
+      if (!matches) this.finishMotionPreset({ ok: false, reason: "invalid-response" });
+      else if (response.stage === "accepted") {
+        if (!pending.acceptedSeen) {
+          pending.acceptedSeen = true;
+          pending.onAccepted?.(response);
+          this.emit("motion-preset", { stage: "accepted", ...response });
+        }
+      } else {
+        this.emit("motion-preset", { stage: "endpoint-acknowledgement", ...response });
+        this.finishMotionPreset(response.transportCode === 0 ? { ok: true, terminal: response } : { ok: false, reason: response.transport, terminal: response });
       }
     }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
@@ -237,7 +262,7 @@ class InputBridgeManager extends EventEmitter {
     let report; let decoded;
     try { report = Buffer.isBuffer(value) ? Buffer.from(value) : Buffer.from(value); decoded = decodeManualCalibrationFeatureReport(report); }
     catch { return Promise.resolve({ ok: false, reason: "manual-calibration-report-invalid" }); }
-    if (this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
+    if (this.pendingManualCalibration || this.pendingMotionPreset) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
     if (this.status.calibrationCollectionWritable === false) return Promise.resolve({ ok: false, reason: "manual-calibration-interface-unavailable" });
@@ -253,6 +278,42 @@ class InputBridgeManager extends EventEmitter {
     const pending = this.pendingManualCalibration;
     if (!pending) return;
     this.pendingManualCalibration = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
+  sendMotionPreset(value, { onAccepted } = {}) {
+    let report; let decoded;
+    try { report = Buffer.isBuffer(value) ? Buffer.from(value) : Buffer.from(value); decoded = decodeMotionPresetFeatureReport(report); }
+    catch { return Promise.resolve({ ok: false, reason: "motion-preset-report-invalid" }); }
+    if (this.pendingMotionPreset || this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "motion-preset-busy" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.motionCollectionWritable !== true) return Promise.resolve({ ok: false, reason: "motion-preset-interface-unavailable" });
+    const bridgeRequestId = `preset-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishMotionPreset({ ok: false, reason: "motion-preset-timeout" }), 2500);
+      this.pendingMotionPreset = {
+        bridgeRequestId,
+        numericRequestId: decoded.requestId,
+        kindCode: decoded.kindCode,
+        sourceCode: decoded.sourceCode,
+        operationCode: decoded.operationCode,
+        presetCode: decoded.presetCode,
+        repeat: decoded.repeat,
+        timeout,
+        resolve,
+        onAccepted,
+        acceptedSeen: false,
+      };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "motion-preset-request", requestId: bridgeRequestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishMotionPreset({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
+  finishMotionPreset(result) {
+    const pending = this.pendingMotionPreset;
+    if (!pending) return;
+    this.pendingMotionPreset = null;
     this.clearTimer(pending.timeout);
     pending.resolve(result);
   }
@@ -369,8 +430,9 @@ class InputBridgeManager extends EventEmitter {
     this.finishCapture({ ok: false, reason: "input-bridge-exited" });
     this.failAllAgentStates("input-bridge-exited");
     this.finishManualCalibration({ ok: false, reason: "input-bridge-exited" });
+    this.finishMotionPreset({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
-    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
+    this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
     if (this.stopping || this.restartTimer) return;
     const delay = Math.min(30000, 1000 * (2 ** Math.min(this.restartAttempts, 5)));
@@ -392,9 +454,10 @@ class InputBridgeManager extends EventEmitter {
     this.finishCapture({ ok: false, reason: "input-bridge-stopped" });
     this.failAllAgentStates("input-bridge-stopped");
     this.finishManualCalibration({ ok: false, reason: "input-bridge-stopped" });
+    this.finishMotionPreset({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
-    this.status = { ...this.status, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
+    this.status = { ...this.status, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
     this.emit("status", this.snapshot());
   }
 }

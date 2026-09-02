@@ -58,6 +58,7 @@ test("status parser preserves bounded collection evidence and rejects bad types"
   assert.equal(JSON.stringify(parsed).includes("private"), false);
   assert.equal(parseBridgeLine(JSON.stringify(status({ configCollectionWritable: "yes" }))), null);
   assert.equal(parseBridgeLine(JSON.stringify(status({ calibrationCollectionWritable: 1 }))), null);
+  assert.equal(parseBridgeLine(JSON.stringify(status({ motionCollectionWritable: 1 }))), null);
 });
 
 test("manager keeps config and calibration collection routing independent", async () => {
@@ -97,7 +98,7 @@ test("USB collection re-enumeration refreshes Link only when config collection r
 
 test("diagnostics distinguish enumeration and both writable collections without identifiers", () => {
   const report = createDiagnosticReport({ inputBridge: { boardConnected: true, configCollectionWritable: true, calibrationCollectionWritable: false, devicePath: "private", serialNumber: "private" } });
-  assert.deepEqual(report.easyInputHid, { enumerated: true, configCollection: "writable", calibrationCollection: "unavailable" });
+  assert.deepEqual(report.easyInputHid, { enumerated: true, configCollection: "writable", calibrationCollection: "unavailable", motionCollection: "unknown" });
   assert.equal(JSON.stringify(report).includes("private"), false);
-  assert.deepEqual(createDiagnosticReport({ inputBridge: { boardConnected: false } }).easyInputHid, { enumerated: false, configCollection: "not-enumerated", calibrationCollection: "not-enumerated" });
+  assert.deepEqual(createDiagnosticReport({ inputBridge: { boardConnected: false } }).easyInputHid, { enumerated: false, configCollection: "not-enumerated", calibrationCollection: "not-enumerated", motionCollection: "not-enumerated" });
 });
