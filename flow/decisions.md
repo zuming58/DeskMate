@@ -1,5 +1,12 @@
 # Decisions
 
+## D075 - Emergency-stop clearing is an explicit verified restart transaction
+
+- Date: 2026-09-02
+- Decision: a latched manual-control emergency stop is never cleared by application startup, reconnect, status polling or an ordinary start. Windows may discover the latch with a read-only query, but only the user-visible `解除急停并重新开始` action with the environment confirmation checked may request one clear.
+- Transaction: every recovery click performs fresh status → `clearEmergencyStop` → correlated terminal with `state=locked` and `emergencyStopped=false` → the existing serial Yaw/Pitch center establishment. Direction controls remain absent until the whole sequence succeeds.
+- Boundary: clear reuses the frozen T10C operation and existing coordinator. It does not alter emergency-stop priority, wire values, firmware, motion parameters or lifecycle locks. Failure or ambiguous terminal evidence leaves the endpoint and UI fail closed.
+
 ## D074 - Manual direction labels follow observed mechanism semantics, not wire-sign intuition
 
 - Date: 2026-09-02

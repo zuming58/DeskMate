@@ -1205,7 +1205,7 @@ export function KeymapPage({ notify }) {
 const MANUAL_CONTROL_PHASE_LABELS = Object.freeze({ unavailable: "设备未连接", locked: "已锁定", "idle-timeout": "已自动退出", "establishing-center": "正在建立中心", "center-required": "需先建立中心", ready: "可以控制", moving: "正在移动", "emergency-stopped": "已紧急停止" });
 const CALIBRATION_OPERATION_LABELS = Object.freeze({ status: "读取状态", selectAxis: "选择轴", arm: "安全解锁", provisionalCenter: "暂定中心", singleStep: "单步", recenter: "回到中心", emergencyStop: "紧急停止", clearEmergencyStop: "清除急停" });
 const CALIBRATION_TRANSPORT_LABELS = Object.freeze({ completed: "端点已响应", malformed: "请求格式错误", busy: "EasyInput 正忙", stale: "请求已过期", conflict: "请求 ID 冲突", "link-not-ready": "DeskMate Link 未就绪", "link-queue-busy": "Link 队列正忙", timeout: "请求超时", "link-error": "Link 返回错误", "peer-disconnected-or-restarted": "小智断开或重启", "invalid-response": "小智响应无效", internal: "EasyInput 内部错误" });
-const CALIBRATION_ENDPOINT_LABELS = Object.freeze({ completed: "端点接受本次操作", duplicate: "端点识别为重复请求", "not-ready": "手动校准 owner 未就绪", "bad-payload": "端点拒绝无效载荷", "wrong-session": "会话已经变化", "stale-action": "动作 ID 已过期", "arm-required": "需要重新安全解锁", "arm-expired": "安全解锁已过期", "wrong-axis": "轴选择不一致", "step-out-of-range": "单步超出安全范围", "center-required": "需要先建立中心", "emergency-stopped": "急停已锁定", faulted: "运动 owner 故障锁定", "adapter-unavailable": "真实舵机适配器尚未接入", "adapter-failure": "舵机适配器执行失败", "action-conflict": "动作 ID 冲突", "safety-not-confirmed": "安全声明不完整", "manual-calibration-request-id-store-corrupt": "请求编号存储损坏，控制已锁定", "manual-calibration-request-id-exhausted": "请求编号空间已耗尽，控制已锁定", "manual-calibration-request-id-persist-failed": "请求编号无法安全保存，控制已锁定", "manual-calibration-request-id-unavailable": "请求编号不可用，控制已锁定" });
+const CALIBRATION_ENDPOINT_LABELS = Object.freeze({ completed: "端点接受本次操作", duplicate: "端点识别为重复请求", "not-ready": "手动校准 owner 未就绪", "bad-payload": "端点拒绝无效载荷", "wrong-session": "会话已经变化", "stale-action": "动作 ID 已过期", "arm-required": "需要重新安全解锁", "arm-expired": "安全解锁已过期", "wrong-axis": "轴选择不一致", "step-out-of-range": "单步超出安全范围", "center-required": "需要先建立中心", "emergency-stopped": "急停已锁定", "emergency-stop-clear-not-confirmed": "小智没有确认解除急停", faulted: "运动 owner 故障锁定", "adapter-unavailable": "真实舵机适配器尚未接入", "adapter-failure": "舵机适配器执行失败", "action-conflict": "动作 ID 冲突", "safety-not-confirmed": "安全声明不完整", "manual-calibration-request-id-store-corrupt": "请求编号存储损坏，控制已锁定", "manual-calibration-request-id-exhausted": "请求编号空间已耗尽，控制已锁定", "manual-calibration-request-id-persist-failed": "请求编号无法安全保存，控制已锁定", "manual-calibration-request-id-unavailable": "请求编号不可用，控制已锁定" });
 const CALIBRATION_LINK_ERROR_LABELS = Object.freeze({ UNKNOWN_TYPE: "当前小智固件不支持手动校准协议", BAD_PAYLOAD: "小智拒绝了校准协议载荷", NOT_READY: "协议存在，但校准 owner/真实适配器未就绪", BUSY: "小智校准 owner 正忙", SEQUENCE_CONFLICT: "DeskMate Link 序列冲突", INTERNAL: "小智端内部错误" });
 
 function ManualCalibrationPanel({ notify }) {
@@ -1216,6 +1216,7 @@ function ManualCalibrationPanel({ notify }) {
     const apply = (value) => { if (active && value) setStatus(value); };
     const unsubscribe = voiceAdapters.desktop.onManualControlStatus(apply);
     void voiceAdapters.desktop.getManualControlStatus().then(apply);
+    void voiceAdapters.desktop.queryManualCalibration().catch(() => {});
     const onVisibility = () => { if (document.hidden) void voiceAdapters.desktop.endManualControl("document-hidden"); };
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
@@ -1232,7 +1233,7 @@ function ManualCalibrationPanel({ notify }) {
       setEnvironmentConfirmed(false);
       return;
     }
-    const result = applyResult(await voiceAdapters.desktop.startManualControl({ environmentConfirmed }));
+    const result = applyResult(await voiceAdapters.desktop.startManualControl({ environmentConfirmed, recoverEmergencyStop: status.phase === "emergency-stopped" }));
     if (!result?.ok) notify(`无法开始手动控制：${CALIBRATION_ENDPOINT_LABELS[result?.reason] || result?.reason || "unavailable"}`);
   };
   const establishCenter = async () => {
@@ -1270,16 +1271,17 @@ function ManualCalibrationPanel({ notify }) {
   const linkErrorCopy = terminal?.transport === "link-error" && terminal?.linkErrorCode > 0 ? `${CALIBRATION_LINK_ERROR_LABELS[terminal.linkError] || "未知 Link 错误"} · ${terminal.linkError} (${terminal.linkErrorCode})` : "";
   const terminalCopy = terminal ? endpoint ? `${CALIBRATION_ENDPOINT_LABELS[endpoint.result] || "状态响应"} · completed_output_count ${endpoint.completedOutputCount}` : linkErrorCopy || CALIBRATION_TRANSPORT_LABELS[terminal.transport] || terminal.transport : "尚无 terminal";
   const directions = [{ id: "up", label: "上", icon: ArrowUp }, { id: "left", label: "左", icon: ArrowLeft }, { id: "right", label: "右", icon: ArrowRight }, { id: "down", label: "下", icon: ArrowDown }];
+  const emergencyRecovery = status.phase === "emergency-stopped";
   return <Card className="manual-calibration-panel">
     <div className="manual-calibration-panel__header"><SectionTitle index="02" title="小智手动控制" description="确认一次环境后即可按住方向移动；松开、失焦或断连都会停止继续发送。" /><div className="manual-calibration-panel__status"><StatusBadge tone={status.phase === "ready" || status.phase === "moving" ? "success" : "demo"}>{MANUAL_CONTROL_PHASE_LABELS[status.phase] || "状态未知"}</StatusBadge><small>DeskMate Link：{status.linkState || "unavailable"}</small></div></div>
-    {!status.active && <div className="manual-control-start"><label><input type="checkbox" checked={environmentConfirmed} onChange={(event) => setEnvironmentConfirmed(event.target.checked)} />设备周围无阻挡，我在设备旁</label><div className="manual-control-start__actions"><Button icon={PlayerPlay} disabled={!status.available || !environmentConfirmed} onClick={startOrEnd}>开始手动控制（会先回中）</Button><span className="manual-control-stop"><Button variant="primary" disabled={!status.available} onClick={emergencyStop}>立即停止</Button></span></div></div>}
+    {!status.active && <><div className="manual-control-start"><label><input type="checkbox" checked={environmentConfirmed} onChange={(event) => setEnvironmentConfirmed(event.target.checked)} />设备周围无阻挡，我在设备旁</label><div className="manual-control-start__actions"><Button icon={PlayerPlay} disabled={!status.available || !environmentConfirmed} onClick={startOrEnd}>{emergencyRecovery ? "解除急停并重新开始（会先回中）" : "开始手动控制（会先回中）"}</Button><span className="manual-control-stop"><Button variant="primary" disabled={!status.available} onClick={emergencyStop}>立即停止</Button></span></div></div>{emergencyRecovery && <Notice tone="warning" title="急停保持锁定">只有勾选环境确认并点击“解除急停并重新开始”后，才会读取新状态、显式清除急停并重新建立双轴中心。重连和状态查询不会自动清锁。</Notice>}</>}
     {status.active && <>
       {status.phase === "center-required" && <Notice tone="warning" title="需要先建立中心">方向按键保持禁用。建立 Yaw 和 Pitch 中心成功后才能移动；不会自动连续驱动。</Notice>}
       <div className="manual-control-layout">
-        <div className="manual-control-pad" aria-label="按住方向控制云台">
+        {status.centerReady && <div className="manual-control-pad" aria-label="按住方向控制云台">
           {directions.map(({ id, label, icon: DirectionIcon }) => <button type="button" key={id} aria-label={`按住向${label}`} className={`manual-control-direction manual-control-direction--${id} ${status.heldDirection === id ? "is-held" : ""}`} disabled={!status.controlsEnabled} onPointerDown={(event) => { void pressDirection(event, id); }} onPointerUp={(event) => releaseDirection(event, id)} onPointerCancel={(event) => releaseDirection(event, id)} onLostPointerCapture={(event) => { if (status.heldDirection === id) releaseDirection(event, id); }} onKeyDown={(event) => keyboardDirection(event, id, true)} onKeyUp={(event) => keyboardDirection(event, id, false)}><DirectionIcon size={32} /><span>{label}</span></button>)}
           <div className="manual-control-pad__center"><Robot size={28} /><small>按住移动<br/>松开停止</small></div>
-        </div>
+        </div>}
         <div className="manual-control-actions">
           {!status.centerReady && <Button variant="primary" disabled={Boolean(status.inFlight)} onClick={establishCenter}>建立中心</Button>}
           <Button variant="ghost" disabled={!status.controlsEnabled} onClick={recenter}>回到中心</Button>

@@ -45,12 +45,13 @@ class ManualControlCoordinator extends EventEmitter {
     const session = this.session.snapshot();
     const evidence = this.calibration.snapshot();
     const terminal = evidence.terminal;
+    const remoteEmergencyStopped = evidence.context?.emergencyStopped === true || evidence.context?.state === "emergency-stopped";
     const correlatedTerminal = Boolean(evidence.intent?.requestId && terminal?.requestId === evidence.intent.requestId && terminal.transport === "completed" && terminal.endpoint);
     const effectiveLinkState = this.linkState === "unavailable" && correlatedTerminal ? "connected" : this.linkState;
     let phase = "locked";
     if (!session.available) phase = "unavailable";
     else if (session.lastReason === "idle-timeout") phase = "idle-timeout";
-    else if (["emergency-stop-requested", "emergency-stopped"].includes(session.lastReason)) phase = "emergency-stopped";
+    else if (remoteEmergencyStopped || ["emergency-stop-requested", "emergency-stopped"].includes(session.lastReason)) phase = "emergency-stopped";
     else if (session.active && session.inFlight?.kind === "establish-center") phase = "establishing-center";
     else if (session.active && !session.centerReady) phase = "center-required";
     else if (session.active && session.heldDirection) phase = "moving";
@@ -94,6 +95,13 @@ class ManualControlCoordinator extends EventEmitter {
     if (!current.available) return { ok: false, reason: "manual-control-unavailable", status: this.snapshot() };
     const query = await this.calibration.queryStatus();
     if (!query?.ok || query.status?.gate !== "ready") return { ok: false, reason: reasonFromResult(query), status: this.publish() };
+    const context = query.status?.context;
+    const emergencyStopped = context?.emergencyStopped === true || context?.state === "emergency-stopped";
+    if (emergencyStopped) {
+      if (value.recoverEmergencyStop !== true) return { ok: false, reason: "emergency-stopped", status: this.publish() };
+      const cleared = await this._runCommand("clearEmergencyStop", {});
+      if (!cleared.ok) return { ok: false, reason: cleared.reason, status: this.publish() };
+    }
     this.environmentConfirmed = true;
     this.session.setAvailable(true);
     const started = this.session.begin({ centerReady: false });
@@ -176,6 +184,7 @@ class ManualControlCoordinator extends EventEmitter {
     if (!result?.ok || !endpointSucceeded(endpoint)) return { ok: false, reason: reasonFromResult(result) };
     if (operation === "selectAxis" && endpoint.selectedAxis !== extra.axis) return { ok: false, reason: "axis-not-confirmed" };
     if (operation === "arm" && endpoint.armed !== true) return { ok: false, reason: "arm-not-confirmed" };
+    if (operation === "clearEmergencyStop" && (endpoint.emergencyStopped !== false || endpoint.state !== "locked")) return { ok: false, reason: "emergency-stop-clear-not-confirmed" };
     return { ok: true };
   }
 }

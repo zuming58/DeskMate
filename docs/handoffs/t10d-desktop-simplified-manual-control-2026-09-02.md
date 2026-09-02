@@ -62,6 +62,8 @@ The continuation predicate is checked between select, ARM and output. Releasing 
 
 Recenter runs Yaw and Pitch serially through select → fresh ARM → recenter. Immediate stop first suppresses every repeat, waits only for a current in-flight terminal and then issues the existing emergency-stop operation.
 
+Post-HIL recovery addendum: this historical branch intentionally exposed stop but omitted an explicit clear/restart path. User-present HIL later proved the stop latched correctly and a subsequent start stayed locked. The follow-on `codex/t10d-desktop-emergency-stop-recovery` adds only an explicit, verified status → clear → dual-center restart transaction; see `t10d-desktop-emergency-stop-recovery-2026-09-02.md`. It does not weaken or automatically clear emergency stop.
+
 Pointer release/cancel, lost pointer capture, window blur, hidden document, page leave, device disconnect, Link waiting/faulted/disabled and 60 seconds without activity lock the session. `center-required` remains recoverable without leaving the session; every other transport or endpoint failure exits fail closed and clears volatile ARM authority.
 
 ## Evidence boundary
