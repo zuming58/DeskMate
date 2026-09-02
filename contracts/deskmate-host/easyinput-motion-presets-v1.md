@@ -77,7 +77,9 @@ Link response `10`, and internal failure `11`.
 Accepted stage proves only that EasyInput stored the exact request. Stage 2
 proves only the matched Xiaozhi acknowledgement/status was returned. Windows
 must poll `0x23` and match `session_id`, `action_id`, state and completed counter
-before labelling a preset physically executed.
+before labelling it `Xiaozhi endpoint reported complete`. With no position
+sensor, software must never label this as measured angle, mechanical arrival or
+physical acceptance; those remain user-observed HIL evidence.
 
 ## Single request and lifecycle
 

@@ -83,6 +83,11 @@ States: `NOT_READY=0`, `RECENTERING=1`, `READY=2`, `RUNNING=3`,
 Flags: adapter available bit 0, centered bit 1, emergency stop latched bit 2,
 faulted bit 3 and physical output active bit 4. Bits 5..7 are zero.
 
+`adapter available`, `centered` and `physical output active` describe only the
+endpoint's configured adapter and accepted command state. There is no position
+sensor, so none of these bits proves measured shaft angle, mechanical arrival,
+load safety or physical acceptance.
+
 Source is semantic scheduling metadata only. UI and explicit voice share the
 highest normal runtime priority, then context, then idle. It does not grant a
 new capability and never overrides manual control, recovery, fault or stop.
