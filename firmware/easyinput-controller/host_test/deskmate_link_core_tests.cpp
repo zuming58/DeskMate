@@ -292,48 +292,51 @@ void display_failure_keeps_link_connected_but_blocks_state() {
     CHECK(!controller.queue_agent_state(LinkAgentState::Working, 9));
 }
 
-void forbidden_t09_capabilities_and_status_fail_closed() {
+void t15_motion_capability_is_optional_and_audio_fails_closed() {
     LinkWireFrame wire{};
     const std::array<std::uint8_t, 8> hello = {
         2, 1, 0xdd, 0xcc, 0xbb, 0xaa, 0x80, 0};
 
-    LinkController capabilities_controller;
-    capabilities_controller.start(1, 0);
-    CHECK(capabilities_controller.poll(0, wire));
-    capabilities_controller.receive(
+    LinkController motion_controller;
+    motion_controller.start(1, 0);
+    CHECK(motion_controller.poll(0, wire));
+    motion_controller.receive(
         response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
-    CHECK(capabilities_controller.poll(1, wire));
-    const std::array<std::uint8_t, 10> deferred_capabilities = {
+    CHECK(motion_controller.poll(1, wire));
+    const std::array<std::uint8_t, 10> motion_capabilities = {
         15, 0, 0, 0, 15, 0, 0, 0, 0x80, 0};
-    capabilities_controller.receive(
+    motion_controller.receive(
         response(LinkMessageType::GetCapabilities, 2,
-                 deferred_capabilities.data(), deferred_capabilities.size()),
+                 motion_capabilities.data(), motion_capabilities.size()),
         2);
-    CHECK(capabilities_controller.snapshot().semantic_errors == 1);
-    CHECK(capabilities_controller.snapshot().implemented_capabilities == 0);
-    CHECK(capabilities_controller.snapshot().enabled_capabilities == 0);
-
-    LinkController status_controller;
-    status_controller.start(1, 0);
-    CHECK(status_controller.poll(0, wire));
-    status_controller.receive(
-        response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
-    CHECK(status_controller.poll(1, wire));
-    const std::array<std::uint8_t, 10> capabilities = {
-        7, 0, 0, 0, 7, 0, 0, 0, 0x80, 0};
-    status_controller.receive(
-        response(LinkMessageType::GetCapabilities, 2,
-                 capabilities.data(), capabilities.size()),
-        2);
-    CHECK(status_controller.poll(2, wire));
-    const std::array<std::uint8_t, 11> deferred_status = {
+    CHECK(motion_controller.snapshot().semantic_errors == 0);
+    CHECK(motion_controller.snapshot().implemented_capabilities == 15);
+    CHECK(motion_controller.snapshot().enabled_capabilities == 15);
+    CHECK(motion_controller.poll(2, wire));
+    const std::array<std::uint8_t, 11> motion_ready_status = {
         0xdd, 0xcc, 0xbb, 0xaa, 4, 3, 2, 1, 0, 7, 0};
-    status_controller.receive(
-        response(LinkMessageType::GetStatus, 3, deferred_status.data(),
-                 deferred_status.size()),
+    motion_controller.receive(
+        response(LinkMessageType::GetStatus, 3, motion_ready_status.data(),
+                 motion_ready_status.size()),
         3);
-    CHECK(status_controller.snapshot().semantic_errors == 1);
-    CHECK(status_controller.snapshot().status_flags == 0);
+    CHECK(motion_controller.snapshot().semantic_errors == 0);
+    CHECK(motion_controller.snapshot().status_flags == 7);
+
+    LinkController audio_controller;
+    audio_controller.start(1, 0);
+    CHECK(audio_controller.poll(0, wire));
+    audio_controller.receive(
+        response(LinkMessageType::Hello, 1, hello.data(), hello.size()), 1);
+    CHECK(audio_controller.poll(1, wire));
+    const std::array<std::uint8_t, 10> audio_capabilities = {
+        31, 0, 0, 0, 31, 0, 0, 0, 0x80, 0};
+    audio_controller.receive(
+        response(LinkMessageType::GetCapabilities, 2,
+                 audio_capabilities.data(), audio_capabilities.size()),
+        2);
+    CHECK(audio_controller.snapshot().semantic_errors == 1);
+    CHECK(audio_controller.snapshot().implemented_capabilities == 0);
+    CHECK(audio_controller.snapshot().enabled_capabilities == 0);
 }
 
 void errors_and_unmatched_frames_fail_closed() {
@@ -380,7 +383,7 @@ int main() {
     controller_retries_disconnect_and_does_not_replay();
     malformed_response_fails_closed();
     display_failure_keeps_link_connected_but_blocks_state();
-    forbidden_t09_capabilities_and_status_fail_closed();
+    t15_motion_capability_is_optional_and_audio_fails_closed();
     errors_and_unmatched_frames_fail_closed();
     if (failures != 0) {
         std::cerr << "deskmate_link_core_tests: " << failures << " failure(s)\n";

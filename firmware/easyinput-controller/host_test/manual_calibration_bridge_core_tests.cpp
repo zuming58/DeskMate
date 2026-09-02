@@ -126,8 +126,8 @@ std::array<std::uint8_t, 19> select_payload(std::uint32_t action_id = 1) {
 LinkStatusSnapshot ready_link() {
     LinkStatusSnapshot link{};
     link.state = LinkControllerState::Connected;
-    link.implemented_capabilities = kLinkT09RequiredCapabilities;
-    link.enabled_capabilities = kLinkT09RequiredCapabilities;
+    link.implemented_capabilities = kLinkT15RequiredCapabilities;
+    link.enabled_capabilities = kLinkT15RequiredCapabilities;
     link.controller_boot_id = 0x11223344;
     link.peer_boot_id = 0xaabbccdd;
     return link;

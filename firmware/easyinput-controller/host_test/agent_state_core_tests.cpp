@@ -37,8 +37,8 @@ std::array<std::uint8_t, kAgentStatePayloadBytes> command(
 LinkStatusSnapshot ready_link(std::uint32_t peer_restarts = 0) {
     LinkStatusSnapshot link{};
     link.state = LinkControllerState::Connected;
-    link.implemented_capabilities = kLinkT09RequiredCapabilities;
-    link.enabled_capabilities = kLinkT09RequiredCapabilities;
+    link.implemented_capabilities = kLinkT15RequiredCapabilities;
+    link.enabled_capabilities = kLinkT15RequiredCapabilities;
     link.peer_restarts = peer_restarts;
     return link;
 }

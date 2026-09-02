@@ -240,7 +240,7 @@ bool ManualCalibrationBridge::link_ready(const LinkStatusSnapshot& link) {
     return link.state == LinkControllerState::Connected &&
            (link.enabled_capabilities & kLinkT09RequiredCapabilities) ==
                kLinkT09RequiredCapabilities &&
-           (link.enabled_capabilities & kLinkT09ForbiddenCapabilities) == 0 &&
+           (link.enabled_capabilities & kLinkT15ForbiddenCapabilities) == 0 &&
            link.controller_boot_id != 0 && link.peer_boot_id != 0;
 }
 

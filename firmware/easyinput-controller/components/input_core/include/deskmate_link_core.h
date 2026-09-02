@@ -31,6 +31,8 @@ enum class LinkMessageType : std::uint8_t {
     SetAgentState = 0x04,
     ManualCalibrationCommand = 0x20,
     GetManualCalibrationStatus = 0x21,
+    MotionPresetCommand = 0x22,
+    GetMotionPresetStatus = 0x23,
 };
 
 enum class LinkErrorCode : std::uint8_t {
@@ -71,12 +73,18 @@ inline constexpr std::uint32_t kLinkT08DeferredCapabilities =
     kLinkCapabilityDisplay | kLinkCapabilityMotion | kLinkCapabilityAudio;
 inline constexpr std::uint32_t kLinkT09RequiredCapabilities =
     kLinkCapabilityCore | kLinkCapabilityAgentState | kLinkCapabilityDisplay;
-inline constexpr std::uint32_t kLinkT09ForbiddenCapabilities =
-    kLinkCapabilityMotion | kLinkCapabilityAudio;
+inline constexpr std::uint32_t kLinkT15RequiredCapabilities =
+    kLinkT09RequiredCapabilities | kLinkCapabilityMotion;
+inline constexpr std::uint32_t kLinkT15KnownCapabilities =
+    kLinkT15RequiredCapabilities | kLinkCapabilityAudio;
+inline constexpr std::uint32_t kLinkT15ForbiddenCapabilities =
+    kLinkCapabilityAudio;
 inline constexpr std::uint8_t kLinkT08AllowedStatusFlags =
     (1u << 0) | (1u << 7);
 inline constexpr std::uint8_t kLinkT09AllowedStatusFlags =
     kLinkT08AllowedStatusFlags | (1u << 1);
+inline constexpr std::uint8_t kLinkT15AllowedStatusFlags =
+    kLinkT09AllowedStatusFlags | (1u << 2);
 
 struct LinkFrame {
     std::uint8_t version{kDeskMateLinkVersion};
@@ -155,6 +163,36 @@ struct ManualCalibrationLinkResult {
     std::array<std::uint8_t, 19> payload{};
 };
 
+enum class MotionPresetLinkTerminalKind : std::uint8_t {
+    Response = 0,
+    LinkError = 1,
+    Timeout = 2,
+    Disconnected = 3,
+    InvalidResponse = 4,
+    Internal = 5,
+};
+
+struct MotionPresetLinkRequest {
+    std::uint32_t host_request_id{};
+    std::uint8_t message_type{};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 16> payload{};
+};
+
+struct MotionPresetLinkResult {
+    std::uint32_t host_request_id{};
+    std::uint32_t link_sequence{};
+    std::uint32_t controller_boot_id{};
+    std::uint32_t peer_boot_id{};
+    std::uint8_t message_type{};
+    std::uint8_t terminal_flag{};
+    LinkErrorCode link_error{LinkErrorCode::None};
+    MotionPresetLinkTerminalKind terminal{
+        MotionPresetLinkTerminalKind::Internal};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 20> payload{};
+};
+
 std::uint16_t deskmate_link_crc16(const std::uint8_t* data,
                                   std::size_t length);
 bool encode_deskmate_link_frame(const LinkFrame& frame, LinkWireFrame& wire);
@@ -189,6 +227,8 @@ class LinkController {
     bool queue_manual_calibration(
         const ManualCalibrationLinkRequest& request);
     bool take_manual_calibration_result(ManualCalibrationLinkResult& result);
+    bool queue_motion_preset(const MotionPresetLinkRequest& request);
+    bool take_motion_preset_result(MotionPresetLinkResult& result);
     void note_tx_drop();
     void set_parser_diagnostics(const LinkParserDiagnostics& diagnostics);
     LinkStatusSnapshot snapshot() const { return status_; }
@@ -201,6 +241,7 @@ class LinkController {
         bool active{};
         bool needs_send{};
         bool manual_calibration{};
+        bool motion_preset{};
         std::uint32_t host_request_id{};
     };
 
@@ -215,21 +256,34 @@ class LinkController {
         bool pending{};
     };
 
+    struct QueuedMotionPreset {
+        MotionPresetLinkRequest request{};
+        bool pending{};
+    };
+
     bool begin_request(LinkMessageType type, const std::uint8_t* payload,
                        std::uint16_t length, bool manual_calibration = false,
-                       std::uint32_t host_request_id = 0);
+                       std::uint32_t host_request_id = 0,
+                       bool motion_preset = false);
     bool emit_pending(std::uint32_t now_ms, LinkWireFrame& outgoing);
     void complete_success();
     void complete_failure(std::uint32_t now_ms);
     void disconnect(std::uint32_t now_ms);
     bool handle_response(const LinkFrame& incoming, std::uint32_t now_ms);
     bool valid_manual_response(const LinkFrame& incoming) const;
+    bool valid_motion_response(const LinkFrame& incoming) const;
     void finish_manual(ManualCalibrationLinkTerminalKind terminal,
                        std::uint8_t terminal_flag = 0,
                        LinkErrorCode link_error = LinkErrorCode::None,
                        const std::uint8_t* payload = nullptr,
                        std::uint8_t payload_length = 0);
     void cancel_manual(ManualCalibrationLinkTerminalKind terminal);
+    void finish_motion(MotionPresetLinkTerminalKind terminal,
+                       std::uint8_t terminal_flag = 0,
+                       LinkErrorCode link_error = LinkErrorCode::None,
+                       const std::uint8_t* payload = nullptr,
+                       std::uint8_t payload_length = 0);
+    void cancel_motion(MotionPresetLinkTerminalKind terminal);
     std::uint32_t next_sequence();
 
     LinkStatusSnapshot status_{};
@@ -238,6 +292,9 @@ class LinkController {
     QueuedManualCalibration queued_manual_calibration_{};
     ManualCalibrationLinkResult manual_calibration_result_{};
     bool manual_calibration_result_pending_{};
+    QueuedMotionPreset queued_motion_preset_{};
+    MotionPresetLinkResult motion_preset_result_{};
+    bool motion_preset_result_pending_{};
     std::uint32_t controller_boot_id_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t sequence_{};
