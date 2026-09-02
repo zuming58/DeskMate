@@ -61,6 +61,21 @@ void motion_status_roundtrip(){
   CHECK(json.find("physical_completion")==std::string::npos);CHECK(json.find("mechanical_completion")==std::string::npos);
 }
 
+void maximum_diagnostics_remain_bounded(){
+  constexpr uint32_t maximum=std::numeric_limits<uint32_t>::max();
+  ConfigStatusStream stream;LinkStatusSnapshot link{};link.state=LinkControllerState::Connected;
+  for(uint32_t* value:{&link.rx_frames,&link.tx_frames,&link.framing_errors,&link.crc_errors,&link.version_errors,&link.length_errors,&link.request_timeouts,&link.retries,&link.queue_drops,&link.peer_restarts,&link.unexpected_frames,&link.semantic_errors})*value=maximum;
+  AgentStateDiagnostics agent{};for(uint32_t* value:{&agent.accepted,&agent.malformed,&agent.duplicates,&agent.expired,&agent.dropped_disconnected,&agent.forwarded,&agent.queue_drops})*value=maximum;
+  ManualCalibrationBridgeDiagnostics manual{};for(uint32_t* value:{&manual.accepted,&manual.terminal,&manual.malformed,&manual.duplicates,&manual.busy,&manual.stale,&manual.conflicts,&manual.lifecycle_clears,&manual.response_drops})*value=maximum;
+  MotionPresetBridgeDiagnostics motion{};for(uint32_t* value:{&motion.accepted,&motion.endpoint_acknowledgements,&motion.malformed,&motion.duplicates,&motion.busy,&motion.stale,&motion.conflicts,&motion.lifecycle_clears,&motion.response_drops})*value=maximum;
+  AudioCaptureDiagnostics audio{};for(uint32_t* value:{&audio.captured_frames,&audio.sent_frames,&audio.dropped_frames,&audio.read_errors,&audio.send_errors,&audio.recoveries})*value=maximum;
+  SpeakerOutputDiagnostics speaker{};for(uint32_t* value:{&speaker.requests,&speaker.completed,&speaker.cancelled_for_microphone,&speaker.busy_rejections,&speaker.init_errors,&speaker.write_errors,&speaker.cleanup_errors})*value=maximum;
+  CHECK(stream.replace(18,6,link,agent,audio,speaker,manual,motion));
+  std::array<uint8_t,kConfigFeaturePayloadBytes> payload{};std::string json;
+  while(stream.pending()){CHECK(stream.encode_next(payload));const auto count=payload[3]-9;json.append(reinterpret_cast<const char*>(payload.data()+13),count);stream.mark_sent();}
+  CHECK(json.size()<kConfigStatusMaxJsonBytes);CHECK(json.find("4294967295")!=std::string::npos);
+}
+
 void audio_config_projection(){
   AudioCaptureConfig audio{};
   CHECK(parse_audio_capture_config(kJson,audio)==AudioConfigProjectionStatus::ConfigIncomplete);
@@ -155,4 +170,4 @@ void normalizes_windows_feature_report_shapes(){
   CHECK(!normalize_config_feature_report(0x12,wire.data()+1,kConfigWriteFeaturePayloadBytes,view));
 }
 
-int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));CHECK(p.keys[0].kind==ConfigActionKind::VoiceInput&&p.keys[0].modifiers==3&&p.keys[0].usage==0x2c);CHECK(p.keys[2].kind==ConfigActionKind::VoiceEdit&&p.keys[2].modifiers==3&&p.keys[2].usage==0x08);CHECK(p.keys[1].kind==ConfigActionKind::Hotkey&&p.keys[1].modifiers==0&&p.keys[1].usage==0x28);CHECK(p.keys[3].kind==ConfigActionKind::Hotkey&&p.keys[3].modifiers==0&&p.keys[3].usage==0x2a);write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();motion_status_roundtrip();audio_config_projection();storage();large_config_save_read_and_restart_roundtrip();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();normalizes_windows_feature_report_shapes();return 0;}
+int main(){ConfigProjection p{};CHECK(parse_config_projection(kJson,p));CHECK(p.keys[0].kind==ConfigActionKind::VoiceInput&&p.keys[0].modifiers==3&&p.keys[0].usage==0x2c);CHECK(p.keys[2].kind==ConfigActionKind::VoiceEdit&&p.keys[2].modifiers==3&&p.keys[2].usage==0x08);CHECK(p.keys[1].kind==ConfigActionKind::Hotkey&&p.keys[1].modifiers==0&&p.keys[1].usage==0x28);CHECK(p.keys[3].kind==ConfigActionKind::Hotkey&&p.keys[3].modifiers==0&&p.keys[3].usage==0x2a);write_roundtrip();chunk_zero_replaces_incomplete_write();read_roundtrip();status_roundtrip();motion_status_roundtrip();maximum_diagnostics_remain_bounded();audio_config_projection();storage();large_config_save_read_and_restart_roundtrip();rejects_malformed_projection_without_throwing();accepts_legal_read_flags_and_rejects_reserved();normalizes_windows_feature_report_shapes();return 0;}

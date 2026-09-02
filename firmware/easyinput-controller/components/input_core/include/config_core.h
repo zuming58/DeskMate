@@ -17,7 +17,7 @@ inline constexpr size_t kConfigReadChunkBytes = 49;
 inline constexpr size_t kConfigFeaturePayloadBytes = 63;
 inline constexpr size_t kConfigWriteFeaturePayloadBytes = 63;
 inline constexpr size_t kConfigReadRequestPayloadBytes = 16;
-inline constexpr size_t kConfigStatusMaxJsonBytes = 1536;
+inline constexpr size_t kConfigStatusMaxJsonBytes = 2048;
 uint16_t config_crc16_ccitt(const uint8_t*, size_t);
 enum class ConfigSource : uint8_t { DeskMate=0, Legacy=1, Default=2, Recovery=3 };
 enum class ConfigReceiveStatus : uint8_t { Accepted, Complete, Rejected };
