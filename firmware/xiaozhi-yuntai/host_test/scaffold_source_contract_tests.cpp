@@ -77,6 +77,8 @@ int main() {
     const auto sdkconfig_defaults = ReadAll(SDKCONFIG_DEFAULTS_PATH);
     const auto stage1_reference_defaults =
         ReadAll(SDKCONFIG_STAGE1_REFERENCE_DEFAULTS_PATH);
+    const auto stage2_reference_defaults =
+        ReadAll(SDKCONFIG_STAGE2_REFERENCE_DEFAULTS_PATH);
     const auto partition_table = ReadAll(PARTITION_TABLE_PATH);
     const auto module_gitignore = ReadAll(MODULE_GITIGNORE_PATH);
     const auto link_contract = ReadAll(LINK_CONTRACT_PATH);
@@ -140,6 +142,25 @@ int main() {
     CHECK(Occurrences(stage1_reference_defaults,
                       "CONFIG_DESKMATE_T10DC_PITCH_DIRECTION=1") == 1);
     CHECK(Occurrences(stage1_reference_defaults, "_VERIFIED=y") == 12);
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_SERVO_CALIBRATION_ENABLE=y"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_YAW_CENTER_PULSE_US=1500"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_YAW_MINIMUM_PULSE_US=1055"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_YAW_MAXIMUM_PULSE_US=1944"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_PITCH_CENTER_PULSE_US=1500"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_PITCH_MINIMUM_PULSE_US=1277"));
+    CHECK(Contains(stage2_reference_defaults,
+                   "CONFIG_DESKMATE_T10DC_PITCH_MAXIMUM_PULSE_US=1722"));
+    CHECK(Occurrences(stage2_reference_defaults,
+                      "CONFIG_DESKMATE_T10DC_YAW_DIRECTION=1") == 1);
+    CHECK(Occurrences(stage2_reference_defaults,
+                      "CONFIG_DESKMATE_T10DC_PITCH_DIRECTION=1") == 1);
+    CHECK(Occurrences(stage2_reference_defaults, "_VERIFIED=y") == 12);
     CHECK(Contains(partition_table,
                    "nvs,      data, nvs,     0x9000,    0x4000,"));
     CHECK(Contains(partition_table,

@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T10D-D simple manual control contract and Xiaozhi Stage 2 build complete
+
+- Root cause from the user-present no-motion attempt is now closed: Xiaozhi returned `CENTER_REQUIRED` with `completed_output_count=0`. The request route worked, but the old UI armed and stepped without first establishing a provisional center, so the endpoint rejected the action before PWM. This was not evidence of a failed servo.
+- Froze `T10D_D_SIMPLE_MANUAL_CONTROL_V1_FROZEN`. The operator-facing surface is one environment confirmation/start action, press-and-hold left/right/up/down, return to center and emergency stop. Windows hides axis selection, the four wire attestations, 1..5 second one-use tokens and the three evidence layers, and serially expands each action into the unchanged T10C/T10D-A operations. Link `0x20/0x21` and HID `0x16/0x17` are byte-for-byte unchanged; EasyInput firmware requires no update.
+- Added `profiles/stage2-reference-manual-control.defaults`. The already flashed Stage 1 image is limited to 1489..1511 us and cannot support useful hold control. Stage 2 restores the fixed-reference ranges previously exercised by this same assembled unit: yaw GPIO11 1055..1944 us and pitch GPIO12 1277..1722 us, both centered at 1500 us with fixed 11 us steps. Default `sdkconfig.defaults` remains locked; normal `MOTION`, presets, dancing and expression-linked movement remain disabled.
+- Verification passed Xiaozhi Host CTest `12/12`, `git diff --check` and an independent exact ESP-IDF v5.5.3 fixed-partition build. Generated config contains all Stage 2 values. `app-flash_args` contains only app address `0x100000`. App is `212720` bytes / SHA-256 `C47B6037C3424E4902D64B1AC732B8A8B4749B772632CE6C8F965B7EEBAF7AA2`; unchanged partition table is `3072` bytes / SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`.
+- Classification: `CONTRACT_FROZEN / XIAOZHI_STAGE2_CODE_BUILD_CONFIRMED / WINDOWS_IN_PROGRESS / HIL_NOT_RUN`. No application or device/port was accessed and no Flash/NVS/eFuse, erase, flash, monitor, OLED, PWM or servo operation occurred. Next: receive the software task's exact branch/HEAD/tests/package, integrate and rebuild, then request one new explicit Xiaozhi app-only flash authorization for the exact final image before user-present hold/release/center/e-stop testing.
+
 ## 2026-09-02 - Xiaozhi Stage 1 reference-baseline app-only flash and exact verification confirmed
 
 - After the exact authorization card was shown, the operator explicitly authorized the identified Xiaozhi target for app-only flashing. A same-operation preflight reconfirmed one ESP32-S3 target and the candidate SHA-256 before any write; private device identity was not persisted in Git or diagnostics.

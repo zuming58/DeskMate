@@ -83,3 +83,20 @@ The reproducible overlay is
 `sdkconfig.defaults` remains Stage 0 locked. This overlay is only a user-present
 micro-motion trial candidate; it does not enable normal `MOTION`, presets,
 dancing or expression-linked movement.
+
+## 2026-09-02 simplified manual-control follow-on
+
+The Stage 1 image was flashed and passed status plus yaw-selection HIL, but the
+first output attempt ended with `CENTER_REQUIRED` and
+`completed_output_count=0`; therefore no servo output occurred. The operator
+also rejected the exposed four-checkbox/short-lease workflow and requested one
+simple start action followed by press-and-hold direction controls.
+
+The existing wire already supports a terminal-gated software macro, so no Link
+or HID bytes change. A separate
+`profiles/stage2-reference-manual-control.defaults` restores the fixed
+reference software envelopes (yaw 50..130 degrees, pitch 70..110 degrees) as
+1055..1944 us and 1277..1722 us while retaining the 1500 us center and fixed
+11 us step. This same assembled unit previously ran those fixed-reference nod
+and rotation paths successfully. The overlay remains a candidate, keeps normal
+`MOTION` disabled and requires a new exact app-only build/authorization/HIL.

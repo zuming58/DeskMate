@@ -105,4 +105,18 @@ That overlay permits only the frozen one-axis manual-calibration flow and a
 single 11 us step around 1500 us within 1489..1511 us. It is not the production
 motion profile and does not enable presets or expression-linked movement.
 
+The T10D-D press-and-hold candidate keeps the same wire and fixed one-degree
+operation but uses a separate reference operating envelope:
+
+```powershell
+$manualRoot = (Resolve-Path '.').Path
+$manualSdk = Join-Path $manualRoot 'build-stage2-reference-manual-control-enabled/sdkconfig'
+idf.py -C firmware/xiaozhi-yuntai -B build-stage2-reference-manual-control-enabled `
+  -D "SDKCONFIG=$manualSdk" `
+  -D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;profiles/stage2-reference-manual-control.defaults" build
+```
+
+It remains a manual HIL candidate. The normal defaults stay locked and normal
+`MOTION`, presets and expression-linked movement stay disabled.
+
 干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T10A/T10C 都是 code-only 包，不是烧录候选；任何接线变更、设备识别、Flash 操作或舵机校准仍必须等用户在场并取得新的明确授权。

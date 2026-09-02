@@ -1,5 +1,13 @@
 # Decisions
 
+## D067 - Simple manual control is a Windows orchestration over the frozen calibration wire
+
+- Date: 2026-09-02
+- Decision: the normal manual-servo UI contains one environment confirmation/start action, four press-and-hold directions, return to center and emergency stop. It does not expose four independent attestations, ARM lease duration, token generation, axis confirmation, fixed-step buttons or three large evidence cards.
+- Compatibility: DeskMate Link `0x20/0x21` and EasyInput HID `0x16/0x17` remain byte-for-byte unchanged. Windows serially expands start, hold and center into the existing select-axis, fresh one-use ARM, center, one-degree step and recenter operations. There is one request in flight, no backlog/replay and at most four hold steps per second.
+- Hardware: the flashed Stage 1 1489..1511 us micro-envelope cannot support hold control. A separate Stage 2 overlay may restore the exact fixed-reference yaw 1055..1944 us and pitch 1277..1722 us envelopes previously exercised by this same assembled unit; these values stay local to Xiaozhi and normal `MOTION` remains disabled.
+- Acceptance: the observed no-motion attempt is classified as a truthful `CENTER_REQUIRED` rejection with output count zero, not a PWM failure. New software must establish both centers first. Stage 2 still requires exact build evidence, new app-only authorization and user-present direction/release/center/e-stop HIL.
+
 ## D066 - Manual servo calibration requires a terminal status gate and three separate evidence layers
 
 - Date: 2026-09-02
