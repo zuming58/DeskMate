@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Editable motion programs need a strict compiler before they need a transport
+
+- Symptom: a visual beat editor can look complete while loose JSON, renderer-owned storage or a hidden fallback to existing manual/preset commands makes future hardware execution ambiguous or unsafe.
+- Practice: validate one exact semantic document in the main process, persist it atomically with a bounded count, drive software preview from the same normalized program and put real execution behind a separate readiness-gated adapter.
+- Rule: a software preview is not motion evidence. Until an additive Host/Link contract is frozen and both endpoints exist, the production adapter must stay visibly unavailable and must never synthesize choreography from raw angles, PWM, GPIO or repeated manual steps.
+
 ## Rich task progress needs a smaller trust boundary than conversation text
 
 - Symptom: a coarse lifecycle hook can say that Codex is working or waiting, but it cannot truthfully answer which task or milestone is active without reading broad task content.

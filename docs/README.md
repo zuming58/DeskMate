@@ -4,6 +4,7 @@
 
 - [T15D custom choreography editor design](design/t15d-choreography-editor-v1.md)
 - [T15D custom choreography task](../flow/tasks/T15D-custom-choreography-editor.md)
+- [T15D Windows choreography editor handoff](handoffs/t15d-desktop-choreography-editor-2026-09-02.md)
 - [T15/T16 three-end integration, flash evidence and acceptance gate](handoffs/t15-t16-three-end-integration-2026-09-02.md)
 - [T15 EasyInput motion preset host contract](../contracts/deskmate-host/easyinput-motion-presets-v1.md)
 - [T15 DeskMate Link motion preset contract](../contracts/deskmate-link/t15-motion-presets-v1.md)

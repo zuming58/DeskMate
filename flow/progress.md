@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - T15D Windows choreography editor complete; entity wire remains blocked
+
+- Windows-only delivery branch is `codex/t15d-desktop-choreography-editor`. Work started from the accepted T15/T16 integration implementation `5d0e0ce`, then incorporated the main-Agent documentation baseline `32c5540` before the implementation commit `26b8321`.
+- The action page retains the four fixed presets as `快速动作` and adds a separate bounded custom choreography editor. It provides 2–8 aligned Yaw, Pitch and Expression beats (six by default), 400/600/800/1000 ms beat time, 1–3 repeats, 1–20-character names, at most eight locally persisted programs, copy/delete and a one-cursor software preview. Same-column values preview simultaneously; columns progress sequentially; preview stop/completion restores center and the latest external expression.
+- The Electron-owned store validates an exact semantic document and uses atomic write/readback under `userData`; renderer APIs never reveal the path. The production adapter is intentionally `not-ready` with reason `choreography-transport-not-frozen`, so entity execution is visibly disabled and cannot fall through to fixed presets, manual one-degree steps, angles, PWM, pulse width, duty cycle or GPIO.
+- Verification passed: `npm ci --include=dev`; focused T15D tests `8/8`; full `npm test` `358/358`; `npm run build:desktop`; isolated package at `release-t15d-choreography-editor/win-unpacked`; packaged native bridge self-test; `git diff --check`; tracked-path and secret-assignment scans. Both firmware trees are unchanged.
+- Package evidence: `DeskMate.exe` is `202690560` bytes / SHA-256 `372FB38C031AF51810FE227952BE400A58CE472E10196BF63D4C5CD905BD1468`; input bridge is `153516937` bytes / `719BCB694887034EB7AF25ECFC17A46D71BC1F35A6FE333258A43258647AE4D5`; `app.asar` is `112918905` bytes / `C20CE2B740D4FDB9D6C9EE3B764EA261C3BF8ED0342D510F7EDE0441D989CFAC`.
+- Classification: `T15D_WINDOWS_EDITOR_CODE_BUILD_CONFIRMED / ENTITY_EXECUTION_FAIL_CLOSED / WIRE_NOT_FROZEN / HIL_NOT_RUN`. No application, device, port or hardware was accessed. Next: the main Agent audits this branch; only after the four T15 presets pass physical HIL may it freeze additive Host/Link vectors and implement the two firmware endpoints.
+
 ## 2026-09-02 - T15 preset UX clarified and T15D choreography design opened
 
 - User review found two competing actions on the preset page: the left-side arrow buttons executed immediately while the right-side selection had no visible start action. That ambiguity is removed on `codex/t15-t16-integration@5d0e0ce`: one selection, one repeat selection and one explicit `开始执行` button; the preview has no directional buttons; status has a visible retry; transient startup status reads retry three times and use Chinese recovery copy.
