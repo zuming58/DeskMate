@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T10D-C Stage 0 protocol HIL confirmed; servo output remains untested
+
+- Exact firmware source is `codex/xiaozhi-t10d-c-real-servo-adapter@c812ee0668bcdbbe8f640db617e60db02dc1eeac`. The user-authorized app-only image was written at `0x100000`; exact readback matched all `212704` bytes and SHA-256 `C38617DB94E8C17FF7D45EA5B40A8DA69FB29C289D9CC72E20DC666B7E32CCF4`.
+- The fixed partition table was not written and is byte-identical before/after/build (`3072` bytes, SHA-256 `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`). A complete pre-flash 6 MiB `ota_0` backup and a Git-external flash receipt were retained under ignored build evidence.
+- User-present calibration-panel evidence reports `状态已读取`: the previous `UNKNOWN_TYPE (1)` is gone and the EasyInput -> DeskMate Link -> Xiaozhi `0x21` status round trip completed. Xiaozhi returned owner `locked`, selected axis `none` and fixed step `1°`, matching the default-disabled calibration gate, unavailable adapter and zero-PWM design.
+- The generic top-right `DeskMate Link: unavailable` indicator conflicts with the successful terminal status response. It is provisionally classified as an unrefreshed/general Link state or stale UI cache, not as proof of a physical Link failure; root cause remains open.
+- Classification: `STAGE0_PROTOCOL_HIL_CONFIRMED / DEFAULT_LOCKED / SERVO_OUTPUT_NOT_TESTED / STAGE1_PROFILE_BLOCKED`. No Stage 1 profile, PWM, GPIO11/GPIO12 output, servo movement, OLED command or audio operation was attempted. Do not start Stage 1 until the user-present power, common-ground, unloading, cutoff and measured axis-mapping evidence is complete and separately authorized.
+
 ## 2026-09-02 - T10D-C Xiaozhi real servo adapter Stage 0 package complete
 
 - Real HIL established that the installed Xiaozhi board responds `UNKNOWN_TYPE (1)` to T10C manual-calibration status because its latest authorized image is T09.1: T09 app-only was flashed on 2026-08-30 (`b26e99e...`), T09.1 app-only on 2026-08-31 (`65144a1...`) with exact readback and normal boot, and no T10A/T10C/T10D manual-motion change was flashed afterward. It is neither stock/葡萄 firmware nor an unflashed board.
