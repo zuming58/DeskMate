@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T10D-D movement HIL blocked before output by desktop request-ID regression
+
+- The exact Stage 2 package reached the manual-control page with EasyInput writable and DeskMate Link `connected`, but `Start manual control` failed before center establishment. The user-visible result was `stale`; the direction pad correctly remained hidden because the manual session never became active.
+- The user's fresh redacted diagnostic reports `manualCalibration.request={kind:status,id:8}`, `accepted=false`, `transport=stale`, while both EasyInput HID collections remain writable and DeskMate Link remains connected. No Xiaozhi terminal payload or output count was produced, so this is not servo, adapter or Stage 2 firmware evidence.
+- Root cause is the Windows process-local `ManualCalibrationController.requestCounter`: it restarts from zero when DeskMate restarts, while EasyInput retains `max_request_id_` across that restart in the same USB mount epoch and rejects lower IDs as stale under the frozen host contract.
+- The Windows-only repair was sent to the existing `DeskMate软件开发` task with source baseline `codex/t10d-d-simplified-manual-control@b5673e2`. Required acceptance is a monotonic request ID across desktop process restarts, deterministic first-run/corruption/uint32-boundary tests, full regression and a fresh isolated Windows package. No firmware, port or device action is authorized for that task.
+- Classification: `STAGE2_APP_FLASH_VERIFIED / PHYSICAL_OUTPUT_NOT_RUN / WINDOWS_HIL_BLOCKED_REQUEST_ID_STALE`. Next: receive and audit the Windows fix, merge it into the integration branch, rebuild/relaunch the exact package, then resume start/center and four-direction user observation without reflashing either board.
+
 ## 2026-09-02 - Xiaozhi Stage 2 app-only flash verified; movement HIL underway
 
 - After the exact `COM13` Xiaozhi target was freshly identified as ESP32-S3, the user explicitly confirmed `确认烧录 COM13 小智`. The same private hardware identity matched again immediately before and after the write; it was not persisted in this repository or diagnostics.
