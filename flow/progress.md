@@ -1,5 +1,16 @@
 # Progress log
 
+## 2026-09-02 - T16 desktop actions and Codex task briefing complete
+
+- Exact delivery branch is `codex/t16-desktop-actions-briefing`, created from `codex/t10d-d-simplified-manual-control@2efe4e0b4cc430c235e3ae4df333f1a7ffc6bda3`. The tested implementation commit is `73c7a1e5bcbac278d2d0008c1f761ffcfcc33712`; the final documentation pointer is the branch HEAD containing this record.
+- Registered application actions now persist an explicit `voiceEnabled` policy. Existing and newly registered actions default to disabled. Only an opaque registered UUID with that policy enabled can be opened directly from companion speech; paths, arguments, URLs, shell commands, unregistered labels and disabled actions remain fail closed.
+- Added the frozen `codex-task-brief-v1` optional repository-local reporter/receiver. It accepts only the exact privacy-safe schema, rejects stale sequences and unsafe text, retains at most eight sanitized task snapshots, throttles ordinary working announcements to 15 seconds and answers status questions from deterministic templates. The existing content-free `codex-hook-v1` remains the authoritative coarse fallback.
+- Conversation listening/speech keeps priority over task announcements; displaced announcements are dropped instead of replayed. Renderer surfaces receive no opaque task key, target path, prompt, response, command, identifier or secret.
+- Motion presets now expose a bounded local `repeatCount` of `1..3`, with attention/search defaulting to one and nod/dance to two. `run_motion_preset` remains explicitly reserved and produces no hardware output until the T15 transport is integrated.
+- Verification passed: `npm ci --include=dev`; full `npm test` `332/332`; `npm run build:desktop`; isolated Windows packaging at `release-t16-desktop-actions-briefing/win-unpacked`; packaged native bridge `--protocol-self-test`; `git diff --check`; ASCII tracked-path and secret-token scans. Both firmware trees are unchanged.
+- Package evidence: `DeskMate.exe` is `202690560` bytes / SHA-256 `D8F9EAB648520EC86A4F73598DFA5FF11E8FEB14FBEA75AD74F1F0CC32B42355`; `resources/input-bridge/DeskMate.InputBridge.exe` is `153512841` bytes / `EE876DCD54C904C756BD7B5101443408DD1261A242FADC6523BF341DE68FA3C8`; `resources/app.asar` is `112837520` bytes / `9E5FDB169A4E90DCA337AAF4838FC133C6548650A61669A2BF80FA60ADF3BF10`.
+- Classification: `T16_WINDOWS_CODE_BUILD_CONFIRMED / REAL_APP_OPEN_AND_TASK_REPORTER_HIL_PENDING / MOTION_TRANSPORT_NOT_WIRED`. No application was launched or controlled, and no device, port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred. Next: integrate this branch with T15 when its frozen motion transport is present, then run user-controlled application-open and repository-local reporter acceptance.
+
 ## 2026-09-02 - T10D-D manual motion HIL accepted; T15/T16 opened
 
 - 用户在精确急停恢复软件包与已烧录 Stage 2 双板固件上完成真机复验，并明确确认“可以了，没问题了，验收通过”。接受范围包括 Yaw/Pitch 四向语义、按住连续移动、松手停止继续发步、双轴回中、急停锁存，以及显式解除急停后回中并重新进入手动控制。

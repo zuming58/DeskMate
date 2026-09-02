@@ -12,8 +12,9 @@
 
 - Date: 2026-09-02
 - Decision: a registered Windows application may launch without a per-command confirmation only after the user explicitly enables voice launch for that opaque AppAction. Existing registrations migrate disabled; raw paths, arguments, URLs, shell commands and unregistered targets remain invalid.
-- Codex: `codex-hook-v1` remains authoritative for coarse lifecycle. Richer progress is accepted only from an opt-in `codex-task-brief-v1` reporter carrying an opaque task key, explicit user-facing task label, seven-state value, bounded milestone and sequence. DeskMate does not inspect prompts, replies, tool parameters/results, paths or window titles.
+- Codex: `codex-hook-v1` remains authoritative for coarse lifecycle. Richer progress is accepted only from an opt-in repository-local `codex-task-brief-v1` reporter carrying an opaque task key, explicit user-facing task label, bounded state, milestone and sequence. DeskMate does not inspect prompts, replies, tool parameters/results, paths or window titles and does not install a global Codex plugin.
 - Presentation: task start speaks once, ordinary milestones are throttled to at most one per 15 seconds, and waiting/completed/error may speak immediately. Voice status questions use deterministic stored facts and never ask the language model to invent progress or completion percentages.
+- Compatibility: this supersedes D065's per-call confirmation only for explicitly voice-enabled registered applications. It does not weaken AppAction target validation. Motion intents remain data-only until the separate frozen T15 transport is integrated.
 
 ## D075 - Emergency-stop clearing is an explicit verified restart transaction
 
