@@ -38,6 +38,9 @@ export class DesktopBridgeAdapter {
   constructor(bridge = globalThis.window?.desktopBridge) { this.bridge = bridge; }
   async capabilities() { return this.bridge?.getCapabilities ? this.bridge.getCapabilities() : { supported: false, platform: "web" }; }
   async refreshLinkDiagnostics() { return this.bridge?.refreshLinkDiagnostics ? this.bridge.refreshLinkDiagnostics() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async getManualCalibrationStatus() { return this.bridge?.getManualCalibrationStatus ? this.bridge.getManualCalibrationStatus() : { available: false, gate: "unavailable", controlsEnabled: false }; }
+  async queryManualCalibration() { return this.bridge?.queryManualCalibration ? this.bridge.queryManualCalibration() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async sendManualCalibrationCommand(value) { return this.bridge?.sendManualCalibrationCommand ? this.bridge.sendManualCalibrationCommand(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -65,6 +68,10 @@ export class DesktopBridgeAdapter {
   async stopCompanionConversation() { return this.bridge?.stopCompanionConversation ? this.bridge.stopCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async interruptCompanionConversation() { return this.bridge?.interruptCompanionConversation ? this.bridge.interruptCompanionConversation() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getCompanionConversationStatus() { return this.bridge?.getCompanionConversationStatus ? this.bridge.getCompanionConversationStatus() : { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "desktop-bridge-unavailable" }, audioSink: { available: false, reason: "desktop-bridge-unavailable" }, service: { configured: false } }; }
+  async getCompanionPreferences() { return this.bridge?.getCompanionPreferences ? this.bridge.getCompanionPreferences() : { preferences: null, wakeWord: { available: false, enabled: false, reason: "desktop-bridge-unavailable" } }; }
+  async setCompanionPreferences(value) { return this.bridge?.setCompanionPreferences ? this.bridge.setCompanionPreferences(value) : { preferences: null, wakeWord: { available: false, enabled: false, reason: "desktop-bridge-unavailable" } }; }
+  async setCompanionStartOptions(value) { return this.bridge?.setCompanionStartOptions ? this.bridge.setCompanionStartOptions(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async testCompanionCallAction() { return this.bridge?.testCompanionCallAction ? this.bridge.testCompanionCallAction() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async editSelectedText(instruction, { signal } = {}) {
     if (!this.bridge?.editSelectedText) throw new Error("语音编辑仅在 DeskMate 桌面版可用");
@@ -81,6 +88,7 @@ export class DesktopBridgeAdapter {
   onVoiceCancel(listener) { return this.bridge?.onVoiceCancel ? this.bridge.onVoiceCancel(listener) : () => {}; }
   onKeyDiagnostic(listener) { return this.bridge?.onKeyDiagnostic ? this.bridge.onKeyDiagnostic(listener) : () => {}; }
   onInputBridgeStatus(listener) { return this.bridge?.onInputBridgeStatus ? this.bridge.onInputBridgeStatus(listener) : () => {}; }
+  onManualCalibrationStatus(listener) { return this.bridge?.onManualCalibrationStatus ? this.bridge.onManualCalibrationStatus(listener) : () => {}; }
   onHostActionResult(listener) { return this.bridge?.onHostActionResult ? this.bridge.onHostActionResult(listener) : () => {}; }
   onCodexAgentState(listener) { return this.bridge?.onCodexAgentState ? this.bridge.onCodexAgentState(listener) : () => {}; }
   onCompanionConversationEvent(listener) { return this.bridge?.onCompanionConversationEvent ? this.bridge.onCompanionConversationEvent(listener) : () => {}; }

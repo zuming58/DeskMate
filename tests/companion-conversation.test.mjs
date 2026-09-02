@@ -13,7 +13,7 @@ const { CompanionConversationController } = require("../electron/companion-conve
 const { CompanionMemoryStore } = require("../electron/companion-memory.cjs");
 const { claimOutboxEvents, completeOutboxEvent, createOutboxState, enqueueOutboxEvent, recoverOutbox } = require("../electron/companion-memory-outbox.cjs");
 const { COMPRESSION, FLAGS, MAX_FRAME_BYTES, decodeFrame, encodeFrame, encodeJsonEvent, EVENTS, MESSAGE_TYPES, SERIALIZATION } = require("../electron/doubao-realtime-codec.cjs");
-const { DOUBAO_PROTOCOL_APP_KEY, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
+const { DOUBAO_PROTOCOL_APP_KEY, STRICT_HALF_DUPLEX_INPUT_MODE, DoubaoRealtimeSession, dialogErrorStatusClass, protocolErrorReason, providerFailureBucket, translateFrame } = require("../electron/doubao-realtime.cjs");
 const { acceptsForegroundSessionEvent, emergencyStopForegroundSession, finishForegroundSession, initialForegroundSession, startForegroundSession } = require("../electron/foreground-session.cjs");
 
 function turn(eventId, text = "你好") {
@@ -100,12 +100,12 @@ test("Doubao codec accepts every documented flag layout, identifiers, gzip and f
   assert.doesNotMatch(JSON.stringify(translateFrame(decodeFrame(errorFrame), { replyText: "" })), /private provider content/);
   assert.deepEqual([
     providerFailureBucket(45000001), providerFailureBucket(45000002), providerFailureBucket(45000151),
-    providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
-  ], ["request-invalid", "empty-audio", "audio-format-invalid", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
+    providerFailureBucket(52000042), providerFailureBucket(55000031), providerFailureBucket(55000999), providerFailureBucket(123), providerFailureBucket("private"),
+  ], ["request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error", "unknown-provider-error"]);
   assert.deepEqual([
     dialogErrorStatusClass(undefined), dialogErrorStatusClass(""), dialogErrorStatusClass({ private: true }),
-    dialogErrorStatusClass("45000002"), dialogErrorStatusClass(55000031), dialogErrorStatusClass(123),
-  ], ["missing", "missing", "invalid", "empty-audio", "server-busy", "unknown-provider-error"]);
+    dialogErrorStatusClass("45000002"), dialogErrorStatusClass(52000042), dialogErrorStatusClass(55000031), dialogErrorStatusClass(123),
+  ], ["missing", "missing", "invalid", "empty-audio", "audio-idle-timeout", "server-busy", "unknown-provider-error"]);
   const malformed = Buffer.from(encodeJsonEvent(EVENTS.START_CONNECTION, {}));
   malformed.writeInt32BE(999, 8);
   assert.throws(() => decodeFrame(malformed), /doubao-(connect-id|payload-size)-invalid/);
@@ -137,6 +137,9 @@ test("Doubao adapter performs the binary handshake and bounds PCM chunks", async
   assert.equal(socket.options.headers["X-Api-Access-Key"], "access");
   assert.equal(socket.options.headers["X-Api-App-Key"], DOUBAO_PROTOCOL_APP_KEY);
   assert.deepEqual(socket.frames.slice(0, 2).map((frame) => frame.event), [EVENTS.START_CONNECTION, EVENTS.START_SESSION]);
+  assert.equal(STRICT_HALF_DUPLEX_INPUT_MODE, "keep_alive");
+  assert.deepEqual(socket.frames[1].payloadJson.asr, { extra: { end_smooth_window_ms: 5000, enable_custom_vad: true } });
+  assert.equal(socket.frames[1].payloadJson.dialog.extra.input_mod, "keep_alive");
   assert.equal(session.sendAudio(Buffer.from([1, 2, 3])), true);
   assert.equal(socket.frames.at(-1).event, EVENTS.AUDIO_TASK_REQUEST);
   assert.equal(session.sendAudio(Buffer.alloc(64 * 1024 + 1)), false);
@@ -664,5 +667,109 @@ test("the first real TTS audio frame enters working even if the provider omits t
   assert.equal(controller.snapshot().state, "speaking");
   assert.equal(controller.snapshot().echoGuard.active, true);
   assert.equal(states.at(-1), "working");
+  await controller.stop();
+});
+
+test("synchronous arrival phase closes the event-chain race before tts start is handled", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => commits.push(turn),
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "arrival-race", generation: 1 });
+
+  provider.emit({ type: "tts.start" });
+  assert.equal(source.push(Buffer.from([1, 2])), true);
+  provider.emit({ type: "asr.final", text: "reflected-provider-audio" });
+  await controller.eventChain;
+
+  assert.equal(controller.snapshot().state, "speaking");
+  assert.equal(provider.audio.length, 0);
+  assert.equal(provider.interruptions, 0);
+  assert.equal(sink.interruptions, 0);
+  assert.deepEqual(commits, []);
+  assert.equal(controller.snapshot().turnLifecycle.asrFinalsSuppressed, 1);
+  assert.equal(controller.snapshot().turnLifecycle.asrFinalArrivalPhases.speaking, 1);
+
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  await controller.stop();
+});
+
+test("thinking blocks uplink and late ASR without cancelling the provider or speaker", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => commits.push(turn),
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "thinking-gate", generation: 1 });
+
+  provider.emit({ type: "asr.final", text: "real-user-turn" });
+  assert.equal(source.push(Buffer.from([3, 4])), true);
+  provider.emit({ type: "asr.final", text: "late-asr-copy" });
+  provider.emit({ type: "chat.final", text: "one sentence is a complete provider answer" });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([5, 6]) });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+
+  assert.deepEqual(commits.map((turn) => turn.content), ["real-user-turn", "one sentence is a complete provider answer"]);
+  assert.equal(provider.audio.length, 0);
+  assert.equal(provider.interruptions, 0);
+  assert.equal(sink.interruptions, 0);
+  const lifecycle = controller.snapshot().turnLifecycle;
+  assert.equal(lifecycle.asrFinalsAccepted, 1);
+  assert.equal(lifecycle.asrFinalsSuppressed, 1);
+  assert.equal(lifecycle.asrFinalArrivalPhases.listening, 1);
+  assert.equal(lifecycle.asrFinalArrivalPhases.thinking, 1);
+  assert.equal(lifecycle.ttsTurnStarted, 1);
+  assert.equal(lifecycle.ttsTurnCompleted, 1);
+  assert.equal(lifecycle.ttsTurnAbandoned, 0);
+  assert.equal(lifecycle.chatFinalTtsEndPairs, 1);
+  assert.equal(lifecycle.lastTtsTurnOutcome, "completed");
+  await controller.stop();
+});
+
+test("only explicit interruption abandons an open TTS turn", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "explicit-interrupt-only", generation: 1 });
+  provider.emit({ type: "chat.final", text: "provider answer" });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([7, 8]) });
+  await controller.eventChain;
+
+  assert.equal((await controller.interrupt("user")).ok, true);
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  const lifecycle = controller.snapshot().turnLifecycle;
+  assert.equal(provider.interruptions, 1);
+  assert.equal(lifecycle.ttsTurnStarted, 1);
+  assert.equal(lifecycle.ttsTurnCompleted, 0);
+  assert.equal(lifecycle.ttsTurnAbandoned, 1);
+  assert.equal(lifecycle.lastTtsTurnOutcome, "manual");
+  assert.equal(lifecycle.chatFinalTtsEndPairs, 1);
   await controller.stop();
 });

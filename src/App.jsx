@@ -140,7 +140,7 @@ function AppContent() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState("");
   const lastBoardConnected = useRef(null);
-  const { event, state, mergeRuntime, updateCompanion } = useAppStore();
+  const { event, state, patch, mergeRuntime, updateCompanion } = useAppStore();
   const stopActionRef = useRef(null);
   if (!stopActionRef.current) stopActionRef.current = createCompanionStopAction({ getBridge: () => globalThis.desktopBridge, updateCompanion });
   const stopCompanion = stopActionRef.current.stop;
@@ -183,6 +183,11 @@ function AppContent() {
   }), []);
   useEffect(() => voiceAdapters.desktop.onHostActionResult((result) => {
     if (result?.kind === "fixed-text") setToast(result?.ok ? `已输入固定文字（${result.bytes || 0} 字节）` : `固定文字输入失败：${result?.reason || "未知错误"}`);
+    else if (result?.kind === "companion-call") {
+      if (result?.reason === "host-action-duplicate") return;
+      const success = { "start-listening": "已开始陪伴并进入倾听", "listening-reset": "正在倾听，空闲计时已重置", "interrupt-listen": "已打断回答并继续倾听" }[result?.action];
+      setToast(result?.ok ? success || "AI 陪伴呼唤已响应" : result?.reason === "companion-call-busy" ? "陪伴会话正在切换，请稍候" : `AI 陪伴呼唤失败：${result?.reason || "未知错误"}`);
+    }
     else if (result?.reason === "host-action-duplicate") return;
     else setToast(result?.ok ? `已打开 ${result.label || "应用"}` : `打开应用失败：${result?.reason || "未找到映射"}`);
   }), []);
@@ -232,6 +237,18 @@ function AppContent() {
     globalThis.desktopBridge.getCompanionConversationStatus?.().then(updateCompanion).catch(() => {});
     return globalThis.desktopBridge.onCompanionConversationEvent?.(updateCompanion);
   }, [updateCompanion]);
+  useEffect(() => {
+    let active = true;
+    voiceAdapters.desktop.getCompanionPreferences().then((value) => {
+      if (!active || !value?.preferences) return;
+      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs } });
+      updateCompanion({ preferences: value.preferences, savedPreferences: { revision: value.revision, endSmoothWindowMs: value.preferences.endSmoothWindowMs, idleTimeoutMs: value.preferences.idleTimeoutMs }, wakeWord: value.wakeWord });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [patch, updateCompanion]);
+  useEffect(() => {
+    voiceAdapters.desktop.setCompanionStartOptions({ microphoneSource: state.settings.microphoneSource, microphoneId: state.settings.microphoneId }).catch(() => {});
+  }, [state.settings.microphoneSource, state.settings.microphoneId]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;

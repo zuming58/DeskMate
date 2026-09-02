@@ -37,3 +37,9 @@ The first T11 implementation used the same local encoder for both client and fak
 The official linked Python sample creates one WebSocket/session for continuous turns. Event `359` completes a TTS turn and, for microphone mode, releases the initial greeting gate once; it does not start another session. Session and connection finish requests occur only during explicit close. The documented event `599` payload is `DialogCommonError` with `status_code` and `message`.
 
 The fixed product reference also distinguishes `tts.end` from `dialog.error`, but its raw provider reporting violates DeskMate's diagnostic boundary. T11D.4 therefore independently keeps event `359` as the same-session turn boundary and maps only the official `status_code` to a closed class. No source from the unlicensed reference was copied.
+
+## 2026-09-01 strict half-duplex silence-policy follow-up
+
+The current official protocol page documents two microphone silence controls that are newer and more specific than the linked legacy sample: `keep_alive` when the microphone is muted/cannot upload audio, and `push_to_talk` plus event `400` for explicit press-to-talk. Its error table identifies `52000042 DialogAudioIdleTimeoutError` and recommends `keep_alive`.
+
+DeskMate is a continuous microphone conversation, not push-to-talk. Its strict half-duplex echo guard deliberately stops upstream PCM only while TTS is audible/draining. T11D.5 therefore independently changes only the session declaration to `keep_alive`; it does not copy the official Python source, send EndASR for each answer, weaken the echo guard or reinterpret event `599` as success.

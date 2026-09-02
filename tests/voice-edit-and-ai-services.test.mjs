@@ -100,7 +100,7 @@ test("companion memory commits every turn before summaries and keeps candidates 
     store.appendTurn({ sessionId: "session-1", role: "assistant", content: "记住啦" });
     store.upsertDailySummary({ day: "2026-08-29", summary: "用户明确偏好深色主题。", sourceTurnCount: 2 });
     const candidate = store.addCandidate({ day: "2026-08-29", kind: "preference", summary: "用户偏好深色主题", sourceTurnIds: [first.id] });
-    assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 2, dailySummaries: 1, pendingCandidates: 1, longTermMemories: 0, embeddings: 0 });
+    assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 2, dailySummaries: 1, pendingCandidates: 1, longTermMemories: 0, embeddings: 0, unprocessedTurns: 2, indexedChunks: 0 });
     assert.equal(store.list({ filter: "candidates" })[0].content, "用户偏好深色主题");
     assert.equal(store.setCandidateState(candidate.id, "accepted").ok, true);
     assert.equal(store.status().longTermMemories, 1);

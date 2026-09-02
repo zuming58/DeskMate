@@ -114,6 +114,62 @@ internal static class VendorReportProtocol
         return report[2] == 0 ? ttlMs == 0 : ttlMs is >= 1 and <= 600000;
     }
 
+    public static bool IsValidManualCalibrationRequest(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x16 ||
+            !report.Slice(1, 4).SequenceEqual("DMCR"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[8] != 0 ||
+            report.Slice(38).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(36, 2)) != Crc16Ccitt(report.Slice(1, 35)) ||
+            BitConverter.ToUInt32(report.Slice(9, 4)) == 0) return false;
+        var kind = report[6];
+        var confirmation = BitConverter.ToUInt32(report.Slice(13, 4));
+        if (kind == 2)
+            return report[7] == 0 && confirmation == 0 && !report.Slice(17, 19).ContainsAnyExcept((byte)0);
+        if (report[7] != 0x01 || confirmation == 0) return false;
+        return IsValidManualCalibrationCommand(report.Slice(17, 19));
+    }
+
+    public static bool IsValidManualCalibrationResponse(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x17 ||
+            !report.Slice(1, 4).SequenceEqual("DMCS"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[7] is < 1 or > 2 || report[8] > 11 ||
+            BitConverter.ToUInt32(report.Slice(9, 4)) == 0 || report[22] is not (0 or 0x02 or 0x04) ||
+            report[24] > 19 || report.Slice(62).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(60, 2)) != Crc16Ccitt(report.Slice(1, 59))) return false;
+        var length = report[24];
+        if (report.Slice(25 + length, 19 - length).ContainsAnyExcept((byte)0)) return false;
+        var expectedMessage = report[7] == 1 ? 0x20 : 0x21;
+        if (report[21] != expectedMessage) return false;
+        if (report[6] == 1)
+            return report[8] == 0 && report[22] == 0 && length == 0;
+        if (report[8] == 0)
+            return report[22] == 0x02 && length == (report[7] == 1 ? 19 : 18) && IsValidManualCalibrationEndpoint(report.Slice(25, length), report[21]);
+        return length == 0;
+    }
+
+    private static bool IsValidManualCalibrationCommand(ReadOnlySpan<byte> payload)
+    {
+        var session = BitConverter.ToUInt32(payload.Slice(0, 4));
+        var action = BitConverter.ToUInt32(payload.Slice(4, 4));
+        var token = BitConverter.ToUInt32(payload.Slice(8, 4));
+        var operation = payload[12]; var axis = payload[13]; var direction = unchecked((sbyte)payload[14]);
+        var lease = BitConverter.ToUInt16(payload.Slice(16, 2)); var safety = payload[18];
+        if (session == 0 || action == 0 || operation > 6 || payload[15] != 0) return false;
+        if (operation == 0) return axis <= 1 && token != 0 && direction == 0 && lease is >= 1000 and <= 5000 && safety == 0x0f;
+        if (operation == 1) return axis <= 1 && token == 0 && direction == 0 && lease == 0 && safety == 0;
+        if (operation is 2 or 3 or 4) return axis <= 1 && token != 0 && (operation == 3 ? direction is -1 or 1 : direction == 0) && lease == 0 && safety == 0;
+        return axis == 0xff && token == 0 && direction == 0 && lease == 0 && safety == 0;
+    }
+
+    private static bool IsValidManualCalibrationEndpoint(ReadOnlySpan<byte> payload, byte messageType)
+    {
+        if (messageType == 0x21)
+            return payload.Length == 18 && payload[12] <= 5 && payload[13] is 0 or 1 or 0xff && (payload[14] & 0xc0) == 0 && payload[16] == 10 && payload[17] == 0;
+        return payload.Length == 19 && payload[12] <= 16 && payload[13] <= 5 && payload[14] is 0 or 1 or 0xff && (payload[15] & 0xc0) == 0 && payload[17] == 10 && payload[18] == 0;
+    }
+
     private static byte[][] MakeStatusReports(uint requestId, string json)
     {
         var data = System.Text.Encoding.UTF8.GetBytes(json);

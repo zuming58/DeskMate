@@ -1,4 +1,5 @@
 const { createHash } = require("crypto");
+const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
 
 function stable(value) { if (Array.isArray(value)) return value.map(stable); if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])])); return value; }
 function configFingerprint(value) { return createHash("sha256").update(JSON.stringify(stable(value)), "utf8").digest("hex").slice(0, 16); }
@@ -11,6 +12,7 @@ const firmwareToUi = new Map([
 function sanitizedBinding(press, describeAppAction) {
   if (typeof press === "string" && press.startsWith("host_action:")) {
     const appActionId = press.slice(12);
+    if (appActionId === COMPANION_CALL_ACTION.id) return { action: COMPANION_CALL_ACTION.kind };
     const description = typeof describeAppAction === "function" ? describeAppAction(appActionId) : null;
     return description?.id === appActionId && typeof description.label === "string"
       ? { action: "open-app", appActionId, appName: description.label }
@@ -28,7 +30,7 @@ function sanitizeKeyboardConfig(value, describeAppAction) {
   return { keymap: keys, encoder: { mode: scroll.mode === "cursor" ? "cursor" : "scroll", axis: scroll.axis === "horizontal" ? "horizontal" : "vertical", speed: Math.max(1, Math.min(5, Number(scroll.speed) || 3)), reverseVertical: Boolean(scroll.windows_reverse_vertical), reverseHorizontal: Boolean(scroll.windows_reverse_horizontal), press: sanitizedBinding(profile?.encoder?.press, describeAppAction) } };
 }
 
-const KEY_ACTIONS = new Set(["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled", "enter", "backspace", "hotkey", "fixed-text", "open-app"]);
+const KEY_ACTIONS = new Set(["voice-input", "voice-edit", "select-all", "copy", "paste", "undo", "disabled", "enter", "backspace", "hotkey", "fixed-text", "open-app", "companion-call"]);
 const ENCODER_ACTIONS = new Set(["scroll-axis-toggle", "text-caret-select", "disabled", "hotkey", "enter", "backspace", "fixed-text", "open-app"]);
 
 function bindingToPress(item, allowed = KEY_ACTIONS) {
@@ -39,6 +41,7 @@ function bindingToPress(item, allowed = KEY_ACTIONS) {
   if (item.action === "scroll-axis-toggle") return "scroll_axis_toggle";
   if (item.action === "text-caret-select") return "text_caret_select";
   if (["copy", "paste", "undo", "disabled"].includes(item.action)) return item.action;
+  if (item.action === "companion-call") return `host_action:${COMPANION_CALL_ACTION.id}`;
   if (item.action === "fixed-text") {
     if (typeof item.text !== "string") throw new Error("固定文字无效");
     const bytes = Buffer.from(item.text, "utf8");

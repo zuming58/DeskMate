@@ -6,9 +6,10 @@ import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding 
 import { mapAiStateToPetIntent } from "../domain/petIntent.js";
 import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
+import { COMPANION_DEFAULTS, isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs, normalizeCompanionPreferences } from "../domain/companionPreferences.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -35,11 +36,11 @@ export const defaultState = {
   vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ from: "桌面宠物", to: "桌宠" }, { from: "克劳德代码", to: "Claude Code" }] },
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
-  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "" },
+  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "", companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs },
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
-    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {} }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {} },
+    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
     memory: { ready: false, storage: "unavailable" },
     lastTrigger: null,
   },
@@ -62,7 +63,7 @@ function mergeDefaults(value) {
     keymap: Array.isArray(value.keymap) && value.keymap.length === 8 ? value.keymap.map((item, index) => normalizeKeyBinding(item, defaultState.keymap[index])) : structuredClone(defaultState.keymap),
     encoder: normalizeEncoder(value.encoder),
     vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
-    settings: { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle" },
+    settings: (() => { const companion = normalizeCompanionPreferences({ name: value.settings?.companionName, wakePhrase: value.settings?.companionWakePhrase, endSmoothWindowMs: value.settings?.companionEndSmoothWindowMs, idleTimeoutMs: value.settings?.companionIdleTimeoutMs }); return { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle", companionName: companion.name, companionWakePhrase: companion.wakePhrase, companionEndSmoothWindowMs: companion.endSmoothWindowMs, companionIdleTimeoutMs: companion.idleTimeoutMs }; })(),
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
     agentControl: normalizeAgentControl(value.agentControl),
@@ -86,6 +87,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 9 && isLegacyDemoAiEvent(raw.aiEvent)) raw = { ...raw, aiEvent: { ...DEFAULT_AI_EVENT }, aiIntent: mapAiStateToPetIntent({ state: "idle" }) };
   if ((raw.schemaVersion ?? 0) < 10) raw = { ...raw, agentControl: normalizeAgentControl({ ...(raw.agentControl || {}), automaticStatusEnabled: raw.agentControl?.automaticStatusEnabled !== false }) };
   if ((raw.schemaVersion ?? 0) < 11) raw = { ...raw, runtime: { ...(raw.runtime || {}), companion: { ...(raw.runtime?.companion || {}), audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null } } } };
+  if ((raw.schemaVersion ?? 0) < 12) raw = { ...raw, settings: { ...(raw.settings || {}), companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs } };
   return mergeDefaults(raw);
 }
 
@@ -128,6 +130,10 @@ export function validateConfig(value) {
   if (value.settings?.keyDiagnosticsEnabled !== undefined && typeof value.settings.keyDiagnosticsEnabled !== "boolean") throw new Error("按键诊断设置无效");
   if (value.settings?.simulatorEnabled !== undefined && typeof value.settings.simulatorEnabled !== "boolean") throw new Error("模拟器设置无效");
   if (value.settings?.sttMode !== undefined && !["unconfigured", "mock", "http", "bailian"].includes(value.settings.sttMode)) throw new Error("STT 模式无效");
+  if (value.settings?.companionName !== undefined && (typeof value.settings.companionName !== "string" || !value.settings.companionName.trim() || value.settings.companionName.length > 32)) throw new Error("陪伴名称无效");
+  if (value.settings?.companionWakePhrase !== undefined && (typeof value.settings.companionWakePhrase !== "string" || !value.settings.companionWakePhrase.trim() || value.settings.companionWakePhrase.length > 64)) throw new Error("唤醒短语无效");
+  if (value.settings?.companionEndSmoothWindowMs !== undefined && !isValidCompanionEndSmoothWindowMs(value.settings.companionEndSmoothWindowMs)) throw new Error("停顿阈值无效");
+  if (value.settings?.companionIdleTimeoutMs !== undefined && !isValidCompanionIdleTimeoutMs(value.settings.companionIdleTimeoutMs)) throw new Error("会话空闲时长无效");
   if (value.settings?.sttEndpoint !== undefined && (typeof value.settings.sttEndpoint !== "string" || value.settings.sttEndpoint.length > 2048)) throw new Error("STT 端点格式无效");
   if (value.settings?.customOrganizerRule !== undefined && (typeof value.settings.customOrganizerRule !== "string" || value.settings.customOrganizerRule.length > 4000)) throw new Error("自定义整理规则格式无效");
   const expressionIds = new Set(expressionPresets.map((item) => item.id));
@@ -187,7 +193,7 @@ export function reduceAppState(state, action) {
       next.sessionId = value.sessionId || (next.state === "idle" ? "" : next.sessionId || "");
       next.generation = incomingGeneration || (next.state === "idle" ? 0 : currentGeneration);
       next.error = value.error || (next.state === "error" ? next.error : "");
-      for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "build", "mainState", "stopLifecycle", "providerLifecycle"]) if (value[key] !== undefined) next[key] = value[key];
+      for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "build", "mainState", "stopLifecycle", "providerLifecycle", "turnLifecycle", "sessionPolicy", "preferences", "wakeWord"]) if (value[key] !== undefined) next[key] = value[key];
       if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
     } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
     else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
@@ -200,6 +206,9 @@ export function reduceAppState(state, action) {
       const preserveTerminalGeneration = isStatus && !value.active && currentGeneration > incomingGeneration;
       Object.assign(next, value);
       if (preserveTerminalGeneration) { next.generation = currentGeneration; next.sessionId = current.sessionId || ""; }
+    }
+    for (const key of ["providerLifecycle", "turnLifecycle", "sessionPolicy", "asrTiming", "preferences", "savedPreferences", "wakeWord", "mainState", "build"]) {
+      if (value[key] !== undefined) next[key] = value[key];
     }
     if (incomingSequence) next.eventSequence = incomingSequence;
     return { ...state, runtime: { ...state.runtime, companion: next } };

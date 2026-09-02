@@ -1,5 +1,46 @@
 # Lessons learned
 
+## A persisted provider setting is not proof of provider behavior
+
+- Symptom: settings and new-session diagnostics both show an eight-second endpoint, yet the cloud service still answers after its short default pause.
+- Practice: trace the exact outbound request and compare the whole relevant object with the provider's current official sample. Keep the provider request minimal, preserve separately accepted transport modes, and require one real utterance before closing the gate.
+- Rule: local readback proves persistence; session snapshot proves request ownership; neither proves remote acceptance. Do not hide a provider mismatch with a local response delay, and do not change an independently HIL-selected mode while repairing another field.
+
+## A successful renderer bundle is not a successful first render
+
+- Symptom: Electron opens a normal window and loads packaged assets, but React leaves a white content area because a store action referenced during render is undeclared.
+- Practice: keep the existing bundle and source-contract tests, then also load the real App module and execute its first render in an automated browser-neutral smoke test. Verify at least one stable shell marker.
+- Rule: packaging proves that modules and assets can be assembled; it does not prove that render-time identifiers, hook dependencies or initial state reads are valid.
+
+## Saved settings are not active-session evidence
+
+- Symptom: a UI could show a newly selected pause value while the already connected provider still used the value captured when its session started. A flat diagnostic copied from renderer settings therefore presented preference as runtime fact.
+- Practice: edit a draft, persist through one explicit write/readback transaction, and snapshot a revision at session creation. Export saved and session-applied numeric values separately; use content-free interval/count metrics when runtime timing needs evidence.
+- Rule: an active realtime session never hot-switches identity or timing because a form changed. Reconnect belongs to the same frozen session; only a new session may consume later saved values.
+
+## Grid stretch can turn a bounded visual into a layout regression
+
+- Symptom: a tall settings column stretched its sibling card; `height: 100%`, a large minimum height and a flex-growing face then produced an elongated character far beyond its intended proportions.
+- Practice: give columns independent self-height ownership, keep the visual in a bounded aspect-ratio box and preserve semantic source order when collapsing to one column.
+- Rule: visual proportions must be owned by the visual component. A neighboring card's content height is never an input to face geometry.
+
+## Utterance endpointing and conversation inactivity are different clocks
+
+- Symptom: increasing one generic timeout either still cuts off pauses before a sentence is complete or leaves an abandoned continuous session online too long.
+- Practice: send the documented silence threshold in the provider's companion StartSession request, and keep a separate local timer that is armed only while accepting user speech. Cancel it synchronously when a non-empty final utterance arrives, before queued handlers can race.
+- Rule: `thinking`, playback and drain are active work, not user inactivity. A physical call during listening resets inactivity; during an answer it uses the single explicit interruption path and never becomes a hidden start/stop toggle.
+
+## A serialized event queue still needs synchronous turn ownership
+
+- Symptom: the provider can emit `tts.start` and a delayed/reflected ASR final back-to-back while the awaited handler still shows `listening`; aggregate logs then show cancelled speaker blocks without proving which user turn caused them.
+- Practice: advance a closed half-duplex phase in the provider callback before enqueueing work, attach that immutable arrival phase to the event, and let only `listening` accept microphone/ASR. Count TTS completion only after local played/drain acknowledgement.
+- Rule: serialization preserves handler order but does not make handler state current at callback arrival. Ordinary ASR must never double as cancellation authority; only an explicit user control may abandon an answer.
+
+## Protocol input mode must describe intentional silence, not only the audio format
+
+- Symptom: every TTS block is accepted and played, local drain succeeds and the transport remains open, yet the provider emits a dialog error immediately after the answer.
+- Practice: compare the application's mute policy with the provider's current session modes and error table. A strict half-duplex client can be wire-format correct while violating the provider's expectation that microphone packets remain continuous.
+- Rule: when an audio client deliberately pauses upload, declare the documented silence/keep-alive policy. Do not solve an upstream idle timeout by uploading speaker echo, inventing reconnect, treating an error as completion or switching to push-to-talk semantics.
 ## Branch-local Flow updates do not automatically advance the project mainline
 
 - Symptom: the primary checkout still appeared to stop near T06/T07 even though software, EasyInput and Xiaozhi work had reached T12/T11E/T10C. Each short branch carried a newer plan/progress entry, but later software history and the hardware integration history had diverged and no owner reconciled them.

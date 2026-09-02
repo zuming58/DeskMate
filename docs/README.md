@@ -2,12 +2,28 @@
 
 ## Current handoff
 
+- [T10D-B Windows manual calibration contract](contracts/t10d-b-desktop-manual-calibration-v1.md)
+- [T10D-B Windows manual calibration UI handoff](handoffs/t10d-b-desktop-manual-calibration-ui-2026-09-02.md)
+- [T10D-A EasyInput manual-motion bridge handoff](handoffs/t10d-a-easyinput-manual-motion-bridge-2026-09-02.md)
+- [EasyInput manual calibration host transport](../contracts/deskmate-host/easyinput-manual-calibration-v1.md)
+- [T10C manual calibration Link contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)
+
+- [T13 Windows persona, memory, knowledge and intent handoff](handoffs/t13-desktop-persona-memory-intent-2026-09-02.md)
+- [T13 Windows persona, memory and intent frozen contract](contracts/t13-desktop-persona-memory-intent-v1.md)
+
+- [T11D.6 strict turn ownership and cancellation diagnostics handoff](handoffs/t11d6-turn-cancel-diagnostics-2026-09-01.md)
+- [T11D.6 turn ownership and cancellation diagnostics contract](contracts/t11d6-turn-cancel-diagnostics-v1.md)
+- [T11D.6 intermediate-answer truncation root-cause review](reviews/t11d6-intermediate-answer-truncation-root-cause-2026-09-01.md)
+
+- [T11D.5 half-duplex keep-alive and UI handoff](handoffs/t11d5-half-duplex-keepalive-ui-2026-09-01.md)
+- [T11D.5 strict half-duplex keep-alive contract](contracts/t11d5-half-duplex-keepalive-v1.md)
+- [T11D.5 DialogCommonError root-cause review](reviews/t11d5-dialog-audio-idle-timeout-root-cause-2026-09-01.md)
+
 - [Current three-task integration map (2026-09-02)](status/current-integration-map-2026-09-02.md)
 - [T13A mainline control reconciliation task](../flow/tasks/T13A-mainline-control-reconciliation.md)
 - [T10D-A EasyInput manual-motion bridge task](../flow/tasks/T10D-A-easyinput-manual-motion-bridge.md)
 - [T11F three-end integration audit](handoffs/t11f-three-end-integration-audit-2026-09-01.md)
 
-- [T10C Xiaozhi manual calibration frozen contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)
 - [T10C Xiaozhi manual calibration golden vectors](../contracts/deskmate-link/golden-vectors-t10c-manual-calibration-v1.json)
 - [T10C Xiaozhi manual calibration handoff](handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)
 - [T10C Xiaozhi manual calibration provenance](provenance/t10c-xiaozhi-manual-calibration-provenance.md)

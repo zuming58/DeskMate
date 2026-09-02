@@ -4,6 +4,7 @@ const readline = require("readline");
 const { parseBridgeLine, InputTriggerFilter } = require("./input-bridge-protocol.cjs");
 const { randomUUID } = require("crypto");
 const { encodeKeyboardConfig, encodeConfigReadRequest, parseConfigSnapshot } = require("./easyinput-config.cjs");
+const { decodeManualCalibrationFeatureReport } = require("./manual-calibration-hid.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -24,6 +25,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingCapture = null;
     this.pendingAgentState = null;
     this.queuedAgentState = null;
+    this.pendingManualCalibration = null;
     this.status = { available: false, process: "stopped", boardConnected: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
@@ -60,6 +62,7 @@ class InputBridgeManager extends EventEmitter {
       if (!event.boardConnected) {
         this.finishFixedText({ ok: false, reason: "easyinput-disconnected", bytes: 0 });
         this.failAllAgentStates("easyinput-disconnected");
+        this.finishManualCalibration({ ok: false, reason: "easyinput-disconnected" });
       }
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
@@ -104,6 +107,17 @@ class InputBridgeManager extends EventEmitter {
     }
     if (result.kind === "agent-state-write" && this.pendingAgentState?.requestId === event.requestId) {
       this.finishAgentState(event.ok ? { ok: true } : { ok: false, reason: event.reason || "agent-state-write-failed" }, event.requestId);
+    }
+    if (result.kind === "manual-calibration-write" && this.pendingManualCalibration?.bridgeRequestId === event.requestId && !event.ok) this.finishManualCalibration({ ok: false, reason: event.reason || "manual-calibration-write-failed" });
+    if (result.kind === "manual-calibration-report" && this.pendingManualCalibration?.numericRequestId === event.calibration.requestId) {
+      if (event.calibration.stage === "accepted") {
+        this.pendingManualCalibration.onAccepted?.(event.calibration);
+        this.emit("manual-calibration", { stage: "accepted", ...event.calibration });
+      } else {
+        const terminal = event.calibration;
+        this.emit("manual-calibration", { stage: "terminal", ...terminal });
+        this.finishManualCalibration(terminal.transportCode === 0 ? { ok: true, terminal } : { ok: false, reason: terminal.transport, terminal });
+      }
     }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
   }
@@ -195,6 +209,29 @@ class InputBridgeManager extends EventEmitter {
       }
       this.dispatchAgentState(entry);
     });
+  }
+
+  sendManualCalibration(value, { onAccepted } = {}) {
+    let report; let decoded;
+    try { report = Buffer.isBuffer(value) ? Buffer.from(value) : Buffer.from(value); decoded = decodeManualCalibrationFeatureReport(report); }
+    catch { return Promise.resolve({ ok: false, reason: "manual-calibration-report-invalid" }); }
+    if (this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    const bridgeRequestId = `motion-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishManualCalibration({ ok: false, reason: "manual-calibration-timeout" }), 2500);
+      this.pendingManualCalibration = { bridgeRequestId, numericRequestId: decoded.requestId, confirmationId: decoded.confirmationId, timeout, resolve, onAccepted };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "manual-calibration-request", requestId: bridgeRequestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishManualCalibration({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
+  finishManualCalibration(result) {
+    const pending = this.pendingManualCalibration;
+    if (!pending) return;
+    this.pendingManualCalibration = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
   }
 
   dispatchAgentState(entry) {
@@ -307,6 +344,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishPaste({ ok: false, reason: "input-bridge-exited" });
     this.finishCapture({ ok: false, reason: "input-bridge-exited" });
     this.failAllAgentStates("input-bridge-exited");
+    this.finishManualCalibration({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -329,6 +367,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishPaste({ ok: false, reason: "input-bridge-stopped" });
     this.finishCapture({ ok: false, reason: "input-bridge-stopped" });
     this.failAllAgentStates("input-bridge-stopped");
+    this.finishManualCalibration({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCapabilities: null, linkDiagnostics: null };

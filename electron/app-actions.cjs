@@ -97,6 +97,10 @@ class AppActionStore {
     return item ? { id: value, label: item.label } : null;
   }
 
+  listRegistered({ limit = 100 } = {}) {
+    return [...this.actions.entries()].slice(0, Math.max(1, Math.min(200, Number(limit) || 100))).map(([id, item]) => ({ id, label: item.label }));
+  }
+
   async choose(parentWindow) {
     const result = await this.dialog.showOpenDialog(parentWindow, {
       title: "选择要打开的应用",
@@ -125,10 +129,11 @@ class AppActionStore {
 }
 
 class HostActionExecutor {
-  constructor({ store, now = () => Date.now(), duplicateWindowMs = 250 } = {}) {
+  constructor({ store, reservedActions = new Map(), now = () => Date.now(), duplicateWindowMs = 250 } = {}) {
     this.store = store;
     this.now = now;
     this.duplicateWindowMs = duplicateWindowMs;
+    this.reservedActions = reservedActions;
     this.lastById = new Map();
     this.tail = Promise.resolve();
   }
@@ -140,7 +145,8 @@ class HostActionExecutor {
     const previous = this.lastById.get(value);
     if (previous !== undefined && timestamp - previous < this.duplicateWindowMs) return Promise.resolve({ ok: false, reason: "host-action-duplicate" });
     this.lastById.set(value, timestamp);
-    const operation = this.tail.then(() => this.store.execute(value));
+    const handler = this.reservedActions.get(value);
+    const operation = this.tail.then(() => typeof handler === "function" ? handler() : this.store.execute(value));
     this.tail = operation.catch(() => {});
     return operation;
   }

@@ -1,5 +1,59 @@
 # Decisions
 
+## D066 - Manual servo calibration requires a terminal status gate and three separate evidence layers
+
+- Date: 2026-09-02
+- Decision: Windows may expose only the frozen high-level manual-calibration operations. A correlated Xiaozhi status terminal must open the gate before commands, and every output attempt requires the existing axis/session context plus a fresh one-use arm token. There is no desktop absolute-angle, PWM, pulse-width, duty-cycle or GPIO surface.
+- Evidence: user confirmation, EasyInput `accepted`, and Xiaozhi `terminal` are independent layers. The UI never calls the first two execution and never turns protocol completion into proof of physical motion. `completed_output_count` remains visible terminal evidence.
+- Lifecycle: at most one request is in flight. USB disconnect/remount clears pending work, cached status and volatile authorization; the new mount epoch starts with another status query. Current production `NOT_READY` is truthful and keeps actions disabled.
+- Acceptance: host vectors, malformed reports, safety attestations, one-use tokens, IPC privacy and UI gating may be automated. Enabling a production adapter or moving a servo is T10D-C and requires separate user-present electrical/mechanical authorization.
+
+## D065 - Persona, reviewed memory and desktop actions have separate trust boundaries
+
+- Date: 2026-09-02
+- Decision: a companion session freezes one versioned persona and a bounded snapshot of accepted memories. Persona and memory are context only; neither can grant execution authority. Raw turns remain in SQLite, model-generated facts remain pending until explicit review, and complete forgetting deletes source data plus rebuildable derivatives.
+- Knowledge boundary: SQLite is authoritative. DeskMate writes only a managed `DeskMate/` subtree in the encrypted user-selected root. Markdown double links and the deterministic local hash embedding index are disposable derivatives; externally edited files fail closed as conflicts.
+- Action boundary: realtime speech is classified by a separate text-model bridge into a closed intent set. Opening an application is possible only through an existing opaque AppAction UUID and a one-use visible confirmation. Codex status uses official lifecycle metadata and never invents progress or reads content.
+- Acceptance: automated tests may close validation, persistence, projection, index, confirmation and privacy gates. Persona quality, memory usefulness, packaged model behavior, real app launch and real Codex lifecycle remain user-present UX gates.
+
+## D064 - Custom provider endpointing explicitly enables the official VAD gate
+
+- Date: 2026-09-02
+- Decision: every Doubao realtime companion session sends `StartSession.asr.extra.enable_custom_vad=true` together with the validated `end_smooth_window_ms`. The gate is not exposed as a separate user option because it is required to make the existing pause preference operational.
+- Evidence: the current official realtime dialogue API document defines `enable_custom_vad` as the flag that enables custom user-stop detection and states that its default is `false`. The first eight-second HIL used the correct persisted/session value but omitted this flag and observed the provider's roughly two-second default behavior.
+- Boundary: D060's `dialog.extra.input_mod=keep_alive` remains unchanged and compatible with temporary half-duplex microphone silence. `enable_asr_twopass`, `audio_info`, local VAD, `push_to_talk` and EndASR remain out of this repair. D064 supersedes D063's one-field request rule; D063 remains as historical evidence for the rejected first package.
+- Acceptance: automated request vectors prove only the exact outbound configuration. One new user-present session must hold a 3-7 second mid-sentence pause when configured for 8 seconds before endpointing is accepted.
+
+## D063 - Provider endpointing requests stay minimal and preserve the accepted keep-alive mode
+
+- Date: 2026-09-02
+- Decision: DeskMate sends the companion pause only as `StartSession.asr.extra.end_smooth_window_ms`. It does not combine that field with an unrelated two-pass ASR override or a speculative ASR audio descriptor.
+- Boundary: D060 remains authoritative. `dialog.extra.input_mod=keep_alive` stays unchanged because strict half-duplex intentionally pauses microphone upload during playback and the earlier exact-package HIL selected this mode to avoid provider audio-idle failure.
+- Evidence rule: a saved value and a session snapshot prove only local persistence and request preparation. They do not prove that the provider honored the requested endpoint until a real utterance passes user-present timing acceptance.
+
+## D062 - Companion settings are explicit transactions and sessions own frozen revisions
+
+- Date: 2026-09-01
+- Decision: Companion identity and timing fields are edited as a renderer draft, persisted only by one explicit Save action and acknowledged only after Electron main validates, atomically writes and rereads the file. Each new conversation snapshots one revision; that identity, provider pause and listening idle policy remain fixed for the whole session and its reconnects.
+- Range: provider pause is 0.5–50 seconds in 0.5-second steps. Listening idle stop is off or an integer 10–3600 seconds. These supersede D061's preset-only ranges without changing its two-clock ownership or reserved physical call action.
+- Evidence: diagnostics keep saved and session-applied numeric values separate, expose only a bounded partial-to-final interval/count, and emit a final lifecycle event after an internally completed stop. Identity, wake phrase, text, audio and provider identifiers remain excluded.
+- Presentation: the Companion overview uses independent self-height columns and a bounded `3:2` face. A taller settings stack cannot stretch the realtime face or displace the directly following Xiaozhi state test.
+
+## D061 - Companion endpointing uses two clocks and one reserved physical call action
+
+- Date: 2026-09-01
+- Decision: provider utterance endpointing is a companion-only 2/3/5-second StartSession setting, while whole-conversation inactivity is a separate 30/60/120/off local timer owned only by `listening`. Default identity is `小言`. EasyInput calls the one existing controller through reserved `host_action_v1` UUID `f11135b4-7471-47f1-808a-629ae99eb63b`; a repeated call resets listening or explicitly interrupts an answer but never toggles the conversation off.
+- Reason: a short provider silence threshold cuts off thoughtful speech, while using the same timer for whole-session cleanup would terminate valid thinking/playback. Reusing the frozen opaque Host Action preserves firmware compatibility and avoids turning the companion call into an executable mapping.
+- Boundary: normal dictation endpointing is unchanged. Wake-word support stays unavailable until a local Chinese engine/model, redistribution license, opt-in indication and foreground audio-owner integration are approved.
+
+## D060 - Strict half-duplex microphone silence uses the provider keep-alive mode
+
+- Date: 2026-09-01
+- Decision: a continuous DeskMate realtime session that suppresses microphone PCM during computer-speaker playback declares `dialog.extra.input_mod = "keep_alive"`. Event `359` remains a same-session turn boundary; event `599` remains fail-closed.
+- Evidence: the exact T11D.4 run had complete playback and zero local/transport failures but 600 echo-guard upstream drops followed by adjacent `DialogCommonError`. The current official provider document requires `keep_alive` when microphone upload may pause and defines `52000042 DialogAudioIdleTimeoutError` for the matching timeout.
+- Privacy: `52000042` maps only to `audio-idle-timeout`; raw code/message/payload and identities remain excluded. The rejected run did not export the numeric code, so the category match is recorded as causal inference pending exact-package HIL.
+- Consequence: do not replace the provider session, send push-to-talk EndASR, continuously upload speaker echo, or ignore `599` to hide the symptom.
+
 ## D059 - EasyInput manual calibration uses additive HID reports 0x16/0x17
 
 - Date: 2026-09-02
@@ -433,3 +487,10 @@
 - 决策：首版 Link 固定为 115200 8N1 的三线 3.3 V TTL UART；EasyInput 是唯一请求发起者，同时只允许一个在途请求。帧使用 `DMLK` magic、版本、方向、消息 ID、非零序列、最大 128 字节 payload 和 CRC16-CCITT-FALSE。T08 只开放 HELLO、能力、状态和无硬件副作用的 Agent 状态存储/确认。
 - 原因：先冻结最小、可逐字节测试且没有机械风险的切片，可以让两个窗口真正并行，同时把启动噪声、断线、重复、超时、对端重启和旧动作不重放一次定义清楚。
 - 边界：UART0 转为 Link 后关闭应用与 bootloader 日志，不写 eFuse；ROM 启动噪声由流式解析器重同步。DISPLAY、MOTION、AUDIO 能力在后续切片验收前保持未启用；首次接线只读，不执行 OLED、舵机或音频。
+
+## D033 · Companion half-duplex authority is fixed at provider arrival
+
+- 日期：2026-09-01
+- 决策：实时陪伴只在 `listening` 接受麦克风 PCM 与 ASR；`thinking`、`speaking` 和本地 playback drain 全部关闭上行。判断依据是 provider callback 到达时同步推进的封闭阶段，不是等待串行 handler 执行后才变化的 React/控制器显示状态。
+- 原因：`tts.start/audio` 与 ASR 可以在同一个事件循环中连续到达；若阶段只在异步 handler 内更新，后到的回声 ASR 会读取旧 `listening` 并被当成新用户轮次。旧代码又对每个 accepted ASR final 无条件取消 sink，能直接截断已排队回答。
+- 边界：普通 ASR final 只开启用户轮次，不拥有取消权。当前只有显式“打断回答并继续听”可以在会话内取消 TTS；自然语音抢话仍未开放。provider `interrupt()` 只清本地累积文本，不构成服务端取消确认。
