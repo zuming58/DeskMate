@@ -27,4 +27,8 @@ test("T15 UI keeps endpoint completion separate from physical HIL", () => {
   assert.match(page, /端点报告本次动作已完成/);
   assert.match(page, /是否真实转动、方向和机械回中仍以你现场观察为准/);
   assert.match(page, /自动动作暂未开放/);
+  assert.match(page, /endpoint\.completedRepeat/);
+  assert.match(page, /endpoint\.requestedRepeat/);
+  assert.doesNotMatch(page, /endpoint\.repeatCompleted/);
+  assert.doesNotMatch(page, /endpoint\.repeatTotal/);
 });
