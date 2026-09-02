@@ -56,11 +56,15 @@ test("application actions persist only in the Electron-side registry and open by
   const store = new AppActionStore({ userDataPath: root, dialog: {}, shell: { openPath: async (value) => { opened.push(value); return ""; } } });
   const action = store.registerTarget(target, "Demo");
   assert.match(action.id, /^[0-9a-f-]{36}$/);
-  assert.deepEqual(store.describe(action.id), { id: action.id, label: "Demo" });
+  assert.deepEqual(store.describe(action.id), { id: action.id, label: "Demo", voiceEnabled: false });
   assert.equal(JSON.stringify(store.describe(action.id)).includes(target), false);
   assert.deepEqual(await store.execute(action.id), { ok: true, label: "Demo" });
   assert.deepEqual(opened, [target]);
+  assert.equal((await store.executeVoice(action.id)).reason, "application-voice-not-enabled");
+  assert.deepEqual(store.setVoiceEnabled(action.id, true), { ok: true, id: action.id, label: "Demo", voiceEnabled: true });
+  assert.deepEqual(await store.executeVoice(action.id), { ok: true, label: "Demo" });
   const reloaded = new AppActionStore({ userDataPath: root, dialog: {}, shell: { openPath: async () => "" } });
+  assert.equal(reloaded.describe(action.id).voiceEnabled, true);
   assert.deepEqual(await reloaded.execute(action.id), { ok: true, label: "Demo" });
 });
 

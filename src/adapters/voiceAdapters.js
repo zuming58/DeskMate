@@ -64,6 +64,11 @@ export class DesktopBridgeAdapter {
   async registerApplication(token) { return this.bridge?.registerApplication ? this.bridge.registerApplication(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async chooseApplication() { return this.bridge?.chooseApplication ? this.bridge.chooseApplication() : { cancelled: true }; }
   async testApplication(id) { return this.bridge?.testApplication ? this.bridge.testApplication(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async getApplicationVoicePolicy(id) { return this.bridge?.getApplicationVoicePolicy ? this.bridge.getApplicationVoicePolicy(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async setApplicationVoiceEnabled(id, enabled) { return this.bridge?.setApplicationVoiceEnabled ? this.bridge.setApplicationVoiceEnabled(id, enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async getCodexTaskBriefStatus() { return this.bridge?.getCodexTaskBriefStatus ? this.bridge.getCodexTaskBriefStatus() : { receiver: "unavailable", tasks: [] }; }
+  onCodexTaskBriefStatus(listener) { return this.bridge?.onCodexTaskBriefStatus ? this.bridge.onCodexTaskBriefStatus(listener) : () => {}; }
+  onCodexTaskBriefAnnouncement(listener) { return this.bridge?.onCodexTaskBriefAnnouncement ? this.bridge.onCodexTaskBriefAnnouncement(listener) : () => {}; }
   async readKeyboardConfig() { return this.bridge?.readKeyboardConfig ? this.bridge.readKeyboardConfig() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async previewKeyboardConfigPatch(patch) { return this.bridge?.previewKeyboardConfigPatch ? this.bridge.previewKeyboardConfigPatch(patch) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async commitKeyboardConfig(token) { return this.bridge?.commitKeyboardConfig ? this.bridge.commitKeyboardConfig(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }

@@ -153,6 +153,7 @@ function ApplicationPicker({ binding, onChange, notify }) {
   const [apps, setApps] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [voicePolicy, setVoicePolicy] = useState({ loaded: false, enabled: false });
   const load = useCallback(async () => {
     setLoading(true);
     try { setApps(await voiceAdapters.desktop.listApplications()); }
@@ -160,11 +161,20 @@ function ApplicationPicker({ binding, onChange, notify }) {
     finally { setLoading(false); }
   }, [notify]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    if (!binding.appActionId) { setVoicePolicy({ loaded: true, enabled: false }); return () => { active = false; }; }
+    voiceAdapters.desktop.getApplicationVoicePolicy(binding.appActionId).then((value) => {
+      if (active) setVoicePolicy({ loaded: Boolean(value?.id), enabled: value?.voiceEnabled === true });
+    }).catch(() => { if (active) setVoicePolicy({ loaded: false, enabled: false }); });
+    return () => { active = false; };
+  }, [binding.appActionId]);
   const select = async (token) => {
     try {
       const result = await voiceAdapters.desktop.registerApplication(token);
       if (!result?.id) throw new Error("应用注册失败");
       onChange({ ...binding, appActionId: result.id, appName: result.label });
+      setVoicePolicy({ loaded: true, enabled: result.voiceEnabled === true });
     } catch (error) { notify(`选择失败：${error.message}`); }
   };
   const choose = async () => {
@@ -173,16 +183,24 @@ function ApplicationPicker({ binding, onChange, notify }) {
       if (result?.cancelled) return;
       if (!result?.id) throw new Error("应用注册失败");
       onChange({ ...binding, appActionId: result.id, appName: result.label });
+      setVoicePolicy({ loaded: true, enabled: result.voiceEnabled === true });
     } catch (error) { notify(`选择失败：${error.message}`); }
   };
   const test = async () => {
     const result = await voiceAdapters.desktop.testApplication(binding.appActionId);
     notify(result?.ok ? `已打开 ${result.label || binding.appName}` : `无法打开应用：${result?.reason || "未知错误"}`);
   };
+  const setVoiceEnabled = async (enabled) => {
+    const result = await voiceAdapters.desktop.setApplicationVoiceEnabled(binding.appActionId, enabled);
+    if (!result?.ok) return notify(`语音权限未保存：${result?.reason || "未知错误"}`);
+    setVoicePolicy({ loaded: true, enabled: result.voiceEnabled === true });
+    notify(result.voiceEnabled ? `已允许语音直接打开 ${result.label}` : `已关闭 ${result.label} 的语音直接打开`);
+  };
   const filtered = apps.filter((app) => app.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0, 30);
   return (
     <div className="application-picker">
       {binding.appActionId && <div className="application-picker__selected"><AppWindow size={20} /><strong>{binding.appName || "已选择应用"}</strong><Button variant="ghost" onClick={test}>测试打开</Button></div>}
+      {binding.appActionId && <SettingRow title="允许陪伴语音直接打开" description="仅此已登记应用；旧注册项和新注册项默认关闭。路径、参数、网址与 Shell 始终拒绝。"><Toggle checked={voicePolicy.enabled} disabled={!voicePolicy.loaded} onChange={(value) => { void setVoiceEnabled(value); }} /></SettingRow>}
       <SearchField value={query} onChange={setQuery} placeholder={loading ? "正在读取应用…" : "搜索已安装应用"} />
       <div className="application-picker__summary"><span>{query.trim() ? "搜索结果" : "已安装应用"}</span><small>{loading ? "读取中" : `${filtered.length} 项`}</small></div>
       <div className="application-picker__list" role="listbox" aria-label="可选择的 Windows 应用">
@@ -413,6 +431,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             {conversation.state === "speaking" && <Notice tone="info" title="严格轮流说话">防回声中，自动语音打断暂停，可手动点击“打断回答并继续听”。</Notice>}
             {conversation.audioSelection?.fallback && <Notice tone="warning" title="本轮已明确回退">{microphoneSourceFailureMessage(conversation.audioSelection.fallback.reason)}；保存的首选来源没有改变，本轮实际使用电脑麦克风。</Notice>}
             {conversation.proposal?.token && <Notice tone="warning" title="检测到桌面动作意图"><strong>{conversation.proposal.label}</strong><div className="button-row"><Button variant="primary" onClick={() => { void confirmIntent(); }}>确认执行</Button><Button variant="ghost" onClick={() => { void rejectIntent(); }}>取消</Button></div>实时对话模型不能直接执行系统动作；只有这里确认后，Electron 主进程才会调用已登记白名单。</Notice>}
+            {conversation.result?.type === "open_application" && <Notice tone={conversation.result.ok ? "success" : "warning"} title={conversation.result.ok ? "已执行语音白名单动作" : "语音应用动作已拒绝"}>{conversation.result.ok ? `已打开 ${conversation.result.label}` : conversation.result.reason === "application-voice-not-enabled" ? "此应用尚未显式允许语音直接打开。请在按键配置的应用卡片中开启该权限。" : `未打开：${conversation.result.reason || "unknown"}`}</Notice>}
+            {conversation.result?.type === "query_codex_status" && <Notice tone={conversation.result.codex?.needsDisambiguation ? "warning" : "info"} title="Codex 确定性状态回答">{conversation.result.answer}</Notice>}
+            {conversation.result?.type === "run_motion_preset" && <Notice tone="demo" title="动作意图已识别但未执行">动作硬件合同尚未冻结，本次没有向 EasyInput 或小智发送任何动作。</Notice>}
           </div>
           </Card>
           <AgentStateTestPanel notify={notify} navigate={navigate} index="04" />
@@ -1356,6 +1377,7 @@ export function AgentsPage({ notify, embedded = false }) {
   const [sendState, setSendState] = useState({ status: "idle", label: "尚未发送" });
   const [providerStatus, setProviderStatus] = useState({ provider: control.agentId, receiver: "starting", connected: false, state: "idle", delivery: "not-received" });
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
+  const recentCodexTasks = Array.isArray(state.runtime?.codexTasks?.tasks) ? state.runtime.codexTasks.tasks.slice(0, 8) : [];
   const eventLabel = { idle: "待命", listening: "倾听中", thinking: "思考中", working: "工作中", waiting_user: "等待用户", completed: "已完成", error: "异常" };
   const updateMapping = (agentId, value) => {
     patch({ agentExpressionMapping: { ...mapping, [agentId]: value } });
@@ -1419,6 +1441,7 @@ export function AgentsPage({ notify, embedded = false }) {
         <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{["codex", "hermes"].includes(control.agentId) ? !control.automaticStatusEnabled ? `${manualAgentName(control)} 自动状态已禁用` : providerStatus.connected ? `${providerStatus.work?.summary || `${manualAgentName(control)} 生命周期已连接`} · ${providerStatus.sourceVersion}` : providerStatus.receiver === "listening" ? `DeskMate 正在等待 ${manualAgentName(control)} 的首个真实事件${control.agentId === "hermes" ? "；需先在 Hermes 中显式启用插件" : ""}` : `${manualAgentName(control)} 生命周期接收器不可用` : "自动适配未启用；点击任意状态会立即手动发送"}</small>{["codex", "hermes"].includes(control.agentId) && providerStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
       </Card>
       <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
+      <Card><SectionTitle index="02A" title="Codex 近期任务简报" description="可选 codex-task-brief-v1 只接收任务标签、粗状态和不超过 80 字的里程碑；不读取提示词、回复、工具参数、路径或窗口标题。" />{recentCodexTasks.length ? <div className="companion-info-list">{recentCodexTasks.map((task) => <div key={`${task.taskLabel}-${task.sequence}`}><span><small>{task.state} · sequence {task.sequence}</small><strong>{task.taskLabel}</strong>{task.milestone && <small>{task.milestone}</small>}</span></div>)}</div> : <Notice tone="info" title="等待可选简报报告器">现有 codex-hook-v1 粗状态继续有效；尚未收到细粒度任务简报。</Notice>}</Card>
       <div className="agent-grid">{agents.map((agent) => {
         const active = control.agentId === agent.id;
         const displayState = active ? eventLabel[state.aiEvent.type] : "可选择";
@@ -1499,18 +1522,19 @@ export function ExpressionEditorPage({ notify }) {
 
 export function MotionPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
-  const { preset, speed, range } = state.motion;
+  const { preset, speed, range, repeatCount } = state.motion;
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
   const [testing, setTesting] = useState(false);
-  const play = (nextPreset = preset) => { updateMotion({ preset: nextPreset }); setTesting(true); notify("正在播放软件动作预览；未发送到小智舵机"); window.setTimeout(() => setTesting(false), 1800); };
+  const selectPreset = (nextPreset) => updateMotion({ preset: nextPreset, repeatCount: ["nod", "dance"].includes(nextPreset) ? 2 : 1 });
+  const play = (nextPreset = preset) => { if (nextPreset !== preset) selectPreset(nextPreset); setTesting(true); notify(`正在播放软件动作预览 × ${nextPreset === preset ? repeatCount : ["nod", "dance"].includes(nextPreset) ? 2 : 1}；未发送到小智舵机`); window.setTimeout(() => setTesting(false), 1800); };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
       {!embedded && <PageIntro title="动作编排" description="设计左右摇头、上下点头与组合动作" actions={<Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button>} />}
       {embedded && <div className="embedded-heading"><div><span>MOTION PREVIEW</span><h2>动作编排</h2><p>保留幅度、速度、预设和时间线，当前只驱动软件画面。</p></div><Button icon={testing ? PlayerPause : PlayerPlay} variant="primary" onClick={() => play()}>{testing ? "预览中…" : "测试动作"}</Button></div>}
       <Notice tone="demo" title="虚拟动作预览">双轴舵机型号、角度零点和安全限位尚未确定，当前只展示动作编排体验。</Notice>
       <div className="motion-grid">
-        <Card className="motion-stage"><div className={`motion-avatar ${testing ? `is-playing is-${preset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="桌宠动作预览" /></div><div className="axis-controls"><Button icon={ArrowLeft} onClick={() => play("search")}>左转</Button><Button icon={ArrowUp} onClick={() => play("attentive")}>抬头</Button><Button icon={ArrowDown} onClick={() => play("nod")}>点头</Button><Button icon={ArrowRight} onClick={() => play("search")}>右转</Button></div></Card>
-        <Card><SectionTitle index="01" title="动作参数" /><label className="field-label">动作预设<Segmented value={preset} onChange={(value) => updateMotion({ preset: value })} options={[{ value: "attentive", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><SettingRow title="动作速度" description="速度越高，运动越利落"><Slider label="动作速度" value={speed} onChange={(value) => updateMotion({ speed: value })} /></SettingRow><SettingRow title="运动范围" description="限制头部最大转动角度"><Slider label="运动范围" value={range} onChange={(value) => updateMotion({ range: value })} min={10} max={80} suffix="°" /></SettingRow><SettingRow title="柔性起停" description="减少舵机突然启动带来的晃动"><Toggle checked onChange={() => notify("柔性起停已保持开启")} /></SettingRow></Card>
+        <Card className="motion-stage"><div className={`motion-avatar ${testing ? `is-playing is-${preset === "attention" ? "attentive" : preset}` : ""}`}><CompanionFace expressionId={state.currentExpression} alt="桌宠动作预览" /></div><div className="axis-controls"><Button icon={ArrowLeft} onClick={() => play("search")}>左转</Button><Button icon={ArrowUp} onClick={() => play("attention")}>抬头</Button><Button icon={ArrowDown} onClick={() => play("nod")}>点头</Button><Button icon={ArrowRight} onClick={() => play("search")}>右转</Button></div></Card>
+        <Card><SectionTitle index="01" title="动作参数" /><label className="field-label">动作预设<Segmented value={preset} onChange={selectPreset} options={[{ value: "attention", label: "关注" }, { value: "nod", label: "点头" }, { value: "search", label: "寻找" }, { value: "dance", label: "跳舞" }]} /></label><label className="field-label">重复次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label><Notice tone="demo" title="仅保存软件动作意图">重复次数限制为 1–3。当前没有实现或猜测动作 HID/DeskMate Link 合同，不会发送到舵机。</Notice><SettingRow title="动作速度" description="速度越高，运动越利落"><Slider label="动作速度" value={speed} onChange={(value) => updateMotion({ speed: value })} /></SettingRow><SettingRow title="运动范围" description="限制头部最大转动角度"><Slider label="运动范围" value={range} onChange={(value) => updateMotion({ range: value })} min={10} max={80} suffix="°" /></SettingRow><SettingRow title="柔性起停" description="减少舵机突然启动带来的晃动"><Toggle checked onChange={() => notify("柔性起停已保持开启")} /></SettingRow></Card>
       </div>
       <Card><SectionTitle index="02" title="动作时间线" description="把表情和动作组合为一段可复用行为。" /><div className="timeline"><span className="timeline-label">0s</span><div className="timeline-track"><i style={{ left: "4%", width: "22%" }}>看向用户</i><i style={{ left: "32%", width: "18%" }}>眨眼</i><i style={{ left: "56%", width: "32%" }}>轻点头 × 2</i></div><span className="timeline-label">4s</span></div></Card>
     </div>

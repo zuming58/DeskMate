@@ -239,6 +239,22 @@ function AppContent() {
   }, [updateCompanion]);
   useEffect(() => {
     let active = true;
+    voiceAdapters.desktop.getCodexTaskBriefStatus().then((value) => { if (active) mergeRuntime("codexTasks", value); }).catch(() => {});
+    const unsubscribeStatus = voiceAdapters.desktop.onCodexTaskBriefStatus((value) => mergeRuntime("codexTasks", value));
+    const unsubscribeAnnouncement = voiceAdapters.desktop.onCodexTaskBriefAnnouncement((value) => {
+      const text = String(value?.text || "").slice(0, 240);
+      if (!text) return;
+      setToast(text);
+      if (value?.speak === true && "speechSynthesis" in window && typeof globalThis.SpeechSynthesisUtterance === "function") {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "zh-CN";
+        window.speechSynthesis.speak(utterance);
+      }
+    });
+    return () => { active = false; unsubscribeStatus?.(); unsubscribeAnnouncement?.(); };
+  }, [mergeRuntime]);
+  useEffect(() => {
+    let active = true;
     voiceAdapters.desktop.getCompanionPreferences().then((value) => {
       if (!active || !value?.preferences) return;
       patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs } });
