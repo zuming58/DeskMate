@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Manual-control output reached hardware; Pitch up/down semantics reversed
+
+- User-present HIL on the exact request-ID recovery package confirms the former `stale` blocker is closed: manual control starts, the direction pad appears and physical Pitch output occurs through Windows → EasyInput → DeskMate Link → Xiaozhi.
+- The assembled unit provides the missing physical-direction evidence: the current Windows mapping `up → pitch +1` makes the head nod downward, while `down → pitch -1` raises it. The frozen T10C payload defines only a signed one-degree step, so this is a Windows semantic mapping defect rather than a Link, EasyInput or Xiaozhi firmware defect.
+- Sent a minimal Windows-only repair to `DeskMate软件开发` from exact integration HEAD `95d9c95`: change only `up → pitch -1` and `down → pitch +1`, add explicit four-direction regression, rebuild/package and leave every firmware/wire/center/limit/rate/safety boundary unchanged. No device/port access or reflash is authorized in that task.
+- Classification: `REQUEST_ID_HIL_ACCEPTED / PHYSICAL_PITCH_OUTPUT_CONFIRMED / PITCH_DIRECTION_SEMANTICS_REJECTED / WINDOWS_FIX_IN_PROGRESS`. Next: audit/merge/relaunch the software package, then verify up/down, release, return-to-center and immediate stop before progressing to preset movements.
+
 ## 2026-09-02 - Request-ID restart recovery merged and exact package launched for HIL rerun
 
 - Merged `codex/t10d-desktop-request-id-recovery@a710fd5192712aff1d71a159cc49bc690f235484` into the main integration branch as `2a8c4e7`. The source audit confirms the change is Electron-only: a checksummed dual journal reserves request-ID blocks before use, resumes above the persisted high-water after restart, retries only read-only status through bounded floors on `stale`, and fails closed on persistence corruption or `uint32` exhaustion. No HID/DeskMate Link bytes or firmware sources changed.
