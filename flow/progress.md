@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-02 - Request-ID restart recovery merged and exact package launched for HIL rerun
+
+- Merged `codex/t10d-desktop-request-id-recovery@a710fd5192712aff1d71a159cc49bc690f235484` into the main integration branch as `2a8c4e7`. The source audit confirms the change is Electron-only: a checksummed dual journal reserves request-ID blocks before use, resumes above the persisted high-water after restart, retries only read-only status through bounded floors on `stale`, and fails closed on persistence corruption or `uint32` exhaustion. No HID/DeskMate Link bytes or firmware sources changed.
+- Independent verification in the integration tree passed the focused request-ID suite `6/6`, full Desktop regression `316/316` and `git diff --check`. The delivered package `release-t10d-request-id-recovery/win-unpacked/DeskMate.exe` is `202690560` bytes with SHA-256 `B70ECB55106BAE84C257BB02DCF6298F2EDEB96FF8DB5935860A00F092D39A2D`.
+- Seven Electron processes from the previous exact package path were confirmed and closed, then the verified recovery package was launched successfully. No device/port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo command was accessed by this integration step.
+- Classification: `WINDOWS_ROOT_CAUSE_FIXED / EXACT_PACKAGE_RUNNING / HIL_RERUN_PENDING / PHYSICAL_OUTPUT_NOT_RUN`. Next: the user confirms the environment and presses start once without unplugging EasyInput. Acceptance first requires the prior `stale` status to become a fresh accepted/terminal status and the direction pad to appear; only then may the user briefly hold directions and report physical observation.
+
 ## 2026-09-02 - T10D-D movement HIL blocked before output by desktop request-ID regression
 
 - The exact Stage 2 package reached the manual-control page with EasyInput writable and DeskMate Link `connected`, but `Start manual control` failed before center establishment. The user-visible result was `stale`; the direction pad correctly remained hidden because the manual session never became active.
