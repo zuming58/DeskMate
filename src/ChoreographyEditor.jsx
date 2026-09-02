@@ -9,7 +9,7 @@ import {
   IconRefresh as Refresh,
   IconTrash as Trash,
 } from "@tabler/icons-react";
-import { CompanionFace } from "./CompanionFace.jsx";
+import { expressionAssetUrl } from "./CompanionFace.jsx";
 import { voiceAdapters } from "./adapters/voiceAdapters.js";
 import {
   CHOREOGRAPHY_BEAT_MS,
@@ -17,7 +17,6 @@ import {
   CHOREOGRAPHY_LABELS,
   CHOREOGRAPHY_PITCH,
   CHOREOGRAPHY_YAW,
-  choreographyExpressionId,
   choreographyPreviewFrame,
   createChoreographyDraft,
   createEmptyBeat,
@@ -42,8 +41,41 @@ const REASON_COPY = Object.freeze({
 
 function reasonCopy(reason) { return REASON_COPY[reason] || "操作未完成，请稍后重试。"; }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
+const EXPRESSION_ASSETS = Object.freeze({ completed: "happy", thinking: "think", working: "focus" });
 
-export function ChoreographyEditor({ currentExpression, notify }) {
+function normalizeEditorAction(action) {
+  const next = clone(action);
+  next.beats = next.beats.map((beat) => ({
+    ...beat,
+    expression: CHOREOGRAPHY_EXPRESSIONS.includes(beat.expression) ? beat.expression : "hold",
+  }));
+  return next;
+}
+
+function TrackChoices({ beatIndex, label, value, values, onChange, expression = false }) {
+  return (
+    <div className={`choreography-track-choices ${expression ? "is-expression" : ""}`} role="group" aria-label={`第 ${beatIndex + 1} 拍 ${label}`}>
+      {values.filter((item) => item !== "hold").map((item) => {
+        const selected = value === item;
+        return (
+          <button
+            key={item}
+            type="button"
+            className="choreography-choice"
+            aria-label={`第 ${beatIndex + 1} 拍 ${label}${CHOREOGRAPHY_LABELS[expression ? "expression" : label === "Yaw" ? "yaw" : "pitch"][item]}${selected ? "，再次点击清除" : ""}`}
+            aria-pressed={selected}
+            onClick={() => onChange(selected ? "hold" : item)}
+          >
+            {expression && <img src={expressionAssetUrl(EXPRESSION_ASSETS[item])} alt="" draggable="false" />}
+            <span>{CHOREOGRAPHY_LABELS[expression ? "expression" : label === "Yaw" ? "yaw" : "pitch"][item]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ChoreographyEditor({ notify }) {
   const [actions, setActions] = useState([]);
   const [selectedName, setSelectedName] = useState("");
   const [draft, setDraft] = useState(() => createChoreographyDraft());
@@ -87,7 +119,7 @@ export function ChoreographyEditor({ currentExpression, notify }) {
     stopPreview(false);
     setSelectedName(name);
     const action = actions.find((item) => item.name === name);
-    if (action) setDraft(clone(action));
+    if (action) setDraft(normalizeEditorAction(action));
   };
   const newDraft = () => { stopPreview(false); setSelectedName(""); setDraft(createChoreographyDraft()); };
 
@@ -104,7 +136,7 @@ export function ChoreographyEditor({ currentExpression, notify }) {
       if (step >= total) {
         previewFrameRef.current = { yaw: "center", pitch: "center", expression: null };
         setPreview({ running: false, beatIndex: -1, loop: action.repeat, ...previewFrameRef.current });
-        notify("软件预览完成：已回到中位并恢复最新外部表情；没有发送实体动作");
+        notify("软件预览完成：轨道已回到起始状态；没有发送实体动作");
         return;
       }
       const beatIndex = step % action.beats.length;
@@ -174,9 +206,11 @@ export function ChoreographyEditor({ currentExpression, notify }) {
     } finally { setBusy(""); }
   };
 
-  const yawDegrees = preview.yaw === "left" ? -12 : preview.yaw === "right" ? 12 : 0;
-  const pitchDegrees = preview.pitch === "up" ? -10 : preview.pitch === "down" ? 10 : 0;
-  const expression = choreographyExpressionId(preview.expression) || currentExpression;
+  const previewSummary = {
+    yaw: CHOREOGRAPHY_LABELS.yaw[preview.yaw] || "保持",
+    pitch: CHOREOGRAPHY_LABELS.pitch[preview.pitch] || "保持",
+    expression: CHOREOGRAPHY_LABELS.expression[preview.expression] || "保持",
+  };
 
   return (
     <Card className="choreography-editor">
@@ -193,23 +227,27 @@ export function ChoreographyEditor({ currentExpression, notify }) {
         <label><span>节拍时长</span><Segmented compact value={String(draft.beatMs)} onChange={(value) => setDraft((current) => ({ ...current, beatMs: Number(value) }))} options={CHOREOGRAPHY_BEAT_MS.map((value) => ({ value: String(value), label: `${value} ms` }))} /></label>
         <label><span>循环次数</span><Segmented compact value={String(draft.repeat)} onChange={(value) => setDraft((current) => ({ ...current, repeat: Number(value) }))} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label>
       </div>
-      <div className="choreography-beat-tools"><strong>{draft.beats.length} 拍</strong><span><Button icon={Plus} disabled={draft.beats.length >= 8} onClick={addBeat}>增加一拍</Button><Button icon={Trash} disabled={draft.beats.length <= 2} onClick={removeBeat}>移除末拍</Button></span></div>
+      <div className="choreography-beat-tools"><strong>{draft.beats.length} 拍 <small>未选择 = 保持</small></strong><span><Button icon={Plus} disabled={draft.beats.length >= 8} onClick={addBeat}>增加一拍</Button><Button icon={Trash} disabled={draft.beats.length <= 2} onClick={removeBeat}>移除末拍</Button></span></div>
       <div className="choreography-table-wrap">
         <div className="choreography-table" style={{ "--beat-count": draft.beats.length }}>
           <div className="choreography-corner">轨道</div>{draft.beats.map((_, index) => <div key={`head-${index}`} className={preview.running && preview.beatIndex === index ? "is-active" : ""}>第 {index + 1} 拍</div>)}
-          {[["yaw", "Yaw 左右", CHOREOGRAPHY_YAW], ["pitch", "Pitch 上下", CHOREOGRAPHY_PITCH], ["expression", "表情", CHOREOGRAPHY_EXPRESSIONS]].map(([key, label, values]) => <div className="choreography-row" key={key}><strong>{label}</strong>{draft.beats.map((beat, index) => <Select key={`${key}-${index}`} value={beat[key]} onChange={(value) => updateBeat(index, key, value)} ariaLabel={`${label}第 ${index + 1} 拍`}>{values.map((value) => <option key={value} value={value}>{CHOREOGRAPHY_LABELS[key][value]}</option>)}</Select>)}</div>)}
+          <div className="choreography-row"><strong>Yaw 左右</strong>{draft.beats.map((beat, index) => <TrackChoices key={`yaw-${index}`} beatIndex={index} label="Yaw" value={beat.yaw} values={CHOREOGRAPHY_YAW} onChange={(value) => updateBeat(index, "yaw", value)} />)}</div>
+          <div className="choreography-row"><strong>Pitch 上下</strong>{draft.beats.map((beat, index) => <TrackChoices key={`pitch-${index}`} beatIndex={index} label="Pitch" value={beat.pitch} values={CHOREOGRAPHY_PITCH} onChange={(value) => updateBeat(index, "pitch", value)} />)}</div>
+          <div className="choreography-row"><strong>表情</strong>{draft.beats.map((beat, index) => <TrackChoices key={`expression-${index}`} beatIndex={index} label="表情" value={beat.expression} values={CHOREOGRAPHY_EXPRESSIONS} expression onChange={(value) => updateBeat(index, "expression", value)} />)}</div>
         </div>
       </div>
-      <div className="choreography-preview-layout">
-        <div className="choreography-preview-face" style={{ "--preview-yaw": `${yawDegrees}deg`, "--preview-pitch": `${pitchDegrees}deg` }}><CompanionFace expressionId={expression} alt="自定义舞蹈软件预览" /><small>{preview.running ? `软件预览 · 第 ${preview.loop} 轮 · 第 ${preview.beatIndex + 1} 拍` : "软件预览 · 中位 · 最新外部表情"}</small></div>
-        <div className="choreography-actions">
-          <Button icon={DeviceFloppy} variant="primary" disabled={busy !== ""} onClick={() => { void save(); }}>保存动作</Button>
-          <Button icon={preview.running ? PlayerPause : PlayerPlay} disabled={busy !== ""} onClick={() => preview.running ? stopPreview(true) : startPreview()}>{preview.running ? "停止软件预览" : "软件预览"}</Button>
-          <Button icon={PlayerPlay} disabled={!adapter.ready || busy !== ""} onClick={() => { void runReal(); }}>实体执行</Button>
-          <div className="motion-safety-actions"><Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止并回中</Button><Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button></div>
-        </div>
+      <div className="choreography-preview-summary" role="status" aria-live="polite">
+        <strong>{preview.running ? `软件预览 · 第 ${preview.loop} 轮 / 第 ${preview.beatIndex + 1} 拍` : "软件预览待开始"}</strong>
+        <span>Yaw {previewSummary.yaw}</span><span>Pitch {previewSummary.pitch}</span><span>表情 {previewSummary.expression}</span>
       </div>
-      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>软件预览不等于实体执行</strong>传输尚未接入；实体按钮保持禁用，预览不发送舵机指令。</span></div>
+      <div className="choreography-actions">
+        <Button icon={DeviceFloppy} variant="primary" disabled={busy !== ""} onClick={() => { void save(); }}>保存</Button>
+        <Button icon={preview.running ? PlayerPause : PlayerPlay} disabled={busy !== ""} onClick={() => preview.running ? stopPreview(true) : startPreview()}>{preview.running ? "停止预览" : "软件预览"}</Button>
+        <Button icon={PlayerPlay} disabled={!adapter.ready || busy !== ""} title={adapter.ready ? "在小智上执行" : "实体传输尚未接入"} onClick={() => { void runReal(); }}>实体执行</Button>
+        <Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止回中</Button>
+        <Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button>
+      </div>
+      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>软件预览不等于实体执行</strong>实体传输尚未接入，预览不会发送舵机指令。</span></div>
     </Card>
   );
 }

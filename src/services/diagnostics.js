@@ -23,6 +23,8 @@ const MOTION_PRESETS = new Set(["attention", "nod", "search", "dance"]);
 const MOTION_SOURCES = new Set(["UI", "voice", "context", "idle"]);
 const MOTION_RESULTS = new Set(["accepted", "duplicate", "completed", "cancelled", "not-ready", "bad-payload", "wrong-session", "stale-action", "busy", "recenter-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict"]);
 const MOTION_STATES = new Set(["not-ready", "recentering", "ready", "running", "emergency-stopped", "faulted"]);
+const MOTION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "motion-hid-write-failed", "motion-preset-interface-unavailable", "motion-preset-write-failed", "unavailable"]);
+const MOTION_REASONS = new Set(["", "automatic-motion-disabled", "easyinput-not-connected", "input-bridge-unavailable", "input-bridge-stopped", "input-bridge-exited", "input-bridge-write-failed", "manual-control-active", "motion-preset-busy", "motion-preset-interface-unavailable", "motion-preset-timeout", "motion-preset-report-invalid", "motion-preset-write-failed", "motion-hid-write-failed", "motion-operation-cancelled", "motion-action-superseded", "peer-disconnected-or-restarted", "invalid-response", "completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "internal", "not-ready", "bad-payload", "wrong-session", "stale-action", "recenter-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict", "cancelled"]);
 
 function normalizeManualCalibrationDiagnostics(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -80,7 +82,8 @@ function normalizeMotionPresetDiagnostics(value) {
     source: MOTION_SOURCES.has(source.source) ? source.source : null,
     endpointReportedComplete: source.endpointReportedComplete === true,
     endpoint,
-    reason: /^[a-z0-9-]{0,80}$/.test(String(source.reason || "")) ? String(source.reason || "") : "internal",
+    transport: MOTION_TRANSPORTS.has(source.transport) ? source.transport : "unavailable",
+    reason: MOTION_REASONS.has(String(source.reason || "")) ? String(source.reason || "") : "internal",
   };
 }
 export function createDiagnosticReport(input = {}) {

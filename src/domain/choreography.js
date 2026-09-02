@@ -1,12 +1,12 @@
 export const CHOREOGRAPHY_BEAT_MS = Object.freeze([400, 600, 800, 1000]);
 export const CHOREOGRAPHY_YAW = Object.freeze(["hold", "left", "center", "right"]);
 export const CHOREOGRAPHY_PITCH = Object.freeze(["hold", "up", "center", "down"]);
-export const CHOREOGRAPHY_EXPRESSIONS = Object.freeze(["hold", "idle", "listening", "thinking", "working", "waiting", "completed", "error"]);
+export const CHOREOGRAPHY_EXPRESSIONS = Object.freeze(["hold", "completed", "thinking", "working"]);
 
 export const CHOREOGRAPHY_LABELS = Object.freeze({
   yaw: Object.freeze({ hold: "保持", left: "左", center: "中", right: "右" }),
   pitch: Object.freeze({ hold: "保持", up: "上", center: "中", down: "下" }),
-  expression: Object.freeze({ hold: "保持", idle: "待命", listening: "倾听", thinking: "思考", working: "工作", waiting: "等待", completed: "开心", error: "错误" }),
+  expression: Object.freeze({ hold: "保持", completed: "开心", thinking: "好奇", working: "专注" }),
 });
 
 export function createEmptyBeat() { return { yaw: "hold", pitch: "hold", expression: "hold" }; }

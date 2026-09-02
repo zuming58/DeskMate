@@ -498,23 +498,43 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
 
 function MemoryManagementPage({ notify }) {
   const [filter, setFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [forget, setForget] = useState(null);
   const [busy, setBusy] = useState(false);
   const [memoryStatus, setMemoryStatus] = useState({ ready: false, storage: "unavailable", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0 });
+  const [memoryPolicy, setMemoryPolicy] = useState({ version: 1, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", lastResults: {} });
   const [knowledgeBaseStatus, setKnowledgeBaseStatus] = useState({ configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" });
   const [memoryItems, setMemoryItems] = useState([]);
   const [indexResults, setIndexResults] = useState([]);
+  const nextMemoryRunLabel = useMemo(() => {
+    if (!memoryPolicy.enabledSources.length) return "已关闭";
+    if (memoryPolicy.schedule !== "daily") return "仅手动";
+    const [hour, minute] = memoryPolicy.dailyTime.split(":").map(Number);
+    const now = new Date();
+    const next = new Date(now); next.setHours(hour, minute, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return `${next.toDateString() === now.toDateString() ? "今天" : "明天"} ${memoryPolicy.dailyTime}`;
+  }, [memoryPolicy.dailyTime, memoryPolicy.enabledSources.length, memoryPolicy.schedule]);
+  const memoryResultLabel = (source) => {
+    const result = memoryPolicy.lastResults?.[source];
+    if (!result || result.status === "never") return "尚未运行";
+    if (result.status === "failed") return `${result.day || "最近"} 失败 · 可立即重试`;
+    if (result.status === "warning") return `${result.day || "最近"} 摘要已保存 · 双链待重试`;
+    if (result.status === "no-pending") return `${result.day} 无待整理内容`;
+    return `${result.day} 已完成`;
+  };
   const refreshMemory = useCallback(async () => {
     try {
-      const [status, items, knowledgeBase] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.()]);
+      const [status, items, knowledgeBase, policy] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.()]);
       if (status) setMemoryStatus(status);
       setMemoryItems(Array.isArray(items) ? items : []);
       if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
+      if (policy) setMemoryPolicy(policy);
     } catch { setMemoryStatus((current) => ({ ...current, ready: false, storage: "unavailable" })); }
-  }, [filter, query]);
-  useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); return () => window.clearTimeout(timer); }, [refreshMemory]);
+  }, [filter, sourceFilter, query]);
+  useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); const poll = window.setInterval(refreshMemory, 30_000); return () => { window.clearTimeout(timer); window.clearInterval(poll); }; }, [refreshMemory]);
   const reviewCandidate = async (id, state) => {
     try {
       const result = await globalThis.desktopBridge?.setMemoryCandidateState?.({ id, state });
@@ -577,7 +597,7 @@ function MemoryManagementPage({ notify }) {
     try {
       const result = await globalThis.desktopBridge?.generatePendingMemories?.();
       if (!result?.ok) throw new Error(result?.reason || "memory-generation-failed");
-      notify(result.skipped ? "当前没有待整理的真实对话回合" : `已生成每日摘要和 ${result.candidates} 条待审核候选`);
+      notify(result.skipped ? "当前没有待整理的真实对话回合" : result.warning ? `已生成每日摘要和 ${result.candidates} 条候选；双链同步未完成，可在知识库区域重试` : `已生成每日摘要和 ${result.candidates} 条待审核候选`);
       await refreshMemory();
     } catch (error) { notify(`记忆整理失败：${error.message}`); }
     finally { setBusy(false); }
@@ -598,15 +618,29 @@ function MemoryManagementPage({ notify }) {
       const result = await globalThis.desktopBridge?.syncKnowledgeBase?.();
       if (!result?.ok && !Number.isInteger(result?.conflicts)) throw new Error(result?.reason || "knowledge-base-sync-failed");
       notify(result.conflicts ? `双链同步完成，但保留了 ${result.conflicts} 个用户修改冲突` : `已同步 ${result.files} 个受管 Markdown 双链文件`);
+      await refreshMemory();
     } catch (error) { notify(`知识库同步失败：${error.message}`); }
     finally { setBusy(false); }
   };
   const searchIndex = async () => {
     const text = query.trim();
     if (!text) { setIndexResults([]); notify("请先输入检索内容"); return; }
-    const results = await globalThis.desktopBridge?.searchMemoryIndex?.({ query: text, limit: 8 });
+    const results = await globalThis.desktopBridge?.searchMemoryIndex?.({ query: text, source: sourceFilter, limit: 8 });
     setIndexResults(Array.isArray(results) ? results : []);
     notify(`本地混合检索返回 ${Array.isArray(results) ? results.length : 0} 个切片`);
+  };
+  const toggleMemorySource = (source) => {
+    setMemoryPolicy((current) => ({ ...current, enabledSources: current.enabledSources.includes(source) ? current.enabledSources.filter((value) => value !== source) : [...current.enabledSources, source] }));
+  };
+  const saveMemoryPolicy = async () => {
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.setMemoryPolicy?.({ version: 1, enabledSources: memoryPolicy.enabledSources, schedule: memoryPolicy.schedule, dailyTime: memoryPolicy.dailyTime });
+      if (!result?.version) throw new Error(result?.reason || "memory-policy-save-failed");
+      setMemoryPolicy(result);
+      notify(result.enabledSources.length ? `记忆来源与整理时间已保存：${result.schedule === "daily" ? `每天 ${result.dailyTime}` : "仅手动整理"}` : "记忆来源已全部关闭；不会自动整理新内容");
+    } catch (error) { notify(`记忆策略保存失败：${error.message}`); }
+    finally { setBusy(false); }
   };
   return (
     <div className="companion-embedded memory-management">
@@ -615,6 +649,17 @@ function MemoryManagementPage({ notify }) {
         <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理待处理对话</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
       <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedTurns || 0} 条待整理。模型只生成候选；必须由你审核后才能进入长期记忆。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Card className="memory-policy-card">
+        <SectionTitle index="01" title="来源与自动整理" description="两个来源默认开启且可独立关闭；每天 23:30 按本地时间整理，失败来源会单独重试。" />
+        <div className="memory-policy-grid">
+          <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="记录陪伴对话" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
+          <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="记录成功语音输入" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
+          <label className="field-label">整理方式<select value={memoryPolicy.schedule} onChange={(event) => setMemoryPolicy((current) => ({ ...current, schedule: event.target.value }))}><option value="daily">每天自动整理</option><option value="manual">仅手动整理</option></select></label>
+          <label className="field-label">本地整理时间<input type="time" step="60" disabled={memoryPolicy.schedule !== "daily"} value={memoryPolicy.dailyTime} onChange={(event) => setMemoryPolicy((current) => ({ ...current, dailyTime: event.target.value }))} /></label>
+        </div>
+        <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
+        <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
+      </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>
       <div className="memory-metrics">
         <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
@@ -624,12 +669,13 @@ function MemoryManagementPage({ notify }) {
       </div>
       <Card className="memory-toolbar">
         <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "全部" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
+        <Segmented compact value={sourceFilter} onChange={setSourceFilter} options={[{ value: "all", label: "全部来源" }, { value: "companion", label: "陪伴" }, { value: "dictation", label: "语音输入" }]} />
         <SearchField value={query} onChange={setQuery} placeholder="搜索日期、主题或记忆内容" /><Button variant="soft" disabled={busy || !memoryStatus.longTermMemories} onClick={() => { void rebuildIndex(); }}>重建本地索引</Button><Button variant="soft" disabled={!query.trim()} onClick={() => { void searchIndex(); }}>混合检索</Button>
       </Card>
       {indexResults.length > 0 && <Card><SectionTitle index="R" title="检索预览" description="关键词与本地可重建 embedding 的有界结果；不会向 React 暴露向量。" /><div className="memory-item-list">{indexResults.map((item) => <article key={item.chunkId}><div><span>{item.kind}</span><time>{item.day} · {Math.round(item.score * 100)}%</time></div><p>{item.content}</p></article>)}</div></Card>}
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。" action={<Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}</span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。" action={<Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
         </Card>
         <Card>
           <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />
@@ -772,6 +818,10 @@ export function VoicePage({ notify }) {
           const transcription = { status: result.status, provider: result.provider || "unknown", durationMs: Number(result.durationMs) || 0, errorType: failure?.code || "", label: failure?.label || "转写成功" };
           const entry = { id, audioId, microphoneSource: item.microphoneSource || "computer", operation: workflow === "edit" ? "voice-edit" : "voice-input", time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
           patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: transcription.provider, status: transcription.status, durationMs: transcription.durationMs, errorType: transcription.errorType }, organizer } });
+          if (workflow === "input" && result.status === "success" && state.settings.sttMode !== "mock" && item.microphoneSource !== "simulation") {
+            try { await voiceAdapters.desktop.commitDictationMemory({ eventId: `dictation:${id}`, sessionId: `dictation:${id}`, content: text, createdAt: new Date().toISOString() }); }
+            catch { /* dictation remains successful even if optional local memory ingestion is unavailable */ }
+          }
           return entry;
         },
       });
@@ -1530,6 +1580,11 @@ export function MotionPage({ notify, embedded = false }) {
   const [runningPreset, setRunningPreset] = useState("");
   const [safetyAction, setSafetyAction] = useState("");
   const selectPreset = (nextPreset) => updateMotion({ preset: nextPreset, repeatCount: ["nod", "dance"].includes(nextPreset) ? 2 : 1 });
+  const motionFailureCopy = (reason) => ({
+    "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
+    "motion-preset-interface-unavailable": "没有找到动作 HID 接口，请重新检测动作链。",
+    "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经连接。",
+  })[reason] || reason || "动作链未返回完成结果";
   const refreshStatus = useCallback(async () => {
     try {
       const result = await voiceAdapters.desktop.getMotionStatus();
@@ -1555,13 +1610,17 @@ export function MotionPage({ notify, embedded = false }) {
     return () => { active = false; if (retryTimer) clearTimeout(retryTimer); unsubscribe?.(); };
   }, [refreshStatus]);
   const runPreset = async (nextPreset) => {
+    if (!motionAvailable) {
+      notify("动作未开始：真实动作链尚未检测成功，请先重新检测。");
+      return;
+    }
     const nextRepeat = nextPreset === preset ? repeatCount : (["nod", "dance"].includes(nextPreset) ? 2 : 1);
     if (nextPreset !== preset) selectPreset(nextPreset);
     setRunningPreset(nextPreset);
     try {
       const result = await voiceAdapters.desktop.runPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
       if (result) setMotionStatus(result);
-      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${result?.reason || "endpoint-not-complete"}`);
+      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${motionFailureCopy(result?.reason)}`);
     } catch (error) {
       notify(`动作请求失败：${error?.message || "motion-request-failed"}`);
     } finally {
@@ -1586,10 +1645,11 @@ export function MotionPage({ notify, embedded = false }) {
   const endpoint = motionStatus?.endpoint || {};
   const endpointState = String(endpoint.state || "unavailable").toLowerCase();
   const emergencyStopped = endpoint.emergencyStopped === true || endpoint.emergencyStopLatched === true;
-  const motionAvailable = motionStatus?.ok === true || endpointState !== "unavailable";
+  const motionAvailable = motionStatus?.ok === true || motionStatus?.available === true;
   const unavailableMessage = ({
     "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经重新上电并连接。",
     "motion-preset-interface-unavailable": "已检测到 EasyInput，但没有找到实体动作接口。请重新检测；若仍失败，需要核对当前固件。",
+    "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
     "input-bridge-unavailable": "Windows 输入桥尚未就绪，请重新检测动作链。",
     "motion-status-unavailable": "软件暂时没有读到实体动作状态，请点击“重新检测动作链”。",
   })[motionStatus?.reason] || "实体动作状态暂时不可用，请重新检测动作链。";
@@ -1606,7 +1666,7 @@ export function MotionPage({ notify, embedded = false }) {
     <div className={embedded ? "companion-embedded" : "page"}>
       {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
       {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>选择动作和次数，再点击一次“开始执行”。正常结束后会自动回中。</p></div><span className="motion-heading-actions"><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>重新检测动作链</Button></span></div>}
-      <div className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
+      <div id="motion-chain-status" className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
         <MotionStatusIcon size={17} stroke={1.8} />
         <strong>{statusTitle}</strong>
         <span>{statusDescription}</span>
@@ -1622,7 +1682,7 @@ export function MotionPage({ notify, embedded = false }) {
           <label className="field-label">次数<Segmented value={String(repeatCount)} onChange={(value) => updateMotion({ repeatCount: Number(value) })} options={[1, 2, 3].map((value) => ({ value: String(value), label: `${value} 次` }))} /></label>
           <p className="motion-default-summary"><strong>默认</strong>关注、寻找 1 次；点头、跳舞 2 次。</p>
           <div className="motion-action-bar">
-            <Button icon={PlayerPlay} variant="primary" className="motion-run-button" disabled={Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${repeatCount}` : `开始 · ${presetLabel} × ${repeatCount}`}</Button>
+            <Button icon={PlayerPlay} variant="primary" className="motion-run-button" aria-describedby="motion-chain-status" disabled={!motionAvailable || Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${repeatCount}` : `开始 · ${presetLabel} × ${repeatCount}`}</Button>
             <Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
             <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
             {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}
@@ -1692,7 +1752,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const settingsAgentDelivery = normalizeAgentDelivery(inputBridge.agentStateDelivery);
   const sharedStatus = deviceServiceStatus({ inputBridge, audioStatus: settingsAudioStatus, preferredMicrophoneSource: state.settings.microphoneSource, companion: state.runtime?.companion, memory: state.runtime?.memory });
   const collectionLabel = (value) => !inputBridge.boardConnected ? "设备未枚举" : value === true ? "可写" : value === false ? "不可用" : "状态未知";
-  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: sharedStatus.easyInput.label, tone: sharedStatus.easyInput.tone }, { label: "配置 HID 集合 · FF00:0002", value: collectionLabel(inputBridge.configCollectionWritable), tone: inputBridge.configCollectionWritable === true ? "success" : "demo" }, { label: "校准 HID 集合 · FF00:0007", value: collectionLabel(inputBridge.calibrationCollectionWritable), tone: inputBridge.calibrationCollectionWritable === true ? "success" : "demo" }, { label: "小智 DeskMate Link", value: sharedStatus.xiaozhi.label, tone: sharedStatus.xiaozhi.tone }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: sharedStatus.microphone.label, tone: sharedStatus.microphone.tone }];
+  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: sharedStatus.easyInput.label, tone: sharedStatus.easyInput.tone }, { label: "配置 HID 集合 · FF00:0002", value: collectionLabel(inputBridge.configCollectionWritable), tone: inputBridge.configCollectionWritable === true ? "success" : "demo" }, { label: "校准 HID 集合 · FF00:0007", value: collectionLabel(inputBridge.calibrationCollectionWritable), tone: inputBridge.calibrationCollectionWritable === true ? "success" : "demo" }, { label: "动作 HID 集合 · FF00:0009", value: collectionLabel(inputBridge.motionCollectionWritable), tone: inputBridge.motionCollectionWritable === true ? "success" : "demo" }, { label: "小智 DeskMate Link", value: sharedStatus.xiaozhi.label, tone: sharedStatus.xiaozhi.tone }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: sharedStatus.microphone.label, tone: sharedStatus.microphone.tone }];
   return (
     <div className="page">
       <PageIntro title="设置与诊断" description="管理快捷键、输入方式、外观和系统诊断" actions={<><Button icon={Upload} onClick={() => document.getElementById("config-import").click()}>导入配置</Button><input id="config-import" type="file" accept="application/json" hidden onChange={importConfig} /><Button icon={Download} onClick={downloadConfig}>导出配置</Button><Button icon={Refresh} onClick={() => { reset(); notify("设置已恢复为默认值"); }}>恢复默认</Button></>} />

@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T15E motion UX and shared-memory Windows handoff](handoffs/t15e-motion-memory-ux-2026-09-03.md)
+- [T15E shared memory ingestion contract](contracts/t15e-shared-memory-ingestion-v1.md)
 - [T15D custom choreography editor design](design/t15d-choreography-editor-v1.md)
 - [T15D custom choreography task](../flow/tasks/T15D-custom-choreography-editor.md)
 - [T15D Windows choreography editor handoff](handoffs/t15d-desktop-choreography-editor-2026-09-02.md)

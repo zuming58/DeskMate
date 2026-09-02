@@ -17,7 +17,8 @@ const { CompanionMemoryStore } = require("./companion-memory.cjs");
 const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
 const { CompanionMemoryPipeline } = require("./companion-memory-pipeline.cjs");
-const { KnowledgeBaseProjection } = require("./knowledge-base-projection.cjs");
+const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("./companion-memory-policy.cjs");
+const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
@@ -79,6 +80,10 @@ let aiServiceStore;
 let companionMemoryStore;
 let companionMemoryControl;
 let companionMemoryPipeline;
+let companionMemoryGenerationCoordinator;
+let companionMemoryPolicyStore;
+let companionMemoryDigestScheduler;
+let memoryDigestTimer;
 let knowledgeBaseSettings;
 let companionConversationController;
 let companionPreferenceStore;
@@ -234,7 +239,7 @@ function handleCompanionConversationEvent(event = {}) {
 }
 
 async function commitCompanionTurn(turn) {
-  const result = companionMemoryStore.commitConversationTurn(turn);
+  const result = companionMemoryStore.commitConversationTurn({ ...turn, source: "companion" });
   if (turn?.role === "user" && companionIntentBridge) {
     void companionIntentBridge.analyze(turn.content).then((analysis) => {
       if (analysis?.proposal) handleCompanionConversationEvent({ type: "intent.proposal", proposal: analysis.proposal });
@@ -243,6 +248,29 @@ async function commitCompanionTurn(turn) {
     }).catch(() => {});
   }
   return result;
+}
+
+async function generateConfiguredMemories() {
+  const sources = companionMemoryPolicyStore.snapshot().enabledSources;
+  if (!sources.length) return { ok: true, skipped: true, reason: "memory-no-enabled-sources", turns: 0, candidates: 0, sources: {}, projection: skippedProjection() };
+  const results = {};
+  let turns = 0;
+  let candidates = 0;
+  for (const source of sources) {
+    const days = companionMemoryStore.unprocessedDays({ source }).slice(0, 14);
+    if (!days.length) { results[source] = { ok: true, skipped: true, reason: "memory-no-unprocessed-turns", turns: 0, candidates: 0 }; continue; }
+    let last = null;
+    for (const day of days) {
+      last = await companionMemoryPipeline.processPending({ sources: [source], day });
+      if (!last?.ok) break;
+      turns += Number(last.turns) || 0;
+      candidates += Number(last.candidates) || 0;
+    }
+    results[source] = last;
+  }
+  const ok = Object.values(results).every((result) => result?.ok);
+  const projection = ok && turns > 0 ? companionMemoryGenerationCoordinator.projectIfConfigured() : skippedProjection();
+  return { ok, skipped: turns === 0, reason: turns === 0 ? "memory-no-unprocessed-turns" : "", warning: projection.warning, warningReason: projection.warning ? projection.reason : "", turns, candidates, sources: results, projection };
 }
 
 function loadTextModelSecret() {
@@ -947,6 +975,7 @@ app.whenReady().then(async () => {
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
+  companionMemoryPolicyStore = new CompanionMemoryPolicyStore({ userDataPath: app.getPath("userData") });
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
@@ -967,6 +996,15 @@ app.whenReady().then(async () => {
   });
   motionPresetService.on("status", (value) => { sendToMain("motion-preset-status", value); emitInputBridgeStatus(); });
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
+  companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
+  companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
+    policyStore: companionMemoryPolicyStore,
+    pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }),
+    process: ({ source, day }) => companionMemoryGenerationCoordinator.processSourceDay({ source, day }),
+  });
+  memoryDigestTimer = setInterval(() => { void companionMemoryDigestScheduler.tick(); }, 60_000);
+  memoryDigestTimer.unref?.();
+  setTimeout(() => { void companionMemoryDigestScheduler.tick(); }, 0);
   wakeWordAdapter = new UnavailableWakeWordAdapter();
   easyInputAudioSource = new EasyInputLanAudioSource();
   easyInputAudioManager = new EasyInputAudioManager({
@@ -1174,16 +1212,24 @@ app.whenReady().then(async () => {
   handleTrusted("companion:set-computer-audio-ready", (ready) => computerCompanionAudio.setRendererReady(Boolean(ready)));
   onTrusted("companion:computer-audio-event", (value) => { computerCompanionAudio.handleRendererEvent(value); });
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
+  handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
+  handleTrusted("memory:set-policy", (value = {}) => companionMemoryPolicyStore.save(value));
+  handleTrusted("memory:commit-dictation", (value = {}) => companionMemoryStore.commitConversationTurn({ ...value, role: "user", source: "dictation" }));
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
   handleTrusted("memory:update-candidate", (value = {}) => companionMemoryStore.updateCandidate(value));
-  handleTrusted("memory:generate-pending", () => companionMemoryPipeline.processPending());
+  handleTrusted("memory:generate-pending", () => generateConfiguredMemories());
   handleTrusted("memory:rebuild-index", () => companionMemoryStore.rebuildLocalIndex());
   handleTrusted("memory:search-index", (value = {}) => companionMemoryStore.searchLongTermMemory(value));
   handleTrusted("memory:sync-knowledge-base", () => {
-    let root;
-    try { root = knowledgeBaseSettings.loadRoot(); } catch (error) { return { ok: false, reason: error?.message || "knowledge-base-location-unavailable" }; }
-    return new KnowledgeBaseProjection({ root }).sync(companionMemoryStore.projectionItems());
+    const result = companionMemoryGenerationCoordinator.projectIfConfigured();
+    if (result.ok && !result.skipped) {
+      const snapshot = companionMemoryPolicyStore.snapshot();
+      for (const [source, previous] of Object.entries(snapshot.lastResults)) {
+        if (previous?.status === "warning") companionMemoryPolicyStore.markResult(source, { ...previous, status: "completed", reason: "" });
+      }
+    }
+    return result;
   });
   handleTrusted("memory:prepare-forget", (value = {}) => companionMemoryControl.prepareForget(value));
   handleTrusted("memory:confirm-forget", (value = {}) => companionMemoryControl.confirmForget(value));
@@ -1275,6 +1321,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((realtime) => realtime.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

@@ -63,11 +63,11 @@ test("accepted memories are chunked, locally embedded and searchable without exp
 
 test("Markdown projection uses stable double links and preserves user conflicts", () => temp("deskmate-kb-projection-", (root) => {
   const projection = new KnowledgeBaseProjection({ root, now: () => "2026-09-02T09:00:00.000Z" });
-  const data = { dailySummaries: [{ day: "2026-09-02", summary: "完成了记忆开发", sourceTurnCount: 2 }], memories: [{ id: "12345678-1234-1234-1234-123456789abc", day: "2026-09-02", kind: "project", summary: "DeskMate 长期记忆" }] };
+  const data = { dailySummaries: [{ day: "2026-09-02", source: "companion", summary: "完成了记忆开发", sourceTurnCount: 2 }], memories: [{ id: "12345678-1234-1234-1234-123456789abc", day: "2026-09-02", source: "companion", kind: "project", summary: "DeskMate 长期记忆" }] };
   const first = projection.sync(data);
   assert.equal(first.ok, true);
   const note = path.join(root, "DeskMate", "memories", "12345678-1234-1234-1234-123456789abc.md");
-  assert.match(fs.readFileSync(note, "utf8"), /\[\[daily\/2026-09-02/);
+  assert.match(fs.readFileSync(note, "utf8"), /\[\[daily\/companion\/2026-09-02/);
   fs.writeFileSync(note, "user edited", "utf8");
   const second = projection.sync(data);
   assert.equal(second.conflicts, 1);
