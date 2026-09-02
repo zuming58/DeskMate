@@ -39,6 +39,14 @@ The T12/T13 software line contains newer Windows behavior but is not descended f
 - Classification: `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN`.
 - Safety: no app launch, device/port access, flash, OLED, audio, PWM or servo action. Motion remains `NOT_READY` in production.
 
+## Latest Windows follow-on (not merged)
+
+- T14A: `codex/t14-desktop-agent-adapter-framework@8578f0cc8bef40ba269bb0960adbaf04c66432ed`, based on the integrated Flow HEAD `1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`.
+- Adds a strict official Hermes lifecycle adapter and a generic sanitized provider status surface while preserving Codex and the single Agent State publisher.
+- Packages an optional Hermes plugin template but does not install, enable or modify global configuration. WorkBuddy remains manual pending authoritative identity and lifecycle evidence.
+- Desktop `289/289` and Windows package passed; classification is `SOFTWARE_FOLLOW_ON / CODE_BUILD_CONFIRMED / HIL_NOT_RUN / NOT_MERGED`.
+- It does not alter the current firmware evidence, does not enable motion and does not silently replace the exact T10D package selected for the current user gate.
+
 ## Three task summaries
 
 ### 1. Main Agent / EasyInput controller
@@ -72,6 +80,7 @@ The T12/T13 software line contains newer Windows behavior but is not descended f
 | T10D-B manual UI | Frozen `0x16/0x17` contract and vectors | Code/build complete at `6732503`; HIL not run | DeskMate software task |
 | T10D integration candidate | T10D-A and T10D-B code/build complete | Complete at `fd3204a`: Desktop full test/package and both firmware Host+IDF gates passed | Main Agent |
 | Integrated software HIL | Exact integrated package | T13 feature matrix plus truthful T10D-B NOT_READY/status gating | Main Agent + user |
+| T14A Hermes adapter HIL | Exact T14A package and explicit local enablement | Real lifecycle events use the shared publisher and reach the existing OLED state path without content leakage | DeskMate software task + main Agent + user |
 | EasyInput speaker HIL | Separate explicit app-only authorization and exact image audit | Low-volume local probe plus microphone-priority evidence; no layout regression | Main Agent + user |
 | Motion route code | T10C contract remains unchanged | T10D-A and T10D-B code/build complete; production motion still disabled | Main Agent / DeskMate software task |
 | Real servo calibration | All electrical/mechanical blockers documented and user present | Stage-by-stage recoverable HIL with physical cutoff and measured safe limits | Main Agent + user |

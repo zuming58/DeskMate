@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-02 - T14A Hermes Agent adapter delivery verified and queued as a Windows follow-on
+
+- Received and independently checked `codex/t14-desktop-agent-adapter-framework@8578f0cc8bef40ba269bb0960adbaf04c66432ed`; tested implementation is `be1a0afccc87aa32479d9cc8faeba916864d7091`. Git ancestry proves it starts from the exact T10D integrated Flow HEAD `1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`.
+- Scope audit confirms a Windows-only follow-on: strict local Hermes lifecycle Hook parsing, one generic sanitized provider status surface, the existing single `AgentStatePublisher`, Codex compatibility, and an optional packaged Hermes plugin template. WorkBuddy remains explicitly manual because its authoritative product lifecycle is still unknown. No firmware or DeskMate host/Link contract file changed.
+- Reported evidence was inspected from the pushed handoff: `npm ci --include=dev` passed, full Desktop tests `289/289`, Windows package passed, source/secret/ASCII/firmware-boundary checks passed. `DeskMate.exe` is `202690560` bytes / SHA-256 `95989A35243FA3AC4ED7B8FE83B36C5DE4035F07BA5502E860EFAD2DF89C1E99`; `app.asar` is `112772428` bytes / SHA-256 `7A27CDFCDE369CD60F8AB6EAF08A7E7144B1C9FB56A6DC585F90DD4A27BFDA43`.
+- Classification is `SOFTWARE_FOLLOW_ON / CODE_BUILD_CONFIRMED / HIL_NOT_RUN / NOT_MERGED`. The task did not launch DeskMate, install/enable Hermes, change global Hook/plugin configuration, access devices/ports or touch firmware/hardware. Real Hermes lifecycle plus OLED observation remains an explicit user-present gate.
+- The authoritative handoff remains on that branch at `docs/handoffs/t14a-desktop-hermes-agent-adapter-2026-09-02.md`. The current T10D exact-package gate and `NOT_READY` motion boundary are unchanged; the main Agent will select a later integration point rather than silently swapping the package under test.
+
 ## 2026-09-02 - T10D three-end integration candidate rebuilt and ready for software HIL
 
 - Created isolated branch `codex/t10d-three-end-integration` from control HEAD `b0a95d1c254d8fb8fad62933f76fa71fe7da10a3` and merged the exact Windows delivery `codex/t10d-desktop-manual-calibration-ui@67325032eee4b8e056de23c1c9b204b6d442d2f8`. The tested implementation merge is `fd3204a2b294535a1f865d9a2901e16e257179d8`; the dirty primary checkout was not modified.
