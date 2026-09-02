@@ -1,6 +1,6 @@
 # Development plan
 
-## Current stage: T15 runtime motion presets and T16 desktop actions/briefing
+## Current stage: T15 three-end physical acceptance and T16 software acceptance
 
 目标：以已经完成用户真机验收的 T10D-D 双舵机手动控制为硬件基线，冻结并实现四个高层实体预设动作，经 Windows → EasyInput → 小智三端完成状态、执行、终态、回中与急停闭环；Windows 软件并行实现白名单应用语音直开和隐私安全的 Codex 任务简报。任何新固件在独立构建与审计完成后，仍需用户逐板确认才能 app-only 烧录。
 
@@ -8,12 +8,14 @@
 
 > **主 Agent 总控快照（2026-09-02，以下内容优先于本节后面的历史分支记录）**
 >
-> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总，并已在隔离分支形成唯一 T10D 三端集成候选。任何窗口自己的 `flow/` 都只是该分支交接，只有本总控分支负责项目级状态、合并顺序和最终验收。
+> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总。T15/T16 已在隔离分支完成三端代码、构建和双板烧录阶段；当前不再有并行开发窗口待合并，下一门是用户在最新 Windows 包上完成实体预设与 T16 软件能力验收。任何窗口自己的 `flow/` 都只是该分支交接，只有本总控分支负责项目级状态、合并顺序和最终验收。
 
 #### Current source-of-truth map
 
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
+| T15/T16 current integration | `codex/t15-t16-integration`, tested implementation `871206c` | Desktop `353/353` + Windows package/native self-test; EasyInput Host `14/14` + ESP-IDF v5.5.5 build + app-only flash/readback; Xiaozhi Host `14/14` + ESP-IDF v5.5.3 build + user-reported flash success | `THREE_END_CODE_BUILD_CONFIRMED / DUAL_BOARD_FLASH_COMPLETE / PHYSICAL_PRESET_HIL_PENDING` |
+| T16 Windows delivery | `codex/t16-desktop-actions-briefing@5ed4a1e18822a337a36c50e53e998b2326faa6a0`, merged as `77e3647` | Explicit voice-enabled AppAction, bounded `codex-task-brief-v1`, deterministic status query and package verification | `MERGED / CODE_BUILD_CONFIRMED / REAL_APP_AND_REPORTER_HIL_PENDING` |
 | T10D-D accepted baseline | `codex/t10d-d-simplified-manual-control@2efe4e0` | User accepted all four directions, release, recenter, emergency stop and explicit emergency-stop recovery on the exact recovery package | `MOTION_MANUAL_CONTROL_HIL_ACCEPTED / FROZEN_BASELINE` |
 | T10D integrated candidate | `codex/t10d-three-end-integration@fd3204a2b294535a1f865d9a2901e16e257179d8` | Desktop `283/283` + exact Windows package; EasyInput Host `13/13` + ESP-IDF v5.5.5; Xiaozhi Host `11/11` + ESP-IDF v5.5.3 | `THREE_END_CODE_BUILD_CONFIRMED / HIL_NOT_RUN` |
 | T14A Windows follow-on | `codex/t14-desktop-agent-adapter-framework@8578f0cc8bef40ba269bb0960adbaf04c66432ed`, now included in T10D-D through the software ancestry | Codex-compatible generic provider status plus strict Hermes lifecycle adapter; integrated Desktop `310/310` + package | `MERGED / CODE_BUILD_CONFIRMED / HIL_NOT_RUN` |
@@ -38,8 +40,8 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 6. **T10D-C Stage 1 route trial — FLASH/PROTOCOL HIL COMPLETE, OUTPUT NOT RUN.** The exact app-only image was written and verified. Status and yaw selection reached Xiaozhi. The attempted step was rejected as `CENTER_REQUIRED` with `completed_output_count=0`, so no PWM/output occurred; this identified the old UI's missing center orchestration rather than a servo failure.
 7. **T10D-D simplified press-and-hold control — CODE/BUILD COMPLETE.** `codex/t10d-d-simplified-manual-control@514ad6be7a5c54a8574174d26121ac07bdafabbe` merges the simplified Windows delivery and the separate Xiaozhi Stage 2 profile. Desktop `310/310` plus package/native self-test, EasyInput Host `13/13`, Xiaozhi Host `12/12` and exact ESP-IDF v5.5.3 build pass. EasyInput firmware does not change.
 8. **T10D-D user-present HIL — ACCEPTED AND FROZEN.** The exact recovery package completed all four directions, release, recenter, emergency-stop latch and explicit recovery. This closes the calibration-style manual-control gate and permits design of bounded semantic presets; it does not by itself prove any preset, autonomous or voice-triggered movement.
-9. **T15 runtime preset motion — IN PROGRESS.** Freeze new additive HID `0x18/0x19` and DeskMate Link `0x22/0x23` contracts, implement Xiaozhi-local trajectories plus strict EasyInput forwarding, then expose four real preset tests in Windows. Default repeat is one for attention/search and two for nod/dance, configurable only from 1 through 3.
-10. **T16 desktop actions and Codex briefing — IN PROGRESS IN PARALLEL.** Implement direct launch only for explicitly voice-enabled registered applications, deterministic Codex status answers, and an opt-in content-bounded task brief reporter. This package must not guess the still-unfrozen motion wire.
+9. **T15 runtime preset motion — CODE/BUILD/FLASH COMPLETE; PHYSICAL HIL PENDING.** Additive HID `0x18/0x19` and DeskMate Link `0x22/0x23` are frozen and implemented. Xiaozhi owns the local trajectories; EasyInput only validates and forwards one request; Windows exposes four bounded real preset tests. Default repeat is one for attention/search and two for nod/dance, configurable only from 1 through 3. Both boards now contain T15 candidates: EasyInput was app-only flashed and independently read back byte-for-byte by the main Agent; Xiaozhi flash success is user-reported. Voice and automatic motion remain disabled until the ordered physical preset test passes.
+10. **T16 desktop actions and Codex briefing — CODE/BUILD COMPLETE; USER HIL PENDING.** Direct launch is implemented only for explicitly voice-enabled registered applications; deterministic Codex status answers and the opt-in content-bounded task brief reporter are merged into the current integration. Real application launch, reporter ingestion, automatic announcement and voice query remain user-controlled acceptance items.
 11. **T11E-B EasyInput local-speaker HIL — SEPARATE USER-AUTHORIZED GATE.** First audit the exact app-only image and preserved 16 MiB layout, then verify only the bounded low-volume startup probe and microphone-priority arbitration. It does not prove realtime speaker downlink, which remains `NOT_FROZEN`.
 
 #### Ownership and reporting

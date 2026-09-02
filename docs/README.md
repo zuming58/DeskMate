@@ -2,6 +2,9 @@
 
 ## Current handoff
 
+- [T15/T16 three-end integration, flash evidence and acceptance gate](handoffs/t15-t16-three-end-integration-2026-09-02.md)
+- [T15 EasyInput motion preset host contract](../contracts/deskmate-host/easyinput-motion-presets-v1.md)
+- [T15 DeskMate Link motion preset contract](../contracts/deskmate-link/t15-motion-presets-v1.md)
 - [T16 desktop actions and Codex task briefing](handoffs/t16-desktop-actions-briefing-2026-09-02.md)
 - [T16 desktop actions and task brief frozen contract](contracts/t16-desktop-actions-and-task-brief-v1.md)
 - [Windows explicit emergency-stop recovery](handoffs/t10d-desktop-emergency-stop-recovery-2026-09-02.md)
