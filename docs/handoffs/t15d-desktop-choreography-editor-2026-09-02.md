@@ -57,3 +57,15 @@ Package evidence:
 - The four existing T15 quick presets must first pass their ordered physical HIL. The main Agent then owns additive contract/vector freezing, both firmware endpoints, integration and user-authorized hardware acceptance.
 
 No application was launched or controlled. No device, port, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred.
+
+## Post-delivery compact UX repair
+
+The user's first visual review rejected the oversized full-width start action and repeated explanatory cards. A follow-up Windows-only commit keeps all transport and safety behavior intact and makes these changes:
+
+- start, stop/center and emergency stop share one compact action row;
+- default-repeat guidance is one line instead of a Notice card;
+- motion status is a one-line strip;
+- preview and automatic-motion boundaries are short footnotes;
+- the T15D action group uses the same compact hierarchy.
+
+The final follow-up evidence is `359/359` Desktop tests, a passing Windows package/native bridge self-test and `design-qa.md` with `final result: passed`. Updated package hashes are recorded in the newest `flow/progress.md` entry.

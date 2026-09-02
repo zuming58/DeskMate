@@ -23,7 +23,7 @@ import {
   createEmptyBeat,
   validateChoreographyDraft,
 } from "./domain/choreography.js";
-import { Button, Card, Notice, SectionTitle, Segmented, Select, StatusBadge } from "./ui.jsx";
+import { Button, Card, SectionTitle, Segmented, Select, StatusBadge } from "./ui.jsx";
 
 const REASON_COPY = Object.freeze({
   "choreography-contract-invalid": "动作结构无效，请重新编辑。",
@@ -180,7 +180,7 @@ export function ChoreographyEditor({ currentExpression, notify }) {
 
   return (
     <Card className="choreography-editor">
-      <SectionTitle index="02" title="自定义舞蹈" description="每一列是一个节拍；Yaw、Pitch 和表情在同一列同时生效，列与列依次执行。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
+      <SectionTitle index="02" title="自定义舞蹈" description="同列同步，逐列播放。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
       <div className="choreography-toolbar">
         <label><span>已保存动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="已保存的自定义动作"><option value="">新建草稿</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}</option>)}</Select></label>
         <Button icon={Plus} onClick={newDraft}>新建</Button>
@@ -205,11 +205,11 @@ export function ChoreographyEditor({ currentExpression, notify }) {
         <div className="choreography-actions">
           <Button icon={DeviceFloppy} variant="primary" disabled={busy !== ""} onClick={() => { void save(); }}>保存动作</Button>
           <Button icon={preview.running ? PlayerPause : PlayerPlay} disabled={busy !== ""} onClick={() => preview.running ? stopPreview(true) : startPreview()}>{preview.running ? "停止软件预览" : "软件预览"}</Button>
-          <Button icon={PlayerPlay} variant="primary" disabled={!adapter.ready || busy !== ""} onClick={() => { void runReal(); }}>实体执行</Button>
+          <Button icon={PlayerPlay} disabled={!adapter.ready || busy !== ""} onClick={() => { void runReal(); }}>实体执行</Button>
           <div className="motion-safety-actions"><Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止并回中</Button><Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button></div>
         </div>
       </div>
-      <Notice tone="demo" title="软件预览不等于实体执行">自定义动作传输尚未冻结并接入。实体执行按钮会保持禁用；预览不会调用固定动作接口，也不会发送角度、PWM、GPIO 或舵机指令。结尾固定显示中位并恢复最新外部表情。</Notice>
+      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>软件预览不等于实体执行</strong>传输尚未接入；实体按钮保持禁用，预览不发送舵机指令。</span></div>
     </Card>
   );
 }
