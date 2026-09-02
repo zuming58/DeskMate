@@ -5,6 +5,10 @@ const { randomBytes } = require("crypto");
 const { encodeManualCalibrationFeatureReport } = require("./manual-calibration-hid.cjs");
 
 const COMMANDS = new Set(["selectAxis", "arm", "provisionalCenter", "singleStep", "recenter", "emergencyStop", "clearEmergencyStop"]);
+const DIAGNOSTIC_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal"]);
+const DIAGNOSTIC_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
+const DIAGNOSTIC_ENDPOINT_RESULTS = new Set(["completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed"]);
+const DIAGNOSTIC_OWNER_STATES = new Set(["locked", "axis-selected", "armed", "provisional-center", "emergency-stopped", "faulted"]);
 
 function randomNonZero() {
   let value = 0;
@@ -22,29 +26,66 @@ class ManualCalibrationController extends EventEmitter {
     super();
     if (typeof send !== "function") throw new Error("manual-calibration-send-required");
     this.send = send; this.randomUInt32 = randomUInt32; this.now = now;
-    this.boardConnected = false; this.mountEpoch = 0; this.requestCounter = 0; this.confirmationCounter = randomUInt32() || 1;
+    this.boardConnected = false; this.calibrationCollectionWritable = false; this.mountEpoch = 0; this.requestCounter = 0; this.confirmationCounter = randomUInt32() || 1;
     this.pending = null; this.gate = "unavailable"; this.context = null; this.armToken = 0;
     this.intent = null; this.accepted = null; this.terminal = null;
   }
 
   snapshot() {
     return Object.freeze({
-      available: this.boardConnected, mountEpoch: this.mountEpoch, gate: this.gate, controlsEnabled: this.boardConnected && this.gate === "ready" && !this.pending,
+      available: this.boardConnected && this.calibrationCollectionWritable, calibrationCollectionWritable: this.calibrationCollectionWritable,
+      mountEpoch: this.mountEpoch, gate: this.gate, controlsEnabled: this.boardConnected && this.calibrationCollectionWritable && this.gate === "ready" && !this.pending,
       pending: this.pending ? { requestId: this.pending.requestId, kind: this.pending.kind, operation: this.pending.operation } : null,
       context: cleanEvidence(this.context), intent: cleanEvidence(this.intent), accepted: cleanEvidence(this.accepted), terminal: cleanEvidence(this.terminal),
     });
   }
 
+  diagnostics() {
+    const intent = this.intent;
+    if (!intent || !["status", "command"].includes(intent.kind) || !Number.isInteger(intent.requestId) || intent.requestId < 1 || intent.requestId > 0xffffffff) {
+      return Object.freeze({ status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: Object.freeze({ enum: "NONE", code: 0 }), endpoint: null, at: null });
+    }
+    const terminal = this.terminal && (this.terminal.requestId === undefined || this.terminal.requestId === intent.requestId) ? this.terminal : null;
+    const terminalTransport = DIAGNOSTIC_TRANSPORTS.has(terminal?.transport) ? terminal.transport : "unavailable";
+    const candidateLinkErrorCode = Number.isInteger(terminal?.linkErrorCode) && DIAGNOSTIC_LINK_ERRORS.has(terminal.linkErrorCode) && DIAGNOSTIC_LINK_ERRORS.get(terminal.linkErrorCode) === terminal.linkError ? terminal.linkErrorCode : 0;
+    const linkErrorCode = terminalTransport === "link-error" && candidateLinkErrorCode > 0 ? candidateLinkErrorCode : 0;
+    const linkError = DIAGNOSTIC_LINK_ERRORS.get(linkErrorCode);
+    const endpoint = terminal?.endpoint && typeof terminal.endpoint === "object" ? terminal.endpoint : null;
+    const endpointEvidence = endpoint && (DIAGNOSTIC_ENDPOINT_RESULTS.has(endpoint.result) || DIAGNOSTIC_OWNER_STATES.has(endpoint.state)) ? Object.freeze({
+      ...(DIAGNOSTIC_ENDPOINT_RESULTS.has(endpoint.result) ? { result: endpoint.result } : {}),
+      ...(DIAGNOSTIC_OWNER_STATES.has(endpoint.state) ? { state: endpoint.state } : {}),
+    }) : null;
+    const at = [terminal?.at, this.accepted?.at, intent.at].find((value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) || null;
+    return Object.freeze({
+      status: "available",
+      request: Object.freeze({ kind: intent.kind, id: intent.requestId }),
+      accepted: this.accepted?.requestId === intent.requestId,
+      transport: terminalTransport === "link-error" && linkErrorCode === 0 ? "unavailable" : terminalTransport,
+      linkError: Object.freeze({ enum: linkError, code: linkErrorCode }),
+      endpoint: endpointEvidence,
+      at,
+    });
+  }
+
   publish() { const value = this.snapshot(); this.emit("status", value); return value; }
+
+  clearVolatileAuthorization() {
+    this.armToken = 0;
+    return this.publish();
+  }
 
   handleBridgeStatus(value = {}) {
     const connected = Boolean(value.boardConnected);
-    if (connected && !this.boardConnected) {
+    const calibrationCollectionWritable = connected && value.calibrationCollectionWritable !== false;
+    const wasAvailable = this.boardConnected && this.calibrationCollectionWritable;
+    const available = connected && calibrationCollectionWritable;
+    if (available && !wasAvailable) {
       this.mountEpoch += 1; this.requestCounter = 0; this.gate = "query-required"; this.context = null; this.armToken = 0; this.pending = null; this.accepted = null; this.terminal = null;
-    } else if (!connected && this.boardConnected) {
+    } else if (!available && wasAvailable) {
       this.gate = "unavailable"; this.context = null; this.armToken = 0; this.pending = null; this.accepted = null; this.terminal = { stage: "terminal", transport: "peer-disconnected-or-restarted", at: this.now() };
     }
     this.boardConnected = connected;
+    this.calibrationCollectionWritable = calibrationCollectionWritable;
     return this.publish();
   }
 
@@ -62,6 +103,7 @@ class ManualCalibrationController extends EventEmitter {
 
   async queryStatus() {
     if (!this.boardConnected) return { ok: false, reason: "easyinput-not-connected", status: this.snapshot() };
+    if (!this.calibrationCollectionWritable) return { ok: false, reason: "manual-calibration-interface-unavailable", status: this.snapshot() };
     if (this.pending) return { ok: false, reason: "manual-calibration-busy", status: this.snapshot() };
     const requestId = this.nextRequestId();
     const report = encodeManualCalibrationFeatureReport({ kind: "status", requestId, confirmationId: 0 });
@@ -73,6 +115,7 @@ class ManualCalibrationController extends EventEmitter {
     const operation = String(value.operation || "");
     if (!COMMANDS.has(operation)) return { ok: false, reason: "manual-calibration-command-invalid", status: this.snapshot() };
     if (!this.boardConnected) return { ok: false, reason: "easyinput-not-connected", status: this.snapshot() };
+    if (!this.calibrationCollectionWritable) return { ok: false, reason: "manual-calibration-interface-unavailable", status: this.snapshot() };
     if (this.gate !== "ready" || !this.context) return { ok: false, reason: "manual-calibration-status-required", status: this.snapshot() };
     if (this.pending) return { ok: false, reason: "manual-calibration-busy", status: this.snapshot() };
     const axis = operation === "emergencyStop" || operation === "clearEmergencyStop" ? "none" : String(value.axis || this.context.selectedAxis || "");
@@ -115,7 +158,10 @@ class ManualCalibrationController extends EventEmitter {
     this.terminal = terminal ? { ...terminal, at: this.now() } : { stage: "terminal", transport: result?.reason || "transport-failed", at: this.now() };
     if (entry.kind === "status") {
       if (result?.ok && terminal?.transportCode === 0 && terminal.endpoint?.type === "status") { this.context = terminal.endpoint; this.gate = "ready"; }
-      else { this.context = null; this.gate = terminal?.transport === "link-not-ready" ? "not-ready" : "faulted"; }
+      else {
+        this.context = null;
+        this.gate = terminal?.transport === "link-not-ready" || (terminal?.transport === "link-error" && terminal?.linkError === "NOT_READY") ? "not-ready" : terminal?.transport === "link-error" && terminal?.linkError === "UNKNOWN_TYPE" ? "unsupported" : "faulted";
+      }
     } else if (result?.ok && terminal?.endpoint?.type === "command") {
       const endpoint = terminal.endpoint;
       this.context = { ...this.context, sessionId: endpoint.sessionId, lastActionId: endpoint.actionId, completedOutputCount: endpoint.completedOutputCount, state: endpoint.state, selectedAxis: endpoint.selectedAxis, flags: endpoint.flags, armed: endpoint.armed, provisionalCenter: endpoint.provisionalCenter, recenterRequired: endpoint.recenterRequired, emergencyStopped: endpoint.emergencyStopped, faulted: endpoint.faulted, adapterAvailable: endpoint.adapterAvailable, lastError: endpoint.lastError, fixedStepDegrees: endpoint.fixedStepDegrees };

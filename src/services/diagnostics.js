@@ -13,6 +13,35 @@ const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacen
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
+const MANUAL_CALIBRATION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "unavailable"]);
+const MANUAL_CALIBRATION_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
+const MANUAL_CALIBRATION_ENDPOINT_RESULTS = new Set(["completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed"]);
+const MANUAL_CALIBRATION_OWNER_STATES = new Set(["locked", "axis-selected", "armed", "provisional-center", "emergency-stopped", "faulted"]);
+
+function normalizeManualCalibrationDiagnostics(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const request = source.request && ["status", "command"].includes(source.request.kind) && Number.isInteger(source.request.id) && source.request.id >= 1 && source.request.id <= 0xffffffff
+    ? { kind: source.request.kind, id: source.request.id }
+    : null;
+  if (!request) return { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null };
+  const requestedTransport = MANUAL_CALIBRATION_TRANSPORTS.has(source.transport) ? source.transport : "unavailable";
+  const candidateLinkErrorCode = Number.isInteger(source.linkError?.code) && MANUAL_CALIBRATION_LINK_ERRORS.has(source.linkError.code) && MANUAL_CALIBRATION_LINK_ERRORS.get(source.linkError.code) === source.linkError.enum ? source.linkError.code : 0;
+  const linkErrorCode = requestedTransport === "link-error" && candidateLinkErrorCode > 0 ? candidateLinkErrorCode : 0;
+  const endpoint = source.endpoint && typeof source.endpoint === "object" ? {
+    ...(MANUAL_CALIBRATION_ENDPOINT_RESULTS.has(source.endpoint.result) ? { result: source.endpoint.result } : {}),
+    ...(MANUAL_CALIBRATION_OWNER_STATES.has(source.endpoint.state) ? { state: source.endpoint.state } : {}),
+  } : null;
+  const at = typeof source.at === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(source.at) ? source.at : null;
+  return {
+    status: "available",
+    request,
+    accepted: source.accepted === true,
+    transport: requestedTransport === "link-error" && linkErrorCode === 0 ? "unavailable" : requestedTransport,
+    linkError: { enum: MANUAL_CALIBRATION_LINK_ERRORS.get(linkErrorCode), code: linkErrorCode },
+    endpoint: endpoint && Object.keys(endpoint).length > 0 ? endpoint : null,
+    at,
+  };
+}
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -26,8 +55,16 @@ export function createDiagnosticReport(input = {}) {
     counters: Object.fromEntries(["heartbeats", "audioFrames", "droppedFrames", "sequenceGaps", "malformedPackets", "sourceRejects", "controlRetries", "controlTimeouts"].map((key) => [key, Number.isInteger(counters[key]) ? counters[key] : 0])),
   };
   const bridge = input.inputBridge || {};
+  const enumerated = bridge.boardConnected === true;
+  const collectionState = (value) => !enumerated ? "not-enumerated" : typeof value === "boolean" ? (value ? "writable" : "unavailable") : "unknown";
+  const easyInputHid = {
+    enumerated,
+    configCollection: collectionState(bridge.configCollectionWritable),
+    calibrationCollection: collectionState(bridge.calibrationCollectionWritable),
+  };
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
+  const manualCalibration = normalizeManualCalibrationDiagnostics(bridge.manualCalibration);
   const conversationSource = input.conversation || {};
   const conversationCounters = conversationSource.counters || {};
   const echoGuardSource = conversationSource.echoGuard || {};
@@ -111,5 +148,5 @@ export function createDiagnosticReport(input = {}) {
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, deskMateLink: link, agentStateDelivery };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration };
 }

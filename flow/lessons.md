@@ -1,5 +1,23 @@
 # Lessons learned
 
+## A safe hold control is a terminal-gated scheduler, not repeated button clicks
+
+- Symptom: simplifying a calibration console into four direction buttons can accidentally create overlapping ARM/step requests, queued movement after release, a repeat rate above the intended ceiling or a UI that stays armed after transport failure.
+- Practice: keep one main-process session owner, let each semantic tick finish select/ARM/output before scheduling the next, and make the continuation predicate observable between those internal requests. Release cancels the next tick; failures other than an explicit center gate end the session; emergency stop waits only for the current terminal and then wins.
+- Rule: renderer pointer state is never movement authority. A hold gesture grants permission for one terminal-gated step at a time, at a bounded cadence, and every focus/lifecycle/disconnect boundary revokes future permission without replay.
+
+## A generic transport failure must not erase a frozen endpoint error
+
+- Symptom: a read-only request is accepted by EasyInput, but the Windows panel only shows `link-error` and falls back to an undifferentiated unavailable state, hiding whether the peer lacks the message or merely has an unready owner.
+- Practice: keep the stable generic transport result and decode only the protocol's frozen error enum as a bounded second layer. Validate the flag, code/name pairing, request correlation and absence of an endpoint payload before exposing it; export only the latest sanitized fact.
+- Rule: intent, controller acceptance, Link transport and endpoint result are separate evidence layers. More precise failure evidence may improve diagnosis, but it must never unlock output or become movement-success evidence.
+
+## Composite HID devices must be selected by top-level collection, not VID/PID alone
+
+- Symptom: one EasyInput function fails with `HidD_SetFeature` while ordinary keys and another vendor report still work; reconnect events can also make the whole board appear unavailable even though only one collection changed.
+- Practice: freeze VID, PID, Usage Page, Usage and exact `HIDP_CAPS` report lengths for each report family. Register every Input-bearing vendor collection with Raw Input, and expose enumeration plus per-collection writable evidence independently.
+- Rule: multiple top-level collections belonging to one USB device are separate Windows interfaces. “Same VID/PID and large enough buffer” is not a routing contract, and one missing collection must not fabricate total device or downstream Link failure.
+
 ## A persisted provider setting is not proof of provider behavior
 
 - Symptom: settings and new-session diagnostics both show an eight-second endpoint, yet the cloud service still answers after its short default pause.
@@ -223,8 +241,8 @@
 
 ## A growing bounded status payload requires consumer-boundary regression vectors
 
-- Symptom: firmware added privacy-safe T09 Link and Agent counters to an existing status JSON. The producer stayed below its 1024-byte buffer, but the Windows consumer silently retained the older 512-byte / 11-chunk limit and discarded the first 561-byte / 12-chunk response.
-- Practice: define the producer's usable byte limit, derived maximum chunk count and per-kind limits once in the consumer protocol module. Test both the newly observed expanded payload and the exact reject boundary. Do not treat a successful full-config stream as evidence that the independent status stream is accepted.
+- Symptom: firmware added privacy-safe Link, Agent and later diagnostics to an existing status JSON. The producer grew to about 1104 bytes inside its 1536-byte buffer, but the Windows consumer silently retained a stale 1023-byte / 21-chunk limit and discarded the first 23-chunk response. A separate full-config read still completed, hiding the mismatch.
+- Practice: define the producer's buffer ceiling, effective usable JSON limit, derived maximum chunk count and per-kind limits once in the consumer protocol module. Test the observed 1024+ byte payload, the 31-chunk edge and the first rejected byte/chunk. Do not treat a successful full-config stream as evidence that the independent status stream is accepted.
 - Rule: whenever fields are added to a bounded cross-end diagnostic payload, rerun a near-current-size golden vector through the actual native consumer. Sanitized counters must remain explicitly enumerated; raw JSON, user content and device identifiers must not be forwarded merely to simplify diagnosis.
 
 ## An app-only candidate must not hide a failed bootloader rebuild

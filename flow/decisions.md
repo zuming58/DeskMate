@@ -1,12 +1,50 @@
 # Decisions
 
-## D067 - Simple manual control is a Windows orchestration over the frozen calibration wire
+## D072 - Simple manual control is a Windows orchestration over the frozen calibration wire
 
 - Date: 2026-09-02
 - Decision: the normal manual-servo UI contains one environment confirmation/start action, four press-and-hold directions, return to center and emergency stop. It does not expose four independent attestations, ARM lease duration, token generation, axis confirmation, fixed-step buttons or three large evidence cards.
 - Compatibility: DeskMate Link `0x20/0x21` and EasyInput HID `0x16/0x17` remain byte-for-byte unchanged. Windows serially expands start, hold and center into the existing select-axis, fresh one-use ARM, center, one-degree step and recenter operations. There is one request in flight, no backlog/replay and at most four hold steps per second.
 - Hardware: the flashed Stage 1 1489..1511 us micro-envelope cannot support hold control. A separate Stage 2 overlay may restore the exact fixed-reference yaw 1055..1944 us and pitch 1277..1722 us envelopes previously exercised by this same assembled unit; these values stay local to Xiaozhi and normal `MOTION` remains disabled.
 - Acceptance: the observed no-motion attempt is classified as a truthful `CENTER_REQUIRED` rejection with output count zero, not a PWM failure. New software must establish both centers first. Stage 2 still requires exact build evidence, new app-only authorization and user-present direction/release/center/e-stop HIL.
+
+## D071 - Manual servo control is a semantic hold session, not an expert calibration console
+
+- Date: 2026-09-02
+- Decision: the normal Windows surface contains one environment confirmation, one start action, four press-and-hold directions, recenter and immediate stop. Electron main owns one `ManualControlCoordinator`; the renderer cannot create ARM tokens, choose leases, select axes or construct raw calibration commands.
+- Orchestration: start serially establishes Yaw and Pitch centers using the existing select → fresh one-use ARM → provisional-center operations. Each held-direction tick selects the axis only when necessary, creates another fresh ARM with the complete frozen safety flags and a 5000 ms lease, then issues exactly one fixed 1° step. Recenter serially runs both axes through select → ARM → recenter. No HID or DeskMate Link wire value changes.
+- Safety lifecycle: at most one semantic request is in flight and the repeat interval is at least 250 ms. Release, pointer cancellation, capture loss, window blur, hidden/page leave, device/Link loss and 60 seconds idle suppress all future output and lock the session. A center-required result keeps only the center-recovery path; every other movement/transport failure exits fail closed. Emergency stop stays available whenever the interface exists.
+- Evidence: user intent, EasyInput accepted and Xiaozhi terminal remain distinct. A correlated completed endpoint may repair a stale generic Link label, but neither protocol completion nor `completed_output_count` proves direction, angle, mechanical clearance or safe physical motion. Those remain user-present HIL.
+
+## D070 - Generic calibration transport preserves a bounded frozen Link error subtype
+
+- 日期：2026-09-02
+- 决策：Windows 手动校准继续把跨板失败归类为通用 `link-error` transport，同时只向控制器、UI 和脱敏诊断传递冻结 DeskMate Link v1 的六个错误名及对应数值。未知值、名称/数值不一致、非 error flag 携带错误值或非 `link-error` transport 携带错误值全部 fail closed。
+- 原因：EasyInput accepted 只证明请求进入总控；通用 transport 只证明板间请求失败。保留受限的端点错误子类，才能不靠猜测区分“小智固件不支持消息”和“协议存在但校准 owner/真实适配器未就绪”，同时避免把任一层证据冒充机械动作结果。
+- 边界：该错误只用于状态查询诊断和可操作提示，不解锁、不启用输出、不构成舵机运动或安全验收。诊断只保存最新请求的有界元数据，不保存 HID 原始报告、Link payload、设备标识或用户数据。
+
+## D069 - Native status-stream bounds follow the frozen producer capacity
+
+- Date: 2026-09-02
+- Decision: Windows accepts EasyInput `0x11` status streams up to the firmware-owned 1536-byte buffer ceiling and at most 31 chunks of 50 data bytes. Full-config `0x13` retains its independent 2048-byte / 42-chunk ceiling.
+- Boundary: 1536 bytes is the defensive wire ceiling; the current NUL-terminated firmware JSON is effectively at most 1535 bytes. Chunk count, declared length, sequence, request identity, CRC, padding, schema and enumerated fields all remain fail-closed.
+- Acceptance: native regression must include a payload larger than 1023 bytes, the 31-chunk edge, and explicit rejection at 32 chunks or 1537 bytes. A successful config read is not evidence that the separate status stream was accepted, and a successful status read is not evidence of Xiaozhi display or motion.
+
+## D068 - Windows routes EasyInput reports by exact top-level HID collection
+
+- Date: 2026-09-02
+- Decision: VID/PID alone never selects an EasyInput Feature path. Reports `0x10..0x15` require VID `303A`, PID `1006`, Usage Page `FF00`, Usage `0002`, and exact 64-byte Input/Feature platform lengths. Manual calibration Feature `0x16` and Input `0x17` require the same VID/PID and lengths on Usage `0007`.
+- Lifecycle: Raw Input subscribes to both vendor usages. Runtime evidence separates any enumerated EasyInput interface, config collection writable and calibration collection writable. Losing `0007` closes only calibration; losing `0002` closes config/Agent State and Link-status reads. Returning `0002` triggers one bounded status refresh without replaying stale actions.
+- Truth boundary: EasyInput enumeration and writable collections are local Windows transport facts only. They never imply DeskMate Link connected, Xiaozhi receipt, terminal completion or physical movement. Exported evidence stays bounded and excludes device paths and identifiers.
+- Acceptance: pure contract tests must prove `0x14→0002`, `0x16→0007`, wrong-collection rejection, dual Raw Input registration and re-enumeration recovery. Real Link/Xiaozhi observation remains a separate HIL gate.
+
+## D067 - External Agent automation requires an authoritative opt-in lifecycle adapter
+
+- Date: 2026-09-02
+- Decision: Codex and Hermes may publish automatic status only through their documented lifecycle hooks and the existing single `AgentStatePublisher`. Hermes uses an optional user-enabled plugin and a strict content-free local pipe. Provider identity never reaches firmware; VoiceWorkflow and companion conversation remain higher priority.
+- Privacy: adapters may send only an allowlisted event name, bounded tool name and closed final outcome. Prompts, replies, commands, tool payloads/results, paths, identifiers, model/provider routing and raw errors are forbidden.
+- Manual boundary: WorkBuddy names multiple unrelated products and no exact user product/version contract has been selected. It remains manual; DeskMate does not infer status from windows, processes, logs or traffic.
+- Acceptance: host tests and packaging can close the software gate. Installing/enabling the Hermes plugin and observing real lifecycle/OLED behavior remain explicit user-controlled acceptance.
 
 ## D066 - Manual servo calibration requires a terminal status gate and three separate evidence layers
 

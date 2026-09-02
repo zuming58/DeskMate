@@ -1,0 +1,3 @@
+name: deskmate-status
+version: "1.0.0"
+description: Sends content-free Hermes lifecycle states to the local DeskMate Windows app

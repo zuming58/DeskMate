@@ -86,6 +86,11 @@ function parseBridgeLine(line) {
   if (!["input", "status"].includes(value.type)) return null;
   if (!ALLOWED_SOURCES.has(value.source) || !ALLOWED_KEYS.has(value.key) || !ALLOWED_ACTIONS.has(value.action)) return null;
   if (!Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+  if (value.type === "status") {
+    for (const field of ["configCollectionWritable", "calibrationCollectionWritable"]) {
+      if (Object.hasOwn(value, field) && typeof value[field] !== "boolean") return null;
+    }
+  }
   return Object.freeze({
     version: 1,
     type: value.type,
@@ -94,7 +99,11 @@ function parseBridgeLine(line) {
     action: value.action,
     time: value.time,
     sequence: value.sequence,
-    ...(value.type === "status" ? { boardConnected: Boolean(value.boardConnected) } : {}),
+    ...(value.type === "status" ? {
+      boardConnected: Boolean(value.boardConnected),
+      ...(typeof value.configCollectionWritable === "boolean" ? { configCollectionWritable: value.configCollectionWritable } : {}),
+      ...(typeof value.calibrationCollectionWritable === "boolean" ? { calibrationCollectionWritable: value.calibrationCollectionWritable } : {}),
+    } : {}),
   });
 }
 
