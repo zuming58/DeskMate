@@ -22,10 +22,11 @@ function cleanEvidence(value) {
 }
 
 class ManualCalibrationController extends EventEmitter {
-  constructor({ send, randomUInt32 = randomNonZero, now = () => new Date().toISOString() } = {}) {
+  constructor({ send, randomUInt32 = randomNonZero, requestIdSequence = null, now = () => new Date().toISOString() } = {}) {
     super();
     if (typeof send !== "function") throw new Error("manual-calibration-send-required");
-    this.send = send; this.randomUInt32 = randomUInt32; this.now = now;
+    if (requestIdSequence !== null && typeof requestIdSequence?.next !== "function") throw new Error("manual-calibration-request-id-sequence-invalid");
+    this.send = send; this.randomUInt32 = randomUInt32; this.requestIdSequence = requestIdSequence; this.now = now;
     this.boardConnected = false; this.calibrationCollectionWritable = false; this.mountEpoch = 0; this.requestCounter = 0; this.confirmationCounter = randomUInt32() || 1;
     this.pending = null; this.gate = "unavailable"; this.context = null; this.armToken = 0;
     this.intent = null; this.accepted = null; this.terminal = null;
@@ -90,6 +91,7 @@ class ManualCalibrationController extends EventEmitter {
   }
 
   nextRequestId() {
+    if (this.requestIdSequence) return this.requestIdSequence.next();
     this.requestCounter = (this.requestCounter + 1) >>> 0;
     if (this.requestCounter === 0) this.requestCounter = 1;
     return this.requestCounter;
@@ -105,10 +107,17 @@ class ManualCalibrationController extends EventEmitter {
     if (!this.boardConnected) return { ok: false, reason: "easyinput-not-connected", status: this.snapshot() };
     if (!this.calibrationCollectionWritable) return { ok: false, reason: "manual-calibration-interface-unavailable", status: this.snapshot() };
     if (this.pending) return { ok: false, reason: "manual-calibration-busy", status: this.snapshot() };
-    const requestId = this.nextRequestId();
-    const report = encodeManualCalibrationFeatureReport({ kind: "status", requestId, confirmationId: 0 });
-    this.gate = "querying";
-    return this.issue({ requestId, confirmationId: 0, kind: "status", operation: "status", report });
+    while (true) {
+      let requestId;
+      try { requestId = this.nextRequestId(); }
+      catch (error) { return this.requestIdFailure(error); }
+      const report = encodeManualCalibrationFeatureReport({ kind: "status", requestId, confirmationId: 0 });
+      this.gate = "querying";
+      const result = await this.issue({ requestId, confirmationId: 0, kind: "status", operation: "status", report });
+      if (result?.reason !== "stale" || typeof this.requestIdSequence?.recoverAfterStale !== "function") return result;
+      try { this.requestIdSequence.recoverAfterStale(requestId); }
+      catch (error) { return this.requestIdFailure(error); }
+    }
   }
 
   async command(value = {}) {
@@ -120,7 +129,10 @@ class ManualCalibrationController extends EventEmitter {
     if (this.pending) return { ok: false, reason: "manual-calibration-busy", status: this.snapshot() };
     const axis = operation === "emergencyStop" || operation === "clearEmergencyStop" ? "none" : String(value.axis || this.context.selectedAxis || "");
     if (!["yaw", "pitch", "none"].includes(axis)) return { ok: false, reason: "manual-calibration-axis-invalid", status: this.snapshot() };
-    const requestId = this.nextRequestId(); const confirmationId = this.nextConfirmationId();
+    let requestId;
+    try { requestId = this.nextRequestId(); }
+    catch (error) { return this.requestIdFailure(error); }
+    const confirmationId = this.nextConfirmationId();
     const actionId = ((this.context.lastActionId || 0) + 1) >>> 0 || 1;
     let armToken = 0; let safetyFlags = 0; let leaseMs = 0; let direction = 0;
     if (operation === "arm") {
@@ -138,6 +150,14 @@ class ManualCalibrationController extends EventEmitter {
     if (["selectAxis", "emergencyStop", "clearEmergencyStop"].includes(operation)) this.armToken = 0;
     const result = await this.issue({ requestId, confirmationId, kind: "command", operation, report, pendingArmToken: operation === "arm" ? armToken : 0 });
     return result;
+  }
+
+  requestIdFailure(error) {
+    const allowed = new Set(["manual-calibration-request-id-store-corrupt", "manual-calibration-request-id-exhausted", "manual-calibration-request-id-persist-failed", "manual-calibration-request-id-invalid"]);
+    const reason = allowed.has(error?.code) ? error.code : "manual-calibration-request-id-unavailable";
+    this.pending = null; this.context = null; this.armToken = 0; this.gate = "faulted";
+    this.terminal = { stage: "terminal", transport: reason, at: this.now() };
+    return { ok: false, reason, status: this.publish() };
   }
 
   async issue(entry) {

@@ -44,6 +44,7 @@ const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
+const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
 const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
@@ -938,8 +939,10 @@ app.whenReady().then(async () => {
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
+  const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    requestIdSequence: manualCalibrationRequestIds,
   });
   manualCalibrationController.on("status", (value) => { sendToMain("manual-calibration-status", value); emitInputBridgeStatus(); });
   manualControlCoordinator = new ManualControlCoordinator({ calibration: manualCalibrationController });
