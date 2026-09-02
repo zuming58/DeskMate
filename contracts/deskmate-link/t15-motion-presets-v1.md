@@ -21,12 +21,18 @@ pulse width, duty cycle, an absolute angle, a waypoint or a velocity.
   multi-second motion.
 - Stop, disconnect, peer reboot, controller reboot, fault and emergency stop
   clear unexecuted waypoints. Nothing is replayed after a new session.
+- T10D manual control and T15 presets share one MotionCoordinator, which is the
+  sole ServoAdapter writer and owns the common emergency-stop, fault, logical
+  center and output state. Starting manual control cancels a preset. A preset
+  can never run while the manual owner is active.
 - Every normally completed preset and `STOP_AND_CENTER` finish at the accepted
   Stage 2 center. Emergency stop disables output immediately and latches.
   `CLEAR_ESTOP_AND_CENTER` clears only the stop latch and then recenters before
   returning ready.
 - The fixed runtime envelope is a strict subset of the accepted Stage 2
   profile. The endpoint owns timing, interpolation, limit checks and output.
+- Source never preempts an already running preset. A concurrent run returns
+  `BUSY`; only manual control, recovery, fault, stop and emergency stop preempt.
 
 ## `0x22 RUN_MOTION_PRESET`
 
@@ -50,6 +56,12 @@ restarting a preset. Reuse with different bytes is a sequence conflict; an
 older normal action is stale. Emergency stop remains idempotent and highest
 priority even when its action ID is older than the last normal action.
 
+Allowed sources are exact: RUN accepts UI, explicit voice, context or idle;
+STOP_AND_CENTER accepts UI or explicit voice; EMERGENCY_STOP accepts UI or
+explicit voice; CLEAR_ESTOP_AND_CENTER accepts UI only. Clear is the explicit
+user-present recovery flow. Context, idle and ordinary voice can never clear a
+latched stop. Clear never clears a fault.
+
 The response is the 20-byte status record below. For `RUN`, result `ACCEPTED`
 means only that the endpoint accepted and started the local preset. It does not
 mean that a servo moved or that the preset finished.
@@ -61,16 +73,16 @@ The request is empty. The response uses the same 20-byte status record:
 | Offset | Bytes | Field |
 | ---: | ---: | --- |
 | 0 | 4 | current `session_id` |
-| 4 | 4 | last accepted/terminal `action_id` |
+| 4 | 4 | subject `action_id` |
 | 8 | 4 | completed preset counter for this session |
 | 12 | 1 | result |
 | 13 | 1 | state |
-| 14 | 1 | active or last preset, `0..4` |
-| 15 | 1 | requested repeats, `0..3` |
-| 16 | 1 | completed repeats, `0..3` |
-| 17 | 1 | source, `0..4` |
-| 18 | 1 | flags |
-| 19 | 1 | last terminal result/detail |
+| 14 | 1 | operation, `0..4` |
+| 15 | 1 | active or last preset, `0..4` |
+| 16 | 1 | requested repeats, `0..3` |
+| 17 | 1 | completed repeats, `0..3` |
+| 18 | 1 | source, `0..4` |
+| 19 | 1 | flags |
 
 Results: `ACCEPTED=0`, `DUPLICATE=1`, `COMPLETED=2`, `CANCELLED=3`,
 `NOT_READY=4`, `BAD_PAYLOAD=5`, `WRONG_SESSION=6`, `STALE_ACTION=7`,
@@ -80,10 +92,12 @@ Results: `ACCEPTED=0`, `DUPLICATE=1`, `COMPLETED=2`, `CANCELLED=3`,
 States: `NOT_READY=0`, `RECENTERING=1`, `READY=2`, `RUNNING=3`,
 `EMERGENCY_STOPPED=4`, `FAULTED=5`.
 
-Flags: adapter available bit 0, centered bit 1, emergency stop latched bit 2,
-faulted bit 3 and physical output active bit 4. Bits 5..7 are zero.
+Flags: adapter available bit 0, logical center command accepted bit 1,
+emergency stop latched bit 2, faulted bit 3, servo output enabled bit 4,
+operation terminal bit 5, duplicate response bit 6. Bit 7 is zero.
 
-`adapter available`, `centered` and `physical output active` describe only the
+`adapter available`, `logical center command accepted` and `servo output
+enabled` describe only the
 endpoint's configured adapter and accepted command state. There is no position
 sensor, so none of these bits proves measured shaft angle, mechanical arrival,
 load safety or physical acceptance.
@@ -98,6 +112,22 @@ Rejected, stopped, duplicate and partially completed actions do not increment
 it. `completed repeats` may advance while running and is diagnostic evidence,
 not measured mechanical movement.
 
+For a `0x22` reply, subject is always that request, including BUSY, STALE and
+other rejections. A rejected request never overwrites the live snapshot that a
+subsequent `0x23` returns. For `0x23`, subject is the current or last accepted
+operation. RUN is complete only when the same controller and peer boot epochs
+remain active, subject action matches, result is COMPLETED, state is READY,
+repeat completed equals repeat total, completed preset counter advanced exactly
+once, and operation terminal is set. STOP/CLEAR do not increment the preset
+counter. EMERGENCY_STOP is a synchronous terminal latch.
+
+Structural violations (length, enum, reserved bytes or impossible field
+combination) return inherited Link `BAD_PAYLOAD`. A structurally valid request
+rejected by motion policy returns the 20-byte semantic result. EasyInput Link
+queue contention is a host transport error and is never converted to semantic
+BUSY. `0x22 ACCEPTED` ends only its Link transaction; it does not complete the
+multi-second action.
+
 ## Endpoint-owned first revision trajectories
 
 The values below describe behavior for tests and product review. They are not
@@ -105,13 +135,18 @@ fields in either wire contract.
 
 | Preset | Local trajectory | Default |
 | --- | --- | ---: |
-| attention | pitch up about 4 degrees, hold, center | 1 repeat, about 1.2 s |
-| nod | pitch down about 6 degrees, slight lift, center | 2 repeats, about 3.2 s |
-| search | yaw left about 10 degrees, right about 10 degrees, center | 1 repeat, about 2.2 s |
-| dance | yaw sway plus small pitch motion, center | 2 repeats, about 7.2 s |
+| attention | `(yaw 0, pitch -4) -> (0, 0)` | 1 repeat, about 1.2 s |
+| nod | `(0, +6) -> (0, -2) -> (0, 0)` | 2 repeats, about 3.2 s |
+| search | `(yaw -10, pitch 0) -> (+10, 0) -> (0, 0)` | 1 repeat, about 2.2 s |
+| dance | `(-8, -3) -> (+8, +3) -> (-8, +3) -> (+8, -3) -> (0, 0)` | 2 repeats, about 7.2 s |
 
 The endpoint may smooth waypoints but may not exceed the frozen amplitudes or
 Stage 2 limits without a new contract and physical acceptance.
+Every repeat ends at logical center before `repeat_completed` increments. A
+preset watchdog is `repeat_count * {attention:1500, nod:1800, search:2500,
+dance:4000} + 1000 ms`; therefore dance x3 has a hard 13 second deadline.
+Expiry stops output, clears remaining waypoints and reports a terminal fault;
+it cannot hold or continue indefinitely.
 
 ## Capability and readiness
 
@@ -119,3 +154,7 @@ The existing MOTION capability bit 3 is enabled only when the production
 endpoint has this handler, the accepted Stage 2 profile and an available real
 servo adapter. A missing/disabled adapter keeps the bit clear and both messages
 return inherited `NOT_READY`. Capability presence is protocol evidence only.
+The capability is stable for a peer boot. Busy, stop or a runtime fault changes
+GET_STATUS motion-ready bit 2 and this status record, not the capability mask.
+Audio bit 4 remains disabled. Agent state, display and T10D manual calibration
+must continue operating when the optional MOTION bit is present.
