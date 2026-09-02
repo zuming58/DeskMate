@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-02 - Main Agent integrated, rebuilt and launched the T15D Windows editor
+
+- Main integration branch `codex/t15-t16-integration` fast-forwarded the reviewed software delivery through `0d079a5d72349c7468db8d2c01215b021c026a29`. An ancestry check proved it contains the main-Agent design/Flow baseline `32c5540`; both firmware directories have zero diff from that baseline.
+- Main-Agent review confirmed one strict Electron-owned choreography document, renderer isolation, bounded local persistence and a fail-closed pending entity adapter. The normal editor exposes 2–8 aligned beat columns for Yaw, Pitch and Expression; all three values in a column preview together, columns advance sequentially, and preview completion returns to center and releases the temporary expression. It does not fall back to T15 presets, manual one-degree commands, angles, PWM, pulse width, duty cycle or GPIO.
+- Independent verification passed focused motion/editor/UI tests `13/13`, full `npm test` `358/358`, `npm run build:desktop`, packaged native bridge `--protocol-self-test` with exit `0`, and package hash inspection. The first package attempt was blocked only because the previous exact `release/win-unpacked` package was running; the Main Agent matched seven processes to that exact executable path, stopped only those processes, then rebuilt successfully.
+- Final `release/win-unpacked` evidence: `DeskMate.exe` is `202690560` bytes / SHA-256 `372FB38C031AF51810FE227952BE400A58CE472E10196BF63D4C5CD905BD1468`; input bridge is `153516937` bytes / `44F6678CD1F2D6F22B2A57B848AF4A6376BD656AFCF41D077D8820E7D3782ABD`; `app.asar` is `112918905` bytes / `C20CE2B740D4FDB9D6C9EE3B764EA261C3BF8ED0342D510F7EDE0441D989CFAC`.
+- The exact rebuilt `release/win-unpacked/DeskMate.exe` was launched and its real 2560x1440 window was inspected. The T15 fixed-action flow is visibly separated from `自定义舞蹈`; the software-preview boundary and pending entity adapter are visible. No Flash/NVS/eFuse operation or servo movement command was issued. The application may perform its normal read-only/startup diagnostics and existing bounded state recovery.
+- Classification: `T15D_WINDOWS_EDITOR_MERGED / MAIN_AGENT_CODE_BUILD_VISUAL_AUDIT_CONFIRMED / ENTITY_EXECUTION_FAIL_CLOSED / WIRE_NOT_FROZEN / HIL_NOT_RUN`. The immediate user-present gate remains the already-flashed T15 quick actions in order: attention, nod twice, search, dance twice, dance emergency-stop and explicit recovery/recenter. Only after that passes may the Main Agent freeze and implement the T15D Host/Link/firmware execution slice.
+
 ## 2026-09-02 - T15D Windows choreography editor complete; entity wire remains blocked
 
 - Windows-only delivery branch is `codex/t15d-desktop-choreography-editor`. Work started from the accepted T15/T16 integration implementation `5d0e0ce`, then incorporated the main-Agent documentation baseline `32c5540` before the implementation commit `26b8321`.
