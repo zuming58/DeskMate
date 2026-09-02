@@ -10,6 +10,7 @@ Date: 2026-09-03
 - Compact motion and choreography UX: `c8de587`
 - Shared long-term memory implementation: `66d330e`
 - Per-source schedule status repair: `b7e2334`
+- Automatic knowledge projection repair: `4dcfbfe7b9a0888e2ac12583004d4b8ecf237f54`
 - Final HEAD: the documentation commit containing this handoff
 
 ## Delivered Windows scope
@@ -41,11 +42,21 @@ Date: 2026-09-03
 - Knowledge projection writes separate managed notes under `DeskMate/daily/<source>/YYYY-MM-DD.md`; reviewed memories link to the matching source-day note.
 - The memory page exposes compact source toggles, daily/manual scheduling, next-run time, per-source last results and source filters.
 
+### Automatic knowledge projection
+
+- Scheduled and manual digest generation now share one Electron-owned projection coordinator.
+- After a digest commits, the coordinator projects the authoritative SQLite snapshot when a knowledge-base directory is configured.
+- Missing configuration returns the explicit non-error skip `knowledge-base-not-configured` and writes no files.
+- Projection conflicts and write failures never roll back the digest. The scheduler persists a per-source `warning` with a fixed reason code; the UI states that the summary is saved and double-link sync awaits retry.
+- The existing “同步双链” action is the explicit retry path and clears projection warnings only after successful sync.
+- Projection results contain fixed reasons and bounded counts only. Root paths and exception details do not cross preload.
+
 The frozen behavior is documented in `docs/contracts/t15e-shared-memory-ingestion-v1.md`; stable product policy is `flow/decisions.md` D079.
 
 ## Verification
 
-- Full `npm test`: `370/370` passed.
+- Focused memory tests: `17/17` passed.
+- Full `npm test`: `373/373` passed.
 - `npm run build:desktop`: passed.
 - Packaged native input bridge `--protocol-self-test`: exit `0`.
 - `git diff --check`: passed.
@@ -56,9 +67,9 @@ Package evidence:
 
 | File | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `DeskMate.exe` | 202690560 | `ABC078FD3049F3F288F38DD4EEF1CD5BBAC3BA491EBC386406547DED280A26CD` |
-| `resources/input-bridge/DeskMate.InputBridge.exe` | 153516937 | `0A79E18DC3C023983619BEECFC998C6AA42038F9A629FB0CB6E3FD2592E4ABA8` |
-| `resources/app.asar` | 112953228 | `922D872F8F491B60339B6F8FB5A51B5427028BEF4CAEDC3B2BF10A33F58B6743` |
+| `DeskMate.exe` | 202690560 | `1E63331508325F75692EE7810AEFF39F62725D430727F4B993210FBAE78E68FF` |
+| `resources/input-bridge/DeskMate.InputBridge.exe` | 153516937 | `DBD010B5EAC4A3497405E08617F8B2684392CFB163010E0241A8ECF1F17BD51A` |
+| `resources/app.asar` | 112957791 | `366643C6F22A420BBB12E692A550A8F237E24CF4F9D08181038DA3DBAF35331F` |
 
 ## Unclosed gates
 

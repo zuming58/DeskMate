@@ -1,5 +1,14 @@
 # Progress log
 
+## 2026-09-03 - T15E automatic knowledge projection review gap closed
+
+- Main-Agent review correctly found that scheduled and manual memory generation committed only to SQLite while Markdown projection still required a separate button press. Windows-only follow-up commit `4dcfbfe7b9a0888e2ac12583004d4b8ecf237f54` adds one Electron-owned generation coordinator shared by the daily scheduler, manual generation and explicit retry path.
+- A successful digest now projects the complete authoritative SQLite snapshot into the configured knowledge-base directory. An unconfigured directory is an explicit non-error `knowledge-base-not-configured` skip. A conflict or write failure never rolls back the committed digest; the affected source receives a bounded `warning` result and the UI says the summary is saved while double-link sync awaits retry.
+- The existing “同步双链” action remains the explicit retry and clears warning state only after a successful projection. Projection responses expose only fixed reason codes and bounded counts, never the root path or exception detail. Existing manifest conflict protection remains unchanged.
+- New tests prove configured scheduled generation writes `DeskMate/daily/<source>/<day>.md`, unconfigured generation writes no files while preserving digest success, and forced projection failure preserves the SQLite summary and records only `knowledge-base-projection-failed`. Focused memory tests pass `17/17`; full `npm test` passes `373/373`; `npm run build:desktop`, packaged native bridge self-test and `git diff --check` pass.
+- Final package evidence after this repair: `DeskMate.exe` `202690560` bytes / SHA-256 `1E63331508325F75692EE7810AEFF39F62725D430727F4B993210FBAE78E68FF`; input bridge `153516937` bytes / `DBD010B5EAC4A3497405E08617F8B2684392CFB163010E0241A8ECF1F17BD51A`; `app.asar` `112957791` bytes / `366643C6F22A420BBB12E692A550A8F237E24CF4F9D08181038DA3DBAF35331F`.
+- Classification: `T15E_AUTOMATIC_PROJECTION_CODE_BUILD_CONFIRMED / SQLITE_AUTHORITATIVE / PROJECTION_WARNING_RETRY_VISIBLE / HIL_NOT_RUN`. No application, port, device, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo operation occurred. Next: the Main Agent audits and integrates the updated branch, then real local-folder acceptance may be run with the user present.
+
 ## 2026-09-03 - T15E motion UX and shared-memory Windows package complete
 
 - Exact delivery branch is `codex/t15e-motion-memory-ux`, created from the accepted compact T15D Windows baseline `79ed688044c34860819e99b4681cc1280ed3039b`. The implementation is split into `576b159` (motion HID collection routing), `c8de587` (compact action/choreography controls), `66d330e` (source-aware shared memory) and `b7e2334` (per-source schedule status).
