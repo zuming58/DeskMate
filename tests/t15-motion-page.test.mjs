@@ -10,6 +10,7 @@ test("T15 motion page exposes only bounded real presets and endpoint controls", 
   assert.match(page, /开始 · \$\{presetLabel\} × \$\{repeatCount\}/);
   assert.match(page, /runPreset\(preset\)/);
   assert.match(page, /重新检测动作链/);
+  assert.match(page, /动作 HID 写入失败，请重新检测动作链/);
   assert.match(page, /readWithRetry/);
   assert.match(page, /只显示画面，不代表小智已经动作/);
   for (const label of ["关注", "点头", "寻找", "跳舞"]) assert.match(page, new RegExp(`value: "[a-z]+", label: "${label}"`));
@@ -17,6 +18,11 @@ test("T15 motion page exposes only bounded real presets and endpoint controls", 
   assert.match(page, /立即急停/);
   assert.match(page, /解除急停并回中/);
   assert.doesNotMatch(page.slice(page.indexOf("export function MotionPage"), page.indexOf("export function SensorsPage")), /动作速度|运动范围|柔性起停/);
+});
+
+test("system diagnostics names the independent runtime motion collection", () => {
+  assert.match(page, /动作 HID 集合 · FF00:0009/);
+  assert.match(page, /inputBridge\.motionCollectionWritable/);
 });
 
 test("T15 renderer adapter uses semantic operations without motion primitives", () => {

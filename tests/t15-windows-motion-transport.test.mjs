@@ -168,15 +168,19 @@ test("codec rejects missing defaults, forbidden controls, invalid source matrix,
   assert.throws(() => decodeMotionPresetInputReport(impossibleReport), /endpoint-invalid/);
 });
 
-test("native bridge routes 0x18/0x19 only through the exact FF00:0007 motion collection", async () => {
+test("native bridge routes 0x18/0x19 only through the exact FF00:0009 motion collection", async () => {
   const [program, protocol] = await Promise.all([
     readFile(new URL("../native/DeskMate.InputBridge/Program.cs", import.meta.url), "utf8"),
     readFile(new URL("../native/DeskMate.InputBridge/VendorReportProtocol.cs", import.meta.url), "utf8"),
   ]);
-  assert.match(program, /MotionPresets = new\(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64\)/);
+  assert.match(program, /MotionPresets = new\(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64\)/);
+  assert.match(program, /ManualCalibration = new\(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64\)/);
+  assert.match(program, /!ManualCalibration\.Matches\(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64\)/);
+  assert.match(program, /!MotionPresets\.Matches\(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64\)/);
   assert.match(program, /0x18 => MotionPresets/);
   assert.match(program, /WriteMotionPresetRequest[\s\S]*ForFeatureReport\(report\[0\]\)[\s\S]*HidD_SetFeature/);
   assert.match(program, /report\.Length == 64 && report\[0\] == 0x19[\s\S]*IsValidMotionPresetResponse/);
+  assert.match(program, /HidUsageVendorMotionPresets = 0x09/);
   assert.match(program, /motionCollectionWritable: availability\.MotionWritable/);
   assert.match(protocol, /IsValidMotionPresetRequest/);
   assert.match(protocol, /IsValidMotionPresetResponse/);
@@ -206,6 +210,13 @@ test("native manager correlates one request, deduplicates accepted notices and s
   assert.equal(Object.hasOwn(parsed, "reportBase64"), false);
   assert.equal(JSON.stringify(parsed).includes("private"), false);
   manager.stop();
+});
+
+test("native motion write failures become actionable bounded reasons", () => {
+  const base = { version: 1, type: "motion-preset-write", source: "easyinput-hid", requestId: "motion-12345678", ok: false, time: at, sequence: 1 };
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, reason: "hid-set-feature-1" })).reason, "motion-hid-write-failed");
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, reason: "compatible-vendor-hid-not-found" })).reason, "motion-preset-interface-unavailable");
+  assert.equal(parseBridgeLine(JSON.stringify({ ...base, reason: "private-device-path" })).reason, "motion-preset-write-failed");
 });
 
 test("run performs status-first polling and reports completion only with the full 316eb1a evidence gate", async () => {
@@ -437,11 +448,18 @@ test("preload/IPC surface and diagnostics expose only semantic motion fields", a
   for (const api of ["getMotionStatus", "runPreset", "stopAndCenter", "emergencyStop", "clearEmergencyStopAndCenter", "onMotionPresetStatus"]) assert.match(preload, new RegExp(api));
   for (const channel of ["desktop:get-motion-status", "desktop:run-motion-preset", "desktop:stop-motion-and-center", "desktop:emergency-stop-motion", "desktop:clear-motion-emergency-stop-and-center"]) assert.match(main, new RegExp(channel));
   assert.match(main, /desktop:start-manual-control[\s\S]{0,180}motionPresetService\?\.close\("motion-operation-cancelled"\)[\s\S]{0,180}manualControlCoordinator\.begin/);
-  const report = createDiagnosticReport({ inputBridge: { boardConnected: true, motionCollectionWritable: true, motionPresets: { status: "available", phase: "ready", busy: false, operation: "run", preset: "nod", repeat: 2, source: "UI", endpointReportedComplete: true, endpoint: { ...endpoint({ actionId: 55, completedPresetCounter: 6, preset: "nod", presetCode: 2, requestedRepeat: 2, completedRepeat: 2 }), controllerBootId: 1, peerBootId: 2, devicePath: "private" }, transcript: "private" } } });
+  const report = createDiagnosticReport({ inputBridge: { boardConnected: true, motionCollectionWritable: true, motionPresets: { status: "available", phase: "ready", busy: false, operation: "run", preset: "nod", repeat: 2, source: "UI", endpointReportedComplete: true, transport: "completed", reason: "", endpoint: { ...endpoint({ actionId: 55, completedPresetCounter: 6, preset: "nod", presetCode: 2, requestedRepeat: 2, completedRepeat: 2 }), controllerBootId: 1, peerBootId: 2, devicePath: "private" }, transcript: "private" } } });
   assert.equal(report.easyInputHid.motionCollection, "writable");
   assert.equal(report.motionPresets.endpointReportedComplete, true);
   assert.equal(report.motionPresets.endpoint.operation, "run");
+  assert.equal(report.motionPresets.transport, "completed");
   assert.equal(JSON.stringify(report).includes("private"), false);
   assert.equal(JSON.stringify(report).includes("BootId"), false);
   assert.doesNotMatch(JSON.stringify(report.motionPresets), /physical|angle|pwm|pulse|gpio/i);
+  const failed = createDiagnosticReport({ inputBridge: { boardConnected: true, motionCollectionWritable: true, motionPresets: { status: "available", phase: "failed", transport: "motion-hid-write-failed", reason: "motion-hid-write-failed" } } });
+  assert.equal(failed.motionPresets.transport, "motion-hid-write-failed");
+  assert.equal(failed.motionPresets.reason, "motion-hid-write-failed");
+  const rejected = createDiagnosticReport({ inputBridge: { motionPresets: { transport: "hid-set-feature-1", reason: "hid-set-feature-1" } } });
+  assert.equal(rejected.motionPresets.transport, "unavailable");
+  assert.equal(rejected.motionPresets.reason, "internal");
 });

@@ -32,24 +32,31 @@ function status(overrides = {}) {
   };
 }
 
-test("native bridge freezes exact collection contracts and routes 0x14/0x16 separately", () => {
+test("native bridge freezes exact collection contracts and routes 0x14/0x16/0x18 separately", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
   assert.match(source, /Config = new\(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64\)/);
   assert.match(source, /ManualCalibration = new\(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64\)/);
+  assert.match(source, /MotionPresets = new\(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64\)/);
   assert.match(source, />= 0x10 and <= 0x15 => Config/);
   assert.match(source, /0x16 => ManualCalibration/);
+  assert.match(source, /0x18 => MotionPresets/);
   assert.match(source, /ForFeatureReport\(0x14\) == Config/);
   assert.match(source, /ForFeatureReport\(0x16\) == ManualCalibration/);
+  assert.match(source, /ForFeatureReport\(0x18\) == MotionPresets/);
+  assert.match(source, /!ManualCalibration\.Matches\(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64\)/);
+  assert.match(source, /!MotionPresets\.Matches\(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64\)/);
   assert.match(source, /usagePage == UsagePage && usage == Usage/);
   assert.doesNotMatch(source, /FeatureReportByteLength >= 64|InputReportByteLength >= 64/);
 });
 
-test("Raw Input subscribes to both vendor top-level collections", () => {
+test("Raw Input subscribes to all three vendor top-level collections", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
   assert.match(source, /HidUsageVendorCommands = 0x02/);
   assert.match(source, /HidUsageVendorManualCalibration = 0x07/);
-  assert.match(source, /Usage = HidUsageVendorCommands[\s\S]*?Usage = HidUsageVendorManualCalibration/);
+  assert.match(source, /HidUsageVendorMotionPresets = 0x09/);
+  assert.match(source, /Usage = HidUsageVendorCommands[\s\S]*?Usage = HidUsageVendorManualCalibration[\s\S]*?Usage = HidUsageVendorMotionPresets/);
   assert.match(source, /report\.Length == 64 && report\[0\] == 0x17[\s\S]*?IsValidManualCalibrationResponse/);
+  assert.match(source, /report\.Length == 64 && report\[0\] == 0x19[\s\S]*?IsValidMotionPresetResponse/);
 });
 
 test("status parser preserves bounded collection evidence and rejects bad types", () => {

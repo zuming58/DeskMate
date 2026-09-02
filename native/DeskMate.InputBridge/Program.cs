@@ -364,11 +364,11 @@ internal readonly record struct HidCollectionAvailability(
 internal static class HidCollectionContracts
 {
     // Frozen EasyInput descriptor: reports 0x10..0x15 share FF00:0002;
-    // manual calibration 0x16/0x17 and runtime motion 0x18/0x19 live on the
-    // separate FF00:0007 motion collection.
+    // manual calibration 0x16/0x17 lives on FF00:0007; runtime motion
+    // 0x18/0x19 lives on its own FF00:0009 top-level collection.
     public static readonly HidCollectionContract Config = new(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64);
     public static readonly HidCollectionContract ManualCalibration = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
-    public static readonly HidCollectionContract MotionPresets = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
+    public static readonly HidCollectionContract MotionPresets = new(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64);
 
     public static HidCollectionContract ForFeatureReport(byte reportId) => reportId switch
     {
@@ -385,8 +385,10 @@ internal static class HidCollectionContracts
         Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
-        MotionPresets.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
+        MotionPresets.Matches(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64) &&
         !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
+        !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64) &&
+        !MotionPresets.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 63, 64) &&
         !ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 65);
 }
@@ -615,6 +617,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private const ushort HidUsagePageVendor = 0xFF00;
     private const ushort HidUsageVendorCommands = 0x02;
     private const ushort HidUsageVendorManualCalibration = 0x07;
+    private const ushort HidUsageVendorMotionPresets = 0x09;
     private const uint RidevInputSink = 0x00000100;
     private const uint RidevDeviceNotify = 0x00002000;
     private const ushort RiKeyBreak = 0x0001;
@@ -712,6 +715,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             {
                 UsagePage = HidUsagePageVendor,
                 Usage = HidUsageVendorManualCalibration,
+                Flags = RidevInputSink | RidevDeviceNotify,
+                Target = Handle,
+            },
+            new RawInputDevice
+            {
+                UsagePage = HidUsagePageVendor,
+                Usage = HidUsageVendorMotionPresets,
                 Flags = RidevInputSink | RidevDeviceNotify,
                 Target = Handle,
             },

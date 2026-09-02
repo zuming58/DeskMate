@@ -1530,6 +1530,11 @@ export function MotionPage({ notify, embedded = false }) {
   const [runningPreset, setRunningPreset] = useState("");
   const [safetyAction, setSafetyAction] = useState("");
   const selectPreset = (nextPreset) => updateMotion({ preset: nextPreset, repeatCount: ["nod", "dance"].includes(nextPreset) ? 2 : 1 });
+  const motionFailureCopy = (reason) => ({
+    "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
+    "motion-preset-interface-unavailable": "没有找到动作 HID 接口，请重新检测动作链。",
+    "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经连接。",
+  })[reason] || reason || "动作链未返回完成结果";
   const refreshStatus = useCallback(async () => {
     try {
       const result = await voiceAdapters.desktop.getMotionStatus();
@@ -1561,7 +1566,7 @@ export function MotionPage({ notify, embedded = false }) {
     try {
       const result = await voiceAdapters.desktop.runPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
       if (result) setMotionStatus(result);
-      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${result?.reason || "endpoint-not-complete"}`);
+      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${motionFailureCopy(result?.reason)}`);
     } catch (error) {
       notify(`动作请求失败：${error?.message || "motion-request-failed"}`);
     } finally {
@@ -1590,6 +1595,7 @@ export function MotionPage({ notify, embedded = false }) {
   const unavailableMessage = ({
     "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经重新上电并连接。",
     "motion-preset-interface-unavailable": "已检测到 EasyInput，但没有找到实体动作接口。请重新检测；若仍失败，需要核对当前固件。",
+    "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
     "input-bridge-unavailable": "Windows 输入桥尚未就绪，请重新检测动作链。",
     "motion-status-unavailable": "软件暂时没有读到实体动作状态，请点击“重新检测动作链”。",
   })[motionStatus?.reason] || "实体动作状态暂时不可用，请重新检测动作链。";
@@ -1692,7 +1698,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
   const settingsAgentDelivery = normalizeAgentDelivery(inputBridge.agentStateDelivery);
   const sharedStatus = deviceServiceStatus({ inputBridge, audioStatus: settingsAudioStatus, preferredMicrophoneSource: state.settings.microphoneSource, companion: state.runtime?.companion, memory: state.runtime?.memory });
   const collectionLabel = (value) => !inputBridge.boardConnected ? "设备未枚举" : value === true ? "可写" : value === false ? "不可用" : "状态未知";
-  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: sharedStatus.easyInput.label, tone: sharedStatus.easyInput.tone }, { label: "配置 HID 集合 · FF00:0002", value: collectionLabel(inputBridge.configCollectionWritable), tone: inputBridge.configCollectionWritable === true ? "success" : "demo" }, { label: "校准 HID 集合 · FF00:0007", value: collectionLabel(inputBridge.calibrationCollectionWritable), tone: inputBridge.calibrationCollectionWritable === true ? "success" : "demo" }, { label: "小智 DeskMate Link", value: sharedStatus.xiaozhi.label, tone: sharedStatus.xiaozhi.tone }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: sharedStatus.microphone.label, tone: sharedStatus.microphone.tone }];
+  const diagnosticItems = [{ label: "Windows 输入桥", value: inputBridge.process === "running" ? "运行中" : inputBridge.process || "未知", tone: inputBridge.process === "running" ? "success" : "demo" }, { label: "EasyInput HID", value: sharedStatus.easyInput.label, tone: sharedStatus.easyInput.tone }, { label: "配置 HID 集合 · FF00:0002", value: collectionLabel(inputBridge.configCollectionWritable), tone: inputBridge.configCollectionWritable === true ? "success" : "demo" }, { label: "校准 HID 集合 · FF00:0007", value: collectionLabel(inputBridge.calibrationCollectionWritable), tone: inputBridge.calibrationCollectionWritable === true ? "success" : "demo" }, { label: "动作 HID 集合 · FF00:0009", value: collectionLabel(inputBridge.motionCollectionWritable), tone: inputBridge.motionCollectionWritable === true ? "success" : "demo" }, { label: "小智 DeskMate Link", value: sharedStatus.xiaozhi.label, tone: sharedStatus.xiaozhi.tone }, { label: "最近 Agent State 写入", value: settingsAgentDelivery.status === "acknowledged" ? `EasyInput ACK 成功 · ${settingsAgentDelivery.targetState}` : settingsAgentDelivery.status === "failed" ? `失败 · ${settingsAgentDelivery.reason || "unknown"}` : settingsAgentDelivery.status === "sending" ? "请求中" : "尚未发送", tone: settingsAgentDelivery.status === "acknowledged" ? "success" : "demo" }, { label: "当前麦克风来源", value: normalizeMicrophoneSource(state.settings.microphoneSource) === "easyinput" ? "EasyInput 板载麦克风" : "电脑麦克风", tone: "success" }, sttDiagnostic, organizerDiagnostic, { label: "文字输出", value: state.settings.activeWindowOutputEnabled ? "原窗口 + 剪贴板回退" : state.settings.outputMode === "clipboard" ? "剪贴板" : "历史", tone: "success" }, { label: "EasyInput 板载麦克风", value: sharedStatus.microphone.label, tone: sharedStatus.microphone.tone }];
   return (
     <div className="page">
       <PageIntro title="设置与诊断" description="管理快捷键、输入方式、外观和系统诊断" actions={<><Button icon={Upload} onClick={() => document.getElementById("config-import").click()}>导入配置</Button><input id="config-import" type="file" accept="application/json" hidden onChange={importConfig} /><Button icon={Download} onClick={downloadConfig}>导出配置</Button><Button icon={Refresh} onClick={() => { reset(); notify("设置已恢复为默认值"); }}>恢复默认</Button></>} />

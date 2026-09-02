@@ -12,6 +12,9 @@ does not authorize a flash or prove physical motion.
 - Host to EasyInput: Feature Report `0x18`, 63 payload bytes (64 bytes with the
   report ID in a Windows `HidD_SetFeature` buffer).
 - EasyInput to Host: Input Report `0x19`, 63 payload bytes.
+- Both reports belong to the dedicated top-level HID collection
+  `UsagePage FF00 / Usage 0009`. Manual calibration remains on `FF00:0007`;
+  a Windows handle opened for that collection must never be reused here.
 - Multi-byte integers are little-endian. CRC is CRC16-CCITT-FALSE, polynomial
   `0x1021`, initial `0xFFFF`, no reflection and no final XOR.
 - Unknown length/version/kind/origin/operation/preset/repeat, non-zero reserved

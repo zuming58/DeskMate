@@ -7,6 +7,15 @@ const LINK_STATES = new Set(["disabled", "waiting", "connected", "faulted"]);
 const { decodeManualCalibrationInputReport } = require("./manual-calibration-hid.cjs");
 const { decodeMotionPresetInputReport } = require("./motion-presets-hid.cjs");
 
+function sanitizeMotionWriteReason(value) {
+  const reason = String(value || "");
+  if (/^hid-set-feature-\d+$/.test(reason)) return "motion-hid-write-failed";
+  if (reason === "compatible-vendor-hid-not-found") return "motion-preset-interface-unavailable";
+  if (reason === "invalid-motion-preset-report") return "motion-preset-report-invalid";
+  if (reason === "input-bridge-write-failed") return reason;
+  return "motion-preset-write-failed";
+}
+
 function isUInt32(value) {
   return Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
 }
@@ -26,7 +35,7 @@ function parseBridgeLine(line) {
   }
   if (value.type === "motion-preset-write") {
     if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
-    return Object.freeze({ version: 1, type: "motion-preset-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: typeof value.reason === "string" ? value.reason.slice(0, 80) : "", time: value.time, sequence: value.sequence });
+    return Object.freeze({ version: 1, type: "motion-preset-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : sanitizeMotionWriteReason(value.reason), time: value.time, sequence: value.sequence });
   }
   if (value.type === "manual-calibration-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
@@ -179,4 +188,4 @@ class InputTriggerFilter {
   }
 }
 
-module.exports = { parseBridgeLine, InputTriggerFilter };
+module.exports = { parseBridgeLine, InputTriggerFilter, sanitizeMotionWriteReason };

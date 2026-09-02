@@ -13,7 +13,7 @@ const {
 
 const SAFE_REASONS = new Set([
   "automatic-motion-disabled", "easyinput-not-connected", "input-bridge-unavailable", "input-bridge-stopped", "input-bridge-exited", "input-bridge-write-failed",
-  "manual-control-active", "motion-preset-busy", "motion-preset-interface-unavailable", "motion-preset-timeout", "motion-preset-report-invalid", "motion-preset-write-failed",
+  "manual-control-active", "motion-preset-busy", "motion-preset-interface-unavailable", "motion-preset-timeout", "motion-preset-report-invalid", "motion-preset-write-failed", "motion-hid-write-failed",
   "motion-operation-cancelled", "motion-action-superseded", "peer-disconnected-or-restarted", "invalid-response", "completed", "malformed", "busy", "stale", "conflict",
   "link-not-ready", "link-queue-busy", "timeout", "link-error", "internal", "not-ready", "bad-payload", "wrong-session", "stale-action", "recenter-required",
   "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict", "cancelled",
@@ -124,6 +124,7 @@ class MotionPresetService extends EventEmitter {
       source: snapshot.active?.source || snapshot.lastOutcome?.source || null,
       endpointReportedComplete: snapshot.endpointReportedComplete,
       endpoint: snapshot.endpoint,
+      transport: this.terminal?.transport || "unavailable",
       reason: snapshot.lastOutcome?.reason || "",
     });
   }
