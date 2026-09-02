@@ -3,6 +3,7 @@
 ## Current handoff
 
 - [T10D-B Windows manual calibration contract](contracts/t10d-b-desktop-manual-calibration-v1.md)
+- [T10D-B Windows manual calibration UI handoff](handoffs/t10d-b-desktop-manual-calibration-ui-2026-09-02.md)
 - [T10D-A EasyInput manual-motion bridge handoff](handoffs/t10d-a-easyinput-manual-motion-bridge-2026-09-02.md)
 - [EasyInput manual calibration host transport](../contracts/deskmate-host/easyinput-manual-calibration-v1.md)
 - [T10C manual calibration Link contract](../contracts/deskmate-link/t10c-manual-calibration-v1.md)
