@@ -4,6 +4,7 @@
 
 - Branch: `codex/t14-desktop-agent-adapter-framework`
 - Base: `codex/t10d-three-end-integration@1f7b58e60b288ebd8d3a65caa71fb926a69ff3ee`
+- Tested implementation: `be1a0afccc87aa32479d9cc8faeba916864d7091`
 - Contract: `T14A_DESKTOP_AGENT_ADAPTER_V1_FROZEN`
 - Build identity: `t14a-hermes-agent-adapter-v1`
 
