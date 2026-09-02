@@ -1,5 +1,15 @@
 # Progress log
 
+## 2026-09-03 - T15E motion UX and shared-memory Windows package complete
+
+- Exact delivery branch is `codex/t15e-motion-memory-ux`, created from the accepted compact T15D Windows baseline `79ed688044c34860819e99b4681cc1280ed3039b`. The implementation is split into `576b159` (motion HID collection routing), `c8de587` (compact action/choreography controls), `66d330e` (source-aware shared memory) and `b7e2334` (per-source schedule status).
+- Fixed T15 motion commands now resolve the vendor HID collection `FF00:0009` instead of being incorrectly restricted to the configuration collection. Manual/configuration routing remains unchanged. Native and JavaScript protocol tests cover the distinction; no device command or hardware operation was performed.
+- The user-rejected full-width start button and repeated large notices are replaced by one compact 40 px action row, inline repeat guidance, a compact status strip and low-emphasis boundary captions. The custom choreography editor follows the same hierarchy. The side-by-side visual review is recorded in `design-qa.md` with `final result: passed`.
+- Long-term memory now accepts exactly two trusted final-text sources: `companion` and successful real `dictation`. They keep independent source/day summaries, digest idempotency, review candidates, filters, knowledge-base notes and last-run/retry states. Both default enabled; the local daily default is 23:30; empty input never invokes the model. Voice edit, mock/failed/cancelled STT, audio bytes and credentials remain excluded.
+- Verification passed: full `npm test` `370/370`; `npm run build:desktop`; packaged native bridge `--protocol-self-test` exit `0`; `git diff --check`; tracked-path, secret and generated-artifact checks. Both firmware trees remain byte-for-byte unchanged from the start baseline.
+- Package evidence: `DeskMate.exe` `202690560` bytes / SHA-256 `ABC078FD3049F3F288F38DD4EEF1CD5BBAC3BA491EBC386406547DED280A26CD`; input bridge `153516937` bytes / `0A79E18DC3C023983619BEECFC998C6AA42038F9A629FB0CB6E3FD2592E4ABA8`; `app.asar` `112953228` bytes / `922D872F8F491B60339B6F8FB5A51B5427028BEF4CAEDC3B2BF10A33F58B6743`.
+- Classification: `T15E_WINDOWS_CODE_BUILD_CONFIRMED / MOTION_HID_ROUTE_REPAIRED / COMPACT_UX_VISUALLY_ACCEPTABLE / SHARED_MEMORY_SOURCE_DAY_ISOLATED / HIL_NOT_RUN`. No application, port, device, firmware, Flash/NVS/eFuse, OLED, audio, PWM or servo was operated. Next: the Main Agent reviews and integrates this branch; motion and memory real-world acceptance remain separate user-present gates.
+
 ## 2026-09-02 - Main Agent accepted the compact T15D editor into the current integration
 
 - Current integration is `codex/t15-t16-integration`; the tested merge before this Flow pointer is `a3b6ae2`. It includes the complete software delivery `codex/t15d-desktop-choreography-editor@2d7e0c0111e36d3cb0eca63c91670d0e069385d3` and preserves both firmware trees byte-for-byte relative to the earlier `32c5540` integration baseline.
