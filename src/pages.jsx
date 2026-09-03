@@ -645,15 +645,15 @@ function MemoryManagementPage({ notify }) {
   return (
     <div className="companion-embedded memory-management">
       <div className="embedded-heading">
-        <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话接通后自动进入这条流水线。</p></div>
+        <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话和成功的语音输入共用这条流水线。</p></div>
         <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理待处理对话</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
       <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedTurns || 0} 条待整理。模型只生成候选；必须由你审核后才能进入长期记忆。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       <Card className="memory-policy-card">
         <SectionTitle index="01" title="来源与自动整理" description="两个来源默认开启且可独立关闭；每天 23:30 按本地时间整理，失败来源会单独重试。" />
         <div className="memory-policy-grid">
-          <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="记录陪伴对话" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
-          <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="记录成功语音输入" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
+          <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
+          <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
           <label className="field-label">整理方式<select value={memoryPolicy.schedule} onChange={(event) => setMemoryPolicy((current) => ({ ...current, schedule: event.target.value }))}><option value="daily">每天自动整理</option><option value="manual">仅手动整理</option></select></label>
           <label className="field-label">本地整理时间<input type="time" step="60" disabled={memoryPolicy.schedule !== "daily"} value={memoryPolicy.dailyTime} onChange={(event) => setMemoryPolicy((current) => ({ ...current, dailyTime: event.target.value }))} /></label>
         </div>
