@@ -17,6 +17,15 @@ function sanitizeMotionWriteReason(value) {
   return "motion-preset-write-failed";
 }
 
+function sanitizeChoreographyWriteReason(value) {
+  const reason = String(value || "");
+  if (reason === "invalid-choreography-report") return "choreography-native-report-rejected";
+  if (/^hid-set-feature-\d+$/.test(reason)) return "choreography-hid-write-failed";
+  if (reason === "compatible-vendor-hid-not-found") return "choreography-interface-unavailable";
+  if (reason === "input-bridge-write-failed") return reason;
+  return "choreography-write-failed";
+}
+
 function isUInt32(value) {
   return Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
 }
@@ -36,7 +45,7 @@ function parseBridgeLine(line) {
   }
   if (value.type === "choreography-write") {
     if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
-    return Object.freeze({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : "choreography-write-failed", time: value.time, sequence: value.sequence });
+    return Object.freeze({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : sanitizeChoreographyWriteReason(value.reason), time: value.time, sequence: value.sequence });
   }
   if (value.type === "motion-preset-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;

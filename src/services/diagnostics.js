@@ -25,6 +25,9 @@ const MOTION_RESULTS = new Set(["accepted", "duplicate", "completed", "cancelled
 const MOTION_STATES = new Set(["not-ready", "recentering", "ready", "running", "emergency-stopped", "faulted"]);
 const MOTION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "motion-hid-write-failed", "motion-preset-interface-unavailable", "motion-preset-write-failed", "unavailable"]);
 const MOTION_REASONS = new Set(["", "automatic-motion-disabled", "easyinput-not-connected", "input-bridge-unavailable", "input-bridge-stopped", "input-bridge-exited", "input-bridge-write-failed", "manual-control-active", "motion-preset-busy", "motion-preset-interface-unavailable", "motion-preset-timeout", "motion-preset-report-invalid", "motion-preset-write-failed", "motion-hid-write-failed", "motion-operation-cancelled", "motion-action-superseded", "peer-disconnected-or-restarted", "invalid-response", "completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "internal", "not-ready", "bad-payload", "wrong-session", "stale-action", "recenter-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict", "cancelled"]);
+const CHOREOGRAPHY_PHASES = new Set(["unavailable", "query-required", "checking-status", "preparing-center", "starting", "running", "ready", "recentering", "not-ready", "emergency-stopped", "faulted", "failed"]);
+const CHOREOGRAPHY_CLASSIFICATIONS = new Set(["v2-success", "native-rejected", "v2-failed", "legacy-fallback"]);
+const CHOREOGRAPHY_REASONS = new Set(["", "easyinput-not-connected", "input-bridge-unavailable", "input-bridge-stopped", "input-bridge-exited", "input-bridge-write-failed", "choreography-active", "choreography-busy", "choreography-interface-unavailable", "choreography-timeout", "choreography-report-invalid", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-status-unavailable", "choreography-execute-failed", "manual-control-active", "motion-preset-active", "motion-preset-interface-unavailable", "motion-operation-cancelled", "peer-disconnected-or-restarted", "invalid-response", "completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "internal", "cancelled", "not-ready", "bad-payload", "wrong-session", "stale-action", "recenter-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "sequence-conflict"]);
 
 function normalizeManualCalibrationDiagnostics(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -86,6 +89,59 @@ function normalizeMotionPresetDiagnostics(value) {
     reason: MOTION_REASONS.has(String(source.reason || "")) ? String(source.reason || "") : "internal",
   };
 }
+
+function normalizeChoreographyDiagnostics(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const endpointSource = source.endpoint && typeof source.endpoint === "object" ? source.endpoint : null;
+  const endpoint = endpointSource && MOTION_RESULTS.has(endpointSource.result) && MOTION_STATES.has(endpointSource.state) ? {
+    actionId: Number.isInteger(endpointSource.actionId) && endpointSource.actionId >= 0 && endpointSource.actionId <= 0xffffffff ? endpointSource.actionId : 0,
+    completedCounter: Number.isInteger(endpointSource.completedCounter) && endpointSource.completedCounter >= 0 && endpointSource.completedCounter <= 0xffffffff ? endpointSource.completedCounter : 0,
+    result: endpointSource.result,
+    state: endpointSource.state,
+    beatCount: Number.isInteger(endpointSource.beatCount) && endpointSource.beatCount >= 0 && endpointSource.beatCount <= 8 ? endpointSource.beatCount : 0,
+    currentBeat: endpointSource.currentBeat === 0xff || (Number.isInteger(endpointSource.currentBeat) && endpointSource.currentBeat >= 0 && endpointSource.currentBeat <= 7) ? endpointSource.currentBeat : 0xff,
+    repeat: Number.isInteger(endpointSource.repeat) && endpointSource.repeat >= 0 && endpointSource.repeat <= 3 ? endpointSource.repeat : 0,
+    completedRepeats: Number.isInteger(endpointSource.completedRepeats) && endpointSource.completedRepeats >= 0 && endpointSource.completedRepeats <= 3 ? endpointSource.completedRepeats : 0,
+    yawAmplitudeDegrees: Number.isInteger(endpointSource.yawAmplitudeDegrees) && endpointSource.yawAmplitudeDegrees >= 4 && endpointSource.yawAmplitudeDegrees <= 40 ? endpointSource.yawAmplitudeDegrees : 0,
+    pitchAmplitudeDegrees: Number.isInteger(endpointSource.pitchAmplitudeDegrees) && endpointSource.pitchAmplitudeDegrees >= 4 && endpointSource.pitchAmplitudeDegrees <= 20 ? endpointSource.pitchAmplitudeDegrees : 0,
+    yawSpeedDegreesPerSecond: Number.isInteger(endpointSource.yawSpeedDegreesPerSecond) && endpointSource.yawSpeedDegreesPerSecond >= 20 && endpointSource.yawSpeedDegreesPerSecond <= 100 ? endpointSource.yawSpeedDegreesPerSecond : 0,
+    pitchSpeedDegreesPerSecond: Number.isInteger(endpointSource.pitchSpeedDegreesPerSecond) && endpointSource.pitchSpeedDegreesPerSecond >= 20 && endpointSource.pitchSpeedDegreesPerSecond <= 100 ? endpointSource.pitchSpeedDegreesPerSecond : 0,
+    adapterAvailable: endpointSource.adapterAvailable === true,
+    logicalCenterAccepted: endpointSource.logicalCenterAccepted === true,
+    emergencyStopLatched: endpointSource.emergencyStopLatched === true,
+    faulted: endpointSource.faulted === true,
+    servoOutputEnabled: endpointSource.servoOutputEnabled === true,
+    operationTerminal: endpointSource.operationTerminal === true,
+    displayLeaseActive: endpointSource.displayLeaseActive === true,
+    duplicateResponse: endpointSource.duplicateResponse === true,
+  } : null;
+  const outcomeSource = source.lastOutcome && typeof source.lastOutcome === "object" ? source.lastOutcome : null;
+  const outcomeReason = CHOREOGRAPHY_REASONS.has(String(outcomeSource?.reason || "")) ? String(outcomeSource?.reason || "") : "internal";
+  const fallbackReason = CHOREOGRAPHY_REASONS.has(String(outcomeSource?.fallbackReason || "")) ? String(outcomeSource?.fallbackReason || "") : "";
+  const lastOutcome = outcomeSource ? {
+    ok: outcomeSource.ok === true,
+    classification: CHOREOGRAPHY_CLASSIFICATIONS.has(outcomeSource.classification) ? outcomeSource.classification : outcomeSource.ok === true ? "v2-success" : "v2-failed",
+    protocolVersion: [1, 2].includes(outcomeSource.protocolVersion) ? outcomeSource.protocolVersion : 2,
+    legacyFallback: outcomeSource.legacyFallback === true,
+    endpointReportedComplete: outcomeSource.endpointReportedComplete === true,
+    reason: outcomeReason,
+    fallbackReason,
+    preset: MOTION_PRESETS.has(outcomeSource.preset) ? outcomeSource.preset : null,
+    repeat: Number.isInteger(outcomeSource.repeat) && outcomeSource.repeat >= 1 && outcomeSource.repeat <= 3 ? outcomeSource.repeat : 0,
+    source: MOTION_SOURCES.has(outcomeSource.source) ? outcomeSource.source : null,
+  } : null;
+  return {
+    status: source.available === true ? "available" : "unavailable",
+    protocolVersion: source.protocolVersion === 2 ? 2 : 0,
+    phase: CHOREOGRAPHY_PHASES.has(source.state) ? source.state : "unavailable",
+    ready: source.ready === true,
+    busy: source.busy === true,
+    activeSource: MOTION_SOURCES.has(source.active?.source) ? source.active.source : null,
+    endpoint,
+    lastOutcome,
+    reason: CHOREOGRAPHY_REASONS.has(String(source.reason || "")) ? String(source.reason || "") : "internal",
+  };
+}
 export function createDiagnosticReport(input = {}) {
   const sanitize = (value) => { if (Array.isArray(value)) return value.map(sanitize); if (!value || typeof value !== "object") return value; return Object.fromEntries(Object.entries(value).filter(([key]) => !SECRET_KEYS.test(key)).map(([key, item]) => [key, sanitize(item)])); };
   const source = input.lanAudio || {};
@@ -111,6 +167,7 @@ export function createDiagnosticReport(input = {}) {
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
   const manualCalibration = normalizeManualCalibrationDiagnostics(bridge.manualCalibration);
   const motionPresets = normalizeMotionPresetDiagnostics(bridge.motionPresets);
+  const choreography = normalizeChoreographyDiagnostics(bridge.choreography);
   const conversationSource = input.conversation || {};
   const conversationCounters = conversationSource.counters || {};
   const echoGuardSource = conversationSource.echoGuard || {};
@@ -194,5 +251,5 @@ export function createDiagnosticReport(input = {}) {
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets, choreography };
 }

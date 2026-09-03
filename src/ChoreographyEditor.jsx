@@ -38,6 +38,8 @@ const REASON_COPY = Object.freeze({
   "choreography-not-found": "这个动作已经不存在，请刷新列表。",
   "choreography-transport-not-frozen": "自定义动作实体传输尚未接入。",
   "choreography-interface-unavailable": "当前 EasyInput 固件还没有提供自定义动作接口。",
+  "choreography-native-report-rejected": "Windows 输入桥拒绝了 V2 动作报文，请导出诊断并更新桌面软件。",
+  "choreography-hid-write-failed": "Windows 未能把 V2 动作写入 EasyInput，请重新连接后再试。",
   "easyinput-not-connected": "EasyInput 尚未连接。",
   "adapter-unavailable": "小智舵机适配器尚未就绪。",
   "not-ready": "小智尚未回中就绪，请稍后重试。",

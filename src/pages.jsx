@@ -1626,7 +1626,11 @@ export function MotionPage({ notify, embedded = false }) {
     try {
       const result = await voiceAdapters.desktop.runPreset({ preset: nextPreset, repeat: nextRepeat, source: "UI" });
       if (result) setMotionStatus(result);
-      notify(result?.ok && result?.endpointReportedComplete ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}端点已完成并回中；请观察真机确认动作` : `动作未完成：${motionFailureCopy(result?.reason)}`);
+      notify(result?.ok && result?.endpointReportedComplete
+        ? result?.legacyFallback
+          ? `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]}由旧版兼容动作完成；V2 数字速度/幅度未生效，请查看诊断`
+          : `${({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[nextPreset]} V2 端点已完成并回中；请观察真机确认动作`
+        : `动作未完成：${motionFailureCopy(result?.reason)}`);
     } catch (error) {
       notify(`动作请求失败：${error?.message || "motion-request-failed"}`);
     } finally {

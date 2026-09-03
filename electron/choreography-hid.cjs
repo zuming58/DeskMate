@@ -72,7 +72,7 @@ function encodeChoreographyFeatureReport(value = {}) {
 function decodeChoreographyFeatureReport(value) {
   const report = Buffer.from(value || []);
   if (report.length !== 64 || report[0] !== FEATURE_REPORT_ID || report.subarray(1, 5).toString("ascii") !== "DMCQ" || report[5] !== 2 || ![1, 2].includes(report[6]) || report.readUInt32LE(9) === 0 || report.readUInt16LE(44) !== crc16(report.subarray(1, 44)) || report.subarray(46).some(Boolean)) throw new Error("choreography-request-invalid");
-  return Object.freeze({ kind: report[6] === 1 ? "command" : "status", requestId: report.readUInt32LE(9), sourceCode: report[7] });
+  return Object.freeze({ protocolVersion: report[5], kind: report[6] === 1 ? "command" : "status", requestId: report.readUInt32LE(9), sourceCode: report[7] });
 }
 
 function parseEndpoint(bytes) {
@@ -89,7 +89,7 @@ function decodeChoreographyInputReport(value) {
   const report = Buffer.from(value || []);
   if (report.length !== 64 || report[0] !== INPUT_REPORT_ID || report.subarray(1, 5).toString("ascii") !== "DMCS" || report[5] !== 2 || ![1, 2].includes(report[6]) || ![1, 2].includes(report[7]) || report[8] >= TRANSPORT_RESULTS.length || report.readUInt32LE(9) === 0 || report[17] !== (report[7] === 1 ? 0x26 : 0x27) || ![0, 2, 4].includes(report[18]) || report[20] > 24 || report.readUInt16LE(61) !== crc16(report.subarray(1, 61)) || report[63] !== 0) throw new Error("choreography-response-invalid");
   const endpoint = report[20] === 24 ? parseEndpoint(report.subarray(21, 45)) : null;
-  return Object.freeze({ stage: report[6] === 1 ? "accepted" : "endpoint-acknowledgement", kind: report[7] === 1 ? "command" : "status", transport: TRANSPORT_RESULTS[report[8]], transportCode: report[8], requestId: report.readUInt32LE(9), linkSequence: report.readUInt32LE(13), messageType: report[17], linkFlag: report[18], linkErrorCode: report[19], endpoint, controllerBootId: report.readUInt32LE(45), peerBootId: report.readUInt32LE(49), sourceCode: report[53], beatCount: report[54], beatCode: report[55], repeat: report[56], yawAmplitudeDegrees: report[57], pitchAmplitudeDegrees: report[58], yawSpeedDegreesPerSecond: report[59], pitchSpeedDegreesPerSecond: report[60] });
+  return Object.freeze({ protocolVersion: report[5], stage: report[6] === 1 ? "accepted" : "endpoint-acknowledgement", kind: report[7] === 1 ? "command" : "status", transport: TRANSPORT_RESULTS[report[8]], transportCode: report[8], requestId: report.readUInt32LE(9), linkSequence: report.readUInt32LE(13), messageType: report[17], linkFlag: report[18], linkErrorCode: report[19], endpoint, controllerBootId: report.readUInt32LE(45), peerBootId: report.readUInt32LE(49), sourceCode: report[53], beatCount: report[54], beatCode: report[55], repeat: report[56], yawAmplitudeDegrees: report[57], pitchAmplitudeDegrees: report[58], yawSpeedDegreesPerSecond: report[59], pitchSpeedDegreesPerSecond: report[60] });
 }
 
 module.exports = { FEATURE_REPORT_ID, INPUT_REPORT_ID, REPORT_BYTES, PAYLOAD_BYTES, decodeChoreographyFeatureReport, decodeChoreographyInputReport, encodeChoreographyFeatureReport, parseEndpoint };

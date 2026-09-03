@@ -174,7 +174,7 @@ class InputBridgeManager extends EventEmitter {
     if (result.kind === "choreography-report" && this.pendingChoreography?.numericRequestId === event.choreography.requestId) {
       const pending = this.pendingChoreography;
       const response = event.choreography;
-      if (response.kind !== pending.kind) this.finishChoreography({ ok: false, reason: "invalid-response" });
+      if (response.protocolVersion !== pending.protocolVersion || response.kind !== pending.kind) this.finishChoreography({ ok: false, reason: "invalid-response" });
       else if (response.stage === "accepted") {
         if (!pending.acceptedSeen) { pending.acceptedSeen = true; pending.onAccepted?.(response); this.emit("choreography", { stage: "accepted", ...response }); }
       } else {
@@ -347,7 +347,7 @@ class InputBridgeManager extends EventEmitter {
     const bridgeRequestId = `dance-${randomUUID()}`;
     return new Promise((resolve) => {
       const timeout = this.setTimer(() => this.finishChoreography({ ok: false, reason: "choreography-timeout" }), 3500);
-      this.pendingChoreography = { bridgeRequestId, numericRequestId: decoded.requestId, kind: decoded.kind, timeout, resolve, onAccepted, acceptedSeen: false };
+      this.pendingChoreography = { bridgeRequestId, numericRequestId: decoded.requestId, protocolVersion: decoded.protocolVersion, kind: decoded.kind, timeout, resolve, onAccepted, acceptedSeen: false };
       this.child.stdin.write(`${JSON.stringify({ version: 1, type: "choreography-request", requestId: bridgeRequestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishChoreography({ ok: false, reason: "input-bridge-write-failed" }); });
     });
   }

@@ -11,6 +11,7 @@ const TERMINAL_FAILURES = new Set(["cancelled", "not-ready", "bad-payload", "wro
 const SAFE_REASONS = new Set([
   "easyinput-not-connected", "input-bridge-unavailable", "input-bridge-stopped", "input-bridge-exited", "input-bridge-write-failed",
   "choreography-active", "choreography-busy", "choreography-interface-unavailable", "choreography-timeout", "choreography-report-invalid", "choreography-write-failed",
+  "choreography-native-report-rejected", "choreography-hid-write-failed",
   "choreography-status-unavailable", "choreography-execute-failed", "manual-control-active", "motion-preset-active", "motion-preset-interface-unavailable",
   "motion-operation-cancelled", "peer-disconnected-or-restarted", "invalid-response", "completed", "malformed", "busy", "stale", "conflict",
   "link-not-ready", "link-queue-busy", "timeout", "link-error", "internal", ...TERMINAL_FAILURES,
@@ -78,6 +79,7 @@ class ChoreographyService extends EventEmitter {
   snapshot() {
     const available = this.boardConnected && this.motionCollectionWritable;
     return Object.freeze({
+      protocolVersion: 2,
       ready: available && !this.active && this.lastEndpoint?.adapterAvailable === true && this.lastEndpoint?.faulted !== true && this.lastEndpoint?.emergencyStopLatched !== true,
       available,
       state: this.phase,
@@ -157,7 +159,7 @@ class ChoreographyService extends EventEmitter {
       if (command.endpoint.operationTerminal && command.endpoint.result === "completed" && command.endpoint.completedCounter > baseline && command.endpoint.completedRepeats === action.repeat && command.endpoint.logicalCenterAccepted) {
         this.phase = "ready";
         this.lastEndpoint = command.endpoint;
-        this.lastOutcome = { ok: true, reason: "", name: action.name, source, endpointReportedComplete: true };
+        this.lastOutcome = { ok: true, reason: "", name: action.name, source, classification: "v2-success", protocolVersion: 2, legacyFallback: false, endpointReportedComplete: true };
         this.publish();
         return Object.freeze({ ...this.lastOutcome, endpoint: Object.freeze({ ...command.endpoint }) });
       }
@@ -174,7 +176,7 @@ class ChoreographyService extends EventEmitter {
         if (TERMINAL_FAILURES.has(polled.endpoint.result)) return this.failure(polled.endpoint.result);
         if (polled.endpoint.operationTerminal && polled.endpoint.result === "completed" && polled.endpoint.completedCounter > baseline && polled.endpoint.completedRepeats === action.repeat && polled.endpoint.logicalCenterAccepted) {
           this.phase = "ready";
-          this.lastOutcome = { ok: true, reason: "", name: action.name, source, endpointReportedComplete: true };
+          this.lastOutcome = { ok: true, reason: "", name: action.name, source, classification: "v2-success", protocolVersion: 2, legacyFallback: false, endpointReportedComplete: true };
           this.publish();
           return Object.freeze({ ...this.lastOutcome, endpoint: Object.freeze({ ...polled.endpoint }) });
         }
@@ -193,6 +195,29 @@ class ChoreographyService extends EventEmitter {
     return this.execute(action, { source });
   }
 
+  noteLegacyFallback({ preset, repeat, source, triggerReason }, result = {}) {
+    const fallbackReason = safeReason(triggerReason, "choreography-execute-failed");
+    this.lastOutcome = {
+      ok: result.ok === true,
+      reason: result.ok === true ? "" : safeReason(result.reason),
+      classification: "legacy-fallback",
+      protocolVersion: 1,
+      legacyFallback: true,
+      fallbackReason,
+      preset: PRESETS.has(preset) ? preset : null,
+      repeat: Number.isInteger(repeat) && repeat >= 1 && repeat <= 3 ? repeat : 0,
+      source: SOURCES.has(source) ? source : null,
+      endpointReportedComplete: result.endpointReportedComplete === true,
+    };
+    this.publish();
+    return Object.freeze({
+      ...result,
+      legacyFallback: true,
+      protocolVersion: 1,
+      fallbackReason,
+    });
+  }
+
   close() {
     if (this.active) this.active.cancelled = true;
     this.active = null;
@@ -209,9 +234,9 @@ class ChoreographyService extends EventEmitter {
     const result = await this.send(report);
     if (!result?.ok) return { ok: false, reason: safeReason(result?.reason), endpoint: result?.terminal?.endpoint || null, requestId };
     const terminal = result.terminal;
-    if (!terminal || terminal.stage !== "endpoint-acknowledgement" || terminal.transport !== "completed" || terminal.requestId !== requestId || terminal.kind !== value.kind || !terminal.endpoint || terminal.endpoint.sessionId !== terminal.controllerBootId) return { ok: false, reason: "invalid-response", requestId };
+    if (!terminal || terminal.protocolVersion !== 2 || terminal.stage !== "endpoint-acknowledgement" || terminal.transport !== "completed" || terminal.requestId !== requestId || terminal.kind !== value.kind || !terminal.endpoint || terminal.endpoint.sessionId !== terminal.controllerBootId) return { ok: false, reason: "invalid-response", requestId };
     if (value.kind === "command" && (terminal.sourceCode !== terminal.endpoint.sourceCode || terminal.beatCount !== value.action.beats.length || terminal.repeat !== value.action.repeat || terminal.yawAmplitudeDegrees !== value.yawAmplitudeDegrees || terminal.pitchAmplitudeDegrees !== value.pitchAmplitudeDegrees || terminal.yawSpeedDegreesPerSecond !== value.yawSpeedDegreesPerSecond || terminal.pitchSpeedDegreesPerSecond !== value.pitchSpeedDegreesPerSecond)) return { ok: false, reason: "invalid-response", requestId };
-    return { ok: true, endpoint: terminal.endpoint, requestId };
+    return { ok: true, endpoint: terminal.endpoint, requestId, protocolVersion: 2 };
   }
 
   availabilityFailure() {
@@ -241,7 +266,7 @@ class ChoreographyService extends EventEmitter {
   failure(reason) {
     const safe = safeReason(reason, "choreography-execute-failed");
     this.phase = safe === "emergency-stopped" ? "emergency-stopped" : this.availabilityFailure() ? "unavailable" : "failed";
-    this.lastOutcome = { ok: false, reason: safe, endpointReportedComplete: false };
+    this.lastOutcome = { ok: false, reason: safe, classification: safe === "choreography-native-report-rejected" ? "native-rejected" : "v2-failed", protocolVersion: 2, legacyFallback: false, endpointReportedComplete: false };
     this.publish();
     return Object.freeze({ ok: false, ready: false, state: this.phase, reason: safe, endpoint: this.lastEndpoint ? Object.freeze({ ...this.lastEndpoint }) : null });
   }

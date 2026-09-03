@@ -1093,8 +1093,10 @@ app.whenReady().then(async () => {
     const preset = String(value.preset || "");
     const source = String(value.source || "");
     const result = await choreographyService.executePreset(preset, value.repeat, source);
-    const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
-    return result?.ok || !canFallback ? result : motionPresetService.runPreset(preset, value.repeat, source);
+    const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
+    if (result?.ok || !canFallback) return result;
+    const legacyResult = await motionPresetService.runPreset(preset, value.repeat, source);
+    return choreographyService.noteLegacyFallback({ preset, repeat: value.repeat, source, triggerReason: result.reason }, legacyResult);
   });
   handleTrusted("desktop:stop-motion-and-center", (source) => { choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
   handleTrusted("desktop:emergency-stop-motion", (source) => { choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });

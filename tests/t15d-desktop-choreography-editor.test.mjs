@@ -5,11 +5,13 @@ import path from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
 import { CHOREOGRAPHY_EXPRESSIONS, CHOREOGRAPHY_LABELS, choreographyPreviewFrame, createChoreographyDraft, validateChoreographyDraft } from "../src/domain/choreography.js";
+import { createDiagnosticReport } from "../src/services/diagnostics.js";
 
 const require = createRequire(import.meta.url);
 const { ChoreographyStore, validateChoreography } = require("../electron/choreography-store.cjs");
 const { ChoreographyService } = require("../electron/choreography-service.cjs");
 const { decodeChoreographyFeatureReport, decodeChoreographyInputReport, encodeChoreographyFeatureReport } = require("../electron/choreography-hid.cjs");
+const { parseBridgeLine } = require("../electron/input-bridge-protocol.cjs");
 
 const action = (overrides = {}) => ({
   version: 1,
@@ -61,6 +63,8 @@ test("0x1A/0x1B choreography v2 codec matches the frozen host golden vectors", (
   assert.equal(run.subarray(1).toString("hex"), golden.vectors.run_two_beat_numeric_request);
   assert.equal(status.subarray(1).toString("hex"), golden.vectors.status_request);
   const completed = decodeChoreographyInputReport(Buffer.from(`1b${golden.vectors.status_completed}`, "hex"));
+  assert.equal(decodeChoreographyFeatureReport(run).protocolVersion, 2);
+  assert.equal(completed.protocolVersion, 2);
   assert.equal(completed.endpoint.result, "completed");
   assert.equal(completed.endpoint.logicalCenterAccepted, true);
   assert.equal(completed.endpoint.yawAmplitudeDegrees, 36);
@@ -121,7 +125,7 @@ test("real choreography service sends one bounded program and waits for terminal
       sent.push(Buffer.from(report));
       if (request.kind === "command") queueMicrotask(() => { completed = true; });
       const value = endpoint(request.kind === "command" ? request.requestId : completed ? nextId - 1 : 0);
-      return { ok: true, terminal: { stage: "endpoint-acknowledgement", transport: "completed", requestId: request.requestId, kind: request.kind, controllerBootId: 7, peerBootId: 8, sourceCode: request.kind === "command" ? 1 : 0, beatCount: request.kind === "command" ? 2 : 0, repeat: request.kind === "command" ? 2 : 0, yawAmplitudeDegrees: request.kind === "command" ? 36 : 0, pitchAmplitudeDegrees: request.kind === "command" ? 18 : 0, yawSpeedDegreesPerSecond: request.kind === "command" ? 90 : 0, pitchSpeedDegreesPerSecond: request.kind === "command" ? 70 : 0, endpoint: value } };
+      return { ok: true, terminal: { protocolVersion: 2, stage: "endpoint-acknowledgement", transport: "completed", requestId: request.requestId, kind: request.kind, controllerBootId: 7, peerBootId: 8, sourceCode: request.kind === "command" ? 1 : 0, beatCount: request.kind === "command" ? 2 : 0, repeat: request.kind === "command" ? 2 : 0, yawAmplitudeDegrees: request.kind === "command" ? 36 : 0, pitchAmplitudeDegrees: request.kind === "command" ? 18 : 0, yawSpeedDegreesPerSecond: request.kind === "command" ? 90 : 0, pitchSpeedDegreesPerSecond: request.kind === "command" ? 70 : 0, endpoint: value } };
     },
   });
   service.handleBridgeStatus({ boardConnected: true, motionCollectionWritable: true });
@@ -134,6 +138,46 @@ test("real choreography service sends one bounded program and waits for terminal
   assert.equal(command[18], 90);
   assert.equal(command[19], 70);
   assert.equal(command.subarray(20, 26).toString("hex"), "010003020101");
+  assert.equal(service.snapshot().lastOutcome.classification, "v2-success");
+  assert.equal(service.snapshot().lastOutcome.legacyFallback, false);
+});
+
+test("native bridge rejection and legacy quick-action fallback stay explicit", () => {
+  const rejected = parseBridgeLine(JSON.stringify({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: "dance-12345678", ok: false, reason: "invalid-choreography-report", time: "2026-09-03T10:00:00.000Z", sequence: 1 }));
+  assert.equal(rejected.reason, "choreography-native-report-rejected");
+  const service = new ChoreographyService({ send: async () => ({ ok: false }), prepareCenter: async () => ({ ok: true }) });
+  service.handleBridgeStatus({ boardConnected: true, motionCollectionWritable: true });
+  const result = service.noteLegacyFallback({ preset: "nod", repeat: 2, source: "UI", triggerReason: "choreography-native-report-rejected" }, { ok: true, endpointReportedComplete: true });
+  assert.equal(result.legacyFallback, true);
+  assert.equal(result.protocolVersion, 1);
+  assert.equal(service.snapshot().lastOutcome.classification, "legacy-fallback");
+  assert.equal(service.snapshot().lastOutcome.fallbackReason, "choreography-native-report-rejected");
+});
+
+test("diagnostics whitelist V2 choreography outcome and bounded endpoint evidence", () => {
+  const endpoint = { sessionId: 7, actionId: 9, completedCounter: 3, result: "completed", state: "ready", beatCount: 2, currentBeat: 0xff, repeat: 2, completedRepeats: 2, sourceCode: 1, yawAmplitudeDegrees: 36, pitchAmplitudeDegrees: 18, yawSpeedDegreesPerSecond: 90, pitchSpeedDegreesPerSecond: 70, adapterAvailable: true, logicalCenterAccepted: true, emergencyStopLatched: false, faulted: false, servoOutputEnabled: false, operationTerminal: true, displayLeaseActive: false, duplicateResponse: false, devicePath: "private", transcript: "private" };
+  const report = createDiagnosticReport({ inputBridge: { choreography: { protocolVersion: 2, available: true, ready: true, state: "ready", busy: false, endpoint, lastOutcome: { ok: true, name: "private dance", classification: "v2-success", protocolVersion: 2, legacyFallback: false, endpointReportedComplete: true, source: "UI", devicePath: "private" } } } });
+  assert.equal(report.choreography.protocolVersion, 2);
+  assert.equal(report.choreography.lastOutcome.classification, "v2-success");
+  assert.equal(report.choreography.endpoint.yawSpeedDegreesPerSecond, 90);
+  assert.equal(JSON.stringify(report.choreography).includes("private"), false);
+  const fallback = createDiagnosticReport({ inputBridge: { choreography: { protocolVersion: 2, available: true, state: "failed", lastOutcome: { ok: true, classification: "legacy-fallback", protocolVersion: 1, legacyFallback: true, endpointReportedComplete: true, fallbackReason: "choreography-native-report-rejected", preset: "nod", repeat: 2, source: "UI" } } } });
+  assert.equal(fallback.choreography.lastOutcome.classification, "legacy-fallback");
+  assert.equal(fallback.choreography.lastOutcome.protocolVersion, 1);
+});
+
+test("native protocol self-test embeds exact V1 and V2 vectors with isolated negative cases", () => {
+  const source = fs.readFileSync(new URL("../native/DeskMate.InputBridge/VendorReportProtocol.cs", import.meta.url), "utf8");
+  const v1 = JSON.parse(fs.readFileSync(new URL("../contracts/deskmate-host/golden-vectors-easyinput-choreography-v1.json", import.meta.url), "utf8"));
+  const v2 = JSON.parse(fs.readFileSync(new URL("../contracts/deskmate-host/golden-vectors-easyinput-choreography-v2.json", import.meta.url), "utf8"));
+  for (const vector of Object.values(v1.vectors)) assert.match(source, new RegExp(vector));
+  for (const vector of Object.values(v2.vectors)) assert.match(source, new RegExp(vector));
+  for (const version of ["V1", "V2"]) {
+    for (const suffix of ["InvalidVersion", "InvalidCrc", "InvalidLink", "InvalidNumeric", "InvalidPadding"]) assert.match(source, new RegExp(`!IsValidChoreography(?:Request|Response)\\(choreography${version}${suffix}\\)`));
+  }
+  assert.match(source, /!IsValidChoreographyResponse\(choreographyV2InvalidEndpointNumeric\)/);
+  assert.match(source, /version == 2 \? 44 : 42/);
+  assert.match(source, /version == 2 \? 61 : 59/);
 });
 
 test("T15D preload and renderer expose persistence, default dance, settings and real execution", () => {
@@ -148,6 +192,8 @@ test("T15D preload and renderer expose persistence, default dance, settings and 
   assert.match(main, /new ChoreographyService\(/);
   assert.match(main, /desktop:run-choreography[\s\S]*choreographyService\.execute\(value\.action \|\| value/);
   assert.doesNotMatch(main.match(/desktop:run-choreography[\s\S]{0,500}/)?.[0] || "", /motionPresetService\.runPreset/);
+  assert.match(main, /desktop:run-motion-preset[\s\S]*noteLegacyFallback/);
+  assert.match(editor, /Windows 输入桥拒绝了 V2 动作报文/);
   assert.match(editor, /disabled={!adapter\.ready/);
   assert.match(editor, /if \(adapter\.ready !== true\)/);
   assert.match(editor, /choreography-boundary-note/);
@@ -197,4 +243,5 @@ test("quick actions fail closed until the real motion chain is detected", () => 
   assert.match(pages, /aria-describedby="motion-chain-status"/);
   assert.match(pages, /id="motion-chain-status"/);
   assert.match(pages, /真实动作链尚未检测成功，请先重新检测/);
+  assert.match(pages, /旧版兼容动作完成；V2 数字速度\/幅度未生效/);
 });
