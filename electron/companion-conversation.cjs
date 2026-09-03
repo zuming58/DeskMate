@@ -87,6 +87,7 @@ class CompanionConversationController {
     audioSource,
     audioSink,
     commitTurn = async () => ({ ok: true }),
+    resolveTrustedTurn = () => null,
     publishState = async () => ({ ok: true }),
     onEvent = () => {},
     wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
@@ -102,6 +103,7 @@ class CompanionConversationController {
     this.audioSource = audioSource;
     this.audioSink = audioSink;
     this.commitTurn = commitTurn;
+    this.resolveTrustedTurn = resolveTrustedTurn;
     this.publishState = publishState;
     this.onEvent = onEvent;
     this.wait = wait;
@@ -136,6 +138,8 @@ class CompanionConversationController {
     this.halfDuplexPhase = "idle";
     this.activeTtsTurn = null;
     this.pendingChatFinals = 0;
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
     this.turnLifecycle = {
       ttsTurnStarted: 0, ttsTurnCompleted: 0, ttsTurnAbandoned: 0,
@@ -381,6 +385,8 @@ class CompanionConversationController {
     this.playbackDraining = false;
     this.activeTtsTurn = null;
     this.pendingChatFinals = 0;
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
     this.lastPartialAt = null;
     this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
     this.setHalfDuplexPhase("connecting");
@@ -537,6 +543,8 @@ class CompanionConversationController {
     if (this.reconnecting) return this.reconnecting;
     this.reconnecting = (async () => {
       this.lastPartialAt = null;
+      this.pendingTrustedResponse = null;
+      this.trustedResponseActive = false;
       await this.audioSource.stop();
       if (!this.isCurrent(token)) return cancelled();
       this.abandonOpenTurn("provider");
@@ -564,13 +572,13 @@ class CompanionConversationController {
     return this.reconnecting;
   }
 
-  async commitFinalTurn(role, text, token) {
+  async commitFinalTurn(role, text, token, metadata = {}) {
     if (!this.isCurrent(token)) return false;
     const content = boundedText(text);
     if (!content.trim()) return false;
     const sequence = ++this.turnSequence;
     const eventId = `${this.active.sessionId}:turn:${sequence}:${role}`;
-    await this.commitTurn({ eventId, sessionId: this.active.sessionId, role, content, createdAt: new Date().toISOString() });
+    await this.commitTurn({ eventId, sessionId: this.active.sessionId, role, content, createdAt: new Date().toISOString(), ...metadata });
     return true;
   }
 
@@ -617,20 +625,42 @@ class CompanionConversationController {
         this.asrTiming = { metric: "provider-partial-to-final-v1", status: "available", lastMs: elapsed, samples: this.asrTiming.samples + 1 };
       }
       this.lastPartialAt = null;
-      if (await this.commitFinalTurn("user", event.text, token)) {
+      let trusted = null;
+      try { trusted = await this.resolveTrustedTurn(event.text); } catch { trusted = null; }
+      const trustedText = boundedText(trusted?.text || trusted?.answer, 240).trim();
+      if (trustedText) this.pendingTrustedResponse = Object.freeze({ text: trustedText, result: trusted?.result || null });
+      if (await this.commitFinalTurn("user", event.text, token, { intentHandled: Boolean(trustedText) })) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
+        if (trustedText && trusted?.result) this.onEvent({ type: "intent.result", result: trusted.result, sessionId: this.active.sessionId, generation: this.active.generation });
         await this.transition("thinking");
       }
       return { ok: true };
     }
+    if (event.type === "asr.ended" && this.pendingTrustedResponse) {
+      const response = this.pendingTrustedResponse;
+      this.pendingTrustedResponse = null;
+      this.trustedResponseActive = true;
+      if (!this.provider?.speakText?.(response.text)) {
+        this.trustedResponseActive = false;
+        await this.transition("listening", { reason: "trusted-response-send-failed" });
+        return { ok: false, reason: "companion-trusted-response-unavailable" };
+      }
+      if (await this.commitFinalTurn("assistant", response.text, token)) {
+        if (!this.isCurrent(token)) return { ignored: true };
+        this.onEvent({ type: "turn.assistant-final", text: response.text, trusted: true, sessionId: this.active.sessionId, generation: this.active.generation });
+      }
+      return { ok: true, trusted: true };
+    }
     if (event.type === "chat.partial") {
+      if (this.pendingTrustedResponse || this.trustedResponseActive) return { ignored: true, reason: "companion-trusted-response-owned" };
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       if (this.state !== "thinking") await this.transition("thinking");
       this.onEvent({ type: "reply.partial", text: boundedText(event.fullText || event.text), sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true };
     }
     if (event.type === "chat.final") {
+      if (this.pendingTrustedResponse || this.trustedResponseActive) return { ignored: true, reason: "companion-trusted-response-owned" };
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };
       if (await this.commitFinalTurn("assistant", event.text, token)) {
         if (!this.isCurrent(token)) return { ignored: true };
@@ -662,6 +692,7 @@ class CompanionConversationController {
         this.discardResponseUntilTtsEnd = false;
         this.postInterruptState = "";
         this.playbackDraining = false;
+        this.trustedResponseActive = false;
         if (this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
         return { ok: true, interrupted: true };
       }
@@ -673,6 +704,7 @@ class CompanionConversationController {
       }
       this.finishTtsTurn();
       this.playbackDraining = false;
+      this.trustedResponseActive = false;
       await this.transition("listening", { reason: drainResult?.ok ? "tts-playback-drained" : "tts-playback-drain-timeout" });
       return { ok: true, drained: Boolean(drainResult?.ok) };
     }
@@ -713,6 +745,8 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
     await this.cleanup(provider, "provider");
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
@@ -750,6 +784,8 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
     await this.cleanup(provider, "stop");
     this.state = "idle";
     this.setHalfDuplexPhase("idle");
@@ -767,6 +803,8 @@ class CompanionConversationController {
     if (!['thinking', 'speaking', 'completed'].includes(this.state)) return { ok: false, reason: "companion-response-not-active", status: this.snapshot() };
     this.discardResponseUntilTtsEnd = true;
     this.postInterruptState = "listening";
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
     this.markTtsTurnInterrupted("manual");
     await this.audioSink.interrupt("manual");
     this.provider?.interrupt?.();

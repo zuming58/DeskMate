@@ -245,9 +245,10 @@ function handleCompanionConversationEvent(event = {}) {
 }
 
 async function commitCompanionTurn(turn) {
-  const result = companionMemoryStore.commitConversationTurn({ ...turn, source: "companion" });
-  if (turn?.role === "user" && companionIntentBridge) {
-    void companionIntentBridge.analyze(turn.content).then((analysis) => {
+  const { intentHandled = false, ...memoryTurn } = turn || {};
+  const result = companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
+  if (memoryTurn?.role === "user" && companionIntentBridge && !intentHandled) {
+    void companionIntentBridge.analyze(memoryTurn.content).then((analysis) => {
       if (analysis?.proposal) handleCompanionConversationEvent({ type: "intent.proposal", proposal: analysis.proposal });
       if (analysis?.result) handleCompanionConversationEvent({ type: "intent.result", result: analysis.result });
       if (!analysis?.proposal) handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() });
@@ -1086,6 +1087,11 @@ app.whenReady().then(async () => {
     audioSource: computerCompanionAudio.source,
     audioSink: computerCompanionAudio.sink,
     commitTurn: commitCompanionTurn,
+    resolveTrustedTurn: (text) => {
+      const analysis = companionIntentBridge?.resolveDeterministic?.(text);
+      const answer = String(analysis?.result?.answer || "").trim();
+      return answer ? { text: answer, result: analysis.result } : null;
+    },
     publishState: (value) => agentStatePublisher.publishCompanionState(value),
     onEvent: handleCompanionConversationEvent,
   });

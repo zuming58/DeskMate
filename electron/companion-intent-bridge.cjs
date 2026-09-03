@@ -7,6 +7,13 @@ const TOKEN_TTL_MS = 60_000;
 
 function safeReason(value) { return /^[a-z0-9-]{1,80}$/.test(String(value || "")) ? String(value) : "intent-bridge-failed"; }
 
+function isCodexStatusQuery(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
+  const namesCodex = /(?:codex|code\s*x|代码助手|编程任务)/i.test(source);
+  const asksStatus = /(?:状态|进度|进行到|做到|完成|做完|结束|哪一步|怎么样|如何|跑到|还在|工作情况)/u.test(source);
+  return namesCodex && asksStatus;
+}
+
 class CompanionIntentBridge {
   constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
     this.loadSecret = loadSecret;
@@ -18,6 +25,7 @@ class CompanionIntentBridge {
     this.now = now;
     this.createToken = createToken;
     this.pending = new Map();
+    this.codexSelectionExpiresAt = 0;
     this.last = { status: "idle", type: "none", label: "没有待确认动作", reason: "", expiresAt: 0 };
   }
 
@@ -26,9 +34,29 @@ class CompanionIntentBridge {
     return { ...this.last };
   }
 
+  codexStatusResult(source) {
+    const brief = this.codexTasks?.query?.(source);
+    const coarse = summarizeCodexWork(this.codexStatus());
+    const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到 Codex 任务简报；${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
+    const answer = String(codex.answer || codex.summary || "Codex 当前状态不可用").slice(0, 500);
+    this.codexSelectionExpiresAt = codex.needsDisambiguation ? this.now() + TOKEN_TTL_MS : 0;
+    this.last = { status: "completed", type: "query_codex_status", label: answer, reason: "", expiresAt: 0 };
+    return { ok: true, proposal: null, result: { type: "query_codex_status", ok: true, answer, codex } };
+  }
+
+  resolveDeterministic(text) {
+    const source = String(text || "").trim().slice(0, 4000);
+    if (!source) return null;
+    const namedFollowUp = this.codexSelectionExpiresAt > this.now() && this.codexTasks?.matchesTaskLabel?.(source);
+    if (!isCodexStatusQuery(source) && !namedFollowUp) return null;
+    return this.codexStatusResult(source);
+  }
+
   async analyze(text) {
     const source = String(text || "").trim().slice(0, 4000);
     if (!source) return { ok: true, proposal: null };
+    const deterministic = this.resolveDeterministic(source);
+    if (deterministic) return deterministic;
     const apps = this.appActions.listRegistered({ limit: 100 });
     let parsed;
     try {
@@ -62,12 +90,7 @@ class CompanionIntentBridge {
       return { ok: Boolean(result?.ok), reason: result?.ok ? "" : safeReason(result?.reason), proposal: null, result: { type, ...result } };
     }
     if (type === "query_codex_status") {
-      const brief = this.codexTasks?.query?.(source);
-      const coarse = summarizeCodexWork(this.codexStatus());
-      const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到 Codex 任务简报；${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
-      const answer = String(codex.answer || codex.summary || "Codex 当前状态不可用").slice(0, 500);
-      this.last = { status: "completed", type, label: answer, reason: "", expiresAt: 0 };
-      return { ok: true, proposal: null, result: { type, ok: true, answer, codex } };
+      return this.codexStatusResult(source);
     }
     const preset = ["attention", "search", "nod", "dance"].includes(parsed?.preset) ? parsed.preset : "";
     if (!preset || typeof this.motionAction !== "function") {
@@ -99,4 +122,4 @@ class CompanionIntentBridge {
   }
 }
 
-module.exports = { CompanionIntentBridge, TOKEN_TTL_MS };
+module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery };

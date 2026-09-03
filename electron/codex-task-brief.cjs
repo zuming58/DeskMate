@@ -84,6 +84,24 @@ function deterministicTaskAnswer(task) {
   return copy[task.state];
 }
 
+function normalizeTaskReference(value) {
+  return String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function taskReferenceTerms(label) {
+  const full = normalizeTaskReference(label);
+  const parts = String(label || "").split(/[\s\-_/·:：]+/u).map(normalizeTaskReference).filter((value) => value.length >= 2 && !["任务", "项目", "软件", "固件"].includes(value));
+  return [...new Set([full, ...parts].filter((value) => value.length >= 2))];
+}
+
+function candidatePrompt(labels, { similar = false } = {}) {
+  const spoken = labels.slice(0, 3);
+  const remainder = labels.length - spoken.length;
+  const prefix = similar ? "有多个名称相近的 Codex 任务" : "最近有多个 Codex 任务";
+  const suffix = remainder > 0 ? `等 ${labels.length} 个任务` : "";
+  return `${prefix}：${spoken.join("、")}${suffix}。请说出${similar ? "完整" : ""}任务名称。`;
+}
+
 class CodexTaskBriefStore {
   constructor({ now = () => Date.now(), maxTasks = MAX_RECENT_TASKS, throttleMs = PROGRESS_THROTTLE_MS } = {}) {
     this.now = now;
@@ -121,18 +139,31 @@ class CodexTaskBriefStore {
     return [...this.tasks.values()].reverse().map((task) => this.sanitize(task));
   }
 
+  matchingTasks(utterance = "") {
+    const source = normalizeTaskReference(utterance);
+    if (!source) return [];
+    return [...this.tasks.values()].reverse().filter((task) => taskReferenceTerms(task.taskLabel).some((term) => source.includes(term)));
+  }
+
+  matchesTaskLabel(utterance = "") {
+    return this.matchingTasks(utterance).length > 0;
+  }
+
   query(utterance = "") {
     const tasks = [...this.tasks.values()].reverse();
     if (!tasks.length) return { ok: true, available: false, needsDisambiguation: false, answer: "Codex 还没有报告近期任务状态", task: null };
-    const source = String(utterance || "").toLocaleLowerCase("zh-CN");
-    const matches = tasks.filter((task) => source.includes(task.taskLabel.toLocaleLowerCase("zh-CN")));
+    const matches = this.matchingTasks(utterance);
     if (matches.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(matches[0]), task: this.sanitize(matches[0]) };
+    if (matches.length > 1) {
+      const labels = matches.slice(0, this.maxTasks).map((task) => task.taskLabel);
+      return { ok: true, available: true, needsDisambiguation: true, answer: candidatePrompt(labels, { similar: true }), tasks: labels };
+    }
     const active = tasks.filter((task) => ["thinking", "working", "waiting"].includes(task.state));
     if (active.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(active[0]), task: this.sanitize(active[0]) };
     if (!active.length && tasks.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(tasks[0]), task: this.sanitize(tasks[0]) };
     const candidates = active.length ? active : tasks;
     const labels = candidates.slice(0, this.maxTasks).map((task) => task.taskLabel);
-    return { ok: true, available: true, needsDisambiguation: true, answer: `最近有多个 Codex 任务：${labels.join("、")}。请说出任务名称。`, tasks: labels };
+    return { ok: true, available: true, needsDisambiguation: true, answer: candidatePrompt(labels), tasks: labels };
   }
 
   status() { return Object.freeze({ receiver: "listening", protocol: "codex-task-brief-v1", tasks: this.list() }); }
@@ -169,4 +200,4 @@ class CodexTaskBriefServer {
   }
 }
 
-module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, normalizeCodexTaskBrief, resolveCodexTaskBriefPipePath, sendCodexTaskBrief };
+module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskReferenceTerms };

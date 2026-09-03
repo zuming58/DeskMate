@@ -8,7 +8,7 @@ import { normalizeMotionState, MOTION_REPEAT_DEFAULTS } from "../src/domain/moti
 
 const require = createRequire(import.meta.url);
 const { CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, encodeCodexTaskBrief, sendCodexTaskBrief } = require("../electron/codex-task-brief.cjs");
-const { CompanionIntentBridge } = require("../electron/companion-intent-bridge.cjs");
+const { CompanionIntentBridge, isCodexStatusQuery } = require("../electron/companion-intent-bridge.cjs");
 const { parseArguments, reportCodexTaskBrief, reserveCodexTaskBrief, stateFileFor } = require("../scripts/report-codex-task-brief.cjs");
 
 const task = (overrides = {}) => ({ version: "codex-task-brief-v1", provider: "codex", taskKey: "opaque_01", taskLabel: "DeskMate 软件", state: "working", milestone: "正在补齐测试", sequence: 1, ...overrides });
@@ -113,6 +113,42 @@ test("multiple Codex tasks require a named label and deterministic templates nev
   assert.equal(named.needsDisambiguation, false);
   assert.equal(named.answer, "桌面软件 正在执行：代码门通过");
   assert.doesNotMatch(named.answer, /%/);
+});
+
+test("task lookup tolerates spoken spacing, matches a unique project term, and keeps similar names ambiguous", () => {
+  const store = new CodexTaskBriefStore();
+  store.ingest(task({ taskKey: "task_one", taskLabel: "DeskMate 软件闭环", state: "working", milestone: "语音路由修复" }));
+  store.ingest(task({ taskKey: "task_two", taskLabel: "EasyInput 固件", state: "waiting", milestone: "等待烧录授权" }));
+  assert.equal(store.query("Desk Mate 软件闭环怎么样").answer, "DeskMate 软件闭环 正在执行：语音路由修复");
+  assert.equal(store.query("EasyInput 项目到哪一步了").answer, "EasyInput 固件 正在等你回复：等待烧录授权");
+  store.ingest(task({ taskKey: "task_three", taskLabel: "DeskMate 安装包", state: "working", milestone: "正在打包" }));
+  const similar = store.query("DeskMate 项目怎么样");
+  assert.equal(similar.needsDisambiguation, true);
+  assert.match(similar.answer, /完整任务名称/);
+});
+
+test("Codex status questions and a named follow-up bypass the language model", async () => {
+  let now = 5_000;
+  let modelCalls = 0;
+  const store = new CodexTaskBriefStore({ now: () => now });
+  store.ingest(task({ taskKey: "task_one", taskLabel: "DeskMate 软件闭环", state: "working", milestone: "修复确定性回答" }));
+  store.ingest(task({ taskKey: "task_two", taskLabel: "EasyInput 固件", state: "waiting", milestone: "等待人工验证" }));
+  const bridge = new CompanionIntentBridge({
+    loadSecret: () => ({ apiKey: "x" }),
+    appActions: { listRegistered: () => [] },
+    codexStatus: () => ({ state: "working" }),
+    codexTasks: store,
+    requestJson: async () => { modelCalls += 1; return { type: "none" }; },
+    now: () => now,
+  });
+  assert.equal(isCodexStatusQuery("Codex 已经进行到哪一步了"), true);
+  const ambiguous = await bridge.analyze("Codex 已经进行到哪一步了");
+  assert.equal(ambiguous.result.codex.needsDisambiguation, true);
+  assert.equal(modelCalls, 0);
+  now += 1_000;
+  const selected = bridge.resolveDeterministic("EasyInput 固件");
+  assert.equal(selected.result.answer, "EasyInput 固件 正在等你回复：等待人工验证");
+  assert.equal(modelCalls, 0);
 });
 
 test("voice intent opens enabled apps, rejects disabled apps, answers Codex deterministically, and reserves motion without wire output", async () => {

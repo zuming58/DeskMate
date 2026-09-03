@@ -89,6 +89,11 @@ test("Doubao codec accepts every documented flag layout, identifiers, gzip and f
   const response = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 451, sessionId: "s1", serialization: SERIALIZATION.JSON, payload: Buffer.from('{"results":[{"text":"你好","is_interim":false}]}') });
   const translated = translateFrame(decodeFrame(response), { replyText: "" });
   assert.deepEqual(translated, { type: "asr.final", text: "你好" });
+  const asrEnded = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 459, sessionId: "s1", serialization: SERIALIZATION.JSON, payload: Buffer.from("{}") });
+  assert.deepEqual(translateFrame(decodeFrame(asrEnded), { replyText: "" }), {
+    type: "asr.ended",
+    diagnostic: { providerEvent: "asr.ended", terminalEvent: "none", failureBucket: "none" },
+  });
   const gzipFrame = encodeFrame({ messageType: MESSAGE_TYPES.FULL_SERVER_RESPONSE, event: 150, sessionId: "s1", serialization: SERIALIZATION.JSON, compression: COMPRESSION.GZIP, payload: gzipSync(Buffer.from("{}")) });
   assert.deepEqual(decodeFrame(gzipFrame).payloadJson, {});
   const errorFrame = encodeFrame({ messageType: MESSAGE_TYPES.ERROR, flags: FLAGS.NO_SEQUENCE, code: 45000001, serialization: SERIALIZATION.JSON, payload: Buffer.from('{"message":"private provider content"}') });
@@ -218,6 +223,41 @@ test("trusted task brief uses provider voice, then returns to continuous listeni
   assert.equal((await controller.announce("又有一条进度")).ok, true);
   assert.deepEqual(provider.spokenTexts, ["又有一条进度"]);
   assert.equal(controller.snapshot().state, "thinking");
+  await controller.stop("test-complete");
+});
+
+test("trusted Codex status owns the turn after ASR ended and suppresses the free-chat answer", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  const events = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (value) => { commits.push(value); },
+    resolveTrustedTurn: (text) => text.includes("Codex") ? { text: "DeskMate 软件闭环 正在执行：修复确定性回答", result: { type: "query_codex_status", ok: true, answer: "DeskMate 软件闭环 正在执行：修复确定性回答" } } : null,
+    onEvent: (value) => events.push(value),
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "trusted-status", generation: 1 });
+  provider.emit({ type: "asr.final", text: "Codex 进行到哪一步了" });
+  provider.emit({ type: "asr.ended" });
+  provider.emit({ type: "chat.partial", text: "随便", fullText: "随便回答" });
+  provider.emit({ type: "chat.final", text: "随便回答" });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([7, 8]) });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.deepEqual(provider.spokenTexts, ["DeskMate 软件闭环 正在执行：修复确定性回答"]);
+  assert.deepEqual(commits.map(({ role, content, intentHandled = false }) => ({ role, content, intentHandled })), [
+    { role: "user", content: "Codex 进行到哪一步了", intentHandled: true },
+    { role: "assistant", content: "DeskMate 软件闭环 正在执行：修复确定性回答", intentHandled: false },
+  ]);
+  assert.equal(events.some((event) => event.type === "reply.partial"), false);
+  assert.equal(events.find((event) => event.type === "turn.assistant-final")?.trusted, true);
+  assert.equal(controller.snapshot().state, "listening");
   await controller.stop("test-complete");
 });
 
