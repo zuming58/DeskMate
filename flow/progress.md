@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-03 - Main Agent integrated, rebuilt and independently verified the Windows V2 bridge repair
+
+- Main integration branch `codex/t15-t16-integration` fast-forwarded the Windows-only delivery `codex/t15d-native-v2-bridge-fix@0120f1acd585d71f0d7983ba00147cf6637105f5`; the implementation commit is `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110` and its exact base is `bce207d379b249e3d094901ad425ac10a09616c7`.
+- Independent review confirmed that the native bridge now accepts frozen Host choreography V1 rollback and V2 with separate CRC offsets, zero-padding rules, Link `0x24/0x25` versus `0x26/0x27`, V1 profile bounds and V2 numeric Yaw/Pitch angle/speed bounds. Electron also correlates the protocol version; custom choreography remains fail-closed, while any quick-action legacy fallback is explicitly classified and cannot masquerade as V2 success.
+- Main-Agent verification passed full Desktop `378/378`, `npm run build:desktop`, packaged `DeskMate.InputBridge.exe --protocol-self-test`, `git diff --check` and an empty firmware diff from the diagnosed base. Fresh package: `DeskMate.exe` 202690560 bytes / SHA-256 `1C7289B956FE9532FD2F1C25A750AEF3445E6BD9E8325C62724DEEAFA16558D0`; `app.asar` 113010318 bytes / `BCDA46DD4205C66ED71F679DB18A76E205F775A27080575630D3529E76306908`; packaged input bridge 153525129 bytes / `37B4C1AF77F3ADF0C5DA4F79076752B9ADF6B7762250ED2B1221452AF9269207`.
+- Both already verified T15D V2 firmware applications remain unchanged, so neither board needs reflashing for this repair. No device, HID, motion or firmware operation occurred. Classification: `WINDOWS_NATIVE_V2_REPAIR_INTEGRATED / EXACT_PACKAGE_REBUILT / FIRMWARE_REFLASH_NOT_REQUIRED / HUMAN_HIL_PENDING`. Next: launch this exact package and require a maximum-Pitch quick nod plus one current custom choreography to return terminal `v2-success`; `legacy-fallback` is diagnostic evidence only, not acceptance.
+
 ## 2026-09-03 - T15D Windows native bridge now validates the frozen V2 choreography contract
 
 - Windows-only branch `codex/t15d-native-v2-bridge-fix` starts from exact integration base `bce207d379b249e3d094901ad425ac10a09616c7`; implementation commit is `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110`.
