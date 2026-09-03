@@ -1575,6 +1575,7 @@ export function MotionPage({ notify, embedded = false }) {
   const presetLabel = ({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[preset] || "动作";
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
   const [motionStatus, setMotionStatus] = useState({ ok: false, reason: "motion-status-not-read", endpointReportedComplete: false, endpoint: null });
+  const [motionAutomation, setMotionAutomation] = useState({ policy: { version: 1, enabled: false, idleEnabled: false }, running: false, idleDelaySeconds: 90, thinkingDelaySeconds: 4, last: { state: "disabled", trigger: "", reason: "" } });
   const [activeDance, setActiveDance] = useState({ name: "", repeat: 2 });
   const [runningPreset, setRunningPreset] = useState("");
   const [safetyAction, setSafetyAction] = useState("");
@@ -1612,9 +1613,20 @@ export function MotionPage({ notify, embedded = false }) {
     };
     void readWithRetry();
     voiceAdapters.desktop.listChoreographies().then((value) => { if (active) syncDanceLibrary(value); }).catch(() => {});
+    voiceAdapters.desktop.getMotionAutomationPolicy().then((value) => { if (active && value?.policy) setMotionAutomation(value); }).catch(() => {});
     const unsubscribe = voiceAdapters.desktop.onMotionPresetStatus((value) => { if (active && value) setMotionStatus(value); });
-    return () => { active = false; if (retryTimer) clearTimeout(retryTimer); unsubscribe?.(); };
+    const unsubscribeAutomation = voiceAdapters.desktop.onMotionAutomationStatus((value) => { if (active && value?.policy) setMotionAutomation(value); });
+    return () => { active = false; if (retryTimer) clearTimeout(retryTimer); unsubscribe?.(); unsubscribeAutomation?.(); };
   }, [refreshStatus, syncDanceLibrary]);
+  const updateMotionAutomation = async (patch) => {
+    const policy = { version: 1, ...motionAutomation.policy, ...patch };
+    if (!policy.enabled) policy.idleEnabled = false;
+    try {
+      const result = await voiceAdapters.desktop.setMotionAutomationPolicy(policy);
+      if (result?.policy) setMotionAutomation(result);
+      notify(result?.ok ? `自动情境动作已${policy.enabled ? "开启" : "关闭"}` : `自动动作设置未保存：${result?.reason || "motion-automation-save-failed"}`);
+    } catch (error) { notify(`自动动作设置未保存：${error?.message || "motion-automation-save-failed"}`); }
+  };
   const runPreset = async (nextPreset) => {
     if (!motionAvailable) {
       notify("动作未开始：真实动作链尚未检测成功，请先重新检测。");
@@ -1699,7 +1711,11 @@ export function MotionPage({ notify, embedded = false }) {
             <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
             {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}
           </div>
-          <div className="motion-automation-note"><Sparkles size={16} stroke={1.8} /><span><strong>自动联动待验收</strong>语音与情境动作保持关闭。</span></div>
+          <div className="motion-automation-panel">
+            <div className="motion-automation-row"><span><strong>自动情境动作</strong><small>开始陪伴时关注；思考超过 {motionAutomation.thinkingDelaySeconds || 4} 秒时寻找；确认和 Codex 完成后点头。</small></span><Toggle label="自动情境动作总开关" checked={motionAutomation.policy.enabled} onChange={(enabled) => { void updateMotionAutomation({ enabled }); }} /></div>
+            <div className="motion-automation-row"><span><strong>空闲轻微环视</strong><small>连续空闲 {motionAutomation.idleDelaySeconds || 90} 秒后执行一次寻找；聆听、说话、手动或其他动作期间跳过且不补发。</small></span><Toggle label="空闲环视" disabled={!motionAutomation.policy.enabled} checked={motionAutomation.policy.enabled && motionAutomation.policy.idleEnabled} onChange={(idleEnabled) => { void updateMotionAutomation({ idleEnabled }); }} /></div>
+            <p>“跳舞”始终只由按钮、明确语音或已激活的自定义舞蹈触发。当前状态：{({ disabled: "已关闭", ready: "等待触发", "waiting-thinking": "等待持续思考", "waiting-confirmation": "等待确认回答结束", running: "正在执行", completed: "最近一次已完成", skipped: "最近一次已跳过", failed: "最近一次失败" })[motionAutomation.last?.state] || "等待状态"}{motionAutomation.last?.reason ? ` · ${motionAutomation.last.reason}` : ""}</p>
+          </div>
         </Card>
       </div>
       <ChoreographyEditor currentExpression={state.currentExpression} notify={notify} onDanceLibraryChange={syncDanceLibrary} />

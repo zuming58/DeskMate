@@ -1,6 +1,6 @@
 # T12A desktop companion pause, identity and call
 
-Status: `TEST_CONFIRMED / BUILD_CONFIRMED / HIL_PENDING`
+Status: `WINDOWS_CODE_BUILD_CONFIRMED / USER_HIL_PENDING / NO_FIRMWARE_CHANGE`
 
 ## Goal
 

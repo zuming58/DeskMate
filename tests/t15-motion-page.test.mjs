@@ -37,7 +37,8 @@ test("T15 renderer adapter uses semantic operations without motion primitives", 
 test("T15 UI keeps endpoint completion separate from physical HIL", () => {
   assert.match(page, /端点报告本次动作已完成/);
   assert.match(page, /实体结果仍以现场观察为准/);
-  assert.match(page, /自动联动待验收/);
+  assert.match(page, /自动情境动作总开关/);
+  assert.match(page, /开始陪伴时关注/);
   assert.match(page, /endpoint\.completedRepeat/);
   assert.match(page, /endpoint\.requestedRepeat/);
   assert.doesNotMatch(page, /endpoint\.repeatCompleted/);

@@ -1,6 +1,6 @@
 # T10D-D simple manual control
 
-Status: `THREE_END_CODE_BUILD_CONFIRMED / HIL_READY_NOT_RUN`
+Status: `USER_HIL_ACCEPTED / FROZEN_REGRESSION_BASELINE`
 
 ## Objective
 
@@ -38,4 +38,5 @@ No flash, hardware action or physical movement is authorized by this task card.
 - Windows source delivery: `codex/t10d-desktop-manual-control-ux@55e929bee6da65ddf2c78efc429834e986995572`.
 - Desktop: full `310/310`, packaged native self-test and isolated Windows package passed.
 - EasyInput: firmware unchanged; final-tree Host CTest `13/13` passed.
-- Xiaozhi: final-tree Host CTest `12/12` and exact ESP-IDF v5.5.3 Stage 2 build passed. The app is still not flashed.
+- Xiaozhi: final-tree Host CTest `12/12` and exact ESP-IDF v5.5.3 Stage 2 build passed; the authorized Stage 2 app was flashed and verified during the later integration sequence.
+- User-present acceptance passed all four hold directions, release-without-late-motion, return to center, emergency-stop latch and explicit emergency-stop recovery. No later task reopens this wire or requires another flash; it is now a regression baseline.

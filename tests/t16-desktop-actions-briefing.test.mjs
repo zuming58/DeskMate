@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { normalizeMotionState, MOTION_REPEAT_DEFAULTS } from "../src/domain/motionPresets.js";
 
 const require = createRequire(import.meta.url);
 const { CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, encodeCodexTaskBrief, sendCodexTaskBrief } = require("../electron/codex-task-brief.cjs");
 const { CompanionIntentBridge } = require("../electron/companion-intent-bridge.cjs");
+const { parseArguments, reportCodexTaskBrief, reserveCodexTaskBrief, stateFileFor } = require("../scripts/report-codex-task-brief.cjs");
 
 const task = (overrides = {}) => ({ version: "codex-task-brief-v1", provider: "codex", taskKey: "opaque_01", taskLabel: "DeskMate 软件", state: "working", milestone: "正在补齐测试", sequence: 1, ...overrides });
 
@@ -31,6 +35,37 @@ test("optional local reporter reaches the bounded receiver without exposing the 
   await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(received.length, 1);
   assert.equal(received[0].taskKey, "opaque_01");
+});
+
+test("repository reporter persists only an opaque key, visible label and monotonic sequence", async () => {
+  const stateDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-task-reporter-"));
+  try {
+    const first = reserveCodexTaskBrief(parseArguments(["--task-key", "deskmate_t18", "--task-label", "DeskMate 软件闭环", "--state", "thinking", "--milestone", "开始核对"]), { stateDirectory });
+    assert.equal(first.sequence, 1);
+    const second = reserveCodexTaskBrief(parseArguments(["--task-key", "deskmate_t18", "--state", "working", "--milestone", "正在执行测试"]), { stateDirectory });
+    assert.equal(second.sequence, 2);
+    assert.equal(second.taskLabel, "DeskMate 软件闭环");
+    const stored = fs.readFileSync(stateFileFor("deskmate_t18", stateDirectory), "utf8");
+    assert.doesNotMatch(stored, /prompt|response|tool|command|cwd|window/i);
+    const sent = [];
+    const result = await reportCodexTaskBrief(["--task-key", "deskmate_t18", "--state", "completed", "--milestone", "测试通过"], { stateDirectory, send: async (report) => { sent.push(report); return { ok: true }; } });
+    assert.deepEqual({ ok: result.ok, sequence: result.sequence, state: result.state }, { ok: true, sequence: 3, state: "completed" });
+    assert.equal(sent[0].taskLabel, "DeskMate 软件闭环");
+  } finally {
+    fs.rmSync(stateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("repository reporter fails closed on missing labels, unsafe text and unknown arguments", async () => {
+  const stateDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-task-reporter-invalid-"));
+  try {
+    assert.throws(() => parseArguments(["--task-key", "deskmate_t18", "--unknown", "x", "--state", "working"]), /argument-invalid/);
+    assert.throws(() => reserveCodexTaskBrief({ taskKey: "deskmate_t18", state: "working", taskLabel: "", milestone: "" }, { stateDirectory }), /brief-invalid/);
+    const result = await reportCodexTaskBrief(["--task-key", "deskmate_t18", "--task-label", "DeskMate", "--state", "working", "--milestone", "password=secret"], { stateDirectory, send: async () => ({ ok: true }) });
+    assert.deepEqual(result, { ok: false, reason: "codex-task-brief-invalid" });
+  } finally {
+    fs.rmSync(stateDirectory, { recursive: true, force: true });
+  }
 });
 
 test("task brief store keeps eight recent tasks, rejects stale sequence and throttles only ordinary progress", () => {

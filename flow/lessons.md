@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Automatic behavior must lose conflicts instead of becoming delayed behavior
+
+- Symptom: a low-priority idle or contextual action blocked by speaking, manual control or another motion can become surprising if it is queued and runs after the user believes the event has passed.
+- Practice: evaluate the current ownership and safety gates once at trigger time, drop blocked automatic work, and schedule only the next independent idle opportunity. Keep explicit voice/UI motion on their existing higher-priority path.
+- Rule: contextual motion is decoration, not an obligation. Never replay it after disconnect, recovery, emergency, manual ownership or a stale conversational state.
+
 ## Every native boundary must execute the frozen protocol vectors
 
 - Symptom: JavaScript and both firmware endpoints support a new protocol version, yet the packaged native bridge silently rejects it; a legacy fallback makes one action still move and hides the version skew while commands without a fallback do nothing.

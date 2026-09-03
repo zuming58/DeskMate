@@ -1,5 +1,12 @@
 # Progress log
 
+## 2026-09-03 - User accepted T15D V2; software-closure branch opened
+
+- User-present HIL on the exact repaired Windows package and the already verified EasyInput/Xiaozhi T15D V2 applications now passes: fixed quick actions move correctly, maximum Pitch and independent speed/angle settings take effect, the activated custom dance executes physically, and the user explicitly reported the feature normal. This upgrades T15D from `HUMAN_HIL_PENDING` to `T15D_HIL_ACCEPTED / FROZEN_BASELINE`.
+- Accepted sources remain `codex/t15-t16-integration@42138d7aab8180941efc5ec387edeb78608a8635`, EasyInput app SHA-256 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097` at `0x10000`, and Xiaozhi app SHA-256 `61193549A98B988C0B9E026A3E7D7F329312C9C4EAE9FD8190171CE0FBF8EF43` at `0x100000`. No new hardware operation or reflash is required.
+- New implementation branch `codex/t18-software-closure` starts from that accepted integration HEAD. Scope is Windows software and Project Flow only: T16 repository-local Codex task reporter/voice-action acceptance readiness, T17 dual-source memory closure, T15C automatic contextual motion, T12 regression and an internal Beta package. Offline wake, EasyInput speaker downlink, other Agent adapters and sensors remain later slices.
+- Next action: implement and test the content-bounded repository task reporter, then wire the persisted automatic-motion policy and arbitration without changing any Host HID, DeskMate Link or firmware source.
+
 ## 2026-09-03 - Main Agent integrated, rebuilt and independently verified the Windows V2 bridge repair
 
 - Main integration branch `codex/t15-t16-integration` fast-forwarded the Windows-only delivery `codex/t15d-native-v2-bridge-fix@0120f1acd585d71f0d7983ba00147cf6637105f5`; the implementation commit is `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110` and its exact base is `bce207d379b249e3d094901ad425ac10a09616c7`.

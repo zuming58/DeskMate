@@ -51,13 +51,14 @@ const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
 const { MotionPresetService } = require("./motion-preset-service.cjs");
 const { ChoreographyStore } = require("./choreography-store.cjs");
 const { ChoreographyService } = require("./choreography-service.cjs");
+const { MotionAutomationCoordinator, MotionAutomationPolicyStore } = require("./motion-automation.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t15d-adjustable-motion-v2";
+const DESKMATE_BUILD_ID = "t18-software-closure-beta";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -119,6 +120,8 @@ let manualControlCoordinator;
 let motionPresetService;
 let choreographyStore;
 let choreographyService;
+let motionAutomationPolicyStore;
+let motionAutomationCoordinator;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
@@ -234,6 +237,8 @@ function handleCompanionConversationEvent(event = {}) {
   const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...event, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);
+  if (event.type === "state") motionAutomationCoordinator?.onCompanionState(event.state);
+  if (event.type === "intent.result") void motionAutomationCoordinator?.onIntentResult(event.result);
   if (event.type === "state" && ["idle", "error"].includes(event.state) && foregroundSessionState.active?.mode === "companion") {
     releaseForegroundSession({ sessionId: event.sessionId, generation: event.generation });
   }
@@ -498,6 +503,7 @@ function emitAgentProviderStatus(provider) {
 }
 
 async function handleAutomaticAgentHookState(provider, value) {
+  motionAutomationCoordinator?.touchActivity();
   const updatedAt = new Date().toISOString();
   let delivery = activeAgentProvider === provider ? "pending" : "not-selected";
   if (activeAgentProvider === provider) {
@@ -523,6 +529,7 @@ async function handleAutomaticAgentHookState(provider, value) {
 
 async function handleCodexHookState(value) {
   await handleAutomaticAgentHookState("codex", value);
+  if (value?.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
 }
 
 async function handleHermesHookState(value) {
@@ -714,6 +721,7 @@ function updateVoiceState(value = {}) {
     floating: value.floating !== false,
   };
   voiceSessionRecording = state === "recording";
+  motionAutomationCoordinator?.touchActivity();
   if (["idle", "completed", "error", "cancelled"].includes(state)) finishDictationForeground();
   overlayWindow?.webContents.send("voice-state", lastVoiceState);
   if (!lastVoiceState.floating || ["idle"].includes(state)) overlayWindow?.hide();
@@ -770,6 +778,7 @@ function createWindow() {
     sendToMain("manual-control-status", manualControlCoordinator?.snapshot?.() || { available: false, active: false, phase: "unavailable", linkState: "unavailable" });
     sendToMain("motion-preset-status", motionPresetService?.snapshot?.() || { available: false, phase: "unavailable", busy: false, endpointReportedComplete: false });
     sendToMain("choreography-status", choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" });
+    sendToMain("motion-automation-status", motionAutomationCoordinator?.snapshot?.() || { policy: { version: 1, enabled: false, idleEnabled: false }, running: false, last: { state: "disabled" } });
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -947,6 +956,7 @@ async function startCompanionConversation(value = {}) {
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
   const result = await companionConversationController.start(lease);
   if (!result.ok) releaseForegroundSession(lease);
+  else void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
 }
 
@@ -983,6 +993,7 @@ app.whenReady().then(async () => {
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
+  motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });
   const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
@@ -990,7 +1001,7 @@ app.whenReady().then(async () => {
   });
   manualCalibrationController.on("status", (value) => { sendToMain("manual-calibration-status", value); emitInputBridgeStatus(); });
   manualControlCoordinator = new ManualControlCoordinator({ calibration: manualCalibrationController });
-  manualControlCoordinator.on("status", (value) => sendToMain("manual-control-status", value));
+  manualControlCoordinator.on("status", (value) => { sendToMain("manual-control-status", value); if (value?.active) motionAutomationCoordinator?.touchActivity(); });
   motionPresetService = new MotionPresetService({
     send: (report, options) => inputBridge?.sendMotionPreset?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
     requestIdSequence: manualCalibrationRequestIds,
@@ -1006,6 +1017,25 @@ app.whenReady().then(async () => {
     isManualControlActive: () => manualControlCoordinator?.snapshot?.().active === true,
   });
   choreographyService.on("status", (value) => { sendToMain("choreography-status", value); emitInputBridgeStatus(); });
+  motionAutomationCoordinator = new MotionAutomationCoordinator({
+    policyStore: motionAutomationPolicyStore,
+    executePreset: (preset, repeat, source) => choreographyService.executePreset(preset, repeat, source),
+    getActivity: () => {
+      const choreography = choreographyService.snapshot();
+      const legacy = motionPresetService.snapshot();
+      const endpoint = choreography.endpoint || legacy.endpoint || {};
+      return {
+        manualActive: manualControlCoordinator?.snapshot?.().active === true,
+        voiceActive: isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }),
+        companionActive: companionIsActive(),
+        agentActive: ["thinking", "working", "waiting"].includes(providerHookStatus(activeAgentProvider)?.state),
+        motionBusy: choreography.busy === true || legacy.busy === true,
+        emergencyStopped: endpoint.emergencyStopLatched === true || endpoint.state === "emergency-stopped",
+        faulted: endpoint.faulted === true || endpoint.state === "faulted",
+      };
+    },
+  });
+  motionAutomationCoordinator.on("status", (value) => sendToMain("motion-automation-status", value));
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
   companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
@@ -1050,6 +1080,7 @@ app.whenReady().then(async () => {
     codexStatus: () => codexHookStatus,
     codexTasks: codexTaskBriefStore,
     motionAction: (preset) => {
+      motionAutomationCoordinator?.touchActivity();
       const saved = preset === "dance" ? choreographyStore.getDefaultDance() : null;
       const repeat = saved?.repeat || (["nod", "dance"].includes(preset) ? 2 : 1);
       return choreographyService.executePreset(preset, repeat, "voice");
@@ -1064,6 +1095,7 @@ app.whenReady().then(async () => {
     if (!result.ok) return;
     sendToMain("codex-task-brief-status", codexTaskBriefStore.status());
     if (result.announcement) sendToMain("codex-task-brief-announcement", { ...result.announcement, speak: !companionIsActive() && !isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) });
+    if (report.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
   } });
   const taskBriefReceiver = await codexTaskBriefServer.start();
   hermesHookServer = new HermesHookStateServer({ onState: (value) => { void handleHermesHookState(value); } });
@@ -1112,6 +1144,8 @@ app.whenReady().then(async () => {
     try { return choreographyStore.setMotionSettings(value); }
     catch (error) { return { ok: false, reason: error?.message === "motion-settings-invalid" ? error.message : "motion-settings-save-failed", ...choreographyStore.snapshot() }; }
   });
+  handleTrusted("desktop:get-motion-automation-policy", () => ({ ok: true, ...motionAutomationCoordinator.snapshot() }));
+  handleTrusted("desktop:set-motion-automation-policy", (value = {}) => motionAutomationCoordinator.setPolicy(value));
   handleTrusted("desktop:save-choreography", (value = {}) => {
     try { return choreographyStore.save(value.action, value.previousName); }
     catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", ...choreographyStore.snapshot() }; }
@@ -1359,6 +1393,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

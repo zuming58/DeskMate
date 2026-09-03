@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式 EasyInput 总控固件的产品目录，不是 Maker 参考工程的副本。
 
-当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / T15_PRESET_HIL_ACCEPTED / T15D_V2_CODE_BUILD_CONFIRMED / T15D_V2_FLASH_NOT_AUTHORIZED`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action、T10D-D 手动控制与 T15 固定动作均已完成人工验收。当前更换后的新开发板 S1～S8、旋钮旋转/按压和灯效均已通过；S8 无响应只属于已换下旧板的历史硬件问题，不改八键/GPIO48 产品合同。
+当前基线状态：`T03_LOCKED / T04_LOCKED / T05_USER_ACCEPTED / T06_LOCKED / T08_LINK_HIL_CONFIRMED / T09_THREE_END_INTEGRATED / T15_PRESET_HIL_ACCEPTED / T15D_V2_APP_ONLY_FLASH_VERIFIED / T15D_V2_HIL_ACCEPTED / FROZEN_BASELINE`。T03 的 held PTT、atomic tap 和断线安全已锁定；T04 的 GPIO12 五灯输入反馈与 GPIO8 唯一共享电源底座已经独立审计、授权烧录和完整真机矩阵；T05 配置、T06 Host Action、T10D-D 手动控制、T15 固定动作及 T15D V2 可调动作/自定义舞蹈均已完成人工验收。当前更换后的新开发板 S1～S8、旋钮旋转/按压和灯效均已通过；S8 无响应只属于已换下旧板的历史硬件问题，不改八键/GPIO48 产品合同。
 
 第一项实现见 [`T02-easyinput-input-foundation.md`](../../flow/tasks/T02-easyinput-input-foundation.md)：建立 ESP-IDF 5.5.5 构建骨架、八键/旋钮纯逻辑、USB HID 兼容层和 host test。T02 已完成代码、测试与构建门。
 
@@ -14,7 +14,7 @@ T11E-A 冻结并实现本地扬声器硬件底座：I2S1 使用 `GPIO14/13/15`�
 
 T10D-A 冻结并实现手动校准转发桥：Windows 通过 Feature `0x16` 提交一个有 CRC、确认 ID 和单调请求 ID 的 63-byte 请求，EasyInput 通过 Input `0x17` 分别报告已接收与小智终态。总控只逐字节转发既有 T10C `0x20/0x21`，保持 250 ms/三次发送、断线/重启清空和单请求门禁。它没有角度、PWM、脉宽、GPIO 或实体舵机 adapter。
 
-T15B 在同一总控上实现动作预设转发候选：Feature `0x18` / Input `0x19` 使用 63-byte payload，Link `0x22` 使用 16 bytes，`0x23` 请求为空且返回冻结的 20-byte 状态。EasyInput 只校验来源/操作矩阵、维护一个请求槽、关联 controller/peer boot 与 action，并逐字节转发 preset/repeat；nod/dance 的 repeat=2 不会在本板展开为轨迹。MOTION bit 3 现在是已知可选能力，T09 `SET_AGENT_STATE` 与 T10D `0x20/0x21` 在该 bit 存在时继续可用，AUDIO bit 4 仍禁止。长动作只立即获得 endpoint acknowledgement，Windows 另发 `0x23` 轮询并仅可表述为“Xiaozhi endpoint reported complete”。该候选尚未获 flash/HIL 授权，不证明物理或机械完成。
+T15B 在同一总控上实现动作预设转发：Feature `0x18` / Input `0x19` 使用 63-byte payload，Link `0x22` 使用 16 bytes，`0x23` 请求为空且返回冻结的 20-byte 状态。EasyInput 只校验来源/操作矩阵、维护一个请求槽、关联 controller/peer boot 与 action，并逐字节转发 preset/repeat；nod/dance 的 repeat=2 不会在本板展开为轨迹。MOTION bit 3 现在是已知可选能力，T09 `SET_AGENT_STATE` 与 T10D `0x20/0x21` 在该 bit 存在时继续可用，AUDIO bit 4 仍禁止。长动作只立即获得 endpoint acknowledgement，Windows 另发 `0x23` 轮询并仅可表述为“Xiaozhi endpoint reported complete”。T15/T15D 已完成三端真机验收，但协议状态仍不冒充独立轴角或负载测量。
 
 T15D V2 保留专用 HID Feature/Input `0x1A/0x1B`，但将旧版共享档位替换为四个有界数字语义：Yaw 幅度 `4..40°`、Pitch 幅度 `4..20°`、Yaw/Pitch 速度上限各 `20..100°/s`。V2 通过 Link `0x26/0x27` 转发完整 2～8 拍动作；旧 `0x24/0x25` 只为回退兼容保留。EasyInput 仍只校验、关联和转发，不生成轨迹、不计时，也不接触 PWM、GPIO、脉宽或绝对轴角。固定动作、自定义舞蹈和明确语音“跳舞”共用同一条链路；最终轨迹、二次限幅、显示租约、回中和急停均由小智独占。
 
@@ -62,4 +62,4 @@ firmware/easyinput-controller/tools/write-release-manifest.ps1 `
   -OutputPath firmware/easyinput-controller/build/release-manifest.json
 ```
 
-任何三端候选必须在最终 HEAD 干净重建并列出两块板各自的 app 地址、大小、SHA-256、写入与扇区范围后，逐板取得明确授权。本目录的 T15D V2 结果仍只属于代码、Host 和构建证据；不得据此烧录或宣称可调角度、速度和自定义舞蹈已经完成真机验收。
+任何新的三端候选必须在最终 HEAD 干净重建并列出两块板各自的 app 地址、大小、SHA-256、写入与扇区范围后，逐板取得明确授权。已验收的 T15D V2 EasyInput 应用 SHA-256 为 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097`，写入地址为 `0x10000`；后续软件闭环不要求重新烧录。

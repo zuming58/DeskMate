@@ -1,6 +1,6 @@
 # T15D custom choreography editor
 
-Status: `V2_THREE_END_CODE_BUILD_CONFIRMED / DUAL_FIRMWARE_FLASH_AUTHORIZATION_PENDING / HIL_PENDING`
+Status: `USER_HIL_ACCEPTED / DUAL_V2_FIRMWARE_FLASH_VERIFIED / FROZEN_REGRESSION_BASELINE`
 
 ## Goal
 
@@ -42,7 +42,11 @@ local program instead of Windows timing or manual calibration replay.
   used by quick/voice “跳舞” until the user explicitly activates it; its saved
   repeat count then replaces the quick-action repeat selector.
 - V2 desktop, both Host suites and exact ESP-IDF rebuilds pass; both app-only
-  images and fixed partition hashes are audited. Per-board flash authorization
-  and physical acceptance remain open.
+  images and fixed partition hashes were audited, separately authorized, written
+  and independently read back.
+- User-present acceptance confirmed quick actions, independent Yaw/Pitch angle
+  and speed settings, activated custom choreography and physical execution. The
+  exact accepted images are EasyInput `AC31B817...56097` at `0x10000` and Xiaozhi
+  `61193549...8EF43` at `0x100000`. This task is closed and requires no reflash.
 
 Detailed product design: `docs/design/t15d-adjustable-motion-v2.md`.

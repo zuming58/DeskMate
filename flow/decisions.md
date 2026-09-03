@@ -1,5 +1,13 @@
 # Decisions
 
+## D085 - Automatic contextual motion is opt-in, semantic and non-queueing
+
+- Date: 2026-09-03
+- Decision: T15C is a Windows-only coordinator over the user-accepted T15D semantic choreography path. One persisted total switch defaults off; optional idle search defaults off separately. Companion start maps to one `attention`, continuous thinking to one `search` after four seconds, a completed deterministic confirmation to one `nod`, and trusted Codex completion to one `nod` while the existing completed Agent state owns the expression.
+- Priority: emergency/fault and recovery remain above manual control; manual and explicit voice motion remain above context; idle is lowest. If a higher-priority owner, voice workflow, another motion, disconnect, emergency or fault blocks an automatic request, it is dropped without queueing or replay.
+- Idle: the first version uses one fixed 90-second interval, inside the approved 60–120 second range. Active voice or companion work suppresses it. Dance is never automatic and still requires an explicit button, explicit voice intent or the user-activated custom dance.
+- Boundary: no HID/Link contract or firmware changes. The coordinator emits only `attention`, `nod` and `search` through `ChoreographyService`; it cannot send PWM, GPIO, pulse width, arbitrary angle or manual-step streams. User-present physical acceptance remains open even after code/build verification.
+
 ## D084 - Motion adjustment uses independent bounded degrees and speed caps
 
 - Date: 2026-09-03

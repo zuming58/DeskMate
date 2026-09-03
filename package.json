@@ -21,7 +21,9 @@
     "dev:desktop": "npm run build:input-bridge && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs --dev\"",
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "build:desktop": "npm run build:input-bridge && npm run build && electron-builder --win --dir",
+    "build:beta": "npm run build:input-bridge && npm run build && electron-builder --win nsis",
     "preview": "vite preview",
+    "report:codex-task": "node scripts/report-codex-task-brief.cjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:sites": "node --test tests/sites-worker.test.mjs"
   },
@@ -78,6 +80,12 @@
       "target": "dir",
       "executableName": "DeskMate",
       "icon": "electron/assets/tray-icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "DeskMate-${version}-beta-setup.${ext}"
     }
   }
 }

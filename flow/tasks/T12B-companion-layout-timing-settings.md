@@ -1,6 +1,6 @@
 # T12B companion layout, timing settings and evidence
 
-Status: implementation and software verification complete; user-present visual/runtime confirmation pending.
+Status: `WINDOWS_CODE_BUILD_CONFIRMED / USER_VISUAL_RUNTIME_HIL_PENDING / NO_FIRMWARE_CHANGE`
 
 ## Base
 

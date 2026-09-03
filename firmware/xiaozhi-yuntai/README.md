@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10D_D_MANUAL_HIL_ACCEPTED / T15_PRESET_HIL_ACCEPTED / T15D_ADJUSTABLE_MOTION_V2_CODE_BUILD_CONFIRMED / T15D_V2_APP_ONLY_FLASH_VERIFIED / T15D_V2_HIL_PENDING`。T09 显示、T10D-D 手动控制和 T15 四个固定动作已真机通过；T15D V2 的可调角度/速度、自定义舞蹈和激活逻辑已完成 Host/ESP-IDF 构建，精确应用镜像也已写入并完成独立回读校验，但新行为仍待真机验收。
+当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10D_D_MANUAL_HIL_ACCEPTED / T15_PRESET_HIL_ACCEPTED / T15D_ADJUSTABLE_MOTION_V2_CODE_BUILD_CONFIRMED / T15D_V2_APP_ONLY_FLASH_VERIFIED / T15D_V2_HIL_ACCEPTED / FROZEN_BASELINE`。T09 显示、T10D-D 手动控制、T15 四个固定动作及 T15D V2 的可调角度/速度、自定义舞蹈和激活逻辑均已完成真机验收；后续软件闭环沿用该精确应用，不要求重新烧录。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 
@@ -49,7 +49,7 @@ T10A 消费冻结的 [`t10-motion-safety-core-v1.md`](../../docs/contracts/t10-m
 
 T10C 冻结了独立的 [`t10c-manual-calibration-v1.md`](../../contracts/deskmate-link/t10c-manual-calibration-v1.md) 与黄金向量，只开放 `SELECT_AXIS`、短时一次性 `ARM`、本地 provisional center、固定 1.0° `SINGLE_STEP`、`RECENTER` 和最高优先级急停语义。每一次可能输出都会消耗 ARM token；租约、断线或 boot epoch 变化都会解除 ARM 且不重放。
 
-产品 `app_main` 只注入一个 `MotionCoordinator`，由它独占真实 adapter，同时承接 T10C 手动控制、T15 固定动作与 T15D 编舞。普通默认配置仍关闭 calibration gate；Stage 2 overlay 的 GPIO11/GPIO12、50 Hz、中心、方向和脉宽范围来自先前已接受资料。T15 固定动作已完成用户真机验收；新增可调上限与自定义舞蹈仍待独立烧录和 HIL。完整来源与交接分别见 [`t10c-xiaozhi-manual-calibration-provenance.md`](../../docs/provenance/t10c-xiaozhi-manual-calibration-provenance.md) 和 [`t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md`](../../docs/handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)。
+产品 `app_main` 只注入一个 `MotionCoordinator`，由它独占真实 adapter，同时承接 T10C 手动控制、T15 固定动作与 T15D 编舞。普通默认配置仍关闭 calibration gate；Stage 2 overlay 的 GPIO11/GPIO12、50 Hz、中心、方向和脉宽范围来自先前已接受资料。T15 固定动作、可调上限与自定义舞蹈均已完成用户真机验收。完整来源与交接分别见 [`t10c-xiaozhi-manual-calibration-provenance.md`](../../docs/provenance/t10c-xiaozhi-manual-calibration-provenance.md) 和 [`t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md`](../../docs/handoffs/t10c-xiaozhi-manual-calibration-candidate-2026-09-01.md)。
 
 ## T15A motion preset candidate
 
@@ -61,7 +61,7 @@ T15A 严格消费 [`t15-motion-presets-v1.md`](../../contracts/deskmate-link/t15
 - 手动控制优先、共同急停/故障/逻辑中心/输出锁存，以及唯一 `ServoAdapter` writer；
 - 旧固定动作的默认幅度保持有界；T15D V2 将运行时硬边界扩展到原始小智配置允许的 `yaw -40°..+40°`、`pitch -20°..+20°`，每 20 ms 最大推进 2°。每个请求仍先经过协议范围校验，再经过 `MotionSafetyCore` 与真实 adapter 双重限幅。
 
-RUN 的 `ACCEPTED/COMPLETED` 与状态 flags 仅证明端点接受了命令和逻辑轨迹，不证明实际轴角、机械到位、负载安全或物理行程。渲染或运动故障均 fail-soft，基础 DeskMate Link 和显示端继续服务。T15 固定动作已通过用户观察；以下 T15D V2 增量仍待烧录和单独验收。
+RUN 的 `ACCEPTED/COMPLETED` 与状态 flags 仅证明端点接受了命令和逻辑轨迹，不证明实际轴角、机械到位、负载安全或物理行程。渲染或运动故障均 fail-soft，基础 DeskMate Link 和显示端继续服务。T15 固定动作和以下 T15D V2 增量均已通过用户观察，成为冻结回归基线。
 
 ## T15D adjustable choreography V2
 
@@ -142,8 +142,8 @@ idf.py -C firmware/xiaozhi-yuntai -B build-stage2-reference-manual-control-enabl
 ```
 
 It remains the only profile that can expose the T15/T15D `MOTION` runtime. The
-normal defaults stay locked. Fixed T15 actions are accepted; adjustable V2
-settings, expression-linked custom choreography and active-dance replacement
-remain HIL-pending until the new image is separately authorized and written.
+normal defaults stay locked. Fixed T15 actions, adjustable V2 settings,
+expression-linked custom choreography and active-dance replacement are the
+accepted Stage 2 baseline.
 
-干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。T15D V2 只是代码与构建候选；任何 Flash 操作、可调参数或自定义舞蹈真机验收仍必须等用户在场并取得新的明确授权。
+干净构建必须在 `app-flash_args` 中把应用放在 `0x100000`，并证明镜像严格小于 6 MiB。已验收的 T15D V2 小智应用 SHA-256 为 `61193549A98B988C0B9E026A3E7D7F329312C9C4EAE9FD8190171CE0FBF8EF43`，写入地址为 `0x100000`；任何后续新镜像仍必须等用户在场并取得新的逐板明确授权。
