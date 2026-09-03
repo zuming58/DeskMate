@@ -13,7 +13,7 @@ local program instead of Windows timing or manual calibration replay.
 - Windows: editor, local persistence, explicit active-dance selection, bounded
   per-axis angle/speed settings, strict HID codec, real status-first execution,
   software preview, tests and package.
-- EasyInput: strict `0x1A/0x1B` host validation and one-request `0x24/0x25`
+- EasyInput: strict `0x1A/0x1B` host validation and one-request `0x26/0x27`
   forwarding. It never creates trajectories.
 - Xiaozhi: local beat scheduler, independent amplitude/speed mapping, display lease,
   shared motion coordinator, center, disconnect and emergency boundaries.
