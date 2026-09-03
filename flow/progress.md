@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - Main Agent integrated the visible dance activation repair after EasyInput V2 flashing
+
+- The exact user-authorized EasyInput T15D V2 app-only image remains the flashed and independently read-back image at `0x10000`, SHA-256 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097`. The board-specific power-off/power-on reboot and runtime observation remain pending user confirmation; no additional firmware write occurred in this integration step.
+- The bounded Windows-only delivery `codex/t15d-dance-activation-ux@021156e6e09583ce2b1a9004d6a565eee6d2085f` was reviewed and merged as `563c58b`. It keeps the current active dance, explicit activation action and built-in restore action in a stable responsive selection row, including the 1440×1024 product viewport and smaller windows. Draft/save/copy/edit/preview/entity execution still cannot silently change the active dance.
+- The firmware diff from the exact T15D V2 implementation `d6ffb595dd4ea20decdfe6f114c5ffe56838e83c` is empty for both EasyInput and Xiaozhi, and Host HID / DeskMate Link contracts are unchanged. Therefore the software repair does not require reflashing the already-written EasyInput image and does not replace the separately gated Xiaozhi image.
+- Main integration verification passes focused T15D `8/8`, full Desktop `375/375`, final Windows packaging, packaged native bridge `--protocol-self-test` and `git diff --check`. Final package: `DeskMate.exe` `202690560` bytes / SHA-256 `16435B97546779FEB4C2AD3364AF6A9BBE48D6AE82897B5DA62DF43798C68C27`; `app.asar` `113003716` bytes / `1A98E7A10F2DD7659653FE6097378D13474E74E05624DAA2915C8C4F01FD0F94`; input bridge `153521033` bytes / `A67FAFCC5D961ADE52AD0B0A9769EF4B6C21CF96AC1CC58A0508723F326A6768`.
+- Classification: `T15D_V2_WINDOWS_FINAL_PACKAGE_READY / EASYINPUT_FLASH_VERIFIED_REBOOT_PENDING / XIAOZHI_FLASH_NOT_AUTHORIZED / THREE_END_HIL_PENDING`. Next: confirm EasyInput reboot, obtain separate exact Xiaozhi app-only authorization, write and verify Xiaozhi, launch the final package, then test angle/speed limits, fixed motions, built-in dance, activation persistence and one custom dance.
+
 ## 2026-09-03 - T15D dance activation is visible and explicit at every supported width
 
 - Windows-only branch `codex/t15d-dance-activation-ux` starts from integration baseline `10e771dfa3c4dba5a743659595262b9471fbae53`; implementation commit is `a709103569912408445d6cf002374befa284c48e`.
