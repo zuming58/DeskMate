@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - EasyInput T15D V2 app-only image written and independently verified
+
+- After the user explicitly authorized the exact EasyInput image at `0x10000` with SHA-256 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097`, fresh read-only enumeration identified the sole user-prepared download target as the expected ESP32-S3 revision v0.2 with 16 MiB Flash. Private device identity was used only for the operation and was not persisted in Git or product diagnostics.
+- Before writing, the complete existing 3 MiB factory-app range and the 3072-byte partition table were backed up outside Git. The backed-up factory range SHA-256 is `B53CB2CA330F907FF66FFC1489F0E521DFC6A525B4B68CAAA7B9D38F0D513C17`; the real partition table SHA-256 is `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`, exactly matching the fixed authorized layout.
+- Only the 876528-byte app image was written from `0x010000`; the inclusive data range is `0x010000..0x0E5FEF` and the touched erase-sector range is `0x010000..0x0E5FFF`. esptool reported its data hash verified. A separate readback of exactly 876528 bytes produced the same authorized SHA-256.
+- Partition table, bootloader, NVS, PHY, both sound banks and eFuse were not written. The board remains in ROM download mode until the user performs the board-specific `关机 -> 开机` sequence; runtime HID/Link behavior and physical choreography remain unverified. Classification: `EASYINPUT_T15D_V2_APP_ONLY_FLASH_VERIFIED / POWER_CYCLE_PENDING / XIAOZHI_T15D_V2_FLASH_NOT_AUTHORIZED / THREE_END_HIL_PENDING`.
+- The current Windows-only follow-up is separate: the `DeskMate软件开发` task was instructed to keep the saved-dance activation control visible at 1440x1024 and smaller windows, preserve explicit activation semantics and return an exact tested package. It must not modify either firmware or the frozen V2 wire.
+
 ## 2026-09-03 - T15D V2 exposes bounded real angles and independent axis speeds
 
 - User feedback rejected opaque `柔和/标准/明显` and `舒缓/标准/利落` profiles: the required product control is the actual bounded motion request, with independent Yaw angle, Pitch angle, Yaw speed and Pitch speed. Read-only comparison against the original local Xiaozhi reference found Yaw center/min/max `90/50/130°` (`±40°`) and Pitch `90/70/110°` (`±20°`). The two inspected reference files and their SHA-256 values are recorded in `docs/provenance/t15d-adjustable-motion-reference-audit-2026-09-03.md`; no source was copied.
