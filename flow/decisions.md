@@ -1,5 +1,19 @@
 # Decisions
 
+## D082 - Memory management is a shared top-level surface with a fixed first-version organizer
+
+- Date: 2026-09-03
+- Decision: long-term memory management belongs to one standalone primary-navigation page because both completed companion turns and successful real dictation feed it. AI Companion may create one source of events but does not own the review, schedule, index, export, forget or knowledge-base controls.
+- Rules: the first-version organizer prompt is product-owned rather than user-editable. Successful source text stays unchanged in authoritative SQLite; the model creates source/day summaries and review candidates from untrusted data; only user-approved candidates become long-term memory and enter the local chunk/embedding index. Managed Markdown remains a derived projection below the user-selected directory.
+- Boundary: the fixed prompt excludes sensitive attributes, credentials, full paths, device identifiers, voice-edit instructions, mock and failed input. Source participation and schedule remain configurable, but allowing arbitrary prompt text would make retention behavior unpredictable and is not added in this slice.
+
+## D081 - Specific recoverable motion results outrank generic endpoint state
+
+- Date: 2026-09-03
+- Decision: when a valid runtime-motion status contains generic `state=not-ready` together with specific `result=recenter-required`, Windows classifies it as recoverable and runs the existing automatic stop-and-center preparation before RUN. Generic `not-ready` remains fail-closed when no recognized recovery result is present.
+- Evidence: the flashed Xiaozhi endpoint truthfully reports adapter available, no fault, no emergency latch, output enabled and logical center not yet accepted after startup. The earlier ordering returned before center preparation even though the full three-end status path was healthy.
+- Boundary: this is a Windows interpretation correction only. It does not weaken fault/emergency/adapter gates, invent readiness, replay commands, change any HID/Link byte or prove physical movement. RUN still waits for a correlated completed READY terminal after centering.
+
 ## D080 - Runtime motion uses its own FF00:0009 Windows HID collection
 
 - Date: 2026-09-03

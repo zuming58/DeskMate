@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A specific recovery result must outrank its generic not-ready state
+
+- Symptom: every device and transport diagnostic is connected, the endpoint explicitly says it needs recentering, yet the action ends as `not-ready` with no physical movement.
+- Practice: treat a status record as one coherent semantic object. Evaluate fault and emergency first, then exact recoverable results such as `recenter-required`, and only afterward fall back to a generic state. Preserve the observed mixed result/state pair as a regression vector.
+- Rule: a generic state must not erase a more specific same-record recovery instruction. Recovery still needs its own correlated terminal and must never be inferred from connectivity alone.
+
+## Shared memory should be organized by source, not owned by one feature screen
+
+- Symptom: a memory page is nested under AI Companion even though ordinary voice input contributes the same or more source material, making navigation imply the wrong ownership and hiding retention rules.
+- Practice: expose one top-level memory surface with source filters and independent source participation. Show the built-in transformation boundary where the user configures policy: raw authoritative text, derived summary, reviewed candidate, local index and optional managed projection.
+- Rule: do not duplicate memory systems or make users author a safety-critical organizer prompt just to use basic retention. Feature screens produce typed events; the shared memory service owns review, indexing, export and forgetting.
+
 ## A committed digest is not a completed knowledge-base projection
 
 - Symptom: scheduled memory generation succeeds and SQLite shows a daily summary, but the user-selected knowledge-base folder stays unchanged until a separate manual sync is clicked.
