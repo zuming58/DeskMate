@@ -1,5 +1,12 @@
 # Decisions
 
+## D086 - Trusted Codex briefs use the Doubao companion session, not system TTS
+
+- Date: 2026-09-03
+- Decision: audible `codex-task-brief-v1` announcements must use the configured Doubao realtime provider. Renderer/browser `speechSynthesis`, Windows system TTS and a second speech stack are forbidden for this path. A first brief starts a bounded companion session through provider `SayHello`; a subsequent brief may use provider `ChatTTSText` only when the existing session is listening.
+- Conversation: provider playback keeps microphone upload blocked. After the playback drain, the same versioned companion state machine returns to `listening` and resumes the selected microphone, so the user may speak directly without a wake phrase. This does not implement always-on wake: once the session ends or reaches its no-speech timeout, a button, F22/EasyInput call action or another trusted brief is still required to start listening again.
+- Arbitration: a brief must not preempt dictation, another voice owner or a companion that is speaking/thinking/busy. In those cases the bounded report is still stored and shown but is not spoken. The repair changes Windows software only and does not change audio transport, HID, DeskMate Link or either firmware.
+
 ## D085 - Automatic contextual motion is opt-in, semantic and non-queueing
 
 - Date: 2026-09-03

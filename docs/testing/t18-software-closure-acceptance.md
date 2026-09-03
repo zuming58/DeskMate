@@ -22,11 +22,16 @@ EasyInput and Xiaozhi T15D V2 applications installed.
 3. With DeskMate running, use the repository reporter documented in
    `docs/setup/codex-task-brief-reporter.md` to send `working`, `waiting` and
    `completed` for one test task.
-4. Confirm start/ordinary progress is throttled, waiting/completed is immediate,
-   and “Codex 进行到哪一步了” returns the submitted task name and milestone.
-5. Start two named active tasks and ask without a name. DeskMate must ask which
+4. Confirm the audible brief uses the configured Doubao voice rather than
+   Windows/browser TTS. After playback, wait for the same companion session to
+   show **Listening**, then directly say “Codex 进行到哪一步了” without saying a
+   wake phrase; it must return the submitted task name and milestone.
+5. Confirm start/ordinary progress is throttled and waiting/completed is
+   immediate. While dictation or another voice owner is active, a report must
+   remain visible without stealing the microphone or forcing speech.
+6. Start two named active tasks and ask without a name. DeskMate must ask which
    task instead of guessing.
-6. Say “小智点点头 / 跳个舞 / 看看周围” and confirm the accepted semantic
+7. Say “小智点点头 / 跳个舞 / 看看周围” and confirm the accepted semantic
    action path runs. Motion failure must remain visible and must not be described
    as success.
 
