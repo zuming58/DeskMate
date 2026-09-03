@@ -2,7 +2,7 @@
 
 这是 DeskMate 正式小智执行固件的产品目录，不是 `xiaozhi.me` 云端固件的副本。
 
-当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10D_D_MANUAL_HIL_ACCEPTED / T15_PRESET_HIL_ACCEPTED / T15D_ADJUSTABLE_MOTION_V2_CODE_BUILD_CONFIRMED / T15D_V2_FLASH_NOT_AUTHORIZED`。T09 显示、T10D-D 手动控制和 T15 四个固定动作已真机通过；T15D V2 的可调角度/速度、自定义舞蹈和激活逻辑已完成 Host/ESP-IDF 构建，但新镜像尚未烧录和真机验收。
+当前状态：`T09_VISIBLE_STATE_HIL_CONFIRMED / T10D_D_MANUAL_HIL_ACCEPTED / T15_PRESET_HIL_ACCEPTED / T15D_ADJUSTABLE_MOTION_V2_CODE_BUILD_CONFIRMED / T15D_V2_APP_ONLY_FLASH_VERIFIED / T15D_V2_HIL_PENDING`。T09 显示、T10D-D 手动控制和 T15 四个固定动作已真机通过；T15D V2 的可调角度/速度、自定义舞蹈和激活逻辑已完成 Host/ESP-IDF 构建，精确应用镜像也已写入并完成独立回读校验，但新行为仍待真机验收。
 
 Phase B 严格消费冻结提交 `c8b8a344a72a849640c8b19575768d6daf4d6667` 中的 [`v1.md`](../../contracts/deskmate-link/v1.md) 和 [`golden-vectors-v1.json`](../../contracts/deskmate-link/golden-vectors-v1.json)，已经实现：
 

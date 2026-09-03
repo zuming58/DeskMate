@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - Xiaozhi T15D V2 app-only image written and independently verified
+
+- The user explicitly authorized the exact Xiaozhi T15D V2 application image at `0x100000`, SHA-256 `61193549A98B988C0B9E026A3E7D7F329312C9C4EAE9FD8190171CE0FBF8EF43`. Fresh enumeration identified the prepared target as an ESP32-S3 revision v0.2 with 16 MiB Flash. Private device identity was used only for the operation and was not persisted in Git or product diagnostics.
+- Before writing, the live 3072-byte partition table and complete existing 6 MiB `ota_0` range were backed up outside Git. The partition-table SHA-256 is `4D122CA60C7321C2C4CB393D3B612908263C2C860E92EDD43036EDBFD1C762E0`, exactly matching the frozen Xiaozhi layout; the previous `ota_0` backup SHA-256 is `7F25C4C49DE7367F4B96DC4BAF56C20354E8F87D72A2B49027728FDD8BC377C8`.
+- Only the 223568-byte application image was written from `0x100000`; the inclusive data range is `0x100000..0x13694F` and the touched erase-sector range is `0x100000..0x136FFF`. esptool reported its data hash verified. A separate exact-length Flash readback produced the same authorized SHA-256.
+- Partition table, bootloader, NVS, OTA data, PHY, model partition, `ota_1` and eFuse were not written. The tool issued a hard reset through RTS after verification; physical normal-boot, adjustable Pitch/Yaw and custom-dance behavior still require user observation. Classification: `XIAOZHI_T15D_V2_APP_ONLY_FLASH_VERIFIED / DUAL_V2_FIRMWARE_FLASH_VERIFIED / THREE_END_HIL_PENDING`.
+- This closes the diagnosed V2 firmware version skew: the earlier Xiaozhi write was the fixed T15 V1 application, whereas this exact image adds Link `0x26/0x27`, independent angle/speed settings, custom choreography and active-dance replacement. Next: restore/confirm normal boot, launch the exact T15D V2 Windows package and test maximum-Pitch nod followed by one activated custom dance.
+
 ## 2026-09-03 - User HIL isolates T15D V2 failures to a Windows/EasyInput versus Xiaozhi version skew
 
 - The user's new sanitized diagnostic (SHA-256 `4E4D15E23A9E1864395573BD9649EB5B6B752A9A07E5BFF524150A5A180D8734`) confirms the Windows motion HID collection is writable and DeskMate Link is connected. The persisted store also confirms that the requested per-axis settings were saved, including Pitch `20°` at `100°/s`, and that a saved custom dance is active. This rules out settings persistence and activation persistence as the primary failures.
