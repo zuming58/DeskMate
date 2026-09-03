@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A committed digest is not a completed knowledge-base projection
+
+- Symptom: scheduled memory generation succeeds and SQLite shows a daily summary, but the user-selected knowledge-base folder stays unchanged until a separate manual sync is clicked.
+- Practice: let one main-process coordinator own both manual and scheduled generation, commit the authoritative digest first, then automatically project the complete current snapshot when a managed folder is configured. Treat missing configuration as a non-error skip and keep projection failures as bounded, source-specific warnings with an explicit retry.
+- Rule: derived files must never become transaction authority, but a product promise of automatic knowledge deposition is incomplete until the projection step is wired to the automatic trigger. Projection failure must not roll back or hide the already committed source summary.
+
 ## Editable motion programs need a strict compiler before they need a transport
 
 - Symptom: a visual beat editor can look complete while loose JSON, renderer-owned storage or a hidden fallback to existing manual/preset commands makes future hardware execution ambiguous or unsafe.
