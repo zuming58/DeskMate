@@ -262,18 +262,40 @@ export function ChoreographyEditor({ notify, onDanceLibraryChange }) {
     expression: CHOREOGRAPHY_LABELS.expression[preview.expression] || "保持",
   };
   const builtInSelected = selectedName === BUILT_IN_DANCE_ID;
+  const savedCustomSelected = Boolean(selectedName) && !builtInSelected;
   const activeDanceSelected = builtInSelected ? defaultDanceName === "" : Boolean(selectedName) && selectedName === defaultDanceName;
+  const activeDanceLabel = defaultDanceName || "内置默认舞蹈";
+  const activationLabel = activeDanceSelected
+    ? "当前已激活"
+    : !selectedName
+      ? "保存后可激活"
+      : builtInSelected
+        ? "恢复为内置舞蹈"
+        : "激活为跳舞动作";
 
   return (
     <Card className="choreography-editor">
       <SectionTitle index="02" title="自定义舞蹈" description="选择即可查看节拍；保存自己的舞蹈后，再激活为快速动作和语音“跳舞”的内容。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
-      <div className="choreography-toolbar">
-        <label><span>舞蹈动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="内置或已保存的舞蹈动作"><option value={BUILT_IN_DANCE_ID}>内置默认舞蹈{defaultDanceName === "" ? " · 当前已激活" : ""}</option><option value="">新建草稿（未保存）</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}{action.name === defaultDanceName ? " · 当前已激活" : ""}</option>)}</Select></label>
-        <Button icon={Plus} onClick={newDraft}>新建</Button>
-        <Button icon={Copy} disabled={!selectedName || busy !== ""} onClick={() => { void copyAction(); }}>复制</Button>
-        <Button icon={Trash} variant="ghost" disabled={!selectedName || builtInSelected || busy !== ""} onClick={() => { void deleteAction(); }}>删除</Button>
-        <Button icon={Star} disabled={!selectedName || activeDanceSelected || busy !== ""} onClick={() => { void activateDance(); }}>{activeDanceSelected ? "当前已激活" : "激活为跳舞动作"}</Button>
-        <small>{actions.length} / 8</small>
+      <div className="choreography-library">
+        <div className="choreography-selection-bar">
+          <label className="choreography-selector-field"><span>舞蹈动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="内置或已保存的舞蹈动作"><option value={BUILT_IN_DANCE_ID}>内置默认舞蹈{defaultDanceName === "" ? " · 当前已激活" : ""}</option><option value="">新建草稿（未保存）</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}{action.name === defaultDanceName ? " · 当前已激活" : ""}</option>)}</Select></label>
+          <div className="choreography-active-dance" role="status" aria-live="polite"><span>当前跳舞动作</span><strong>{activeDanceLabel}</strong></div>
+          <Button
+            className="choreography-activate-button"
+            icon={Star}
+            variant={savedCustomSelected && !activeDanceSelected ? "primary" : "secondary"}
+            disabled={!selectedName || activeDanceSelected || busy !== ""}
+            onClick={() => { void activateDance(); }}
+          >{activationLabel}</Button>
+        </div>
+        <div className="choreography-toolbar">
+          <div className="choreography-library-actions">
+            <Button icon={Plus} onClick={newDraft}>新建</Button>
+            <Button icon={Copy} disabled={!selectedName || busy !== ""} onClick={() => { void copyAction(); }}>复制</Button>
+            <Button icon={Trash} variant="ghost" disabled={!selectedName || builtInSelected || busy !== ""} onClick={() => { void deleteAction(); }}>删除</Button>
+          </div>
+          <small>已保存 {actions.length} / 8</small>
+        </div>
       </div>
       <div className="choreography-settings">
         <label><span>动作名称</span><input value={draft.name} disabled={builtInSelected} maxLength={20} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
@@ -300,7 +322,7 @@ export function ChoreographyEditor({ notify, onDanceLibraryChange }) {
         <Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止回中</Button>
         <Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button>
       </div>
-      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>当前跳舞动作：{defaultDanceName || "内置默认舞蹈"}</strong>软件预览不等于实体执行；实体执行只运行当前画面。“激活为跳舞动作”后，快速“跳舞”和语音“小智跳个舞”才会改用它。</span></div>
+      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span>软件预览不等于实体执行；两者都只运行当前画面，不会改变已激活舞蹈。只有保存后再明确激活，快速“跳舞”和语音“小智跳个舞”才会改用它。</span></div>
     </Card>
   );
 }

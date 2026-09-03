@@ -1,12 +1,20 @@
 # Progress log
 
+## 2026-09-03 - T15D dance activation is visible and explicit at every supported width
+
+- Windows-only branch `codex/t15d-dance-activation-ux` starts from integration baseline `10e771dfa3c4dba5a743659595262b9471fbae53`; implementation commit is `a709103569912408445d6cf002374befa284c48e`.
+- The choreography selector now keeps a bounded `当前跳舞动作` status and the only activation control in one responsive selection bar. The control remains visible at the 1440×1024 product viewport and the smaller-window layout; a new draft states `保存后可激活`, an already active item states `当前已激活`, and selecting the built-in item can explicitly restore the built-in dance.
+- New, copy, delete, edit, software preview and entity execution do not modify the active dance. A saved custom dance changes quick/voice `跳舞` only through the existing explicit `setDefaultDance` path; the Host HID, DeskMate Link and both firmware trees are unchanged.
+- Verification passed focused T15D `8/8`, full Desktop `375/375`, `npm run build:desktop`, packaged native bridge `--protocol-self-test`, `git diff --check`, tracked ASCII-path scan and a visual comparison using the user-reported crop plus fresh 1440×1024 and smaller-window captures. Final Windows package hashes are recorded in `docs/handoffs/t15d-dance-activation-ux-2026-09-03.md`.
+- No application/device port was controlled and no HID command, motion, Flash/NVS/eFuse, OLED, servo or audio operation occurred. Physical quick/custom choreography still requires separate user-authorized app-only flashing of both T15D V2 firmware candidates followed by HIL; this UI repair does not change those candidates.
+
 ## 2026-09-03 - EasyInput T15D V2 app-only image written and independently verified
 
 - After the user explicitly authorized the exact EasyInput image at `0x10000` with SHA-256 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097`, fresh read-only enumeration identified the sole user-prepared download target as the expected ESP32-S3 revision v0.2 with 16 MiB Flash. Private device identity was used only for the operation and was not persisted in Git or product diagnostics.
 - Before writing, the complete existing 3 MiB factory-app range and the 3072-byte partition table were backed up outside Git. The backed-up factory range SHA-256 is `B53CB2CA330F907FF66FFC1489F0E521DFC6A525B4B68CAAA7B9D38F0D513C17`; the real partition table SHA-256 is `7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`, exactly matching the fixed authorized layout.
 - Only the 876528-byte app image was written from `0x010000`; the inclusive data range is `0x010000..0x0E5FEF` and the touched erase-sector range is `0x010000..0x0E5FFF`. esptool reported its data hash verified. A separate readback of exactly 876528 bytes produced the same authorized SHA-256.
 - Partition table, bootloader, NVS, PHY, both sound banks and eFuse were not written. The board remains in ROM download mode until the user performs the board-specific `关机 -> 开机` sequence; runtime HID/Link behavior and physical choreography remain unverified. Classification: `EASYINPUT_T15D_V2_APP_ONLY_FLASH_VERIFIED / POWER_CYCLE_PENDING / XIAOZHI_T15D_V2_FLASH_NOT_AUTHORIZED / THREE_END_HIL_PENDING`.
-- The current Windows-only follow-up is separate: the `DeskMate软件开发` task was instructed to keep the saved-dance activation control visible at 1440x1024 and smaller windows, preserve explicit activation semantics and return an exact tested package. It must not modify either firmware or the frozen V2 wire.
+- The Windows-only follow-up was delivered and integrated from `codex/t15d-dance-activation-ux@021156e6e09583ce2b1a9004d6a565eee6d2085f`; it changes no firmware or frozen V2 wire.
 
 ## 2026-09-03 - T15D V2 exposes bounded real angles and independent axis speeds
 

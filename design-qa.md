@@ -32,3 +32,23 @@ The combined comparison was inspected as a single visual input. In the current i
 - Existing raster face assets and Tabler icons are reused; no placeholder, emoji, CSS-drawn face, or handcrafted SVG was introduced.
 
 final result: passed
+
+---
+
+# T15D dance activation visibility design QA
+
+- User reference: `C:\Users\ADMINI~1\AppData\Local\Temp\codex-clipboard-72d2ebaa-313b-4e4d-876f-a52901c67290.png`
+- Current 1440×1024 logical-window capture: `D:\CodexData\home\visualizations\2026\09\03\t15d-dance-activation-1440x1024-v2.png`
+- Smaller-window capture: `D:\CodexData\home\visualizations\2026\09\03\t15d-dance-activation-900x800.png`
+- Same-input comparison: `D:\CodexData\home\visualizations\2026\09\03\t15d-dance-activation-reference-vs-current.png`
+
+## Reported problem and verified result
+
+- The reference showed only the dance selector and `新建`; activation was pushed outside the visible toolbar, so the user could save and switch dances without seeing how quick/voice `跳舞` chooses one.
+- The new first row always contains the selector, a bounded `当前跳舞动作` status and the activation control. Secondary library actions occupy their own compact row and no longer compete with activation for horizontal space.
+- The current item is visible without opening the selector. Unsaved drafts state `保存后可激活`; active items state `当前已激活`; restoring the built-in dance remains an explicit operation.
+- At the 1440×1024 target, the control is visible in one row. At the smaller capture it remains visible beside the selection/status group; the narrow fallback stacks it to full available width.
+- Software preview, entity execution, editing and selection remain visually and behaviorally distinct from activation. No UI text claims that a preview or saved draft has changed Xiaozhi.
+- Existing DeskMate type, spacing, border, blue emphasis, Tabler icons and card language are reused. No new visual asset or competing design system was introduced.
+
+final result: passed
