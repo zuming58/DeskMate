@@ -11,19 +11,22 @@ async function source(path) {
   return readFile(join(root, path), "utf8");
 }
 
-test("keeps the primary navigation compact and moves companion tools into AI Companion", async () => {
+test("keeps shared memory in primary navigation and companion-only tools in AI Companion", async () => {
   const app = await source("src/App.jsx");
   const pages = await source("src/pages.jsx");
   const navigationBlock = app.match(/const navigation = \[([\s\S]*?)\n\];/)?.[1] || "";
   const labels = [...navigationBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "按键配置", "设备与诊断"]);
+  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "按键配置", "记忆管理", "设备与诊断"]);
   for (const hiddenLabel of ["表情库", "表情编辑", "动作编排", "环境感知", "AI 联动"]) {
     assert.equal(labels.includes(hiddenLabel), false);
   }
-  for (const section of ["陪伴与记忆", "记忆管理", "动作编排", "AI 联动"]) {
+  for (const section of ["陪伴对话", "动作编排", "AI 联动"]) {
     assert.match(pages, new RegExp(section));
   }
+  const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("export function MemoryManagementPage"));
+  assert.doesNotMatch(companion, /value: "memory"|label: "记忆管理"/);
+  assert.match(app, /memory: MemoryManagementPage/);
   assert.match(pages, /id: "connections".*label: "设备连接"/);
   assert.match(pages, /<ConnectionsPage notify=\{notify\} embedded/);
 });

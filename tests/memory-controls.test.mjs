@@ -111,14 +111,17 @@ test("knowledge-base location is encrypted and renderer status never exposes the
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("memory UI exposes real controls while keeping raw storage and paths in Electron main", async () => {
-  const [page, preload, main] = await Promise.all([
+test("memory UI is a shared top-level page with built-in rules while raw storage and paths stay in Electron main", async () => {
+  const [page, app, preload, main] = await Promise.all([
     readFile(new URL("../src/pages.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
     readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
   const memoryPage = page.slice(page.indexOf("function MemoryManagementPage"), page.indexOf("export function DashboardPage"));
-  for (const copy of ["导出摘要与已审核记忆", "彻底忘记全部", "保存纠正", "永久删除", "知识库位置", "[[双向链接]]", "混合检索"]) assert.match(memoryPage, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const copy of ["导出摘要与已审核记忆", "彻底忘记全部", "保存纠正", "永久删除", "知识库位置", "[[双向链接]]", "混合检索", "内置整理规则", "无需填写提示词", "原样保存在本地 SQLite", "本地 embedding"]) assert.match(memoryPage, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(app, /label: "记忆管理"[\s\S]*label: "设备与诊断"/);
+  assert.match(app, /memory: MemoryManagementPage/);
   for (const api of ["updateMemoryCandidate", "prepareMemoryForget", "confirmMemoryForget", "exportReviewedMemories", "getKnowledgeBaseStatus", "chooseKnowledgeBaseLocation", "generatePendingMemories", "rebuildMemoryIndex", "syncKnowledgeBase"]) assert.match(preload, new RegExp(api));
   assert.match(main, /showSaveDialog/);
   assert.match(main, /showOpenDialog/);

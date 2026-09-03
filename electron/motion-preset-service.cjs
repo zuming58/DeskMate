@@ -408,8 +408,8 @@ class MotionPresetService extends EventEmitter {
     if (!endpoint?.adapterAvailable || endpoint?.result === "adapter-unavailable") return "adapter-unavailable";
     if (endpoint.faulted || endpoint.state === "faulted" || endpoint.result === "faulted") return "faulted";
     if (endpoint.emergencyStopLatched || endpoint.state === "emergency-stopped" || endpoint.result === "emergency-stopped") return "emergency-stopped";
-    if (endpoint.state === "not-ready" || endpoint.result === "not-ready") return "not-ready";
     if (endpoint.result === "recenter-required") return "recenter-required";
+    if (endpoint.state === "not-ready" || endpoint.result === "not-ready") return "not-ready";
     if (endpoint.state === "running" || endpoint.state === "recentering" || endpoint.result === "busy") return "busy";
     return null;
   }

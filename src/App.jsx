@@ -6,6 +6,7 @@ import {
   IconChevronLeft as ChevronLeft,
   IconChevronRight as ChevronRight,
   IconCircleCheck as CircleCheck,
+  IconDatabase as Database,
   IconKeyboard as Keyboard,
   IconLayoutDashboard as LayoutDashboard,
   IconMenu2 as Menu2,
@@ -33,6 +34,7 @@ import {
   ExpressionsPage,
   HistoryPage,
   KeymapPage,
+  MemoryManagementPage,
   MotionPage,
   SensorsPage,
   SettingsPage,
@@ -47,6 +49,7 @@ const navigation = [
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
   { id: "keymap", label: "按键配置", icon: Keyboard },
+  { id: "memory", label: "记忆管理", icon: Database },
   { id: "settings", label: "设备与诊断", icon: Settings2 },
 ];
 
@@ -111,6 +114,7 @@ const pages = {
   history: HistoryPage,
   vocabulary: VocabularyPage,
   keymap: KeymapPage,
+  memory: MemoryManagementPage,
   connections: ConnectionsPage,
   agents: AgentsPage,
   expressions: ExpressionsPage,

@@ -172,7 +172,7 @@ test("Companion DOM and CSS keep independent columns, explicit save, and bounded
   const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
   assert.match(companion, /className="companion-primary-column"[\s\S]*className="companion-stage"[\s\S]*<AgentStateTestPanel/);
-  assert.match(companion, /className="companion-side-stack"[\s\S]*陪伴与记忆[\s\S]*陪伴对话设置[\s\S]*设备与服务[\s\S]*语音互斥边界/);
+  assert.match(companion, /className="companion-side-stack"[\s\S]*陪伴提醒[\s\S]*陪伴对话设置[\s\S]*设备与服务[\s\S]*语音互斥边界/);
   assert.match(companion, /保存陪伴设置/);
   assert.match(companion, /下一次新建陪伴会话生效/);
   assert.match(companion, /sessionActive \? conversation\.sessionPolicy\?\.sessionApplied\?\.name/);

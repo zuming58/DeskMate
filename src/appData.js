@@ -1,10 +1,11 @@
 export const pageMeta = {
   dashboard: { title: "工作台", subtitle: "查看桌宠状态、AI 任务进度与设备运行情况" },
   voice: { title: "语音输入", subtitle: "专注录音、实时转写与智能整理" },
-  companion: { title: "AI 陪伴", subtitle: "陪伴对话、记忆提醒、表情与动作的统一入口" },
+  companion: { title: "AI 陪伴", subtitle: "陪伴对话、人设、AI 联动、表情与动作的统一入口" },
   history: { title: "历史记录", subtitle: "管理、搜索和导出最近的语音输入" },
   vocabulary: { title: "词库", subtitle: "提高专有名词识别率并自动修正常见表达" },
   keymap: { title: "按键配置", subtitle: "配置键盘按键、旋钮和快捷动作" },
+  memory: { title: "记忆管理", subtitle: "统一管理陪伴对话与语音输入形成的本地记忆" },
   connections: { title: "设备与连接", subtitle: "管理 USB、Wi-Fi、蓝牙、麦克风与提示音" },
   agents: { title: "AI 联动", subtitle: "把编程助手的运行状态映射到桌宠灯效和表情" },
   expressions: { title: "表情库", subtitle: "管理内置表情、收藏与工作状态映射" },

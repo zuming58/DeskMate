@@ -270,7 +270,25 @@ test("run status preflight automatically stops, centers and waits READY before t
         active = "run"; runAction = request.requestId;
         return { ok: true, terminal: terminal(request, endpoint({ actionId: runAction, result: "accepted", resultCode: 0, state: "running", stateCode: 3, operation: "run", operationCode: 1, preset: "search", presetCode: 3, requestedRepeat: 1, completedRepeat: 0, source: "voice", sourceCode: 2, flags: 0x11, logicalCenterAccepted: false, servoOutputEnabled: true, operationTerminal: false })) };
       }
-      if (active === "initial") return { ok: true, terminal: terminal(request, endpoint({ actionId: 190, state: "running", stateCode: 3, flags: 0x11, logicalCenterAccepted: false, servoOutputEnabled: true, operationTerminal: false })) };
+      if (active === "initial") return { ok: true, terminal: terminal(request, endpoint({
+        actionId: 0,
+        completedPresetCounter: 0,
+        result: "recenter-required",
+        resultCode: 9,
+        state: "not-ready",
+        stateCode: 0,
+        operation: null,
+        operationCode: 0,
+        preset: null,
+        presetCode: 0,
+        requestedRepeat: 0,
+        completedRepeat: 0,
+        source: null,
+        sourceCode: 0,
+        flags: 0x31,
+        logicalCenterAccepted: false,
+        servoOutputEnabled: true,
+      })) };
       if (active === "stop") {
         active = "centered";
         return { ok: true, terminal: terminal(request, endpoint({ actionId: stopAction, operation: "stopAndCenter", operationCode: 2, preset: null, presetCode: 0, requestedRepeat: 0, completedRepeat: 0, source: "voice", sourceCode: 2 })) };

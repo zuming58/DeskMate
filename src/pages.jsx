@@ -405,15 +405,14 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     <div className="page page--companion">
       <PageIntro
         title="AI 陪伴"
-        description="陪伴对话、记忆提醒、AI 联动、表情与动作的统一入口"
+        description="陪伴对话、人设、AI 联动、表情与动作的统一入口"
         actions={<StatusBadge tone={sessionActive ? "success" : conversation.service?.configured ? "neutral" : "demo"}>{sessionActive ? `实时陪伴中 · ${companionSourceLabel}` : `输入 · ${companionSourceLabel}`}</StatusBadge>}
       />
       <Segmented
         value={section}
         onChange={setSection}
         options={[
-          { value: "overview", label: "陪伴与记忆" },
-          { value: "memory", label: "记忆管理" },
+          { value: "overview", label: "陪伴对话" },
           { value: "motion", label: "动作编排" },
           { value: "agents", label: "AI 联动" },
         ]}
@@ -441,10 +440,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
         </div>
         <div className="companion-side-stack">
           <Card>
-            <SectionTitle index="01" title="陪伴与记忆" description="最终用户和助手回合先事务写入本地 SQLite，再显示为完成。" />
+            <SectionTitle index="01" title="陪伴提醒" description="提醒功能将在接入本地调度器后显示真实日程。" />
             <div className="companion-info-list">
               <button onClick={() => notify("提醒功能待接入本地调度器")}><span className="companion-info-icon"><BellRinging size={20} /></span><span><small>下一个提醒 · 演示</small><strong>14:30 准备产品周会材料</strong></span><StatusBadge tone="demo">今天</StatusBadge></button>
-              <button onClick={() => notify("长期记忆检索待接入 DeskMate memory 目录")}><span className="companion-info-icon"><Book2 size={20} /></span><span><small>记忆片段 · 演示</small><strong>你偏好简洁直达的方案与深色主题</strong></span><StatusBadge tone="neutral">8月26日</StatusBadge></button>
             </div>
           </Card>
           <Card>
@@ -489,14 +487,13 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
         </div>
       </div>
       </>}
-      {section === "memory" && <MemoryManagementPage notify={notify} />}
       {section === "motion" && <MotionPage notify={notify} embedded />}
       {section === "agents" && <AgentsPage notify={notify} embedded />}
     </div>
   );
 }
 
-function MemoryManagementPage({ notify }) {
+export function MemoryManagementPage({ notify }) {
   const [filter, setFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -659,6 +656,7 @@ function MemoryManagementPage({ notify }) {
         </div>
         <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
         <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
+        <Notice tone="info" title="内置整理规则 · 无需填写提示词">成功的原始文本原样保存在本地 SQLite；系统每天按来源生成摘要和待审核候选。只有你确认保留的候选才会成为长期记忆，并可分块建立本地 embedding、参与混合检索及同步到所选知识库。密钥、完整路径、设备标识、语音编辑指令、模拟和失败记录会被排除。</Notice>
       </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>
       <div className="memory-metrics">
