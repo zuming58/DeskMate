@@ -31,17 +31,12 @@ enum class ChoreographyExpression : std::uint8_t {
     kWorking = 3,
 };
 
-enum class ChoreographyIntensity : std::uint8_t {
-    kGentle = 1,
-    kStandard = 2,
-    kVivid = 3,
-};
-
-enum class ChoreographyTempo : std::uint8_t {
-    kRelaxed = 1,
-    kStandard = 2,
-    kQuick = 3,
-};
+inline constexpr std::uint8_t kChoreographyMinimumYawAmplitudeDegrees = 4;
+inline constexpr std::uint8_t kChoreographyMaximumYawAmplitudeDegrees = 40;
+inline constexpr std::uint8_t kChoreographyMinimumPitchAmplitudeDegrees = 4;
+inline constexpr std::uint8_t kChoreographyMaximumPitchAmplitudeDegrees = 20;
+inline constexpr std::uint8_t kChoreographyMinimumSpeedDegreesPerSecond = 20;
+inline constexpr std::uint8_t kChoreographyMaximumSpeedDegreesPerSecond = 100;
 
 struct ChoreographyBeat {
     ChoreographyYaw yaw{ChoreographyYaw::kHold};
@@ -56,8 +51,10 @@ struct ChoreographyCommand {
     std::uint8_t beat_count{};
     std::uint16_t beat_ms{};
     std::uint8_t repeat_count{};
-    ChoreographyIntensity intensity{ChoreographyIntensity::kStandard};
-    ChoreographyTempo tempo{ChoreographyTempo::kStandard};
+    std::uint8_t yaw_amplitude_degrees{20};
+    std::uint8_t pitch_amplitude_degrees{15};
+    std::uint8_t yaw_speed_degrees_per_second{80};
+    std::uint8_t pitch_speed_degrees_per_second{80};
     std::array<ChoreographyBeat, kChoreographyMaximumBeats> beats{};
 };
 
@@ -72,8 +69,10 @@ struct ChoreographySnapshot {
     std::uint8_t repeat_count{};
     std::uint8_t completed_repeats{};
     MotionPresetSource source{MotionPresetSource::kNone};
-    ChoreographyIntensity intensity{ChoreographyIntensity::kStandard};
-    ChoreographyTempo tempo{ChoreographyTempo::kStandard};
+    std::uint8_t yaw_amplitude_degrees{20};
+    std::uint8_t pitch_amplitude_degrees{15};
+    std::uint8_t yaw_speed_degrees_per_second{80};
+    std::uint8_t pitch_speed_degrees_per_second{80};
     bool adapter_available{};
     bool logical_center_accepted{};
     bool emergency_stop_latched{};

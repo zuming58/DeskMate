@@ -7,7 +7,7 @@ const adapters = fs.readFileSync(new URL("../src/adapters/voiceAdapters.js", imp
 
 test("T15 motion page exposes only bounded real presets and endpoint controls", () => {
   assert.match(page, /runPreset\(\{ preset: nextPreset, repeat: nextRepeat, source: "UI" \}\)/);
-  assert.match(page, /开始 · \$\{presetLabel\} × \$\{repeatCount\}/);
+  assert.match(page, /开始 · \$\{presetLabel\} × \$\{displayedRepeat\}/);
   assert.match(page, /runPreset\(preset\)/);
   assert.match(page, /重新检测动作链/);
   assert.match(page, /动作 HID 写入失败，请重新检测动作链/);

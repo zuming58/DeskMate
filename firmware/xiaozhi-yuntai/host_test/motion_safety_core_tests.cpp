@@ -17,8 +17,11 @@ MotionCalibration ValidCalibration() {
 
 MotionIntent Intent(MotionIntentKind kind, MotionSource source,
                     std::uint32_t epoch, std::uint32_t sequence,
-                    MotionTarget target, std::uint64_t expiry) {
-    return {kind, source, epoch, sequence, target, expiry};
+                    MotionTarget target, std::uint64_t expiry,
+                    std::uint16_t horizontal_step = 0,
+                    std::uint16_t vertical_step = 0) {
+    return {kind, source, epoch, sequence, target,
+            horizontal_step, vertical_step, expiry};
 }
 
 void CalibrationAndRecenterFailClosed() {
@@ -96,6 +99,17 @@ void RateLimitBoundsAndPriorityAreDeterministic() {
                               MotionSource::kDialogueAction, 9, 6,
                               {41, 0}, 1000),
                        5) == MotionResult::kInvalidIntent);
+    assert(core.Submit(Intent(MotionIntentKind::kTarget,
+                              MotionSource::kDialogueAction, 9, 7,
+                              {-20, -10}, 1000, 3, 1),
+                       6) == MotionResult::kReplaced);
+    const auto per_axis = core.Tick(7);
+    assert(per_axis.target.horizontal_units == 7);
+    assert(per_axis.target.vertical_units == 3);
+    assert(core.Submit(Intent(MotionIntentKind::kTarget,
+                              MotionSource::kDialogueAction, 9, 8,
+                              {20, 10}, 1000, 6, 1),
+                       7) == MotionResult::kInvalidIntent);
 }
 
 void DuplicateExpiryAndSessionResetNeverReplay() {

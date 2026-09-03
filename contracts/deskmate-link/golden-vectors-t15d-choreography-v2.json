@@ -1,0 +1,9 @@
+{
+  "schema": "deskmate-link-t15d-choreography-v2.golden-vectors",
+  "contract": "T15D_CHOREOGRAPHY_LINK_V2_FROZEN",
+  "byte_order": "little-endian",
+  "vectors": {
+    "run_two_beat_numeric_request_payload": "44332211040302010102020224125a46010003020101000000000000000000000000000000000000",
+    "run_completed_status_payload": "443322110403020103000000020202ff0202012324125a46"
+  }
+}

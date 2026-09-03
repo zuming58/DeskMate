@@ -332,6 +332,35 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
                 motion_coordinator_->choreography_snapshot());
             return Respond(request, payload.data(), payload.size(), response);
         }
+        case LinkMessageType::kRunChoreographyV2: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            ChoreographyCommand command{};
+            if (!DecodeChoreographyCommandV2(request, command)) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            const auto result =
+                motion_coordinator_->ExecuteChoreography(command, now_ms);
+            const auto payload = EncodeChoreographyResponseV2(
+                command, result,
+                motion_coordinator_->choreography_snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kGetChoreographyStatusV2: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            if (request.payload_length != 0) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            motion_coordinator_->Tick(now_ms);
+            const auto payload = EncodeChoreographyStatusV2(
+                motion_coordinator_->choreography_snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
     }
     return Error(request, LinkErrorCode::kUnknownType, response);
 }

@@ -40,14 +40,17 @@ class ChoreographyBridge {
 
  private:
     struct Request {
+        std::uint8_t version{};
         std::uint8_t kind{};
         std::uint32_t request_id{};
         std::uint8_t source{};
         std::uint8_t beat_count{};
         std::uint8_t beat_code{};
         std::uint8_t repeat_count{};
-        std::uint8_t intensity{};
-        std::uint8_t tempo{};
+        std::uint8_t yaw_amplitude_degrees{};
+        std::uint8_t pitch_amplitude_degrees{};
+        std::uint8_t yaw_speed_degrees_per_second{};
+        std::uint8_t pitch_speed_degrees_per_second{};
         std::array<std::uint8_t, 24> beats{};
     };
     struct Response {

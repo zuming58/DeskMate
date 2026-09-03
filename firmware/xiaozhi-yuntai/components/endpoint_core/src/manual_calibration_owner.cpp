@@ -90,44 +90,29 @@ constexpr std::uint32_t kRuntimeTickPeriodMs = 20;
 constexpr std::uint32_t kRuntimeIntentTtlMs = 14000;
 
 std::int16_t ChoreographyYawMagnitude(
-    ChoreographyIntensity intensity) noexcept {
-    switch (intensity) {
-        case ChoreographyIntensity::kGentle: return 60;
-        case ChoreographyIntensity::kStandard: return 80;
-        case ChoreographyIntensity::kVivid: return 100;
-    }
-    return 80;
+    std::uint8_t degrees) noexcept {
+    return static_cast<std::int16_t>(degrees * 10);
 }
 
 std::int16_t ChoreographyPitchUp(
-    ChoreographyIntensity intensity) noexcept {
-    switch (intensity) {
-        case ChoreographyIntensity::kGentle: return -20;
-        case ChoreographyIntensity::kStandard: return -30;
-        case ChoreographyIntensity::kVivid: return -40;
-    }
-    return -30;
+    std::uint8_t degrees) noexcept {
+    return static_cast<std::int16_t>(-degrees * 10);
 }
 
 std::int16_t ChoreographyPitchDown(
-    ChoreographyIntensity intensity) noexcept {
-    switch (intensity) {
-        case ChoreographyIntensity::kGentle: return 30;
-        case ChoreographyIntensity::kStandard: return 50;
-        case ChoreographyIntensity::kVivid: return 60;
-    }
-    return 50;
+    std::uint8_t degrees) noexcept {
+    return static_cast<std::int16_t>(degrees * 10);
 }
 
-std::uint32_t ChoreographyHoldMs(const ChoreographyCommand& command) noexcept {
-    switch (command.tempo) {
-        case ChoreographyTempo::kRelaxed:
-            return static_cast<std::uint32_t>(command.beat_ms) * 3u / 2u;
-        case ChoreographyTempo::kStandard:
-            return command.beat_ms;
-        case ChoreographyTempo::kQuick:
-            return static_cast<std::uint32_t>(command.beat_ms) / 2u;
-    }
+std::uint16_t ChoreographyStepUnits(
+    std::uint8_t degrees_per_second) noexcept {
+    const auto step = static_cast<std::uint16_t>(
+        degrees_per_second * kRuntimeTickPeriodMs / 100u);
+    return step == 0 ? 1 : step;
+}
+
+std::uint32_t ChoreographyHoldMs(const ChoreographyCommand& command,
+                                 const ChoreographyBeat&) noexcept {
     return command.beat_ms;
 }
 
@@ -226,7 +211,8 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
                 choreography_command_.beats[choreography_beat_index_];
             auto target = choreography_target_;
             const auto yaw =
-                ChoreographyYawMagnitude(choreography_command_.intensity);
+                ChoreographyYawMagnitude(
+                    choreography_command_.yaw_amplitude_degrees);
             if (beat.yaw == ChoreographyYaw::kLeft) {
                 target.horizontal_units = static_cast<std::int16_t>(-yaw);
             } else if (beat.yaw == ChoreographyYaw::kCenter) {
@@ -236,15 +222,17 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
             }
             if (beat.pitch == ChoreographyPitch::kUp) {
                 target.vertical_units =
-                    ChoreographyPitchUp(choreography_command_.intensity);
+                    ChoreographyPitchUp(
+                        choreography_command_.pitch_amplitude_degrees);
             } else if (beat.pitch == ChoreographyPitch::kCenter) {
                 target.vertical_units = 0;
             } else if (beat.pitch == ChoreographyPitch::kDown) {
                 target.vertical_units =
-                    ChoreographyPitchDown(choreography_command_.intensity);
+                    ChoreographyPitchDown(
+                        choreography_command_.pitch_amplitude_degrees);
             }
             waypoint = RuntimeWaypoint{
-                target, ChoreographyHoldMs(choreography_command_), false};
+                target, ChoreographyHoldMs(choreography_command_, beat), false};
         }
     } else {
         const auto plan = PlanFor(active_or_last_preset_);
@@ -281,6 +269,13 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
         intent.session_epoch = session_id_;
         intent.sequence = ++normal_motion_sequence_;
         intent.target = waypoint.target;
+        if (runtime_action_ == RuntimeAction::kChoreography &&
+            !waypoint.recenter) {
+            intent.horizontal_maximum_step_units = ChoreographyStepUnits(
+                choreography_command_.yaw_speed_degrees_per_second);
+            intent.vertical_maximum_step_units = ChoreographyStepUnits(
+                choreography_command_.pitch_speed_degrees_per_second);
+        }
         intent.expires_at_ms =
             static_cast<std::uint64_t>(now_ms) + kRuntimeIntentTtlMs;
         const auto submit = normal_motion_.Submit(intent, now_ms);
@@ -371,7 +366,12 @@ bool MotionCoordinator::SameChoreographyCommand(
         left.beat_count != right.beat_count ||
         left.beat_ms != right.beat_ms ||
         left.repeat_count != right.repeat_count ||
-        left.intensity != right.intensity || left.tempo != right.tempo) {
+        left.yaw_amplitude_degrees != right.yaw_amplitude_degrees ||
+        left.pitch_amplitude_degrees != right.pitch_amplitude_degrees ||
+        left.yaw_speed_degrees_per_second !=
+            right.yaw_speed_degrees_per_second ||
+        left.pitch_speed_degrees_per_second !=
+            right.pitch_speed_degrees_per_second) {
         return false;
     }
     for (std::size_t index = 0; index < left.beat_count; ++index) {
@@ -659,9 +659,16 @@ bool MotionCoordinator::BeginRuntimeChoreography(
     waypoint_arrived_ = false;
     runtime_centered_ = false;
     runtime_servo_output_enabled_ = true;
-    const auto maximum_hold =
-        static_cast<std::uint32_t>(command.beat_ms) * 3u / 2u;
-    const auto travel_budget = 500u;
+    const auto maximum_hold = static_cast<std::uint32_t>(command.beat_ms);
+    const auto yaw_travel_budget =
+        2000u * command.yaw_amplitude_degrees /
+        command.yaw_speed_degrees_per_second;
+    const auto pitch_travel_budget =
+        2000u * command.pitch_amplitude_degrees /
+        command.pitch_speed_degrees_per_second;
+    const auto travel_budget =
+        (yaw_travel_budget > pitch_travel_budget
+             ? yaw_travel_budget : pitch_travel_budget) + 500u;
     preset_watchdog_deadline_ms_ =
         now_ms + command.repeat_count * command.beat_count *
                      (maximum_hold + travel_budget) +
@@ -1259,8 +1266,10 @@ ChoreographySnapshot MotionCoordinator::choreography_snapshot() const
         choreography_command_.repeat_count,
         choreography_completed_repeats_,
         choreography_command_.source,
-        choreography_command_.intensity,
-        choreography_command_.tempo,
+        choreography_command_.yaw_amplitude_degrees,
+        choreography_command_.pitch_amplitude_degrees,
+        choreography_command_.yaw_speed_degrees_per_second,
+        choreography_command_.pitch_speed_degrees_per_second,
         RuntimeMotionAvailable(),
         runtime_centered_,
         emergency_stop_latched_,

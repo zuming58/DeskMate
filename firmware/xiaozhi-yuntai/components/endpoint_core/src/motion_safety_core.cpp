@@ -108,7 +108,16 @@ MotionResult MotionSafetyCore::Submit(const MotionIntent& intent,
     if (is_recenter) {
         normalized.target = {calibration_.horizontal.center_units,
                              calibration_.vertical.center_units};
+        normalized.horizontal_maximum_step_units = 0;
+        normalized.vertical_maximum_step_units = 0;
     } else if (!TargetIsWithinLimits(normalized.target)) {
+        ++diagnostics_.rejected;
+        return MotionResult::kInvalidIntent;
+    }
+    if (normalized.horizontal_maximum_step_units >
+            calibration_.horizontal.maximum_step_units ||
+        normalized.vertical_maximum_step_units >
+            calibration_.vertical.maximum_step_units) {
         ++diagnostics_.rejected;
         return MotionResult::kInvalidIntent;
     }
@@ -117,6 +126,10 @@ MotionResult MotionSafetyCore::Submit(const MotionIntent& intent,
     if (slot.occupied && normalized.sequence == slot.intent.sequence) {
         if (slot.intent.kind == normalized.kind &&
             TargetEquals(slot.intent.target, normalized.target) &&
+            slot.intent.horizontal_maximum_step_units ==
+                normalized.horizontal_maximum_step_units &&
+            slot.intent.vertical_maximum_step_units ==
+                normalized.vertical_maximum_step_units &&
             slot.intent.expires_at_ms == normalized.expires_at_ms) {
             ++diagnostics_.duplicates;
             return MotionResult::kDuplicate;
@@ -157,11 +170,17 @@ MotionStep MotionSafetyCore::Tick(std::uint64_t now_ms) noexcept {
     }
 
     const MotionTarget target = selected->intent.target;
+    const auto horizontal_step = selected->intent.horizontal_maximum_step_units
+        ? selected->intent.horizontal_maximum_step_units
+        : calibration_.horizontal.maximum_step_units;
+    const auto vertical_step = selected->intent.vertical_maximum_step_units
+        ? selected->intent.vertical_maximum_step_units
+        : calibration_.vertical.maximum_step_units;
     const MotionTarget next{
         StepAxis(current_.horizontal_units, target.horizontal_units,
-                 calibration_.horizontal.maximum_step_units),
+                 horizontal_step),
         StepAxis(current_.vertical_units, target.vertical_units,
-                 calibration_.vertical.maximum_step_units),
+                 vertical_step),
     };
     const bool position_changed = !TargetEquals(current_, next);
     current_ = next;

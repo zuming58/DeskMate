@@ -60,6 +60,15 @@ ServoCalibrationProfile SafeProfile() {
                                    Axis(11, 10, 1), Axis(12, 8, -1)};
 }
 
+ServoCalibrationProfile Stage2Profile() {
+    return ServoCalibrationProfile{
+        true, true, true, true,
+        ServoAxisCalibrationProfile{11, 1500, 1055, 1944, 11, 1,
+                                     true, true, true, true, true},
+        ServoAxisCalibrationProfile{12, 1500, 1277, 1722, 11, -1,
+                                     true, true, true, true, true}};
+}
+
 ServoAdapterCommand Command(ServoAdapterOperation operation, ServoAxis axis,
                             std::int16_t value = 0) {
     return ServoAdapterCommand{operation, axis, value};
@@ -175,31 +184,35 @@ void BackendFailuresDisableOutputsAndRemainFailSoft() {
 
 void RuntimeEnvelopeIsFixedAndStrictlyChecked() {
     FakePwmBackend backend;
-    CalibratedServoAdapter adapter(backend, SafeProfile());
+    CalibratedServoAdapter adapter(backend, Stage2Profile());
     ServoRuntimeEnvelope envelope{};
     assert(adapter.GetRuntimeEnvelope(envelope));
-    assert(envelope.yaw_minimum_tenths_degree == -100);
-    assert(envelope.yaw_maximum_tenths_degree == 100);
-    assert(envelope.pitch_minimum_tenths_degree == -40);
-    assert(envelope.pitch_maximum_tenths_degree == 60);
-    assert(envelope.maximum_step_tenths_degree == 10);
+    assert(envelope.yaw_minimum_tenths_degree == -400);
+    assert(envelope.yaw_maximum_tenths_degree == 400);
+    assert(envelope.pitch_minimum_tenths_degree == -200);
+    assert(envelope.pitch_maximum_tenths_degree == 200);
+    assert(envelope.maximum_step_tenths_degree == 20);
 
     assert(adapter.Apply(Command(
                ServoAdapterOperation::kAbsoluteRuntimeTarget,
-               ServoAxis::kYaw, -100)) == ServoAdapterResult::kApplied);
-    assert(backend.writes.back().value == 1400);
+               ServoAxis::kYaw, -400)) == ServoAdapterResult::kApplied);
+    assert(backend.writes.back().value == 1060);
     assert(adapter.Apply(Command(
                ServoAdapterOperation::kAbsoluteRuntimeTarget,
-               ServoAxis::kPitch, 60)) == ServoAdapterResult::kApplied);
-    assert(backend.writes.back().value == 1452);
+               ServoAxis::kPitch, 200)) == ServoAdapterResult::kApplied);
+    assert(backend.writes.back().value == 1280);
+    assert(adapter.Apply(Command(
+               ServoAdapterOperation::kAbsoluteRuntimeTarget,
+               ServoAxis::kYaw, 5)) == ServoAdapterResult::kApplied);
+    assert(backend.writes.back().value == 1506);
     const auto writes = backend.writes.size();
     assert(adapter.Apply(Command(
                ServoAdapterOperation::kAbsoluteRuntimeTarget,
-               ServoAxis::kYaw, 110)) == ServoAdapterResult::kOutOfRange);
+               ServoAxis::kYaw, 410)) == ServoAdapterResult::kOutOfRange);
     assert(backend.writes.size() == writes);
 
-    auto narrow = SafeProfile();
-    narrow.yaw.minimum_pulse_us = 1450;
+    auto narrow = Stage2Profile();
+    narrow.yaw.minimum_pulse_us = 1061;
     CalibratedServoAdapter unavailable(backend, narrow);
     assert(unavailable.IsAvailable());
     assert(!unavailable.GetRuntimeEnvelope(envelope));

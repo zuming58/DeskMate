@@ -3,7 +3,7 @@
 const { EventEmitter } = require("events");
 const { randomBytes } = require("crypto");
 const { encodeChoreographyFeatureReport } = require("./choreography-hid.cjs");
-const { validateChoreography } = require("./choreography-store.cjs");
+const { BUILT_IN_DEFAULT_DANCE, DEFAULT_MOTION_SETTINGS, validateChoreography } = require("./choreography-store.cjs");
 
 const PRESETS = new Set(["attention", "nod", "search", "dance"]);
 const SOURCES = new Set(["UI", "voice", "context", "idle"]);
@@ -45,22 +45,14 @@ function builtInAction(preset, repeat = 1) {
       { yaw: "right", pitch: "center", expression: "thinking" },
       { yaw: "center", pitch: "center", expression: "hold" },
     ],
-    dance: [
-      { yaw: "left", pitch: "up", expression: "completed" },
-      { yaw: "center", pitch: "center", expression: "hold" },
-      { yaw: "right", pitch: "down", expression: "working" },
-      { yaw: "center", pitch: "center", expression: "hold" },
-      { yaw: "left", pitch: "down", expression: "completed" },
-      { yaw: "right", pitch: "up", expression: "completed" },
-      { yaw: "center", pitch: "center", expression: "hold" },
-    ],
+    dance: BUILT_IN_DEFAULT_DANCE.beats,
   };
   if (!PRESETS.has(preset) || !Number.isInteger(repeat) || repeat < 1 || repeat > 3) throw new Error("choreography-report-invalid");
-  return validateChoreography({ version: 1, name: `built-in-${preset}`, beatMs: preset === "dance" ? 400 : 600, repeat, beats: actions[preset] });
+  return validateChoreography({ version: 1, name: preset === "dance" ? BUILT_IN_DEFAULT_DANCE.name : `built-in-${preset}`, beatMs: preset === "dance" ? BUILT_IN_DEFAULT_DANCE.beatMs : 600, repeat, beats: actions[preset] });
 }
 
 class ChoreographyService extends EventEmitter {
-  constructor({ send, requestIdSequence = null, prepareCenter, settings = () => ({ intensity: "standard", tempo: "standard" }), defaultDance = () => null, isManualControlActive = () => false, now = () => Date.now(), schedule = setTimeout, pollIntervalMs = 150, operationTimeoutMs = 45000 } = {}) {
+  constructor({ send, requestIdSequence = null, prepareCenter, settings = () => ({ ...DEFAULT_MOTION_SETTINGS }), defaultDance = () => null, isManualControlActive = () => false, now = () => Date.now(), schedule = setTimeout, pollIntervalMs = 150, operationTimeoutMs = 180000 } = {}) {
     super();
     if (typeof send !== "function" || typeof prepareCenter !== "function") throw new Error("choreography-service-dependency-invalid");
     if (requestIdSequence !== null && typeof requestIdSequence?.next !== "function") throw new Error("choreography-request-id-sequence-invalid");
@@ -197,7 +189,7 @@ class ChoreographyService extends EventEmitter {
   async executePreset(preset, repeat, source = "UI") {
     if (!PRESETS.has(preset) || !SOURCES.has(source) || !Number.isInteger(repeat) || repeat < 1 || repeat > 3) return this.failure("choreography-report-invalid");
     const saved = preset === "dance" ? this.defaultDance() : null;
-    const action = saved ? validateChoreography({ ...clone(saved), repeat }) : builtInAction(preset, repeat);
+    const action = saved ? validateChoreography(clone(saved)) : builtInAction(preset, repeat);
     return this.execute(action, { source });
   }
 
@@ -218,7 +210,7 @@ class ChoreographyService extends EventEmitter {
     if (!result?.ok) return { ok: false, reason: safeReason(result?.reason), endpoint: result?.terminal?.endpoint || null, requestId };
     const terminal = result.terminal;
     if (!terminal || terminal.stage !== "endpoint-acknowledgement" || terminal.transport !== "completed" || terminal.requestId !== requestId || terminal.kind !== value.kind || !terminal.endpoint || terminal.endpoint.sessionId !== terminal.controllerBootId) return { ok: false, reason: "invalid-response", requestId };
-    if (value.kind === "command" && (terminal.sourceCode !== terminal.endpoint.sourceCode || terminal.beatCount !== value.action.beats.length || terminal.repeat !== value.action.repeat)) return { ok: false, reason: "invalid-response", requestId };
+    if (value.kind === "command" && (terminal.sourceCode !== terminal.endpoint.sourceCode || terminal.beatCount !== value.action.beats.length || terminal.repeat !== value.action.repeat || terminal.yawAmplitudeDegrees !== value.yawAmplitudeDegrees || terminal.pitchAmplitudeDegrees !== value.pitchAmplitudeDegrees || terminal.yawSpeedDegreesPerSecond !== value.yawSpeedDegreesPerSecond || terminal.pitchSpeedDegreesPerSecond !== value.pitchSpeedDegreesPerSecond)) return { ok: false, reason: "invalid-response", requestId };
     return { ok: true, endpoint: terminal.endpoint, requestId };
   }
 

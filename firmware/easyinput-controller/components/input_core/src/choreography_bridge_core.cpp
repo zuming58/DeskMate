@@ -7,7 +7,8 @@ namespace {
 
 constexpr std::array<std::uint8_t, 4> kRequestMagic{'D', 'M', 'C', 'Q'};
 constexpr std::array<std::uint8_t, 4> kStatusMagic{'D', 'M', 'C', 'S'};
-constexpr std::uint8_t kVersion = 1;
+constexpr std::uint8_t kVersionOne = 1;
+constexpr std::uint8_t kVersionTwo = 2;
 constexpr std::uint8_t kKindCommand = 1;
 constexpr std::uint8_t kKindStatus = 2;
 constexpr std::uint8_t kStageAccepted = 1;
@@ -83,36 +84,66 @@ bool ChoreographyBridge::decode(const std::uint8_t* payload,
     out = {};
     if (payload == nullptr || length != kChoreographyHostPayloadBytes ||
         !std::equal(kRequestMagic.begin(), kRequestMagic.end(), payload) ||
-        payload[4] != kVersion || payload[5] < kKindCommand ||
+        (payload[4] != kVersionOne && payload[4] != kVersionTwo) ||
+        payload[5] < kKindCommand ||
         payload[5] > kKindStatus || payload[7] != 0 ||
-        read_u32(payload + 8) == 0 ||
-        read_u16(payload + 41) != deskmate_link_crc16(payload, 41) ||
-        !all_zero(payload + 43, payload + length)) {
+        read_u32(payload + 8) == 0) {
         return false;
     }
     Request request{};
+    request.version = payload[4];
+    const bool version_two = request.version == kVersionTwo;
+    const std::size_t crc_offset = version_two ? 43u : 41u;
+    if (read_u16(payload + crc_offset) !=
+            deskmate_link_crc16(payload, crc_offset) ||
+        !all_zero(payload + crc_offset + 2u, payload + length)) {
+        return false;
+    }
     request.kind = payload[5];
     request.request_id = read_u32(payload + 8);
     request.source = payload[6];
     request.beat_count = payload[12];
     request.beat_code = payload[13];
     request.repeat_count = payload[14];
-    request.intensity = payload[15];
-    request.tempo = payload[16];
-    std::copy_n(payload + 17, request.beats.size(), request.beats.begin());
+    request.yaw_amplitude_degrees = payload[15];
+    request.pitch_amplitude_degrees = version_two ? payload[16] : payload[15];
+    request.yaw_speed_degrees_per_second = payload[version_two ? 17 : 16];
+    request.pitch_speed_degrees_per_second = version_two
+        ? payload[18] : request.yaw_speed_degrees_per_second;
+    std::copy_n(payload + (version_two ? 19 : 17), request.beats.size(),
+                request.beats.begin());
     if (request.kind == kKindStatus) {
         if (request.source != 0 || request.beat_count != 0 ||
             request.beat_code != 0 || request.repeat_count != 0 ||
-            request.intensity != 0 || request.tempo != 0 ||
+            request.yaw_amplitude_degrees != 0 ||
+            request.pitch_amplitude_degrees != 0 ||
+            request.yaw_speed_degrees_per_second != 0 ||
+            request.pitch_speed_degrees_per_second != 0 ||
             !all_zero(request.beats.data(),
                       request.beats.data() + request.beats.size())) return false;
     } else {
         if (request.source < 1 || request.source > 4 ||
             request.beat_count < 2 || request.beat_count > 8 ||
             request.beat_code < 1 || request.beat_code > 4 ||
-            request.repeat_count < 1 || request.repeat_count > 3 ||
-            request.intensity < 1 || request.intensity > 3 ||
-            request.tempo < 1 || request.tempo > 3) return false;
+            request.repeat_count < 1 || request.repeat_count > 3) return false;
+        const bool profile_valid = version_two
+            ? request.yaw_amplitude_degrees >= 4 &&
+                  request.yaw_amplitude_degrees <= 40 &&
+                  request.pitch_amplitude_degrees >= 4 &&
+                  request.pitch_amplitude_degrees <= 20 &&
+                  request.yaw_speed_degrees_per_second >= 20 &&
+                  request.yaw_speed_degrees_per_second <= 100 &&
+                  request.pitch_speed_degrees_per_second >= 20 &&
+                  request.pitch_speed_degrees_per_second <= 100
+            : request.yaw_amplitude_degrees >= 1 &&
+                  request.yaw_amplitude_degrees <= 3 &&
+                  request.pitch_amplitude_degrees >= 1 &&
+                  request.pitch_amplitude_degrees <= 3 &&
+                  request.yaw_speed_degrees_per_second >= 1 &&
+                  request.yaw_speed_degrees_per_second <= 3 &&
+                  request.pitch_speed_degrees_per_second >= 1 &&
+                  request.pitch_speed_degrees_per_second <= 3;
+        if (!profile_valid) return false;
         bool changes = false;
         for (std::size_t index = 0; index < 8; ++index) {
             const std::size_t offset = index * 3;
@@ -156,8 +187,12 @@ bool ChoreographyBridge::accept(const std::uint8_t* payload,
     peer_boot_id_ = link.peer_boot_id;
     dispatch.host_request_id = request.request_id;
     dispatch.message_type = request.kind == kKindCommand
-        ? static_cast<std::uint8_t>(LinkMessageType::RunChoreography)
-        : static_cast<std::uint8_t>(LinkMessageType::GetChoreographyStatus);
+        ? static_cast<std::uint8_t>(request.version == kVersionTwo
+              ? LinkMessageType::RunChoreographyV2
+              : LinkMessageType::RunChoreography)
+        : static_cast<std::uint8_t>(request.version == kVersionTwo
+              ? LinkMessageType::GetChoreographyStatusV2
+              : LinkMessageType::GetChoreographyStatus);
     if (request.kind == kKindCommand) {
         dispatch.payload_length = 40;
         write_u32(dispatch.payload.data(), link.controller_boot_id);
@@ -166,8 +201,14 @@ bool ChoreographyBridge::accept(const std::uint8_t* payload,
         dispatch.payload[9] = request.beat_count;
         dispatch.payload[10] = request.beat_code;
         dispatch.payload[11] = request.repeat_count;
-        dispatch.payload[12] = request.intensity;
-        dispatch.payload[13] = request.tempo;
+        dispatch.payload[12] = request.yaw_amplitude_degrees;
+        dispatch.payload[13] = request.version == kVersionTwo
+            ? request.pitch_amplitude_degrees
+            : request.yaw_speed_degrees_per_second;
+        if (request.version == kVersionTwo) {
+            dispatch.payload[14] = request.yaw_speed_degrees_per_second;
+            dispatch.payload[15] = request.pitch_speed_degrees_per_second;
+        }
         std::copy(request.beats.begin(), request.beats.end(),
                   dispatch.payload.begin() + 16);
     }
@@ -248,13 +289,15 @@ bool ChoreographyBridge::encode(
     if (response.request.request_id == 0) return false;
     out.fill(0);
     std::copy(kStatusMagic.begin(), kStatusMagic.end(), out.begin());
-    out[4] = kVersion;
+    out[4] = response.request.version;
     out[5] = response.stage;
     out[6] = response.request.kind;
     out[7] = response.transport;
     write_u32(out.data() + 8, response.request.request_id);
     write_u32(out.data() + 12, response.link_sequence);
-    out[16] = response.request.kind == kKindCommand ? 0x24 : 0x25;
+    out[16] = response.request.kind == kKindCommand
+        ? (response.request.version == kVersionTwo ? 0x26 : 0x24)
+        : (response.request.version == kVersionTwo ? 0x27 : 0x25);
     out[17] = response.terminal_flag;
     out[18] = static_cast<std::uint8_t>(response.link_error);
     out[19] = response.endpoint_length;
@@ -266,9 +309,16 @@ bool ChoreographyBridge::encode(
     out[53] = response.request.beat_count;
     out[54] = response.request.beat_code;
     out[55] = response.request.repeat_count;
-    out[56] = response.request.intensity;
-    out[57] = response.request.tempo;
-    write_u16(out.data() + 58, deskmate_link_crc16(out.data(), 58));
+    out[56] = response.request.yaw_amplitude_degrees;
+    if (response.request.version == kVersionTwo) {
+        out[57] = response.request.pitch_amplitude_degrees;
+        out[58] = response.request.yaw_speed_degrees_per_second;
+        out[59] = response.request.pitch_speed_degrees_per_second;
+        write_u16(out.data() + 60, deskmate_link_crc16(out.data(), 60));
+    } else {
+        out[57] = response.request.yaw_speed_degrees_per_second;
+        write_u16(out.data() + 58, deskmate_link_crc16(out.data(), 58));
+    }
     return true;
 }
 

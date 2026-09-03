@@ -20,6 +20,30 @@ bool EmptyBeat(const ChoreographyBeat& beat) noexcept {
            beat.expression == ChoreographyExpression::kHold;
 }
 
+std::uint8_t LegacyAmplitudeDegrees(std::uint8_t profile,
+                                    bool pitch) noexcept {
+    if (pitch) {
+        return profile == 1 ? 8 : profile == 2 ? 15 : 20;
+    }
+    return profile == 1 ? 12 : profile == 2 ? 20 : 40;
+}
+
+std::uint8_t LegacySpeedDegreesPerSecond(std::uint8_t profile) noexcept {
+    return profile == 1 ? 40 : profile == 2 ? 80 : 100;
+}
+
+std::uint8_t LegacyAmplitudeProfile(std::uint8_t degrees,
+                                    bool pitch) noexcept {
+    const auto standard = static_cast<std::uint8_t>(pitch ? 15 : 20);
+    const auto vivid = static_cast<std::uint8_t>(pitch ? 20 : 40);
+    return degrees >= vivid ? 3 : degrees >= standard ? 2 : 1;
+}
+
+std::uint8_t LegacySpeedProfile(std::uint8_t degrees_per_second) noexcept {
+    return degrees_per_second >= 100 ? 3
+         : degrees_per_second >= 80 ? 2 : 1;
+}
+
 std::uint8_t SnapshotFlags(const ChoreographySnapshot& snapshot,
                            bool duplicate) noexcept {
     return static_cast<std::uint8_t>(
@@ -34,7 +58,8 @@ std::uint8_t SnapshotFlags(const ChoreographySnapshot& snapshot,
 }
 
 std::array<std::uint8_t, kChoreographyStatusPayloadBytes> Encode(
-    const ChoreographySnapshot& snapshot, bool duplicate) noexcept {
+    const ChoreographySnapshot& snapshot, bool duplicate,
+    bool version_two) noexcept {
     std::array<std::uint8_t, kChoreographyStatusPayloadBytes> payload{};
     WriteLe32(payload.data(), snapshot.session_id);
     WriteLe32(payload.data() + 4, snapshot.action_id);
@@ -47,17 +72,23 @@ std::array<std::uint8_t, kChoreographyStatusPayloadBytes> Encode(
     payload[17] = snapshot.completed_repeats;
     payload[18] = static_cast<std::uint8_t>(snapshot.source);
     payload[19] = SnapshotFlags(snapshot, duplicate);
-    payload[20] = static_cast<std::uint8_t>(snapshot.intensity);
-    payload[21] = static_cast<std::uint8_t>(snapshot.tempo);
+    payload[20] = version_two
+        ? snapshot.yaw_amplitude_degrees
+        : LegacyAmplitudeProfile(snapshot.yaw_amplitude_degrees, false);
+    payload[21] = version_two
+        ? snapshot.pitch_amplitude_degrees
+        : LegacySpeedProfile(snapshot.yaw_speed_degrees_per_second);
+    if (version_two) {
+        payload[22] = snapshot.yaw_speed_degrees_per_second;
+        payload[23] = snapshot.pitch_speed_degrees_per_second;
+    }
     return payload;
 }
 
-}  // namespace
-
-bool DecodeChoreographyCommand(const LinkFrame& frame,
-                               ChoreographyCommand& command) noexcept {
+bool DecodeCommon(const LinkFrame& frame, ChoreographyCommand& command,
+                  bool version_two) noexcept {
     if (frame.payload_length != kChoreographyCommandPayloadBytes ||
-        frame.payload[14] != 0 || frame.payload[15] != 0) {
+        (!version_two && (frame.payload[14] != 0 || frame.payload[15] != 0))) {
         return false;
     }
     command = {};
@@ -73,16 +104,45 @@ bool DecodeChoreographyCommand(const LinkFrame& frame,
         default: return false;
     }
     command.repeat_count = frame.payload[11];
-    command.intensity = static_cast<ChoreographyIntensity>(frame.payload[12]);
-    command.tempo = static_cast<ChoreographyTempo>(frame.payload[13]);
+    if (version_two) {
+        command.yaw_amplitude_degrees = frame.payload[12];
+        command.pitch_amplitude_degrees = frame.payload[13];
+        command.yaw_speed_degrees_per_second = frame.payload[14];
+        command.pitch_speed_degrees_per_second = frame.payload[15];
+    } else {
+        const auto amplitude_profile = frame.payload[12];
+        const auto speed_profile = frame.payload[13];
+        if (amplitude_profile < 1 || amplitude_profile > 3 ||
+            speed_profile < 1 || speed_profile > 3) return false;
+        command.yaw_amplitude_degrees =
+            LegacyAmplitudeDegrees(amplitude_profile, false);
+        command.pitch_amplitude_degrees =
+            LegacyAmplitudeDegrees(amplitude_profile, true);
+        command.yaw_speed_degrees_per_second =
+            LegacySpeedDegreesPerSecond(speed_profile);
+        command.pitch_speed_degrees_per_second =
+            command.yaw_speed_degrees_per_second;
+    }
     if (command.session_id == 0 || command.action_id == 0 ||
         !ValidSource(command.source) || command.beat_count < 2 ||
         command.beat_count > kChoreographyMaximumBeats ||
         command.repeat_count < 1 || command.repeat_count > 3 ||
-        command.intensity < ChoreographyIntensity::kGentle ||
-        command.intensity > ChoreographyIntensity::kVivid ||
-        command.tempo < ChoreographyTempo::kRelaxed ||
-        command.tempo > ChoreographyTempo::kQuick) {
+        command.yaw_amplitude_degrees <
+            kChoreographyMinimumYawAmplitudeDegrees ||
+        command.yaw_amplitude_degrees >
+            kChoreographyMaximumYawAmplitudeDegrees ||
+        command.pitch_amplitude_degrees <
+            kChoreographyMinimumPitchAmplitudeDegrees ||
+        command.pitch_amplitude_degrees >
+            kChoreographyMaximumPitchAmplitudeDegrees ||
+        command.yaw_speed_degrees_per_second <
+            kChoreographyMinimumSpeedDegreesPerSecond ||
+        command.yaw_speed_degrees_per_second >
+            kChoreographyMaximumSpeedDegreesPerSecond ||
+        command.pitch_speed_degrees_per_second <
+            kChoreographyMinimumSpeedDegreesPerSecond ||
+        command.pitch_speed_degrees_per_second >
+            kChoreographyMaximumSpeedDegreesPerSecond) {
         return false;
     }
     bool any_change = false;
@@ -103,6 +163,18 @@ bool DecodeChoreographyCommand(const LinkFrame& frame,
     return any_change;
 }
 
+}  // namespace
+
+bool DecodeChoreographyCommand(const LinkFrame& frame,
+                               ChoreographyCommand& command) noexcept {
+    return DecodeCommon(frame, command, false);
+}
+
+bool DecodeChoreographyCommandV2(const LinkFrame& frame,
+                                 ChoreographyCommand& command) noexcept {
+    return DecodeCommon(frame, command, true);
+}
+
 std::array<std::uint8_t, kChoreographyStatusPayloadBytes>
 EncodeChoreographyResponse(const ChoreographyCommand& command,
                            MotionPresetResult result,
@@ -113,18 +185,50 @@ EncodeChoreographyResponse(const ChoreographyCommand& command,
     response.beat_count = command.beat_count;
     response.repeat_count = command.repeat_count;
     response.source = command.source;
-    response.intensity = command.intensity;
-    response.tempo = command.tempo;
+    response.yaw_amplitude_degrees = command.yaw_amplitude_degrees;
+    response.pitch_amplitude_degrees = command.pitch_amplitude_degrees;
+    response.yaw_speed_degrees_per_second =
+        command.yaw_speed_degrees_per_second;
+    response.pitch_speed_degrees_per_second =
+        command.pitch_speed_degrees_per_second;
     if (result != MotionPresetResult::kAccepted &&
         result != MotionPresetResult::kDuplicate) {
         response.operation_terminal = true;
     }
-    return Encode(response, result == MotionPresetResult::kDuplicate);
+    return Encode(response, result == MotionPresetResult::kDuplicate, false);
+}
+
+std::array<std::uint8_t, kChoreographyStatusPayloadBytes>
+EncodeChoreographyResponseV2(const ChoreographyCommand& command,
+                             MotionPresetResult result,
+                             const ChoreographySnapshot& live_snapshot) noexcept {
+    auto response = live_snapshot;
+    response.action_id = command.action_id;
+    response.result = result;
+    response.beat_count = command.beat_count;
+    response.repeat_count = command.repeat_count;
+    response.source = command.source;
+    response.yaw_amplitude_degrees = command.yaw_amplitude_degrees;
+    response.pitch_amplitude_degrees = command.pitch_amplitude_degrees;
+    response.yaw_speed_degrees_per_second =
+        command.yaw_speed_degrees_per_second;
+    response.pitch_speed_degrees_per_second =
+        command.pitch_speed_degrees_per_second;
+    if (result != MotionPresetResult::kAccepted &&
+        result != MotionPresetResult::kDuplicate) {
+        response.operation_terminal = true;
+    }
+    return Encode(response, result == MotionPresetResult::kDuplicate, true);
 }
 
 std::array<std::uint8_t, kChoreographyStatusPayloadBytes>
 EncodeChoreographyStatus(const ChoreographySnapshot& snapshot) noexcept {
-    return Encode(snapshot, false);
+    return Encode(snapshot, false, false);
+}
+
+std::array<std::uint8_t, kChoreographyStatusPayloadBytes>
+EncodeChoreographyStatusV2(const ChoreographySnapshot& snapshot) noexcept {
+    return Encode(snapshot, false, true);
 }
 
 }  // namespace deskmate::xiaozhi

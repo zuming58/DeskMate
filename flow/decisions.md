@@ -1,11 +1,21 @@
 # Decisions
 
+## D084 - Motion adjustment uses independent bounded degrees and speed caps
+
+- Date: 2026-09-03
+- Decision: D083's three shared profile labels are superseded. `动作设置` exposes four numeric controls shared by quick actions, custom choreography and explicit voice motion: Yaw amplitude `4..40°`, Pitch amplitude `4..20°`, Yaw speed cap `20..100°/s`, and Pitch speed cap `20..100°/s`. Defaults are `20°`, `15°`, `80°/s`, `80°/s`.
+- Reference: the read-only original Xiaozhi board configuration fixes Yaw at center `90°` with `50..130°` limits and Pitch at center `90°` with `70..110°` limits. The exact source snapshot and behavior comparison are recorded in `docs/provenance/t15d-adjustable-motion-reference-audit-2026-09-03.md`.
+- Ownership: Windows sends center-relative semantic amplitudes and per-axis speed caps with the complete beat program. EasyInput validates and forwards only. Xiaozhi maps direction tokens to targets, applies the per-axis speed caps in the single scheduler, and clamps again through `MotionSafetyCore` and the accepted Stage 2 adapter.
+- Boundary: degrees are user-facing logical semantics, not measured shaft position and not raw servo control. No contract accepts PWM, pulse width, duty cycle, GPIO, absolute electrical targets or unbounded speed. Existing center, stop, disconnect, fault and emergency behavior remains mandatory.
+- Compatibility: Host V2 keeps HID `0x1A/0x1B` and Link V2 uses additive `0x26/0x27`. Windows emits only V2; both firmware ends retain V1 decoding for rollback. Both boards require separately authorized app-only updates before the new settings can affect the real device.
+
 ## D083 - Motion adjustment is a bounded endpoint-owned profile, not raw servo control
 
 - Date: 2026-09-03
 - Decision: Settings contains one shared `动作设置` surface for fixed quick actions, custom choreography and explicit voice motion. The only controls are strength `柔和/标准/明显` and tempo `舒缓/标准/利落`; changes apply from the next physical action. A saved choreography may separately become the default program for the semantic `dance` action.
 - Mapping: Windows sends only closed enum values. Xiaozhi maps strength to fixed Stage 2 poses (Yaw about 6/8/10 degrees, Pitch up about 2/3/4 degrees and down about 3/5/6 degrees) and maps tempo to beat holds of 1.5/1.0/0.5 times the editor duration. Xiaozhi still owns interpolation, limits, center and stop behavior.
 - Boundary: the renderer, IPC, HID and Link contracts accept no arbitrary angle, velocity, PWM, pulse width, duty cycle or GPIO. Settings do not change manual control, bypass readiness, weaken emergency stop or prove measured motion. Physical effectiveness remains a user-present HIL gate after separately authorized app-only updates to both boards.
+- Superseded by D084 for the setting representation and numeric mapping. Its shared-surface, endpoint-ownership and safety conclusions remain valid.
 
 ## D082 - Memory management is a shared top-level surface with a fixed first-version organizer
 

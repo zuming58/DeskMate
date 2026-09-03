@@ -53,8 +53,10 @@ void SemanticProgramRunsLocallyAndRestoresDisplay() {
     command.beat_count = 2;
     command.beat_ms = 400;
     command.repeat_count = 1;
-    command.intensity = ChoreographyIntensity::kVivid;
-    command.tempo = ChoreographyTempo::kQuick;
+    command.yaw_amplitude_degrees = 40;
+    command.pitch_amplitude_degrees = 20;
+    command.yaw_speed_degrees_per_second = 100;
+    command.pitch_speed_degrees_per_second = 100;
     command.beats[0] = {ChoreographyYaw::kLeft,
                         ChoreographyPitch::kUp,
                         ChoreographyExpression::kCompleted};
@@ -78,12 +80,12 @@ void SemanticProgramRunsLocallyAndRestoresDisplay() {
     assert(std::any_of(adapter.commands.begin(), adapter.commands.end(),
                        [](const auto& value) {
                            return value.axis == ServoAxis::kYaw &&
-                                  value.value_tenths_degree == -100;
+                                  value.value_tenths_degree == -400;
                        }));
     assert(std::any_of(adapter.commands.begin(), adapter.commands.end(),
                        [](const auto& value) {
                            return value.axis == ServoAxis::kPitch &&
-                                  value.value_tenths_degree == 60;
+                                  value.value_tenths_degree == 200;
                        }));
     assert(display.snapshot().desired_state == AgentState::kListening);
 }
@@ -105,8 +107,10 @@ void EmergencyStopPreemptsProgramAndReleasesLease() {
     command.beat_count = 2;
     command.beat_ms = 1000;
     command.repeat_count = 3;
-    command.intensity = ChoreographyIntensity::kStandard;
-    command.tempo = ChoreographyTempo::kStandard;
+    command.yaw_amplitude_degrees = 20;
+    command.pitch_amplitude_degrees = 15;
+    command.yaw_speed_degrees_per_second = 80;
+    command.pitch_speed_degrees_per_second = 80;
     command.beats[0].yaw = ChoreographyYaw::kLeft;
     command.beats[1].yaw = ChoreographyYaw::kRight;
     assert(owner.ExecuteChoreography(command, 1200) ==

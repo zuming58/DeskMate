@@ -75,6 +75,8 @@ struct MotionIntent {
     std::uint32_t session_epoch{0};
     std::uint32_t sequence{0};
     MotionTarget target{};
+    std::uint16_t horizontal_maximum_step_units{0};
+    std::uint16_t vertical_maximum_step_units{0};
     std::uint64_t expires_at_ms{0};
 };
 

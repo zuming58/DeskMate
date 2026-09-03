@@ -30,11 +30,11 @@ struct ServoAdapterCommand {
     std::int16_t value_tenths_degree{};
 };
 
-inline constexpr std::int16_t kRuntimeYawMinimumTenthsDegree = -100;
-inline constexpr std::int16_t kRuntimeYawMaximumTenthsDegree = 100;
-inline constexpr std::int16_t kRuntimePitchMinimumTenthsDegree = -40;
-inline constexpr std::int16_t kRuntimePitchMaximumTenthsDegree = 60;
-inline constexpr std::uint16_t kRuntimeMaximumStepTenthsDegree = 10;
+inline constexpr std::int16_t kRuntimeYawMinimumTenthsDegree = -400;
+inline constexpr std::int16_t kRuntimeYawMaximumTenthsDegree = 400;
+inline constexpr std::int16_t kRuntimePitchMinimumTenthsDegree = -200;
+inline constexpr std::int16_t kRuntimePitchMaximumTenthsDegree = 200;
+inline constexpr std::uint16_t kRuntimeMaximumStepTenthsDegree = 20;
 
 struct ServoRuntimeEnvelope {
     std::int16_t yaw_minimum_tenths_degree{};

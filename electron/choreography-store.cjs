@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const CHOREOGRAPHY_VERSION = 1;
-const STORE_VERSION = 2;
+const STORE_VERSION = 4;
 const MAX_CHOREOGRAPHIES = 8;
 const MIN_BEATS = 2;
 const MAX_BEATS = 8;
@@ -10,11 +10,35 @@ const BEAT_MS = new Set([400, 600, 800, 1000]);
 const YAW_VALUES = new Set(["hold", "left", "center", "right"]);
 const PITCH_VALUES = new Set(["hold", "up", "center", "down"]);
 const EXPRESSION_VALUES = new Set(["hold", "completed", "thinking", "working"]);
-const INTENSITY_VALUES = new Set(["gentle", "standard", "vivid"]);
-const TEMPO_VALUES = new Set(["relaxed", "standard", "quick"]);
-const DEFAULT_MOTION_SETTINGS = Object.freeze({ intensity: "standard", tempo: "standard" });
+const DEFAULT_MOTION_SETTINGS = Object.freeze({
+  yawAmplitudeDegrees: 20,
+  pitchAmplitudeDegrees: 15,
+  yawSpeedDegreesPerSecond: 80,
+  pitchSpeedDegreesPerSecond: 80,
+});
+const MOTION_SETTING_LIMITS = Object.freeze({
+  yawAmplitudeDegrees: Object.freeze({ min: 4, max: 40, step: 1 }),
+  pitchAmplitudeDegrees: Object.freeze({ min: 4, max: 20, step: 1 }),
+  yawSpeedDegreesPerSecond: Object.freeze({ min: 20, max: 100, step: 10 }),
+  pitchSpeedDegreesPerSecond: Object.freeze({ min: 20, max: 100, step: 10 }),
+});
 const ACTION_KEYS = ["beatMs", "beats", "name", "repeat", "version"];
 const BEAT_KEYS = ["expression", "pitch", "yaw"];
+const BUILT_IN_DEFAULT_DANCE = Object.freeze({
+  version: CHOREOGRAPHY_VERSION,
+  name: "内置默认舞蹈",
+  beatMs: 400,
+  repeat: 2,
+  beats: Object.freeze([
+    Object.freeze({ yaw: "left", pitch: "up", expression: "completed" }),
+    Object.freeze({ yaw: "center", pitch: "center", expression: "hold" }),
+    Object.freeze({ yaw: "right", pitch: "down", expression: "working" }),
+    Object.freeze({ yaw: "center", pitch: "center", expression: "hold" }),
+    Object.freeze({ yaw: "left", pitch: "down", expression: "completed" }),
+    Object.freeze({ yaw: "right", pitch: "up", expression: "completed" }),
+    Object.freeze({ yaw: "center", pitch: "center", expression: "hold" }),
+  ]),
+});
 
 function hasExactKeys(value, expected) {
   return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === expected.join(",");
@@ -68,13 +92,33 @@ class ChoreographyStore {
       const value = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
       const keys = Object.keys(value || {}).sort().join(",");
       const legacy = keys === "actions,version" && value.version === 1;
+      const prior = keys === "actions,defaultDanceName,motionSettings,version" && value.version === 2;
+      const interim = keys === "actions,defaultDanceName,motionSettings,version" && value.version === 3;
       const current = keys === "actions,defaultDanceName,motionSettings,version" && value.version === STORE_VERSION;
-      if ((!legacy && !current) || !Array.isArray(value.actions) || value.actions.length > MAX_CHOREOGRAPHIES) throw new Error("choreography-store-invalid");
+      if ((!legacy && !prior && !interim && !current) || !Array.isArray(value.actions) || value.actions.length > MAX_CHOREOGRAPHIES) throw new Error("choreography-store-invalid");
       const actions = value.actions.map(validateChoreography);
       if (new Set(actions.map((action) => action.name)).size !== actions.length) throw new Error("choreography-store-invalid");
       if (legacy) return { actions, defaultDanceName: "", motionSettings: { ...DEFAULT_MOTION_SETTINGS } };
       const defaultDanceName = value.defaultDanceName === "" ? "" : normalizeName(value.defaultDanceName);
       if (defaultDanceName && !actions.some((action) => action.name === defaultDanceName)) throw new Error("choreography-store-invalid");
+      if (prior || interim) {
+        const settings = value.motionSettings;
+        const amplitudeValues = new Set(["gentle", "standard", "vivid"]);
+        const speedValues = new Set(["relaxed", "standard", "quick"]);
+        const legacyProfile = prior && hasExactKeys(settings, ["intensity", "tempo"])
+          ? { yawAmplitude: settings.intensity, pitchAmplitude: settings.intensity, yawSpeed: settings.tempo, pitchSpeed: settings.tempo }
+          : settings;
+        if (!hasExactKeys(legacyProfile, ["pitchAmplitude", "pitchSpeed", "yawAmplitude", "yawSpeed"]) || !amplitudeValues.has(legacyProfile.yawAmplitude) || !amplitudeValues.has(legacyProfile.pitchAmplitude) || !speedValues.has(legacyProfile.yawSpeed) || !speedValues.has(legacyProfile.pitchSpeed)) throw new Error("choreography-store-invalid");
+        const yawAmplitude = { gentle: 12, standard: 20, vivid: 40 };
+        const pitchAmplitude = { gentle: 8, standard: 15, vivid: 20 };
+        const speed = { relaxed: 40, standard: 80, quick: 100 };
+        return { actions, defaultDanceName, motionSettings: {
+          yawAmplitudeDegrees: yawAmplitude[legacyProfile.yawAmplitude],
+          pitchAmplitudeDegrees: pitchAmplitude[legacyProfile.pitchAmplitude],
+          yawSpeedDegreesPerSecond: speed[legacyProfile.yawSpeed],
+          pitchSpeedDegreesPerSecond: speed[legacyProfile.pitchSpeed],
+        } };
+      }
       const motionSettings = this.validateMotionSettings(value.motionSettings);
       return { actions, defaultDanceName, motionSettings };
     } catch { return { actions: [], defaultDanceName: "", motionSettings: { ...DEFAULT_MOTION_SETTINGS } }; }
@@ -82,7 +126,7 @@ class ChoreographyStore {
 
   list() { return clone(this.actions); }
 
-  snapshot() { return { actions: this.list(), defaultDanceName: this.defaultDanceName, motionSettings: clone(this.motionSettings) }; }
+  snapshot() { return { actions: this.list(), builtInDance: clone(BUILT_IN_DEFAULT_DANCE), defaultDanceName: this.defaultDanceName, motionSettings: clone(this.motionSettings) }; }
 
   getDefaultDance() {
     return this.defaultDanceName ? clone(this.actions.find((action) => action.name === this.defaultDanceName) || null) : null;
@@ -91,8 +135,13 @@ class ChoreographyStore {
   getMotionSettings() { return clone(this.motionSettings); }
 
   validateMotionSettings(value) {
-    if (!hasExactKeys(value, ["intensity", "tempo"]) || !INTENSITY_VALUES.has(value.intensity) || !TEMPO_VALUES.has(value.tempo)) throw new Error("motion-settings-invalid");
-    return Object.freeze({ intensity: value.intensity, tempo: value.tempo });
+    const keys = ["pitchAmplitudeDegrees", "pitchSpeedDegreesPerSecond", "yawAmplitudeDegrees", "yawSpeedDegreesPerSecond"];
+    if (!hasExactKeys(value, keys)) throw new Error("motion-settings-invalid");
+    for (const key of keys) {
+      const limit = MOTION_SETTING_LIMITS[key];
+      if (!Number.isInteger(value[key]) || value[key] < limit.min || value[key] > limit.max || (value[key] - limit.min) % limit.step !== 0) throw new Error("motion-settings-invalid");
+    }
+    return Object.freeze({ ...value });
   }
 
   writeAndReadback(state) {
@@ -180,16 +229,16 @@ class PendingChoreographyAdapter {
 
 module.exports = {
   BEAT_MS,
+  BUILT_IN_DEFAULT_DANCE,
   CHOREOGRAPHY_VERSION,
   DEFAULT_MOTION_SETTINGS,
   EXPRESSION_VALUES,
-  INTENSITY_VALUES,
   MAX_BEATS,
   MAX_CHOREOGRAPHIES,
   MIN_BEATS,
+  MOTION_SETTING_LIMITS,
   PITCH_VALUES,
   PendingChoreographyAdapter,
-  TEMPO_VALUES,
   ChoreographyStore,
   YAW_VALUES,
   validateChoreography,

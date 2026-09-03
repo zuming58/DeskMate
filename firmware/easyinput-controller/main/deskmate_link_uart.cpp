@@ -151,7 +151,12 @@ bool DeskMateLinkUart::queue_choreography(
                                      LinkMessageType::RunChoreography) ||
          request.message_type == static_cast<std::uint8_t>(
                                      LinkMessageType::
-                                         GetChoreographyStatus));
+                                         GetChoreographyStatus) ||
+         request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::RunChoreographyV2) ||
+         request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::
+                                         GetChoreographyStatusV2));
     if (accepted) {
         queued_choreography_ = request;
         choreography_command_pending_ = true;

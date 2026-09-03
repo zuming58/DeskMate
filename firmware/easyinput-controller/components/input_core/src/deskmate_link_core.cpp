@@ -561,7 +561,9 @@ bool LinkController::handle_response(const LinkFrame& incoming,
         return valid_motion_response(incoming);
     }
     if (type == LinkMessageType::RunChoreography ||
-        type == LinkMessageType::GetChoreographyStatus) {
+        type == LinkMessageType::GetChoreographyStatus ||
+        type == LinkMessageType::RunChoreographyV2 ||
+        type == LinkMessageType::GetChoreographyStatusV2) {
         return valid_choreography_response(incoming);
     }
     return false;
@@ -624,8 +626,12 @@ bool LinkController::valid_choreography_response(
     const LinkFrame& incoming) const {
     if (!pending_.choreography || incoming.payload_length != 24) return false;
     const auto type = static_cast<LinkMessageType>(incoming.type);
-    const bool command = type == LinkMessageType::RunChoreography;
-    const bool status = type == LinkMessageType::GetChoreographyStatus;
+    const bool version_two = type == LinkMessageType::RunChoreographyV2 ||
+                             type == LinkMessageType::GetChoreographyStatusV2;
+    const bool command = type == LinkMessageType::RunChoreography ||
+                         type == LinkMessageType::RunChoreographyV2;
+    const bool status = type == LinkMessageType::GetChoreographyStatus ||
+                        type == LinkMessageType::GetChoreographyStatusV2;
     if (!command && !status) return false;
     if (read_u32(incoming.payload.data()) != controller_boot_id_ ||
         (command &&
@@ -637,8 +643,10 @@ bool LinkController::valid_choreography_response(
         (incoming.payload[15] != 0xff && incoming.payload[15] > 7) ||
         incoming.payload[16] > 3 || incoming.payload[17] > 3 ||
         incoming.payload[18] > 4 ||
-        incoming.payload[20] > 3 || incoming.payload[21] > 3 ||
-        incoming.payload[22] != 0 || incoming.payload[23] != 0) {
+        incoming.payload[20] > (version_two ? 40 : 3) ||
+        incoming.payload[21] > (version_two ? 20 : 3) ||
+        incoming.payload[22] > (version_two ? 100 : 0) ||
+        incoming.payload[23] > (version_two ? 100 : 0)) {
         return false;
     }
     if (incoming.payload[17] > incoming.payload[16]) return false;
@@ -928,9 +936,13 @@ bool LinkController::take_motion_preset_result(
 bool LinkController::queue_choreography(
     const ChoreographyLinkRequest& request) {
     const bool command = request.message_type == static_cast<std::uint8_t>(
-        LinkMessageType::RunChoreography);
+                             LinkMessageType::RunChoreography) ||
+                         request.message_type == static_cast<std::uint8_t>(
+                             LinkMessageType::RunChoreographyV2);
     const bool status = request.message_type == static_cast<std::uint8_t>(
-        LinkMessageType::GetChoreographyStatus);
+                            LinkMessageType::GetChoreographyStatus) ||
+                        request.message_type == static_cast<std::uint8_t>(
+                            LinkMessageType::GetChoreographyStatusV2);
     if (status_.state != LinkControllerState::Connected ||
         !capabilities_known_ ||
         (status_.enabled_capabilities & kLinkT15RequiredCapabilities) !=

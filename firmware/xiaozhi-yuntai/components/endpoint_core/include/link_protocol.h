@@ -30,6 +30,8 @@ enum class LinkMessageType : std::uint8_t {
     kGetMotionStatus = 0x23,
     kRunChoreography = 0x24,
     kGetChoreographyStatus = 0x25,
+    kRunChoreographyV2 = 0x26,
+    kGetChoreographyStatusV2 = 0x27,
 };
 
 enum class LinkErrorCode : std::uint8_t {

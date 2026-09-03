@@ -45,6 +45,9 @@ add_executable(choreography_link_tests
 target_include_directories(choreography_link_tests PRIVATE
     "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+target_compile_definitions(choreography_link_tests PRIVATE
+    T15D_V2_GOLDEN_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-link/golden-vectors-t15d-choreography-v2.json"
+)
 add_test(NAME choreography_link_tests COMMAND choreography_link_tests)
 
 add_executable(motion_safety_core_tests

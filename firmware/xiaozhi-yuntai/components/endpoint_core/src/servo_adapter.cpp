@@ -52,10 +52,12 @@ bool PulseForLogicalOffset(const ServoAxisCalibrationProfile& profile,
     const std::int32_t scaled =
         static_cast<std::int32_t>(tenths_degree) *
         static_cast<std::int32_t>(profile.pulse_per_degree_us);
-    if (scaled % kOneDegreeTenths != 0) return false;
+    const std::int32_t rounded = scaled >= 0
+        ? (scaled + kOneDegreeTenths / 2) / kOneDegreeTenths
+        : (scaled - kOneDegreeTenths / 2) / kOneDegreeTenths;
     const std::int32_t target =
         static_cast<std::int32_t>(profile.center_pulse_us) +
-        (scaled / kOneDegreeTenths) * profile.direction;
+        rounded * profile.direction;
     if (target < profile.minimum_pulse_us ||
         target > profile.maximum_pulse_us || target < 0 ||
         target > std::numeric_limits<std::uint16_t>::max()) {

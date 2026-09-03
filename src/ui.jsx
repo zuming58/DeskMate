@@ -134,7 +134,7 @@ export function Toggle({ checked, onChange, label, disabled = false }) {
   );
 }
 
-export function Segmented({ options, value, onChange, compact = false }) {
+export function Segmented({ options, value, onChange, compact = false, disabled = false }) {
   return (
     <div className={`segmented ${compact ? "segmented--compact" : ""}`}>
       {options.map((option) => {
@@ -143,6 +143,7 @@ export function Segmented({ options, value, onChange, compact = false }) {
           <button
             key={item.value}
             className={value === item.value ? "is-active" : ""}
+            disabled={disabled}
             onClick={() => onChange?.(item.value)}
           >
             {item.label}
@@ -204,10 +205,10 @@ export function Select({ value, onChange, children, ariaLabel }) {
   );
 }
 
-export function Slider({ value, onChange, min = 0, max = 100, suffix = "%", label }) {
+export function Slider({ value, onChange, min = 0, max = 100, step = 1, suffix = "%", label }) {
   return (
     <div className="slider-control">
-      <input aria-label={label} type="range" min={min} max={max} value={value} onChange={(e) => onChange?.(Number(e.target.value))} />
+      <input aria-label={label} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange?.(Number(e.target.value))} />
       <span>{value}{suffix}</span>
     </div>
   );
