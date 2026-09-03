@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Every native boundary must execute the frozen protocol vectors
+
+- Symptom: JavaScript and both firmware endpoints support a new protocol version, yet the packaged native bridge silently rejects it; a legacy fallback makes one action still move and hides the version skew while commands without a fallback do nothing.
+- Practice: run every frozen request and response golden vector through the actual native validator, then mutate version, CRC, message ID, numeric bounds and padding independently. Export protocol version and fallback classification as bounded diagnostics.
+- Rule: a successful legacy fallback proves only compatibility, never that new settings reached the endpoint. Custom or safety-sensitive behavior remains fail-closed when no semantically equivalent fallback exists.
+
 ## A specific recovery result must outrank its generic not-ready state
 
 - Symptom: every device and transport diagnostic is connected, the endpoint explicitly says it needs recentering, yet the action ends as `not-ready` with no physical movement.

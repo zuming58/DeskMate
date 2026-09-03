@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - T15D Windows native bridge now validates the frozen V2 choreography contract
+
+- Windows-only branch `codex/t15d-native-v2-bridge-fix` starts from exact integration base `bce207d379b249e3d094901ad425ac10a09616c7`; implementation commit is `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110`.
+- The native input bridge now validates V1 rollback and V2 choreography reports with separate exact layouts: request/response CRC coverage, zero padding, Link `0x24/0x25` versus `0x26/0x27`, V1 profiles and V2 Yaw/Pitch angle/speed ranges. Its self-test contains the frozen V1/V2 golden vectors plus negative version, CRC, Link, numeric and padding mutations.
+- Electron now correlates the protocol version and exports a bounded sanitized choreography snapshot. Outcomes distinguish `v2-success`, `native-rejected`, `v2-failed` and `legacy-fallback`; a quick-action fallback explicitly says V2 numeric settings did not apply, while direct custom choreography remains fail-closed.
+- Verification passed focused T15D `11/11`, full Desktop `378/378`, `npm run build:desktop`, direct and packaged native `--protocol-self-test`, `git diff --check`, tracked ASCII-path scan and an empty firmware diff. Package hashes and the exact behavior are recorded in `docs/handoffs/t15d-native-v2-bridge-fix-2026-09-03.md`.
+- No device, HID, motion or firmware operation occurred. Classification: `WINDOWS_NATIVE_V1_V2_SKEW_REPAIRED / EXACT_PACKAGE_READY / FIRMWARE_REFLASH_NOT_REQUIRED / HUMAN_HIL_PENDING`. Next: main Agent integrates this branch, launches the exact rebuilt package and performs maximum-Pitch nod plus one activated custom dance; only a terminal `v2-success` is acceptance evidence.
+
 ## 2026-09-03 - T15D HIL root cause isolated to the Windows native bridge; reference nod cross-check complete
 
 - The latest user HIL still showed two coupled symptoms after both exact V2 app-only images had been written and independently read back: quick `nod` moved only with the old small amplitude, while custom choreography produced no physical movement. The new sanitized diagnostic is `C:\Users\Administrator\Desktop\deskmate-diagnostics.json`, 6368 bytes, SHA-256 `B823DB543109C424EB5598F0C1CB49D321BDD684371A614BD6A7BDEFB9FB59A6`; it reports the exact `t15d-adjustable-motion-v2` app, writable `FF00:0009`, connected DeskMate Link, and a terminal legacy `nod x2` completion.

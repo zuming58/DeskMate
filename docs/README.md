@@ -2,6 +2,7 @@
 
 ## Current handoff
 
+- [T15D native V2 bridge repair handoff](handoffs/t15d-native-v2-bridge-fix-2026-09-03.md)
 - [T15D dance activation responsive UX handoff](handoffs/t15d-dance-activation-ux-2026-09-03.md)
 - [T15D dance activation visual QA](reviews/t15d-dance-activation-design-qa-2026-09-03.md)
 - [T15E motion UX and shared-memory Windows handoff](handoffs/t15e-motion-memory-ux-2026-09-03.md)
