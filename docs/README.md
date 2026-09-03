@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+- [T15D dance activation responsive UX handoff](handoffs/t15d-dance-activation-ux-2026-09-03.md)
+- [T15D dance activation visual QA](reviews/t15d-dance-activation-design-qa-2026-09-03.md)
 - [T15E motion UX and shared-memory Windows handoff](handoffs/t15e-motion-memory-ux-2026-09-03.md)
 - [T15E shared memory ingestion contract](contracts/t15e-shared-memory-ingestion-v1.md)
 - [T15D custom choreography editor design](design/t15d-choreography-editor-v1.md)

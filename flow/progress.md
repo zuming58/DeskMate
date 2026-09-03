@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - T15D dance activation is visible and explicit at every supported width
+
+- Windows-only branch `codex/t15d-dance-activation-ux` starts from integration baseline `10e771dfa3c4dba5a743659595262b9471fbae53`; implementation commit is `a709103569912408445d6cf002374befa284c48e`.
+- The choreography selector now keeps a bounded `当前跳舞动作` status and the only activation control in one responsive selection bar. The control remains visible at the 1440×1024 product viewport and the smaller-window layout; a new draft states `保存后可激活`, an already active item states `当前已激活`, and selecting the built-in item can explicitly restore the built-in dance.
+- New, copy, delete, edit, software preview and entity execution do not modify the active dance. A saved custom dance changes quick/voice `跳舞` only through the existing explicit `setDefaultDance` path; the Host HID, DeskMate Link and both firmware trees are unchanged.
+- Verification passed focused T15D `8/8`, full Desktop `375/375`, `npm run build:desktop`, packaged native bridge `--protocol-self-test`, `git diff --check`, tracked ASCII-path scan and a visual comparison using the user-reported crop plus fresh 1440×1024 and smaller-window captures. Final Windows package hashes are recorded in `docs/handoffs/t15d-dance-activation-ux-2026-09-03.md`.
+- No application/device port was controlled and no HID command, motion, Flash/NVS/eFuse, OLED, servo or audio operation occurred. Physical quick/custom choreography still requires separate user-authorized app-only flashing of both T15D V2 firmware candidates followed by HIL; this UI repair does not change those candidates.
+
 ## 2026-09-03 - T15D V2 exposes bounded real angles and independent axis speeds
 
 - User feedback rejected opaque `柔和/标准/明显` and `舒缓/标准/利落` profiles: the required product control is the actual bounded motion request, with independent Yaw angle, Pitch angle, Yaw speed and Pitch speed. Read-only comparison against the original local Xiaozhi reference found Yaw center/min/max `90/50/130°` (`±40°`) and Pitch `90/70/110°` (`±20°`). The two inspected reference files and their SHA-256 values are recorded in `docs/provenance/t15d-adjustable-motion-reference-audit-2026-09-03.md`; no source was copied.
