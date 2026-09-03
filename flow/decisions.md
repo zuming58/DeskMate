@@ -1,5 +1,12 @@
 # Decisions
 
+## D083 - Motion adjustment is a bounded endpoint-owned profile, not raw servo control
+
+- Date: 2026-09-03
+- Decision: Settings contains one shared `动作设置` surface for fixed quick actions, custom choreography and explicit voice motion. The only controls are strength `柔和/标准/明显` and tempo `舒缓/标准/利落`; changes apply from the next physical action. A saved choreography may separately become the default program for the semantic `dance` action.
+- Mapping: Windows sends only closed enum values. Xiaozhi maps strength to fixed Stage 2 poses (Yaw about 6/8/10 degrees, Pitch up about 2/3/4 degrees and down about 3/5/6 degrees) and maps tempo to beat holds of 1.5/1.0/0.5 times the editor duration. Xiaozhi still owns interpolation, limits, center and stop behavior.
+- Boundary: the renderer, IPC, HID and Link contracts accept no arbitrary angle, velocity, PWM, pulse width, duty cycle or GPIO. Settings do not change manual control, bypass readiness, weaken emergency stop or prove measured motion. Physical effectiveness remains a user-present HIL gate after separately authorized app-only updates to both boards.
+
 ## D082 - Memory management is a shared top-level surface with a fixed first-version organizer
 
 - Date: 2026-09-03

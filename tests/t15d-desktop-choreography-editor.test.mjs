@@ -7,7 +7,9 @@ import { createRequire } from "node:module";
 import { CHOREOGRAPHY_EXPRESSIONS, CHOREOGRAPHY_LABELS, choreographyPreviewFrame, createChoreographyDraft, validateChoreographyDraft } from "../src/domain/choreography.js";
 
 const require = createRequire(import.meta.url);
-const { ChoreographyStore, PendingChoreographyAdapter, validateChoreography } = require("../electron/choreography-store.cjs");
+const { ChoreographyStore, validateChoreography } = require("../electron/choreography-store.cjs");
+const { ChoreographyService } = require("../electron/choreography-service.cjs");
+const { decodeChoreographyFeatureReport, decodeChoreographyInputReport, encodeChoreographyFeatureReport } = require("../electron/choreography-hid.cjs");
 
 const action = (overrides = {}) => ({
   version: 1,
@@ -46,6 +48,25 @@ test("renderer draft uses six columns and preview applies all three tracks simul
   assert.equal(validateChoreographyDraft(action({ beats: [{ yaw: "left", pitch: "hold", expression: "listening" }, action().beats[1]] })).reason, "choreography-beat-invalid");
 });
 
+test("0x1A/0x1B choreography codec matches the frozen host golden vectors", () => {
+  const golden = JSON.parse(fs.readFileSync(new URL("../contracts/deskmate-host/golden-vectors-easyinput-choreography-v1.json", import.meta.url), "utf8"));
+  const sample = action({
+    beats: [
+      { yaw: "left", pitch: "hold", expression: "working" },
+      { yaw: "center", pitch: "up", expression: "completed" },
+    ],
+  });
+  const run = encodeChoreographyFeatureReport({ kind: "command", requestId: 0x01020304, source: "UI", action: sample, intensity: "vivid", tempo: "quick" });
+  const status = encodeChoreographyFeatureReport({ kind: "status", requestId: 0x01020305 });
+  assert.equal(run.subarray(1).toString("hex"), golden.vectors.run_two_beat_vivid_quick_request);
+  assert.equal(status.subarray(1).toString("hex"), golden.vectors.status_request);
+  const completed = decodeChoreographyInputReport(Buffer.from(`1b${golden.vectors.status_completed}`, "hex"));
+  assert.equal(completed.endpoint.result, "completed");
+  assert.equal(completed.endpoint.logicalCenterAccepted, true);
+  assert.equal(completed.endpoint.intensityCode, 3);
+  assert.equal(completed.endpoint.tempoCode, 3);
+});
+
 test("Electron store persists at most eight actions and supports rename, copy and delete without exposing a path", (context) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-choreography-"));
   context.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -65,24 +86,61 @@ test("Electron store persists at most eight actions and supports rename, copy an
   assert.equal(reloaded.list().length, 8);
 });
 
-test("pending choreography adapter validates the semantic object and never guesses the T15 wire", async () => {
-  const adapter = new PendingChoreographyAdapter();
-  assert.deepEqual(adapter.status(), { ready: false, state: "not-ready", reason: "choreography-transport-not-frozen" });
-  assert.deepEqual(await adapter.execute(action()), { ok: false, ready: false, state: "not-ready", reason: "choreography-transport-not-frozen" });
-  await assert.rejects(adapter.execute({ ...action(), pwm: 1500 }), /contract-invalid/);
+test("store persists the default dance and bounded global motion settings", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-motion-settings-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const store = new ChoreographyStore({ userDataPath: root });
+  store.save(action());
+  assert.equal(store.setDefaultDance("晨间舞蹈").defaultDanceName, "晨间舞蹈");
+  assert.deepEqual(store.setMotionSettings({ intensity: "vivid", tempo: "quick" }).motionSettings, { intensity: "vivid", tempo: "quick" });
+  assert.throws(() => store.setMotionSettings({ intensity: "maximum", tempo: "quick" }), /motion-settings-invalid/);
+  const reloaded = new ChoreographyStore({ userDataPath: root });
+  assert.equal(reloaded.getDefaultDance().name, "晨间舞蹈");
+  assert.deepEqual(reloaded.getMotionSettings(), { intensity: "vivid", tempo: "quick" });
+  assert.equal(reloaded.delete("晨间舞蹈").defaultDanceName, "");
 });
 
-test("T15D preload and renderer expose editor persistence while real execution stays ready-gated", () => {
+test("real choreography service sends one bounded program and waits for terminal completion", async () => {
+  let nextId = 10;
+  let completed = false;
+  const sent = [];
+  const endpoint = (requestId = 0) => ({ sessionId: 7, actionId: requestId, completedCounter: completed ? 3 : 2, result: completed ? "completed" : "accepted", state: completed ? "ready" : requestId ? "running" : "ready", beatCount: requestId ? 2 : 0, currentBeat: completed ? 0xff : 0, repeat: requestId ? 2 : 0, completedRepeats: completed ? 2 : 0, sourceCode: requestId ? 1 : 0, intensityCode: 3, tempoCode: 3, adapterAvailable: true, logicalCenterAccepted: completed || !requestId, emergencyStopLatched: false, faulted: false, servoOutputEnabled: !completed && Boolean(requestId), operationTerminal: completed, displayLeaseActive: !completed && Boolean(requestId), duplicateResponse: false });
+  const service = new ChoreographyService({
+    requestIdSequence: { next: () => ++nextId },
+    settings: () => ({ intensity: "vivid", tempo: "quick" }),
+    defaultDance: () => null,
+    prepareCenter: async () => ({ ok: true }),
+    pollIntervalMs: 10,
+    operationTimeoutMs: 500,
+    send: async (report) => {
+      const request = decodeChoreographyFeatureReport(report);
+      sent.push(Buffer.from(report));
+      if (request.kind === "command") queueMicrotask(() => { completed = true; });
+      const value = endpoint(request.kind === "command" ? request.requestId : completed ? nextId - 1 : 0);
+      return { ok: true, terminal: { stage: "endpoint-acknowledgement", transport: "completed", requestId: request.requestId, kind: request.kind, controllerBootId: 7, peerBootId: 8, sourceCode: request.kind === "command" ? 1 : 0, beatCount: request.kind === "command" ? 2 : 0, repeat: request.kind === "command" ? 2 : 0, endpoint: value } };
+    },
+  });
+  service.handleBridgeStatus({ boardConnected: true, motionCollectionWritable: true });
+  const result = await service.execute(action(), { source: "UI" });
+  assert.equal(result.ok, true);
+  assert.equal(result.endpointReportedComplete, true);
+  const command = sent.find((report) => report[6] === 1);
+  assert.equal(command[16], 3);
+  assert.equal(command[17], 3);
+  assert.equal(command.subarray(18, 24).toString("hex"), "010003020101");
+});
+
+test("T15D preload and renderer expose persistence, default dance, settings and real execution", () => {
   const preload = fs.readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const editor = fs.readFileSync(new URL("../src/ChoreographyEditor.jsx", import.meta.url), "utf8");
   const adapter = fs.readFileSync(new URL("../src/adapters/voiceAdapters.js", import.meta.url), "utf8");
-  for (const api of ["listChoreographies", "getChoreographyStatus", "saveChoreography", "copyChoreography", "deleteChoreography", "runChoreography"]) {
+  for (const api of ["listChoreographies", "getChoreographyStatus", "saveChoreography", "copyChoreography", "deleteChoreography", "runChoreography", "setDefaultDance", "getMotionSettings", "setMotionSettings"]) {
     assert.match(preload, new RegExp(`${api}:`));
     assert.match(adapter, new RegExp(`${api}\\(`));
   }
-  assert.match(main, /new PendingChoreographyAdapter\(\)/);
-  assert.match(main, /desktop:run-choreography[\s\S]*choreographyAdapter\.execute\(value\)/);
+  assert.match(main, /new ChoreographyService\(/);
+  assert.match(main, /desktop:run-choreography[\s\S]*choreographyService\.execute\(value\.action \|\| value/);
   assert.doesNotMatch(main.match(/desktop:run-choreography[\s\S]{0,500}/)?.[0] || "", /motionPresetService\.runPreset/);
   assert.match(editor, /disabled={!adapter\.ready/);
   assert.match(editor, /if \(adapter\.ready !== true\)/);
@@ -103,6 +161,12 @@ test("T15D preload and renderer expose editor persistence while real execution s
   assert.doesNotMatch(editor, /setServoAngle|setMotionPwm|writeGpio|pulseWidth/);
   assert.doesNotMatch(editor, /ArrowLeft|ArrowRight|ArrowUp|ArrowDown/);
   assert.doesNotMatch(preload, /choreograph.*Path/i);
+  assert.match(editor, /设为默认舞蹈/);
+  const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(pages, /label: "动作设置"/);
+  assert.match(pages, /value: "gentle", label: "柔和"/);
+  assert.match(pages, /value: "vivid", label: "明显"/);
+  assert.match(pages, /value: "quick", label: "利落"/);
 });
 
 test("quick actions fail closed until the real motion chain is detected", () => {

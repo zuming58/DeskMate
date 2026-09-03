@@ -1,5 +1,6 @@
 #include "link_endpoint.h"
 
+#include "choreography_protocol.h"
 #include "manual_calibration_protocol.h"
 #include "motion_preset_protocol.h"
 
@@ -300,6 +301,35 @@ bool XiaozhiLinkEndpoint::Process(const LinkFrame& request,
             motion_coordinator_->Tick(now_ms);
             const auto payload = EncodeMotionPresetStatus(
                 motion_coordinator_->motion_preset_snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kRunChoreography: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            ChoreographyCommand command{};
+            if (!DecodeChoreographyCommand(request, command)) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            const auto result =
+                motion_coordinator_->ExecuteChoreography(command, now_ms);
+            const auto payload = EncodeChoreographyResponse(
+                command, result,
+                motion_coordinator_->choreography_snapshot());
+            return Respond(request, payload.data(), payload.size(), response);
+        }
+        case LinkMessageType::kGetChoreographyStatus: {
+            if (!link_ready_ || motion_coordinator_ == nullptr ||
+                !motion_capability_enabled_) {
+                return Error(request, LinkErrorCode::kNotReady, response);
+            }
+            if (request.payload_length != 0) {
+                return Error(request, LinkErrorCode::kBadPayload, response);
+            }
+            motion_coordinator_->Tick(now_ms);
+            const auto payload = EncodeChoreographyStatus(
+                motion_coordinator_->choreography_snapshot());
             return Respond(request, payload.data(), payload.size(), response);
         }
     }

@@ -1,4 +1,5 @@
 #include "agent_state_core.h"
+#include "choreography_bridge_core.h"
 #include "audio_capture_service.h"
 #include "audio_io_arbiter.h"
 #include "board_pins.h"
@@ -70,6 +71,12 @@ std::array<uint8_t, kMotionPresetCommandQueueCapacity *
                         sizeof(ConfigFeatureCommand)>
     motion_preset_command_queue_storage{};
 QueueHandle_t motion_preset_command_queue = nullptr;
+StaticQueue_t choreography_command_queue_control{};
+constexpr size_t kChoreographyCommandQueueCapacity = 4;
+std::array<uint8_t, kChoreographyCommandQueueCapacity *
+                        sizeof(ConfigFeatureCommand)>
+    choreography_command_queue_storage{};
+QueueHandle_t choreography_command_queue = nullptr;
 QueueHandle_t config_save_queue = nullptr;
 QueueHandle_t config_result_queue = nullptr;
 StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
@@ -105,6 +112,7 @@ DeskMateLinkUart deskmate_link_uart;
 AgentStateBridge agent_state_bridge;
 ManualCalibrationBridge manual_calibration_bridge;
 MotionPresetBridge motion_preset_bridge;
+ChoreographyBridge choreography_bridge;
 AudioCaptureService audio_capture_service;
 SpeakerOutputService speaker_output_service;
 bool config_save_in_flight = false;
@@ -116,6 +124,8 @@ std::array<uint8_t, kManualCalibrationHostPayloadBytes>
     manual_calibration_response_payload{};
 std::array<uint8_t, kMotionPresetHostPayloadBytes>
     motion_preset_response_payload{};
+std::array<uint8_t, kChoreographyHostPayloadBytes>
+    choreography_response_payload{};
 void reset_config_save_result(ConfigSaveResult& result) {
     result.status = ConfigSaveStatus::WriteFailed;
     result.document.bytes.fill(0);
@@ -287,11 +297,18 @@ void input_owner_task(void*) {
             config_transfer.completed_motion = false;
             (void)motion_preset_bridge.mark_response_sent();
         }
+        if (config_transfer.completed_choreography) {
+            config_transfer.completed_choreography = false;
+            (void)choreography_bridge.mark_response_sent();
+        }
         if (config_transfer.failed_manual) {
             config_transfer.failed_manual = false;
         }
         if (config_transfer.failed_motion) {
             config_transfer.failed_motion = false;
+        }
+        if (config_transfer.failed_choreography) {
+            config_transfer.failed_choreography = false;
         }
         if (config_transfer.failed) {
             config_transfer.failed = false;
@@ -454,6 +471,24 @@ void input_owner_task(void*) {
                 motion_endpoint_acknowledgement,
                 deskmate_link_uart.snapshot());
         }
+        while (xQueueReceive(choreography_command_queue,
+                             &input_owner_config_command, 0) == pdTRUE) {
+            ChoreographyLinkRequest dispatch{};
+            const LinkStatusSnapshot link = deskmate_link_uart.snapshot();
+            if (choreography_bridge.accept(
+                    input_owner_config_command.payload.data(),
+                    input_owner_config_command.length,
+                    input_owner_config_command.epoch, link, dispatch)) {
+                choreography_bridge.note_forward_result(
+                    deskmate_link_uart.queue_choreography(dispatch), link);
+            }
+        }
+        ChoreographyLinkResult choreography_terminal{};
+        if (deskmate_link_uart.take_choreography_result(
+                choreography_terminal)) {
+            choreography_bridge.complete(choreography_terminal,
+                                          deskmate_link_uart.snapshot());
+        }
         while (xQueueReceive(config_command_queue,
                              &input_owner_config_command, 0) == pdTRUE) {
             if (input_owner_config_command.epoch != runtime.diagnostics().usb_mount_epoch) {
@@ -524,6 +559,9 @@ void input_owner_task(void*) {
         motion_preset_bridge.poll_lifecycle(
             runtime.diagnostics().usb_mount_epoch,
             deskmate_link_uart.snapshot());
+        choreography_bridge.poll_lifecycle(
+            runtime.diagnostics().usb_mount_epoch,
+            deskmate_link_uart.snapshot());
 
         runtime.service_release_reassertion(now_ms);
 
@@ -575,6 +613,7 @@ void input_owner_task(void*) {
                 config_transfer.advances_host_command = false;
                 config_transfer.advances_manual_response = false;
                 config_transfer.advances_motion_response = true;
+                config_transfer.advances_choreography_response = false;
                 config_transfer.report.report_id =
                     kMotionPresetStatusReportId;
                 config_transfer.report.length = static_cast<uint8_t>(
@@ -583,6 +622,33 @@ void input_owner_task(void*) {
                     runtime.diagnostics().usb_mount_epoch;
                 std::copy(motion_preset_response_payload.begin(),
                           motion_preset_response_payload.end(),
+                          config_transfer.report.payload.begin());
+            }
+        }
+        if (tud_hid_ready() && !transfer.active &&
+            !config_transfer.active &&
+            choreography_bridge.front_response(
+                choreography_response_payload)) {
+            const bool accepted = tud_hid_report(
+                kChoreographyStatusReportId,
+                choreography_response_payload.data(),
+                choreography_response_payload.size());
+            if (accepted) {
+                config_transfer.active = true;
+                config_transfer.advances_read_stream = false;
+                config_transfer.advances_status_stream = false;
+                config_transfer.advances_host_command = false;
+                config_transfer.advances_manual_response = false;
+                config_transfer.advances_motion_response = false;
+                config_transfer.advances_choreography_response = true;
+                config_transfer.report.report_id =
+                    kChoreographyStatusReportId;
+                config_transfer.report.length = static_cast<uint8_t>(
+                    choreography_response_payload.size());
+                config_transfer.report.epoch =
+                    runtime.diagnostics().usb_mount_epoch;
+                std::copy(choreography_response_payload.begin(),
+                          choreography_response_payload.end(),
                           config_transfer.report.payload.begin());
             }
         }
@@ -716,7 +782,13 @@ extern "C" void app_main(void) {
         motion_preset_command_queue_storage.data(),
         &motion_preset_command_queue_control);
     ESP_ERROR_CHECK(motion_preset_command_queue == nullptr ? ESP_ERR_NO_MEM
-                                                            : ESP_OK);
+                                                           : ESP_OK);
+    choreography_command_queue = xQueueCreateStatic(
+        kChoreographyCommandQueueCapacity, sizeof(ConfigFeatureCommand),
+        choreography_command_queue_storage.data(),
+        &choreography_command_queue_control);
+    ESP_ERROR_CHECK(choreography_command_queue == nullptr ? ESP_ERR_NO_MEM
+                                                          : ESP_OK);
     config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
     config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
     ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
@@ -842,7 +914,13 @@ extern "C" void tud_hid_set_report_cb(
     AgentStateFeatureReportView agent_feature{};
     ManualCalibrationFeatureReportView manual_feature{};
     MotionPresetFeatureReportView motion_feature{};
-    if (normalize_motion_preset_feature_report(
+    ChoreographyFeatureReportView choreography_feature{};
+    if (normalize_choreography_feature_report(
+            report_id, buffer, length, choreography_feature)) {
+        feature.report_id = kChoreographyRequestReportId;
+        feature.payload = choreography_feature.payload;
+        feature.length = choreography_feature.length;
+    } else if (normalize_motion_preset_feature_report(
             report_id, buffer, length, motion_feature)) {
         feature.report_id = kMotionPresetRequestReportId;
         feature.payload = motion_feature.payload;
@@ -874,6 +952,8 @@ extern "C" void tud_hid_set_report_cb(
         destination = manual_calibration_command_queue;
     } else if (feature.report_id == kMotionPresetRequestReportId) {
         destination = motion_preset_command_queue;
+    } else if (feature.report_id == kChoreographyRequestReportId) {
+        destination = choreography_command_queue;
     }
     const BaseType_t queued = feature.report_id == kAgentStateReportId
         ? (destination == nullptr ? pdFALSE

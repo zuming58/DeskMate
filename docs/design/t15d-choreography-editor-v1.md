@@ -1,6 +1,6 @@
 # T15D choreography editor V1
 
-Status: `T15D_CHOREOGRAPHY_V1_NOT_FROZEN`
+Status: `T15D_CHOREOGRAPHY_V1_FROZEN / THREE_END_CODE_BUILD_CONFIRMED / HIL_PENDING`
 
 ## Product decision
 
@@ -9,9 +9,10 @@ grid itself is a Windows UI task, but deterministic real execution requires an
 additive Windows -> EasyInput -> Xiaozhi contract. It must not be implemented by
 rapidly replaying manual `+/-1 degree` calibration commands.
 
-The existing four presets remain available as **Quick actions**. The new editor
-is a separate **Custom dance** flow and does not replace the accepted manual
-control or the still-pending T15 physical preset acceptance.
+The existing four presets remain available as **Quick actions**. The editor is
+a separate **Custom dance** flow. A saved choreography may be marked as the
+default dance; then quick-action or explicit voice “跳舞” executes that program.
+With no default selected, “跳舞” uses the built-in program.
 
 ## Editor model
 
@@ -53,8 +54,10 @@ control or the still-pending T15 physical preset acceptance.
 
 - At least one beat must contain a non-hold value.
 - Values are strict enums and unknown or additional fields are rejected.
-- Yaw and Pitch tokens map only to Xiaozhi-owned Stage 2 safe poses. No angle,
-  range, speed, PWM, pulse width, duty cycle, or GPIO is accepted from Windows.
+- Yaw and Pitch tokens map only to Xiaozhi-owned Stage 2 safe poses. Windows may
+  select one closed strength profile (`gentle/standard/vivid`) and one closed
+  tempo profile (`relaxed/standard/quick`). No raw angle, arbitrary speed, PWM,
+  pulse width, duty cycle, or GPIO is accepted.
 - Xiaozhi owns timing. Windows sends one bounded program and does not stream each
   beat in real time.
 - One choreography may run at a time. A second run returns busy and is not queued.
@@ -63,13 +66,13 @@ control or the still-pending T15 physical preset acceptance.
 - Emergency stop has the same highest priority as the accepted manual-control
   and T15 preset paths.
 
-## Candidate transport budget
+## Frozen transport
 
-The additive wire slice is intentionally not frozen until the four T15 presets
-complete physical acceptance. The candidate is:
+The fixed T15 presets completed physical acceptance. The additive slice is now
+frozen as:
 
-- Host HID Feature/Input: new independent report pair, not `0x18/0x19`.
-- DeskMate Link: new run/status message pair, not `0x22/0x23`.
+- Host HID Feature/Input: `0x1A/0x1B` on `FF00:0009`.
+- DeskMate Link: `0x24 RUN_CHOREOGRAPHY` and `0x25 GET_CHOREOGRAPHY_STATUS`.
 - One request contains a small header plus at most 8 beats. Each beat contains
   only three semantic enum bytes, so it fits the existing 63-byte HID payload and
   128-byte Link payload without fragmentation.
@@ -78,13 +81,12 @@ complete physical acceptance. The candidate is:
   emergency-stop state. It is protocol evidence, not proof of physical angle or
   mechanical safety.
 
-## Delivery order
+## Delivery and acceptance
 
-1. Finish the current fixed-preset UI clarity repair and run the ordered T15
-   physical preset acceptance.
-2. Windows may build and test the editor, local storage, strict compiler, and
-   disabled semantic adapter in parallel.
-3. After T15 HIL, freeze Host and Link vectors, then implement Xiaozhi local
-   scheduling/display lease and EasyInput one-request forwarding.
-4. Merge Windows transport, rebuild all three ends, request separate app-only
-   flash authorization for each board, and perform custom choreography HIL.
+1. Windows editor, persistence, real transport, default-dance routing and motion
+   settings are implemented and packaged.
+2. EasyInput forwarding and Xiaozhi scheduling/display ownership are implemented;
+   both host suites and exact ESP-IDF builds pass.
+3. Request separate app-only flash authorization for each board.
+4. User-present HIL runs built-in actions, all three strength/tempo profiles,
+   one custom program, default voice/quick dance, stop/center and emergency stop.

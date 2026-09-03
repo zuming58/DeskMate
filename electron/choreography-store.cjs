@@ -2,13 +2,17 @@ const fs = require("fs");
 const path = require("path");
 
 const CHOREOGRAPHY_VERSION = 1;
+const STORE_VERSION = 2;
 const MAX_CHOREOGRAPHIES = 8;
 const MIN_BEATS = 2;
 const MAX_BEATS = 8;
 const BEAT_MS = new Set([400, 600, 800, 1000]);
 const YAW_VALUES = new Set(["hold", "left", "center", "right"]);
 const PITCH_VALUES = new Set(["hold", "up", "center", "down"]);
-const EXPRESSION_VALUES = new Set(["hold", "idle", "listening", "thinking", "working", "waiting", "completed", "error"]);
+const EXPRESSION_VALUES = new Set(["hold", "completed", "thinking", "working"]);
+const INTENSITY_VALUES = new Set(["gentle", "standard", "vivid"]);
+const TEMPO_VALUES = new Set(["relaxed", "standard", "quick"]);
+const DEFAULT_MOTION_SETTINGS = Object.freeze({ intensity: "standard", tempo: "standard" });
 const ACTION_KEYS = ["beatMs", "beats", "name", "repeat", "version"];
 const BEAT_KEYS = ["expression", "pitch", "yaw"];
 
@@ -53,35 +57,70 @@ function duplicateName(source, existing) {
 class ChoreographyStore {
   constructor({ userDataPath } = {}) {
     this.filePath = path.join(userDataPath, "choreographies.json");
-    this.actions = this.load();
+    const loaded = this.load();
+    this.actions = loaded.actions;
+    this.defaultDanceName = loaded.defaultDanceName;
+    this.motionSettings = loaded.motionSettings;
   }
 
   load() {
     try {
       const value = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
-      if (!hasExactKeys(value, ["actions", "version"]) || value.version !== 1 || !Array.isArray(value.actions) || value.actions.length > MAX_CHOREOGRAPHIES) return [];
+      const keys = Object.keys(value || {}).sort().join(",");
+      const legacy = keys === "actions,version" && value.version === 1;
+      const current = keys === "actions,defaultDanceName,motionSettings,version" && value.version === STORE_VERSION;
+      if ((!legacy && !current) || !Array.isArray(value.actions) || value.actions.length > MAX_CHOREOGRAPHIES) throw new Error("choreography-store-invalid");
       const actions = value.actions.map(validateChoreography);
-      if (new Set(actions.map((action) => action.name)).size !== actions.length) return [];
-      return actions;
-    } catch { return []; }
+      if (new Set(actions.map((action) => action.name)).size !== actions.length) throw new Error("choreography-store-invalid");
+      if (legacy) return { actions, defaultDanceName: "", motionSettings: { ...DEFAULT_MOTION_SETTINGS } };
+      const defaultDanceName = value.defaultDanceName === "" ? "" : normalizeName(value.defaultDanceName);
+      if (defaultDanceName && !actions.some((action) => action.name === defaultDanceName)) throw new Error("choreography-store-invalid");
+      const motionSettings = this.validateMotionSettings(value.motionSettings);
+      return { actions, defaultDanceName, motionSettings };
+    } catch { return { actions: [], defaultDanceName: "", motionSettings: { ...DEFAULT_MOTION_SETTINGS } }; }
   }
 
   list() { return clone(this.actions); }
 
-  writeAndReadback(actions) {
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    const temporary = `${this.filePath}.tmp`;
-    fs.writeFileSync(temporary, JSON.stringify({ version: 1, actions }, null, 2), { encoding: "utf8", mode: 0o600 });
-    fs.renameSync(temporary, this.filePath);
-    const value = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
-    if (!hasExactKeys(value, ["actions", "version"]) || value.version !== 1 || !Array.isArray(value.actions)) throw new Error("choreography-readback-mismatch");
-    return value.actions.map(validateChoreography);
+  snapshot() { return { actions: this.list(), defaultDanceName: this.defaultDanceName, motionSettings: clone(this.motionSettings) }; }
+
+  getDefaultDance() {
+    return this.defaultDanceName ? clone(this.actions.find((action) => action.name === this.defaultDanceName) || null) : null;
   }
 
-  commit(actions) {
-    const readback = this.writeAndReadback(actions);
-    if (JSON.stringify(readback) !== JSON.stringify(actions)) throw new Error("choreography-readback-mismatch");
-    this.actions = readback;
+  getMotionSettings() { return clone(this.motionSettings); }
+
+  validateMotionSettings(value) {
+    if (!hasExactKeys(value, ["intensity", "tempo"]) || !INTENSITY_VALUES.has(value.intensity) || !TEMPO_VALUES.has(value.tempo)) throw new Error("motion-settings-invalid");
+    return Object.freeze({ intensity: value.intensity, tempo: value.tempo });
+  }
+
+  writeAndReadback(state) {
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    const temporary = `${this.filePath}.tmp`;
+    const persisted = { version: STORE_VERSION, actions: state.actions, defaultDanceName: state.defaultDanceName, motionSettings: state.motionSettings };
+    fs.writeFileSync(temporary, JSON.stringify(persisted, null, 2), { encoding: "utf8", mode: 0o600 });
+    fs.renameSync(temporary, this.filePath);
+    const value = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
+    if (!hasExactKeys(value, ["actions", "defaultDanceName", "motionSettings", "version"]) || value.version !== STORE_VERSION || !Array.isArray(value.actions)) throw new Error("choreography-readback-mismatch");
+    const actions = value.actions.map(validateChoreography);
+    const defaultDanceName = value.defaultDanceName === "" ? "" : normalizeName(value.defaultDanceName);
+    const motionSettings = this.validateMotionSettings(value.motionSettings);
+    if (defaultDanceName && !actions.some((action) => action.name === defaultDanceName)) throw new Error("choreography-readback-mismatch");
+    return { actions, defaultDanceName, motionSettings };
+  }
+
+  commit(next = {}) {
+    const state = {
+      actions: next.actions ?? this.actions,
+      defaultDanceName: next.defaultDanceName ?? this.defaultDanceName,
+      motionSettings: next.motionSettings ?? this.motionSettings,
+    };
+    const readback = this.writeAndReadback(state);
+    if (JSON.stringify(readback) !== JSON.stringify(state)) throw new Error("choreography-readback-mismatch");
+    this.actions = readback.actions;
+    this.defaultDanceName = readback.defaultDanceName;
+    this.motionSettings = readback.motionSettings;
     return this.list();
   }
 
@@ -95,8 +134,9 @@ class ChoreographyStore {
     const next = this.actions.slice();
     if (existingIndex >= 0) next[existingIndex] = action;
     else next.push(action);
-    this.commit(next);
-    return { ok: true, action: clone(action), actions: this.list() };
+    const defaultDanceName = this.defaultDanceName === prior && prior !== action.name ? action.name : this.defaultDanceName;
+    this.commit({ actions: next, defaultDanceName });
+    return { ok: true, action: clone(action), ...this.snapshot() };
   }
 
   copy(name) {
@@ -105,15 +145,28 @@ class ChoreographyStore {
     if (!source) throw new Error("choreography-not-found");
     if (this.actions.length >= MAX_CHOREOGRAPHIES) throw new Error("choreography-limit-reached");
     const copy = validateChoreography({ ...clone(source), name: duplicateName(source.name, new Set(this.actions.map((action) => action.name))) });
-    this.commit([...this.actions, copy]);
-    return { ok: true, action: clone(copy), actions: this.list() };
+    this.commit({ actions: [...this.actions, copy] });
+    return { ok: true, action: clone(copy), ...this.snapshot() };
   }
 
   delete(name) {
     const target = normalizeName(name);
-    if (!this.actions.some((action) => action.name === target)) return { ok: false, reason: "choreography-not-found", actions: this.list() };
-    this.commit(this.actions.filter((action) => action.name !== target));
-    return { ok: true, actions: this.list() };
+    if (!this.actions.some((action) => action.name === target)) return { ok: false, reason: "choreography-not-found", ...this.snapshot() };
+    this.commit({ actions: this.actions.filter((action) => action.name !== target), defaultDanceName: this.defaultDanceName === target ? "" : this.defaultDanceName });
+    return { ok: true, ...this.snapshot() };
+  }
+
+  setDefaultDance(name) {
+    const target = name === "" ? "" : normalizeName(name);
+    if (target && !this.actions.some((action) => action.name === target)) return { ok: false, reason: "choreography-not-found", ...this.snapshot() };
+    this.commit({ defaultDanceName: target });
+    return { ok: true, ...this.snapshot() };
+  }
+
+  setMotionSettings(value) {
+    const motionSettings = this.validateMotionSettings(value);
+    this.commit({ motionSettings });
+    return { ok: true, ...this.snapshot() };
   }
 }
 
@@ -128,12 +181,15 @@ class PendingChoreographyAdapter {
 module.exports = {
   BEAT_MS,
   CHOREOGRAPHY_VERSION,
+  DEFAULT_MOTION_SETTINGS,
   EXPRESSION_VALUES,
+  INTENSITY_VALUES,
   MAX_BEATS,
   MAX_CHOREOGRAPHIES,
   MIN_BEATS,
   PITCH_VALUES,
   PendingChoreographyAdapter,
+  TEMPO_VALUES,
   ChoreographyStore,
   YAW_VALUES,
   validateChoreography,

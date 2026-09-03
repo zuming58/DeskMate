@@ -32,7 +32,7 @@ extern "C" void app_main() {
 
     auto& servo_adapter = deskmate::xiaozhi::GetDeskMateServoAdapter();
     static deskmate::xiaozhi::MotionCoordinator motion_coordinator(
-        servo_adapter);
+        servo_adapter, &display_owner);
     static deskmate::xiaozhi::XiaozhiLinkEndpoint endpoint(
         display_owner, &motion_coordinator);
     endpoint.Start(NewBootEpoch(), MonotonicMilliseconds());

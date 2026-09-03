@@ -1,5 +1,7 @@
 #pragma once
 
+#include "choreography.h"
+#include "display_owner.h"
 #include "motion_preset.h"
 #include "motion_safety_core.h"
 #include "servo_adapter.h"
@@ -82,7 +84,8 @@ struct ManualCalibrationSnapshot {
 
 class MotionCoordinator {
 public:
-    explicit MotionCoordinator(ServoAdapter& adapter) noexcept;
+    explicit MotionCoordinator(ServoAdapter& adapter,
+                               DisplayOwner* display_owner = nullptr) noexcept;
 
     void StartSession(std::uint32_t session_id) noexcept;
     void OnLinkDisconnected() noexcept;
@@ -93,20 +96,29 @@ public:
                                     std::uint64_t now_ms) noexcept;
     MotionPresetResult ExecuteMotionPreset(
         const MotionPresetCommand& command, std::uint32_t now_ms) noexcept;
+    MotionPresetResult ExecuteChoreography(
+        const ChoreographyCommand& command, std::uint32_t now_ms) noexcept;
     bool RuntimeMotionAvailable() const noexcept;
     bool RuntimeMotionReady() const noexcept;
     ManualCalibrationSnapshot snapshot() const noexcept;
     MotionPresetSnapshot motion_preset_snapshot() const noexcept;
+    ChoreographySnapshot choreography_snapshot() const noexcept;
 
 private:
     enum class RuntimeAction : std::uint8_t {
         kNone,
         kRun,
         kRecenter,
+        kChoreography,
     };
 
     struct PresetActionRecord {
         MotionPresetCommand command{};
+        bool valid{};
+    };
+
+    struct ChoreographyActionRecord {
+        ChoreographyCommand command{};
         bool valid{};
     };
 
@@ -115,12 +127,19 @@ private:
                             const ManualCalibrationCommand& right) noexcept;
     static bool SamePresetCommand(const MotionPresetCommand& left,
                                   const MotionPresetCommand& right) noexcept;
+    static bool SameChoreographyCommand(
+        const ChoreographyCommand& left,
+        const ChoreographyCommand& right) noexcept;
     ManualCalibrationResult CheckAction(
         const ManualCalibrationCommand& command) const noexcept;
     MotionPresetResult CheckPresetAction(
         const MotionPresetCommand& command) const noexcept;
+    MotionPresetResult CheckChoreographyAction(
+        const ChoreographyCommand& command) const noexcept;
     void RecordAction(const ManualCalibrationCommand& command) noexcept;
     void RecordPresetAction(const MotionPresetCommand& command) noexcept;
+    void RecordChoreographyAction(
+        const ChoreographyCommand& command) noexcept;
     void ConsumeArm() noexcept;
     void RefreshState() noexcept;
     void RefreshPresetState() noexcept;
@@ -132,8 +151,12 @@ private:
                               std::uint32_t now_ms) noexcept;
     void BeginRuntimePreset(const MotionPresetCommand& command,
                             std::uint32_t now_ms) noexcept;
+    bool BeginRuntimeChoreography(const ChoreographyCommand& command,
+                                  std::uint32_t now_ms) noexcept;
     void AdvanceRuntimeAction(std::uint32_t now_ms) noexcept;
     void CompleteRuntimeAction() noexcept;
+    void CancelChoreography(MotionPresetResult result) noexcept;
+    void RefreshChoreographyState() noexcept;
     void LatchRuntimeFault(MotionPresetResult result) noexcept;
     ServoAdapterResult ApplyRuntimeTarget(
         const MotionTarget& target) noexcept;
@@ -144,6 +167,7 @@ private:
         ServoAdapterOperation operation) noexcept;
 
     ServoAdapter& adapter_;
+    DisplayOwner* display_owner_{};
     MotionSafetyCore normal_motion_{};
     ManualCalibrationCommand last_command_{};
     std::uint32_t session_id_{};
@@ -189,6 +213,22 @@ private:
     bool runtime_centered_{};
     bool runtime_servo_output_enabled_{};
     bool preset_operation_terminal_{};
+
+    static constexpr std::size_t kChoreographyActionHistorySize = 8;
+    std::array<ChoreographyActionRecord, kChoreographyActionHistorySize>
+        choreography_action_history_{};
+    std::size_t choreography_action_history_cursor_{};
+    ChoreographyCommand choreography_command_{};
+    MotionTarget choreography_target_{};
+    MotionPresetResult choreography_result_{MotionPresetResult::kNotReady};
+    MotionPresetState choreography_state_{MotionPresetState::kNotReady};
+    std::uint32_t last_choreography_action_id_{};
+    std::uint32_t completed_choreography_count_{};
+    std::uint8_t choreography_beat_index_{};
+    std::uint8_t choreography_completed_repeats_{};
+    bool choreography_returning_center_{};
+    bool choreography_operation_terminal_{};
+    bool choreography_display_lease_active_{};
 };
 
 using ManualCalibrationOwner = MotionCoordinator;

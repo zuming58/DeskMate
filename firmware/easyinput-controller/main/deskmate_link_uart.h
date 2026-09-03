@@ -16,6 +16,8 @@ class DeskMateLinkUart {
     bool take_manual_calibration_result(ManualCalibrationLinkResult& result);
     bool queue_motion_preset(const MotionPresetLinkRequest& request);
     bool take_motion_preset_result(MotionPresetLinkResult& result);
+    bool queue_choreography(const ChoreographyLinkRequest& request);
+    bool take_choreography_result(ChoreographyLinkResult& result);
     void mark_task_create_failure();
 
  private:
@@ -39,6 +41,11 @@ class DeskMateLinkUart {
     bool motion_preset_command_pending_{};
     bool motion_preset_active_{};
     bool motion_preset_result_pending_{};
+    ChoreographyLinkRequest queued_choreography_{};
+    ChoreographyLinkResult choreography_result_{};
+    bool choreography_command_pending_{};
+    bool choreography_active_{};
+    bool choreography_result_pending_{};
 };
 
 }  // namespace deskmate::easyinput

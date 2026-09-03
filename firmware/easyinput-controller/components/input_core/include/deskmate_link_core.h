@@ -33,6 +33,8 @@ enum class LinkMessageType : std::uint8_t {
     GetManualCalibrationStatus = 0x21,
     MotionPresetCommand = 0x22,
     GetMotionPresetStatus = 0x23,
+    RunChoreography = 0x24,
+    GetChoreographyStatus = 0x25,
 };
 
 enum class LinkErrorCode : std::uint8_t {
@@ -193,6 +195,27 @@ struct MotionPresetLinkResult {
     std::array<std::uint8_t, 20> payload{};
 };
 
+struct ChoreographyLinkRequest {
+    std::uint32_t host_request_id{};
+    std::uint8_t message_type{};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 40> payload{};
+};
+
+struct ChoreographyLinkResult {
+    std::uint32_t host_request_id{};
+    std::uint32_t link_sequence{};
+    std::uint32_t controller_boot_id{};
+    std::uint32_t peer_boot_id{};
+    std::uint8_t message_type{};
+    std::uint8_t terminal_flag{};
+    LinkErrorCode link_error{LinkErrorCode::None};
+    MotionPresetLinkTerminalKind terminal{
+        MotionPresetLinkTerminalKind::Internal};
+    std::uint8_t payload_length{};
+    std::array<std::uint8_t, 24> payload{};
+};
+
 std::uint16_t deskmate_link_crc16(const std::uint8_t* data,
                                   std::size_t length);
 bool encode_deskmate_link_frame(const LinkFrame& frame, LinkWireFrame& wire);
@@ -229,6 +252,8 @@ class LinkController {
     bool take_manual_calibration_result(ManualCalibrationLinkResult& result);
     bool queue_motion_preset(const MotionPresetLinkRequest& request);
     bool take_motion_preset_result(MotionPresetLinkResult& result);
+    bool queue_choreography(const ChoreographyLinkRequest& request);
+    bool take_choreography_result(ChoreographyLinkResult& result);
     void note_tx_drop();
     void set_parser_diagnostics(const LinkParserDiagnostics& diagnostics);
     LinkStatusSnapshot snapshot() const { return status_; }
@@ -242,6 +267,7 @@ class LinkController {
         bool needs_send{};
         bool manual_calibration{};
         bool motion_preset{};
+        bool choreography{};
         std::uint32_t host_request_id{};
     };
 
@@ -261,10 +287,16 @@ class LinkController {
         bool pending{};
     };
 
+    struct QueuedChoreography {
+        ChoreographyLinkRequest request{};
+        bool pending{};
+    };
+
     bool begin_request(LinkMessageType type, const std::uint8_t* payload,
                        std::uint16_t length, bool manual_calibration = false,
                        std::uint32_t host_request_id = 0,
-                       bool motion_preset = false);
+                       bool motion_preset = false,
+                       bool choreography = false);
     bool emit_pending(std::uint32_t now_ms, LinkWireFrame& outgoing);
     void complete_success();
     void complete_failure(std::uint32_t now_ms);
@@ -272,6 +304,7 @@ class LinkController {
     bool handle_response(const LinkFrame& incoming, std::uint32_t now_ms);
     bool valid_manual_response(const LinkFrame& incoming) const;
     bool valid_motion_response(const LinkFrame& incoming) const;
+    bool valid_choreography_response(const LinkFrame& incoming) const;
     void finish_manual(ManualCalibrationLinkTerminalKind terminal,
                        std::uint8_t terminal_flag = 0,
                        LinkErrorCode link_error = LinkErrorCode::None,
@@ -284,6 +317,12 @@ class LinkController {
                        const std::uint8_t* payload = nullptr,
                        std::uint8_t payload_length = 0);
     void cancel_motion(MotionPresetLinkTerminalKind terminal);
+    void finish_choreography(MotionPresetLinkTerminalKind terminal,
+                       std::uint8_t terminal_flag = 0,
+                       LinkErrorCode link_error = LinkErrorCode::None,
+                       const std::uint8_t* payload = nullptr,
+                       std::uint8_t payload_length = 0);
+    void cancel_choreography(MotionPresetLinkTerminalKind terminal);
     std::uint32_t next_sequence();
 
     LinkStatusSnapshot status_{};
@@ -295,6 +334,9 @@ class LinkController {
     QueuedMotionPreset queued_motion_preset_{};
     MotionPresetLinkResult motion_preset_result_{};
     bool motion_preset_result_pending_{};
+    QueuedChoreography queued_choreography_{};
+    ChoreographyLinkResult choreography_result_{};
+    bool choreography_result_pending_{};
     std::uint32_t controller_boot_id_{};
     std::uint32_t peer_boot_id_{};
     std::uint32_t sequence_{};

@@ -6,6 +6,7 @@ const REQUEST_PATTERN = /^[a-zA-Z0-9-]{8,80}$/;
 const LINK_STATES = new Set(["disabled", "waiting", "connected", "faulted"]);
 const { decodeManualCalibrationInputReport } = require("./manual-calibration-hid.cjs");
 const { decodeMotionPresetInputReport } = require("./motion-presets-hid.cjs");
+const { decodeChoreographyInputReport } = require("./choreography-hid.cjs");
 
 function sanitizeMotionWriteReason(value) {
   const reason = String(value || "");
@@ -25,6 +26,18 @@ function parseBridgeLine(line) {
   let value;
   try { value = JSON.parse(line); } catch { return null; }
   if (!value || value.version !== 1) return null;
+  if (value.type === "choreography-report") {
+    if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    try {
+      const report = Buffer.from(value.reportBase64, "base64");
+      if (report.toString("base64") !== value.reportBase64) return null;
+      return Object.freeze({ version: 1, type: "choreography-report", source: "easyinput-hid", choreography: decodeChoreographyInputReport(report), time: value.time, sequence: value.sequence });
+    } catch { return null; }
+  }
+  if (value.type === "choreography-write") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : "choreography-write-failed", time: value.time, sequence: value.sequence });
+  }
   if (value.type === "motion-preset-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     try {
@@ -159,7 +172,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
-    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "choreography-write", "choreography-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) {
         this.reset("easyinput-hid", "F22");

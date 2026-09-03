@@ -85,7 +85,8 @@ bool DeskMateLinkUart::queue_manual_calibration(
         published_status_.state == LinkControllerState::Connected &&
         !manual_calibration_active_ &&
         !manual_calibration_result_pending_ && !motion_preset_active_ &&
-        !motion_preset_result_pending_ && request.host_request_id != 0 &&
+        !motion_preset_result_pending_ && !choreography_active_ &&
+        !choreography_result_pending_ && request.host_request_id != 0 &&
         (request.message_type == static_cast<std::uint8_t>(
                                      LinkMessageType::
                                          ManualCalibrationCommand) ||
@@ -108,7 +109,8 @@ bool DeskMateLinkUart::queue_motion_preset(
         published_status_.state == LinkControllerState::Connected &&
         !motion_preset_active_ && !motion_preset_result_pending_ &&
         !manual_calibration_active_ &&
-        !manual_calibration_result_pending_ && request.host_request_id != 0 &&
+        !manual_calibration_result_pending_ && !choreography_active_ &&
+        !choreography_result_pending_ && request.host_request_id != 0 &&
         (request.message_type == static_cast<std::uint8_t>(
                                      LinkMessageType::MotionPresetCommand) ||
          request.message_type == static_cast<std::uint8_t>(
@@ -136,6 +138,29 @@ bool DeskMateLinkUart::take_manual_calibration_result(
     return ready;
 }
 
+bool DeskMateLinkUart::queue_choreography(
+    const ChoreographyLinkRequest& request) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool accepted =
+        published_status_.state == LinkControllerState::Connected &&
+        !choreography_active_ && !choreography_result_pending_ &&
+        !manual_calibration_active_ &&
+        !manual_calibration_result_pending_ && !motion_preset_active_ &&
+        !motion_preset_result_pending_ && request.host_request_id != 0 &&
+        (request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::RunChoreography) ||
+         request.message_type == static_cast<std::uint8_t>(
+                                     LinkMessageType::
+                                         GetChoreographyStatus));
+    if (accepted) {
+        queued_choreography_ = request;
+        choreography_command_pending_ = true;
+        choreography_active_ = true;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return accepted;
+}
+
 bool DeskMateLinkUart::take_motion_preset_result(
     MotionPresetLinkResult& result) {
     portENTER_CRITICAL(&status_mux_);
@@ -145,6 +170,20 @@ bool DeskMateLinkUart::take_motion_preset_result(
         motion_preset_result_ = {};
         motion_preset_result_pending_ = false;
         motion_preset_active_ = false;
+    }
+    portEXIT_CRITICAL(&status_mux_);
+    return ready;
+}
+
+bool DeskMateLinkUart::take_choreography_result(
+    ChoreographyLinkResult& result) {
+    portENTER_CRITICAL(&status_mux_);
+    const bool ready = choreography_result_pending_;
+    if (ready) {
+        result = choreography_result_;
+        choreography_result_ = {};
+        choreography_result_pending_ = false;
+        choreography_active_ = false;
     }
     portEXIT_CRITICAL(&status_mux_);
     return ready;
@@ -257,6 +296,34 @@ void DeskMateLinkUart::mark_task_create_failure() {
             portEXIT_CRITICAL(&status_mux_);
         }
 
+        ChoreographyLinkRequest choreography_request{};
+        bool choreography_request_ready = false;
+        portENTER_CRITICAL(&status_mux_);
+        if (choreography_command_pending_) {
+            choreography_request = queued_choreography_;
+            queued_choreography_ = {};
+            choreography_command_pending_ = false;
+            choreography_request_ready = true;
+        }
+        portEXIT_CRITICAL(&status_mux_);
+        if (choreography_request_ready &&
+            !controller_.queue_choreography(choreography_request)) {
+            ChoreographyLinkResult rejected{};
+            rejected.host_request_id = choreography_request.host_request_id;
+            rejected.controller_boot_id =
+                controller_.snapshot().controller_boot_id;
+            rejected.peer_boot_id = controller_.snapshot().peer_boot_id;
+            rejected.message_type = choreography_request.message_type;
+            rejected.terminal =
+                controller_.snapshot().state == LinkControllerState::Connected
+                    ? MotionPresetLinkTerminalKind::Internal
+                    : MotionPresetLinkTerminalKind::Disconnected;
+            portENTER_CRITICAL(&status_mux_);
+            choreography_result_ = rejected;
+            choreography_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
+        }
+
         LinkWireFrame outgoing{};
         if (controller_.poll(now_ms, outgoing)) {
             const int written = uart_write_bytes(
@@ -275,6 +342,13 @@ void DeskMateLinkUart::mark_task_create_failure() {
             portENTER_CRITICAL(&status_mux_);
             motion_preset_result_ = motion_result;
             motion_preset_result_pending_ = true;
+            portEXIT_CRITICAL(&status_mux_);
+        }
+        ChoreographyLinkResult choreography_result{};
+        if (controller_.take_choreography_result(choreography_result)) {
+            portENTER_CRITICAL(&status_mux_);
+            choreography_result_ = choreography_result;
+            choreography_result_pending_ = true;
             portEXIT_CRITICAL(&status_mux_);
         }
         publish_status();

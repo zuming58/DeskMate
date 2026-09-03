@@ -205,6 +205,71 @@ internal static class VendorReportProtocol
         return report[18] == 0 && report[19] == 0 && length == 0;
     }
 
+    public static bool IsValidChoreographyRequest(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x1a ||
+            !report.Slice(1, 4).SequenceEqual("DMCQ"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[8] != 0 ||
+            BitConverter.ToUInt32(report.Slice(9, 4)) == 0 ||
+            report.Slice(44).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(42, 2)) !=
+                Crc16Ccitt(report.Slice(1, 41))) return false;
+        if (report[6] == 2)
+            return report[7] == 0 && report.Slice(13, 29).ContainsAnyExcept((byte)0) == false;
+        if (report[7] is < 1 or > 4 || report[13] is < 2 or > 8 ||
+            report[14] is < 1 or > 4 || report[15] is < 1 or > 3 ||
+            report[16] is < 1 or > 3 || report[17] is < 1 or > 3) return false;
+        var changed = false;
+        for (var index = 0; index < 8; index++)
+        {
+            var offset = 18 + index * 3;
+            if (index < report[13])
+            {
+                if (report[offset] > 3 || report[offset + 1] > 3 || report[offset + 2] > 3) return false;
+                changed |= report[offset] != 0 || report[offset + 1] != 0 || report[offset + 2] != 0;
+            }
+            else if (report.Slice(offset, 3).ContainsAnyExcept((byte)0)) return false;
+        }
+        return changed;
+    }
+
+    public static bool IsValidChoreographyResponse(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x1b ||
+            !report.Slice(1, 4).SequenceEqual("DMCS"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[7] is < 1 or > 2 ||
+            report[8] > 11 || BitConverter.ToUInt32(report.Slice(9, 4)) == 0 ||
+            report[17] != (report[7] == 1 ? 0x24 : 0x25) ||
+            report[18] is not (0 or 0x02 or 0x04) || report[19] > 6 ||
+            report[20] is not (0 or 24) ||
+            report.Slice(61).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(59, 2)) !=
+                Crc16Ccitt(report.Slice(1, 58))) return false;
+        var length = report[20];
+        if (report.Slice(21 + length, 24 - length).ContainsAnyExcept((byte)0)) return false;
+        if (report[7] == 2)
+        {
+            if (report.Slice(53, 6).ContainsAnyExcept((byte)0)) return false;
+        }
+        else if (report[53] is < 1 or > 4 || report[54] is < 2 or > 8 ||
+                 report[55] is < 1 or > 4 || report[56] is < 1 or > 3 ||
+                 report[57] is < 1 or > 3 || report[58] is < 1 or > 3) return false;
+        if (report[6] == 1) return report[8] == 0 && report[18] == 0 && report[19] == 0 && length == 0;
+        if (report[8] == 0) return report[18] == 0x02 && report[19] == 0 && length == 24 && IsValidChoreographyEndpoint(report.Slice(21, 24));
+        if (report[8] == 8) return report[18] == 0x04 && report[19] is >= 1 and <= 6 && length == 0;
+        return report[18] == 0 && report[19] == 0 && length == 0;
+    }
+
+    private static bool IsValidChoreographyEndpoint(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length != 24 || BitConverter.ToUInt32(payload.Slice(0, 4)) == 0 ||
+            payload[12] > 14 || payload[13] > 5 || payload[14] > 8 ||
+            (payload[15] != 0xff && payload[15] > 7) || payload[16] > 3 ||
+            payload[17] > payload[16] || payload[18] > 4 ||
+            payload[20] > 3 || payload[21] > 3 || payload[22] != 0 || payload[23] != 0) return false;
+        return ((payload[19] & 0x80) != 0) == (payload[12] == 1);
+    }
+
     private static bool IsValidMotionCommandFields(byte source, byte operation, byte preset, byte repeat)
     {
         if (operation == 1) return source is >= 1 and <= 4 && preset is >= 1 and <= 4 && repeat is >= 1 and <= 3;

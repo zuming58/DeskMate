@@ -7,6 +7,7 @@ enable_testing()
 
 set(CORE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/include")
 set(CORE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/choreography_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/endpoint_model.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/link_endpoint.cpp"
@@ -18,6 +19,33 @@ set(CORE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_preset_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
 )
+
+add_executable(choreography_owner_tests
+    choreography_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
+)
+target_include_directories(choreography_owner_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+if(MSVC)
+    target_compile_options(choreography_owner_tests PRIVATE /W4 /WX)
+else()
+    target_compile_options(choreography_owner_tests PRIVATE
+        -Wall -Wextra -Wpedantic -Werror
+    )
+endif()
+add_test(NAME choreography_owner_tests COMMAND choreography_owner_tests)
+
+add_executable(choreography_link_tests
+    choreography_link_tests.cpp ${CORE_SOURCES}
+)
+target_include_directories(choreography_link_tests PRIVATE
+    "${CORE_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+add_test(NAME choreography_link_tests COMMAND choreography_link_tests)
 
 add_executable(motion_safety_core_tests
     motion_safety_core_tests.cpp
@@ -35,6 +63,7 @@ add_test(NAME motion_safety_core_tests COMMAND motion_safety_core_tests)
 
 add_executable(manual_calibration_owner_tests
     manual_calibration_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"
@@ -55,6 +84,7 @@ add_test(NAME manual_calibration_owner_tests
 
 add_executable(motion_preset_owner_tests
     motion_preset_owner_tests.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/display_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/manual_calibration_owner.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/motion_safety_core.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/../components/endpoint_core/src/servo_adapter.cpp"

@@ -69,6 +69,9 @@ struct DisplayOwnerSnapshot {
     std::uint32_t next_animation_ms{};
     std::uint32_t session_epoch{};
     DisplayOwnerDiagnostics diagnostics{};
+    bool choreography_lease_active{};
+    std::uint32_t choreography_lease_id{};
+    AgentState external_desired_state{AgentState::kIdle};
 };
 
 class DisplayOwner {
@@ -84,6 +87,10 @@ public:
     bool Initialize() noexcept;
     DisplayAcceptResult Accept(std::uint32_t transition_id,
                                AgentState state) noexcept;
+    bool AcquireChoreographyLease(std::uint32_t lease_id) noexcept;
+    bool SetChoreographyLeaseState(std::uint32_t lease_id,
+                                   AgentState state) noexcept;
+    void ReleaseChoreographyLease(std::uint32_t lease_id) noexcept;
     bool Service(std::uint32_t now_ms) noexcept;
     void ResetSession() noexcept;
     void Disable() noexcept;
@@ -113,6 +120,7 @@ private:
     bool enabled_{};
     AgentState current_state_{AgentState::kIdle};
     AgentState desired_state_{AgentState::kIdle};
+    AgentState external_desired_state_{AgentState::kIdle};
     AgentScene current_scene_{AgentScene::kNeutral};
     bool blink_closed_{};
     bool blink_scheduled_{};
@@ -121,6 +129,8 @@ private:
     std::uint32_t session_epoch_{1};
     std::uint32_t last_transition_id_{};
     bool last_transition_valid_{};
+    bool choreography_lease_active_{};
+    std::uint32_t choreography_lease_id_{};
     DisplayOwnerDiagnostics diagnostics_{};
 };
 

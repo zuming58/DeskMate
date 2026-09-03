@@ -272,6 +272,9 @@ void LinkController::start(std::uint32_t controller_boot_id,
     queued_motion_preset_ = {};
     motion_preset_result_ = {};
     motion_preset_result_pending_ = false;
+    queued_choreography_ = {};
+    choreography_result_ = {};
+    choreography_result_pending_ = false;
     controller_boot_id_ = controller_boot_id == 0 ? 1 : controller_boot_id;
     status_.controller_boot_id = controller_boot_id_;
     peer_boot_id_ = 0;
@@ -286,10 +289,12 @@ void LinkController::start(std::uint32_t controller_boot_id,
 void LinkController::fault() {
     cancel_manual(ManualCalibrationLinkTerminalKind::Disconnected);
     cancel_motion(MotionPresetLinkTerminalKind::Disconnected);
+    cancel_choreography(MotionPresetLinkTerminalKind::Disconnected);
     pending_ = {};
     queued_agent_state_ = {};
     queued_manual_calibration_ = {};
     queued_motion_preset_ = {};
+    queued_choreography_ = {};
     peer_boot_id_ = 0;
     capabilities_known_ = false;
     status_.agent_state = LinkAgentState::Idle;
@@ -312,7 +317,8 @@ bool LinkController::begin_request(LinkMessageType type,
                                    std::uint16_t length,
                                    bool manual_calibration,
                                    std::uint32_t host_request_id,
-                                   bool motion_preset) {
+                                   bool motion_preset,
+                                   bool choreography) {
     if (pending_.active || length > kDeskMateLinkMaxPayloadBytes ||
         (payload == nullptr && length != 0)) {
         return false;
@@ -329,6 +335,7 @@ bool LinkController::begin_request(LinkMessageType type,
     pending_.needs_send = true;
     pending_.manual_calibration = manual_calibration;
     pending_.motion_preset = motion_preset;
+    pending_.choreography = choreography;
     pending_.host_request_id = host_request_id;
     return true;
 }
@@ -364,6 +371,8 @@ bool LinkController::poll(std::uint32_t now_ms, LinkWireFrame& outgoing) {
                 finish_manual(ManualCalibrationLinkTerminalKind::Timeout);
             } else if (pending_.motion_preset) {
                 finish_motion(MotionPresetLinkTerminalKind::Timeout);
+            } else if (pending_.choreography) {
+                finish_choreography(MotionPresetLinkTerminalKind::Timeout);
             }
             pending_.active = false;
             complete_failure(now_ms);
@@ -406,6 +415,15 @@ bool LinkController::poll(std::uint32_t now_ms, LinkWireFrame& outgoing) {
                    request.host_request_id, true) &&
                emit_pending(now_ms, outgoing);
     }
+    if (queued_choreography_.pending) {
+        const ChoreographyLinkRequest request = queued_choreography_.request;
+        queued_choreography_ = {};
+        return begin_request(
+                   static_cast<LinkMessageType>(request.message_type),
+                   request.payload.data(), request.payload_length, false,
+                   request.host_request_id, false, true) &&
+               emit_pending(now_ms, outgoing);
+    }
     if (queued_agent_state_.pending) {
         std::array<std::uint8_t, 5> payload{};
         write_u32(payload.data(), queued_agent_state_.transition_id);
@@ -431,10 +449,12 @@ void LinkController::complete_success() {
 void LinkController::disconnect(std::uint32_t now_ms) {
     cancel_manual(ManualCalibrationLinkTerminalKind::Disconnected);
     cancel_motion(MotionPresetLinkTerminalKind::Disconnected);
+    cancel_choreography(MotionPresetLinkTerminalKind::Disconnected);
     pending_ = {};
     queued_agent_state_ = {};
     queued_manual_calibration_ = {};
     queued_motion_preset_ = {};
+    queued_choreography_ = {};
     capabilities_known_ = false;
     status_.agent_state = LinkAgentState::Idle;
     status_.last_error = LinkErrorCode::None;
@@ -540,6 +560,10 @@ bool LinkController::handle_response(const LinkFrame& incoming,
         type == LinkMessageType::GetMotionPresetStatus) {
         return valid_motion_response(incoming);
     }
+    if (type == LinkMessageType::RunChoreography ||
+        type == LinkMessageType::GetChoreographyStatus) {
+        return valid_choreography_response(incoming);
+    }
     return false;
 }
 
@@ -594,6 +618,32 @@ bool LinkController::valid_motion_response(const LinkFrame& incoming) const {
     const bool duplicate = (incoming.payload[19] & (1u << 6)) != 0;
     if (duplicate != (incoming.payload[12] == 1)) return false;
     return true;
+}
+
+bool LinkController::valid_choreography_response(
+    const LinkFrame& incoming) const {
+    if (!pending_.choreography || incoming.payload_length != 24) return false;
+    const auto type = static_cast<LinkMessageType>(incoming.type);
+    const bool command = type == LinkMessageType::RunChoreography;
+    const bool status = type == LinkMessageType::GetChoreographyStatus;
+    if (!command && !status) return false;
+    if (read_u32(incoming.payload.data()) != controller_boot_id_ ||
+        (command &&
+         (pending_.frame.payload_length != 40 ||
+          read_u32(incoming.payload.data() + 4) !=
+              read_u32(pending_.frame.payload.data() + 4))) ||
+        incoming.payload[12] > 14 || incoming.payload[13] > 5 ||
+        incoming.payload[14] > 8 ||
+        (incoming.payload[15] != 0xff && incoming.payload[15] > 7) ||
+        incoming.payload[16] > 3 || incoming.payload[17] > 3 ||
+        incoming.payload[18] > 4 ||
+        incoming.payload[20] > 3 || incoming.payload[21] > 3 ||
+        incoming.payload[22] != 0 || incoming.payload[23] != 0) {
+        return false;
+    }
+    if (incoming.payload[17] > incoming.payload[16]) return false;
+    const bool duplicate = (incoming.payload[19] & (1u << 7)) != 0;
+    return duplicate == (incoming.payload[12] == 1);
 }
 
 void LinkController::finish_manual(
@@ -680,6 +730,45 @@ void LinkController::cancel_motion(MotionPresetLinkTerminalKind terminal) {
     motion_preset_result_pending_ = true;
 }
 
+void LinkController::finish_choreography(
+    MotionPresetLinkTerminalKind terminal, std::uint8_t terminal_flag,
+    LinkErrorCode link_error, const std::uint8_t* payload,
+    std::uint8_t payload_length) {
+    if (!pending_.choreography || choreography_result_pending_) return;
+    ChoreographyLinkResult result{};
+    result.host_request_id = pending_.host_request_id;
+    result.link_sequence = pending_.frame.sequence;
+    result.controller_boot_id = controller_boot_id_;
+    result.peer_boot_id = peer_boot_id_;
+    result.message_type = pending_.frame.type;
+    result.terminal_flag = terminal_flag;
+    result.link_error = link_error;
+    result.terminal = terminal;
+    result.payload_length = payload_length;
+    if (payload != nullptr && payload_length <= result.payload.size()) {
+        std::copy_n(payload, payload_length, result.payload.begin());
+    }
+    choreography_result_ = result;
+    choreography_result_pending_ = true;
+}
+
+void LinkController::cancel_choreography(
+    MotionPresetLinkTerminalKind terminal) {
+    if (pending_.choreography) {
+        finish_choreography(terminal);
+        return;
+    }
+    if (!queued_choreography_.pending || choreography_result_pending_) return;
+    ChoreographyLinkResult result{};
+    result.host_request_id = queued_choreography_.request.host_request_id;
+    result.controller_boot_id = controller_boot_id_;
+    result.peer_boot_id = peer_boot_id_;
+    result.message_type = queued_choreography_.request.message_type;
+    result.terminal = terminal;
+    choreography_result_ = result;
+    choreography_result_pending_ = true;
+}
+
 void LinkController::receive(const LinkFrame& incoming,
                              std::uint32_t now_ms) {
     increment_saturated(status_.rx_frames);
@@ -698,6 +787,9 @@ void LinkController::receive(const LinkFrame& incoming,
                     ManualCalibrationLinkTerminalKind::InvalidResponse);
             } else if (pending_.motion_preset) {
                 finish_motion(MotionPresetLinkTerminalKind::InvalidResponse);
+            } else if (pending_.choreography) {
+                finish_choreography(
+                    MotionPresetLinkTerminalKind::InvalidResponse);
             }
             pending_.active = false;
             complete_failure(now_ms);
@@ -713,6 +805,10 @@ void LinkController::receive(const LinkFrame& incoming,
             finish_motion(MotionPresetLinkTerminalKind::LinkError,
                           static_cast<std::uint8_t>(LinkFrameFlag::Error),
                           status_.last_error);
+        } else if (pending_.choreography) {
+            finish_choreography(MotionPresetLinkTerminalKind::LinkError,
+                          static_cast<std::uint8_t>(LinkFrameFlag::Error),
+                          status_.last_error);
         }
         pending_.active = false;
         complete_failure(now_ms);
@@ -724,6 +820,9 @@ void LinkController::receive(const LinkFrame& incoming,
             finish_manual(ManualCalibrationLinkTerminalKind::InvalidResponse);
         } else if (pending_.motion_preset) {
             finish_motion(MotionPresetLinkTerminalKind::InvalidResponse);
+        } else if (pending_.choreography) {
+            finish_choreography(
+                MotionPresetLinkTerminalKind::InvalidResponse);
         }
         pending_.active = false;
         complete_failure(now_ms);
@@ -736,6 +835,11 @@ void LinkController::receive(const LinkFrame& incoming,
                       static_cast<std::uint8_t>(incoming.payload_length));
     } else if (pending_.motion_preset) {
         finish_motion(MotionPresetLinkTerminalKind::Response,
+                      static_cast<std::uint8_t>(LinkFrameFlag::Response),
+                      LinkErrorCode::None, incoming.payload.data(),
+                      static_cast<std::uint8_t>(incoming.payload_length));
+    } else if (pending_.choreography) {
+        finish_choreography(MotionPresetLinkTerminalKind::Response,
                       static_cast<std::uint8_t>(LinkFrameFlag::Response),
                       LinkErrorCode::None, incoming.payload.data(),
                       static_cast<std::uint8_t>(incoming.payload_length));
@@ -772,8 +876,10 @@ bool LinkController::queue_manual_calibration(
         queued_manual_calibration_.pending ||
         manual_calibration_result_pending_ ||
         queued_motion_preset_.pending || motion_preset_result_pending_ ||
+        queued_choreography_.pending || choreography_result_pending_ ||
         (pending_.active &&
-         (pending_.manual_calibration || pending_.motion_preset))) {
+         (pending_.manual_calibration || pending_.motion_preset ||
+          pending_.choreography))) {
         return false;
     }
     queued_manual_calibration_.request = request;
@@ -797,10 +903,12 @@ bool LinkController::queue_motion_preset(
         request.host_request_id == 0 || (!command && !status) ||
         request.payload_length != (command ? 16u : 0u) ||
         queued_motion_preset_.pending || motion_preset_result_pending_ ||
+        queued_choreography_.pending || choreography_result_pending_ ||
         queued_manual_calibration_.pending ||
         manual_calibration_result_pending_ ||
         (pending_.active &&
-         (pending_.manual_calibration || pending_.motion_preset))) {
+         (pending_.manual_calibration || pending_.motion_preset ||
+          pending_.choreography))) {
         return false;
     }
     queued_motion_preset_.request = request;
@@ -814,6 +922,42 @@ bool LinkController::take_motion_preset_result(
     result = motion_preset_result_;
     motion_preset_result_ = {};
     motion_preset_result_pending_ = false;
+    return true;
+}
+
+bool LinkController::queue_choreography(
+    const ChoreographyLinkRequest& request) {
+    const bool command = request.message_type == static_cast<std::uint8_t>(
+        LinkMessageType::RunChoreography);
+    const bool status = request.message_type == static_cast<std::uint8_t>(
+        LinkMessageType::GetChoreographyStatus);
+    if (status_.state != LinkControllerState::Connected ||
+        !capabilities_known_ ||
+        (status_.enabled_capabilities & kLinkT15RequiredCapabilities) !=
+            kLinkT15RequiredCapabilities ||
+        (status_.enabled_capabilities & kLinkT15ForbiddenCapabilities) != 0 ||
+        request.host_request_id == 0 || (!command && !status) ||
+        request.payload_length != (command ? 40u : 0u) ||
+        queued_choreography_.pending || choreography_result_pending_ ||
+        queued_motion_preset_.pending || motion_preset_result_pending_ ||
+        queued_manual_calibration_.pending ||
+        manual_calibration_result_pending_ ||
+        (pending_.active &&
+         (pending_.manual_calibration || pending_.motion_preset ||
+          pending_.choreography))) {
+        return false;
+    }
+    queued_choreography_.request = request;
+    queued_choreography_.pending = true;
+    return true;
+}
+
+bool LinkController::take_choreography_result(
+    ChoreographyLinkResult& result) {
+    if (!choreography_result_pending_) return false;
+    result = choreography_result_;
+    choreography_result_ = {};
+    choreography_result_pending_ = false;
     return true;
 }
 

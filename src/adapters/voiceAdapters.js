@@ -60,6 +60,9 @@ export class DesktopBridgeAdapter {
   async copyChoreography(name) { return this.bridge?.copyChoreography ? this.bridge.copyChoreography(name) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
   async deleteChoreography(name) { return this.bridge?.deleteChoreography ? this.bridge.deleteChoreography(name) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
   async runChoreography(value) { return this.bridge?.runChoreography ? this.bridge.runChoreography(value) : { ok: false, ready: false, state: "not-ready", reason: "desktop-bridge-unavailable" }; }
+  async setDefaultDance(name) { return this.bridge?.setDefaultDance ? this.bridge.setDefaultDance(name) : { ok: false, reason: "desktop-bridge-unavailable", actions: [] }; }
+  async getMotionSettings() { return this.bridge?.getMotionSettings ? this.bridge.getMotionSettings() : { ok: false, reason: "desktop-bridge-unavailable", motionSettings: { intensity: "standard", tempo: "standard" } }; }
+  async setMotionSettings(value) { return this.bridge?.setMotionSettings ? this.bridge.setMotionSettings(value) : { ok: false, reason: "desktop-bridge-unavailable", motionSettings: { intensity: "standard", tempo: "standard" } }; }
   async networkSummary() { return this.bridge?.getNetworkSummary ? this.bridge.getNetworkSummary() : { available: Boolean(globalThis.navigator?.onLine), transports: [], lanAudio: "desktop-bridge-unavailable", sameLanPossible: Boolean(globalThis.navigator?.onLine) }; }
   async getEasyInputAudioStatus() { return this.bridge?.getEasyInputAudioStatus ? this.bridge.getEasyInputAudioStatus() : { configured: false, state: "desktop-bridge-unavailable", micTest: false, level: 0 }; }
   async openEasyInputAudioSetup() { return this.bridge?.openEasyInputAudioSetup ? this.bridge.openEasyInputAudioSetup() : { ok: false, reason: "desktop-bridge-unavailable" }; }
@@ -119,6 +122,7 @@ export class DesktopBridgeAdapter {
   onManualCalibrationStatus(listener) { return this.bridge?.onManualCalibrationStatus ? this.bridge.onManualCalibrationStatus(listener) : () => {}; }
   onManualControlStatus(listener) { return this.bridge?.onManualControlStatus ? this.bridge.onManualControlStatus(listener) : () => {}; }
   onMotionPresetStatus(listener) { return this.bridge?.onMotionPresetStatus ? this.bridge.onMotionPresetStatus(listener) : () => {}; }
+  onChoreographyStatus(listener) { return this.bridge?.onChoreographyStatus ? this.bridge.onChoreographyStatus(listener) : () => {}; }
   onHostActionResult(listener) { return this.bridge?.onHostActionResult ? this.bridge.onHostActionResult(listener) : () => {}; }
   onAgentProviderState(listener) { return this.bridge?.onAgentProviderState ? this.bridge.onAgentProviderState(listener) : () => {}; }
   onCodexAgentState(listener) { return this.bridge?.onCodexAgentState ? this.bridge.onCodexAgentState(listener) : () => {}; }

@@ -88,7 +88,7 @@ test("voice intent opens enabled apps, rejects disabled apps, answers Codex dete
   assert.equal((await bridge.analyze("桌面软件做完了吗")).result.answer, "桌面软件 已完成：测试通过");
   classified = { type: "run_motion_preset", preset: "nod" };
   const motion = await bridge.analyze("点两次头");
-  assert.equal(motion.reason, "motion-preset-contract-not-frozen");
+  assert.equal(motion.reason, "motion-action-unavailable");
   assert.equal(motion.result.preset, "nod");
 });
 

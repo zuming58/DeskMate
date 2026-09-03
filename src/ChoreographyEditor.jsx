@@ -7,6 +7,7 @@ import {
   IconPlayerPlay as PlayerPlay,
   IconPlus as Plus,
   IconRefresh as Refresh,
+  IconStar as Star,
   IconTrash as Trash,
 } from "@tabler/icons-react";
 import { expressionAssetUrl } from "./CompanionFace.jsx";
@@ -36,6 +37,14 @@ const REASON_COPY = Object.freeze({
   "choreography-limit-reached": "最多只能保存 8 个自定义动作。",
   "choreography-not-found": "这个动作已经不存在，请刷新列表。",
   "choreography-transport-not-frozen": "自定义动作实体传输尚未接入。",
+  "choreography-interface-unavailable": "当前 EasyInput 固件还没有提供自定义动作接口。",
+  "easyinput-not-connected": "EasyInput 尚未连接。",
+  "adapter-unavailable": "小智舵机适配器尚未就绪。",
+  "not-ready": "小智尚未回中就绪，请稍后重试。",
+  "emergency-stopped": "急停仍处于锁定状态，请先解除急停并回中。",
+  "faulted": "小智动作端报告故障，请先停止并检查设备。",
+  "choreography-timeout": "等待小智完成动作超时。",
+  "motion-settings-invalid": "动作强度或速度设置无效。",
   "desktop-bridge-unavailable": "当前不是可用的 DeskMate 桌面环境。",
 });
 
@@ -78,6 +87,7 @@ function TrackChoices({ beatIndex, label, value, values, onChange, expression = 
 export function ChoreographyEditor({ notify }) {
   const [actions, setActions] = useState([]);
   const [selectedName, setSelectedName] = useState("");
+  const [defaultDanceName, setDefaultDanceName] = useState("");
   const [draft, setDraft] = useState(() => createChoreographyDraft());
   const [adapter, setAdapter] = useState({ ready: false, state: "not-ready", reason: "choreography-status-not-read" });
   const [busy, setBusy] = useState("");
@@ -101,6 +111,7 @@ export function ChoreographyEditor({ notify }) {
       voiceAdapters.desktop.getChoreographyStatus().catch(() => ({ ready: false, state: "not-ready", reason: "choreography-status-unavailable" })),
     ]);
     setActions(Array.isArray(list?.actions) ? list.actions : []);
+    setDefaultDanceName(typeof list?.defaultDanceName === "string" ? list.defaultDanceName : "");
     setAdapter(status || { ready: false, state: "not-ready", reason: "choreography-status-unavailable" });
   }, []);
 
@@ -156,6 +167,7 @@ export function ChoreographyEditor({ notify }) {
       const result = await voiceAdapters.desktop.saveChoreography({ action: checked.value, previousName: selectedName });
       if (!result?.ok) return notify(`保存失败：${reasonCopy(result?.reason)}`);
       setActions(result.actions || []);
+      setDefaultDanceName(result.defaultDanceName || "");
       setSelectedName(result.action.name);
       setDraft(clone(result.action));
       notify(`自定义动作“${result.action.name}”已保存到本机`);
@@ -169,6 +181,7 @@ export function ChoreographyEditor({ notify }) {
       const result = await voiceAdapters.desktop.copyChoreography(selectedName);
       if (!result?.ok) return notify(`复制失败：${reasonCopy(result?.reason)}`);
       setActions(result.actions || []);
+      setDefaultDanceName(result.defaultDanceName || "");
       setSelectedName(result.action.name);
       setDraft(clone(result.action));
       notify(`已复制为“${result.action.name}”`);
@@ -182,8 +195,22 @@ export function ChoreographyEditor({ notify }) {
       const result = await voiceAdapters.desktop.deleteChoreography(selectedName);
       if (!result?.ok) return notify(`删除失败：${reasonCopy(result?.reason)}`);
       setActions(result.actions || []);
+      setDefaultDanceName(result.defaultDanceName || "");
       newDraft();
       notify("自定义动作已从本机删除");
+    } finally { setBusy(""); }
+  };
+
+  const toggleDefaultDance = async () => {
+    if (!selectedName) return notify("请先保存这个动作，再把它设为默认舞蹈");
+    setBusy("default");
+    try {
+      const next = defaultDanceName === selectedName ? "" : selectedName;
+      const result = await voiceAdapters.desktop.setDefaultDance(next);
+      if (!result?.ok) return notify(`设置失败：${reasonCopy(result?.reason)}`);
+      setDefaultDanceName(result.defaultDanceName || "");
+      setActions(result.actions || actions);
+      notify(next ? `以后点击“跳舞”或说“小智跳个舞”，会执行“${next}”` : "已恢复使用内置跳舞动作");
     } finally { setBusy(""); }
   };
 
@@ -193,8 +220,9 @@ export function ChoreographyEditor({ notify }) {
     if (adapter.ready !== true) return notify(`实体执行不可用：${reasonCopy(adapter.reason)}`);
     setBusy("run");
     try {
-      const result = await voiceAdapters.desktop.runChoreography(checked.value);
-      notify(result?.ok ? "自定义动作请求已发送；实体结果仍需端点证据和现场观察" : `实体执行未开始：${reasonCopy(result?.reason)}`);
+      const result = await voiceAdapters.desktop.runChoreography({ action: checked.value, source: "UI" });
+      setAdapter(result?.ok ? { ready: true, state: "ready", reason: "" } : { ready: false, state: result?.state || "failed", reason: result?.reason || "choreography-execute-failed" });
+      notify(result?.ok ? "自定义动作已由小智执行完成并回中" : `实体执行未开始：${reasonCopy(result?.reason)}`);
     } finally { setBusy(""); }
   };
 
@@ -214,12 +242,13 @@ export function ChoreographyEditor({ notify }) {
 
   return (
     <Card className="choreography-editor">
-      <SectionTitle index="02" title="自定义舞蹈" description="同列同步，逐列播放。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
+      <SectionTitle index="02" title="自定义舞蹈" description="同列同步，逐列播放；可设为快速动作和语音指令使用的默认舞蹈。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
       <div className="choreography-toolbar">
-        <label><span>已保存动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="已保存的自定义动作"><option value="">新建草稿</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}</option>)}</Select></label>
+        <label><span>已保存动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="已保存的自定义动作"><option value="">新建草稿</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}{action.name === defaultDanceName ? " · 默认舞蹈" : ""}</option>)}</Select></label>
         <Button icon={Plus} onClick={newDraft}>新建</Button>
         <Button icon={Copy} disabled={!selectedName || busy !== ""} onClick={() => { void copyAction(); }}>复制</Button>
         <Button icon={Trash} variant="ghost" disabled={!selectedName || busy !== ""} onClick={() => { void deleteAction(); }}>删除</Button>
+        <Button icon={Star} disabled={!selectedName || busy !== ""} onClick={() => { void toggleDefaultDance(); }}>{selectedName && selectedName === defaultDanceName ? "取消默认舞蹈" : "设为默认舞蹈"}</Button>
         <small>{actions.length} / 8</small>
       </div>
       <div className="choreography-settings">
@@ -247,7 +276,7 @@ export function ChoreographyEditor({ notify }) {
         <Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止回中</Button>
         <Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button>
       </div>
-      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>软件预览不等于实体执行</strong>实体传输尚未接入，预览不会发送舵机指令。</span></div>
+      <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span><strong>软件预览不等于实体执行</strong>只有“实体执行”以及被设为默认后的快速“跳舞”/语音指令会发送到小智。</span></div>
     </Card>
   );
 }

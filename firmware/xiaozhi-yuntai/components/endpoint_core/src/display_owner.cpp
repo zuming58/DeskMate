@@ -127,6 +127,7 @@ bool DisplayOwner::Initialize() noexcept {
     implemented_ = true;
     current_state_ = AgentState::kIdle;
     desired_state_ = AgentState::kIdle;
+    external_desired_state_ = AgentState::kIdle;
     current_scene_ = AgentScene::kNeutral;
     if (!first_frame) {
         IncrementSaturated(diagnostics_.render_failures);
@@ -144,6 +145,19 @@ DisplayAcceptResult DisplayOwner::Accept(std::uint32_t transition_id,
     if (!enabled_) {
         return DisplayAcceptResult::kNotReady;
     }
+    if (choreography_lease_active_) {
+        if (last_transition_valid_ && last_transition_id_ == transition_id &&
+            external_desired_state_ == state) {
+            IncrementSaturated(diagnostics_.duplicates);
+            return DisplayAcceptResult::kDuplicate;
+        }
+        external_desired_state_ = state;
+        last_transition_id_ = transition_id;
+        last_transition_valid_ = true;
+        IncrementSaturated(diagnostics_.accepted);
+        return DisplayAcceptResult::kAccepted;
+    }
+    external_desired_state_ = state;
     if (last_transition_valid_ && last_transition_id_ == transition_id &&
         desired_state_ == state) {
         IncrementSaturated(diagnostics_.duplicates);
@@ -178,6 +192,48 @@ DisplayAcceptResult DisplayOwner::Accept(std::uint32_t transition_id,
     last_transition_valid_ = true;
     IncrementSaturated(diagnostics_.accepted);
     return DisplayAcceptResult::kAccepted;
+}
+
+bool DisplayOwner::AcquireChoreographyLease(std::uint32_t lease_id) noexcept {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (!enabled_ || lease_id == 0) return false;
+    if (choreography_lease_active_) {
+        return choreography_lease_id_ == lease_id;
+    }
+    choreography_lease_active_ = true;
+    choreography_lease_id_ = lease_id;
+    ClearMailboxLocked();
+    return true;
+}
+
+bool DisplayOwner::SetChoreographyLeaseState(std::uint32_t lease_id,
+                                             AgentState state) noexcept {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (!enabled_ || !choreography_lease_active_ ||
+        choreography_lease_id_ != lease_id) {
+        return false;
+    }
+    if (desired_state_ == state) return true;
+    ClearMailboxLocked();
+    mailbox_ = Command{lease_id, session_epoch_, state};
+    mailbox_pending_ = true;
+    desired_state_ = state;
+    return true;
+}
+
+void DisplayOwner::ReleaseChoreographyLease(std::uint32_t lease_id) noexcept {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (!choreography_lease_active_ || choreography_lease_id_ != lease_id) {
+        return;
+    }
+    choreography_lease_active_ = false;
+    choreography_lease_id_ = 0;
+    ClearMailboxLocked();
+    desired_state_ = external_desired_state_;
+    if (current_state_ != external_desired_state_ || blink_closed_) {
+        mailbox_ = Command{0, session_epoch_, external_desired_state_};
+        mailbox_pending_ = true;
+    }
 }
 
 bool DisplayOwner::Service(std::uint32_t now_ms) noexcept {
@@ -245,6 +301,9 @@ void DisplayOwner::ResetSession() noexcept {
         session_epoch_ = 1;
     }
     ClearMailboxLocked();
+    choreography_lease_active_ = false;
+    choreography_lease_id_ = 0;
+    external_desired_state_ = AgentState::kIdle;
     desired_state_ = AgentState::kIdle;
     last_transition_id_ = 0;
     last_transition_valid_ = false;
@@ -260,6 +319,8 @@ void DisplayOwner::ResetSession() noexcept {
 void DisplayOwner::Disable() noexcept {
     std::lock_guard<std::mutex> guard(mutex_);
     enabled_ = false;
+    choreography_lease_active_ = false;
+    choreography_lease_id_ = 0;
     ClearMailboxLocked();
     blink_closed_ = false;
     blink_scheduled_ = false;
@@ -272,7 +333,8 @@ DisplayOwnerSnapshot DisplayOwner::snapshot() const noexcept {
         current_state_,     desired_state_,   current_scene_,
         mailbox_pending_ ? kMailboxCapacity : 0u,
         blink_closed_,      blink_scheduled_, next_animation_ms_,
-        session_epoch_,     diagnostics_,
+        session_epoch_,     diagnostics_, choreography_lease_active_,
+        choreography_lease_id_, external_desired_state_,
     };
 }
 

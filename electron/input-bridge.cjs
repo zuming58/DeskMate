@@ -6,6 +6,7 @@ const { randomUUID } = require("crypto");
 const { encodeKeyboardConfig, encodeConfigReadRequest, parseConfigSnapshot } = require("./easyinput-config.cjs");
 const { decodeManualCalibrationFeatureReport } = require("./manual-calibration-hid.cjs");
 const { decodeMotionPresetFeatureReport } = require("./motion-presets-hid.cjs");
+const { decodeChoreographyFeatureReport } = require("./choreography-hid.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -28,6 +29,7 @@ class InputBridgeManager extends EventEmitter {
     this.queuedAgentState = null;
     this.pendingManualCalibration = null;
     this.pendingMotionPreset = null;
+    this.pendingChoreography = null;
     this.status = { available: false, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
@@ -83,6 +85,7 @@ class InputBridgeManager extends EventEmitter {
         this.failAllAgentStates("easyinput-disconnected");
         this.finishManualCalibration({ ok: false, reason: "easyinput-disconnected" });
         this.finishMotionPreset({ ok: false, reason: "easyinput-disconnected" });
+        this.finishChoreography({ ok: false, reason: "easyinput-disconnected" });
       } else {
         if (configCollectionWritable === false) {
           this.finishConfig({ ok: false, reason: "config-interface-unavailable" });
@@ -90,7 +93,10 @@ class InputBridgeManager extends EventEmitter {
           this.failAllAgentStates("config-interface-unavailable");
         }
         if (calibrationCollectionWritable === false) this.finishManualCalibration({ ok: false, reason: "manual-calibration-interface-unavailable" });
-        if (motionCollectionWritable === false) this.finishMotionPreset({ ok: false, reason: "motion-preset-interface-unavailable" });
+        if (motionCollectionWritable === false) {
+          this.finishMotionPreset({ ok: false, reason: "motion-preset-interface-unavailable" });
+          this.finishChoreography({ ok: false, reason: "choreography-interface-unavailable" });
+        }
       }
     }
     if (result.kind === "config-write" && this.pendingConfig?.requestId === event.requestId && !event.ok) this.finishConfig({ ok: false, reason: event.reason || "vendor-hid-write-failed" });
@@ -162,6 +168,18 @@ class InputBridgeManager extends EventEmitter {
       } else {
         this.emit("motion-preset", { stage: "endpoint-acknowledgement", ...response });
         this.finishMotionPreset(response.transportCode === 0 ? { ok: true, terminal: response } : { ok: false, reason: response.transport, terminal: response });
+      }
+    }
+    if (result.kind === "choreography-write" && this.pendingChoreography?.bridgeRequestId === event.requestId && !event.ok) this.finishChoreography({ ok: false, reason: event.reason || "choreography-write-failed" });
+    if (result.kind === "choreography-report" && this.pendingChoreography?.numericRequestId === event.choreography.requestId) {
+      const pending = this.pendingChoreography;
+      const response = event.choreography;
+      if (response.kind !== pending.kind) this.finishChoreography({ ok: false, reason: "invalid-response" });
+      else if (response.stage === "accepted") {
+        if (!pending.acceptedSeen) { pending.acceptedSeen = true; pending.onAccepted?.(response); this.emit("choreography", { stage: "accepted", ...response }); }
+      } else {
+        this.emit("choreography", { stage: "endpoint-acknowledgement", ...response });
+        this.finishChoreography(response.transportCode === 0 ? { ok: true, terminal: response } : { ok: false, reason: response.transport, terminal: response });
       }
     }
     if (["trigger", "cancel", "diagnostic"].includes(result.kind)) this.emit(result.kind, event);
@@ -262,7 +280,7 @@ class InputBridgeManager extends EventEmitter {
     let report; let decoded;
     try { report = Buffer.isBuffer(value) ? Buffer.from(value) : Buffer.from(value); decoded = decodeManualCalibrationFeatureReport(report); }
     catch { return Promise.resolve({ ok: false, reason: "manual-calibration-report-invalid" }); }
-    if (this.pendingManualCalibration || this.pendingMotionPreset) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
+    if (this.pendingManualCalibration || this.pendingMotionPreset || this.pendingChoreography) return Promise.resolve({ ok: false, reason: "manual-calibration-busy" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
     if (this.status.calibrationCollectionWritable === false) return Promise.resolve({ ok: false, reason: "manual-calibration-interface-unavailable" });
@@ -286,7 +304,7 @@ class InputBridgeManager extends EventEmitter {
     let report; let decoded;
     try { report = Buffer.isBuffer(value) ? Buffer.from(value) : Buffer.from(value); decoded = decodeMotionPresetFeatureReport(report); }
     catch { return Promise.resolve({ ok: false, reason: "motion-preset-report-invalid" }); }
-    if (this.pendingMotionPreset || this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "motion-preset-busy" });
+    if (this.pendingMotionPreset || this.pendingManualCalibration || this.pendingChoreography) return Promise.resolve({ ok: false, reason: "motion-preset-busy" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
     if (this.status.motionCollectionWritable !== true) return Promise.resolve({ ok: false, reason: "motion-preset-interface-unavailable" });
@@ -314,6 +332,30 @@ class InputBridgeManager extends EventEmitter {
     const pending = this.pendingMotionPreset;
     if (!pending) return;
     this.pendingMotionPreset = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
+  sendChoreography(value, { onAccepted } = {}) {
+    let report; let decoded;
+    try { report = Buffer.from(value); decoded = decodeChoreographyFeatureReport(report); }
+    catch { return Promise.resolve({ ok: false, reason: "choreography-report-invalid" }); }
+    if (this.pendingChoreography || this.pendingMotionPreset || this.pendingManualCalibration) return Promise.resolve({ ok: false, reason: "choreography-busy" });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
+    if (!this.status.boardConnected) return Promise.resolve({ ok: false, reason: "easyinput-not-connected" });
+    if (this.status.motionCollectionWritable !== true) return Promise.resolve({ ok: false, reason: "choreography-interface-unavailable" });
+    const bridgeRequestId = `dance-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishChoreography({ ok: false, reason: "choreography-timeout" }), 3500);
+      this.pendingChoreography = { bridgeRequestId, numericRequestId: decoded.requestId, kind: decoded.kind, timeout, resolve, onAccepted, acceptedSeen: false };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "choreography-request", requestId: bridgeRequestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishChoreography({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
+  finishChoreography(result) {
+    const pending = this.pendingChoreography;
+    if (!pending) return;
+    this.pendingChoreography = null;
     this.clearTimer(pending.timeout);
     pending.resolve(result);
   }
@@ -431,6 +473,7 @@ class InputBridgeManager extends EventEmitter {
     this.failAllAgentStates("input-bridge-exited");
     this.finishManualCalibration({ ok: false, reason: "input-bridge-exited" });
     this.finishMotionPreset({ ok: false, reason: "input-bridge-exited" });
+    this.finishChoreography({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -455,6 +498,7 @@ class InputBridgeManager extends EventEmitter {
     this.failAllAgentStates("input-bridge-stopped");
     this.finishManualCalibration({ ok: false, reason: "input-bridge-stopped" });
     this.finishMotionPreset({ ok: false, reason: "input-bridge-stopped" });
+    this.finishChoreography({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };

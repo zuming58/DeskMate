@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "src/display_owner.cpp"
+        "src/choreography_protocol.cpp"
         "src/endpoint_model.cpp"
         "src/link_endpoint.cpp"
         "src/link_protocol.cpp"

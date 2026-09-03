@@ -1,5 +1,6 @@
 #include "input_runtime.h"
 
+#include "choreography_bridge_core.h"
 #include "manual_calibration_bridge_core.h"
 #include "motion_preset_bridge_core.h"
 
@@ -759,9 +760,13 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
         if (config_transfer) {
             const bool manual = config_transfer->advances_manual_response;
             const bool motion = config_transfer->advances_motion_response;
+            const bool choreography =
+                config_transfer->advances_choreography_response;
             config_transfer->clear();
             if (manual) config_transfer->failed_manual = true;
             else if (motion) config_transfer->failed_motion = true;
+            else if (choreography)
+                config_transfer->failed_choreography = true;
             else config_transfer->failed = true;
         }
         runtime.on_usb_lifecycle_drops(result.dropped_events);
@@ -783,9 +788,13 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                             config_transfer->advances_manual_response;
                         const bool motion =
                             config_transfer->advances_motion_response;
+                        const bool choreography =
+                            config_transfer->advances_choreography_response;
                         config_transfer->clear();
                         if (manual) config_transfer->failed_manual = true;
                         else if (motion) config_transfer->failed_motion = true;
+                        else if (choreography)
+                            config_transfer->failed_choreography = true;
                         else config_transfer->failed = true;
                     }
                 }
@@ -800,9 +809,13 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                             config_transfer->advances_manual_response;
                         const bool motion =
                             config_transfer->advances_motion_response;
+                        const bool choreography =
+                            config_transfer->advances_choreography_response;
                         config_transfer->clear();
                         if (manual) config_transfer->failed_manual = true;
                         else if (motion) config_transfer->failed_motion = true;
+                        else if (choreography)
+                            config_transfer->failed_choreography = true;
                         else config_transfer->failed = true;
                     }
                 }
@@ -829,11 +842,15 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                         config_transfer->advances_manual_response;
                     const bool advances_motion =
                         config_transfer->advances_motion_response;
+                    const bool advances_choreography =
+                        config_transfer->advances_choreography_response;
                     config_transfer->clear();
                     config_transfer->completed = advances;
                     config_transfer->completed_status = advances_status;
                     config_transfer->completed_manual = advances_manual;
                     config_transfer->completed_motion = advances_motion;
+                    config_transfer->completed_choreography =
+                        advances_choreography;
                     if (advances_host) runtime.complete_host_command();
                 } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
@@ -861,12 +878,16 @@ UsbLifecycleProcessResult process_usb_lifecycle_events(
                         config_transfer->advances_manual_response;
                     const bool failed_motion =
                         config_transfer->advances_motion_response;
+                    const bool failed_choreography =
+                        config_transfer->advances_choreography_response;
                     config_transfer->clear();
                     if (failed_host) runtime.fail_host_command();
                     else if (failed_manual)
                         config_transfer->failed_manual = true;
                     else if (failed_motion)
                         config_transfer->failed_motion = true;
+                    else if (failed_choreography)
+                        config_transfer->failed_choreography = true;
                     else config_transfer->failed = true;
                 } else if (transfer.active && event.report_identity_valid &&
                     event.epoch == transfer.report.epoch &&
@@ -911,6 +932,7 @@ uint16_t usb_wire_report_length(uint8_t report_id) {
             return 1u + 5u;
         case kManualCalibrationStatusReportId:
         case kMotionPresetStatusReportId:
+        case kChoreographyStatusReportId:
             return 64u;
         default:
             return 0;
@@ -938,6 +960,9 @@ UsbLifecycleEvent make_usb_transfer_event(
         expected_length = 64;
     }
     if (wire_report[0] == kMotionPresetStatusReportId && wire_length == 64) {
+        expected_length = 64;
+    }
+    if (wire_report[0] == kChoreographyStatusReportId && wire_length == 64) {
         expected_length = 64;
     }
     if (expected_length == 0 || wire_length != expected_length) return event;
@@ -971,7 +996,9 @@ const uint8_t kHidReportDescriptor[] = {
     0x85,0x17,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x08,0x81,0x02,0xc0,
     0x06,0x00,0xff,0x09,0x09,0xa1,0x01,
     0x85,0x18,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x09,0xb1,0x02,
-    0x85,0x19,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0a,0x81,0x02,0xc0,
+    0x85,0x19,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0a,0x81,0x02,
+    0x85,0x1a,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0b,0xb1,0x02,
+    0x85,0x1b,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0c,0x81,0x02,0xc0,
 };
 const size_t kHidReportDescriptorSize = sizeof(kHidReportDescriptor);
 

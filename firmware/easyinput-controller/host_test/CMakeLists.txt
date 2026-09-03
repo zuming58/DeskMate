@@ -69,6 +69,14 @@ target_compile_definitions(motion_preset_bridge_core_tests PRIVATE
 )
 add_test(NAME motion_preset_bridge_core_tests COMMAND motion_preset_bridge_core_tests)
 
+add_executable(choreography_bridge_core_tests
+    choreography_bridge_core_tests.cpp
+    ../components/input_core/src/choreography_bridge_core.cpp
+    ../components/input_core/src/deskmate_link_core.cpp
+)
+target_include_directories(choreography_bridge_core_tests PRIVATE ../components/input_core/include)
+add_test(NAME choreography_bridge_core_tests COMMAND choreography_bridge_core_tests)
+
 add_executable(input_core_tests input_core_tests.cpp ../components/input_core/src/input_core.cpp ../components/input_core/src/hid_report.cpp)
 target_include_directories(input_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME input_core_tests COMMAND input_core_tests)

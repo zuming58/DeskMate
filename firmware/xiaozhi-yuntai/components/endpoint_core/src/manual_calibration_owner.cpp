@@ -89,16 +89,74 @@ void IncrementSaturatedPreset(std::uint32_t& value) noexcept {
 constexpr std::uint32_t kRuntimeTickPeriodMs = 20;
 constexpr std::uint32_t kRuntimeIntentTtlMs = 14000;
 
+std::int16_t ChoreographyYawMagnitude(
+    ChoreographyIntensity intensity) noexcept {
+    switch (intensity) {
+        case ChoreographyIntensity::kGentle: return 60;
+        case ChoreographyIntensity::kStandard: return 80;
+        case ChoreographyIntensity::kVivid: return 100;
+    }
+    return 80;
+}
+
+std::int16_t ChoreographyPitchUp(
+    ChoreographyIntensity intensity) noexcept {
+    switch (intensity) {
+        case ChoreographyIntensity::kGentle: return -20;
+        case ChoreographyIntensity::kStandard: return -30;
+        case ChoreographyIntensity::kVivid: return -40;
+    }
+    return -30;
+}
+
+std::int16_t ChoreographyPitchDown(
+    ChoreographyIntensity intensity) noexcept {
+    switch (intensity) {
+        case ChoreographyIntensity::kGentle: return 30;
+        case ChoreographyIntensity::kStandard: return 50;
+        case ChoreographyIntensity::kVivid: return 60;
+    }
+    return 50;
+}
+
+std::uint32_t ChoreographyHoldMs(const ChoreographyCommand& command) noexcept {
+    switch (command.tempo) {
+        case ChoreographyTempo::kRelaxed:
+            return static_cast<std::uint32_t>(command.beat_ms) * 3u / 2u;
+        case ChoreographyTempo::kStandard:
+            return command.beat_ms;
+        case ChoreographyTempo::kQuick:
+            return static_cast<std::uint32_t>(command.beat_ms) / 2u;
+    }
+    return command.beat_ms;
+}
+
+AgentState ChoreographyAgentState(
+    ChoreographyExpression expression) noexcept {
+    switch (expression) {
+        case ChoreographyExpression::kCompleted: return AgentState::kCompleted;
+        case ChoreographyExpression::kThinking: return AgentState::kThinking;
+        case ChoreographyExpression::kWorking: return AgentState::kWorking;
+        case ChoreographyExpression::kHold: return AgentState::kIdle;
+    }
+    return AgentState::kIdle;
+}
+
 }  // namespace
 
-MotionCoordinator::MotionCoordinator(ServoAdapter& adapter) noexcept
-    : adapter_(adapter) {
+MotionCoordinator::MotionCoordinator(ServoAdapter& adapter,
+                                     DisplayOwner* display_owner) noexcept
+    : adapter_(adapter), display_owner_(display_owner) {
     adapter_.DisableOutputs();
     ResetNormalMotion();
     ResetPresetSession();
 }
 
 void MotionCoordinator::StartSession(std::uint32_t session_id) noexcept {
+    if (choreography_display_lease_active_ && display_owner_ != nullptr) {
+        display_owner_->ReleaseChoreographyLease(
+            choreography_command_.action_id);
+    }
     adapter_.DisableOutputs();
     session_id_ = session_id;
     last_action_id_ = 0;
@@ -116,6 +174,10 @@ void MotionCoordinator::StartSession(std::uint32_t session_id) noexcept {
 }
 
 void MotionCoordinator::OnLinkDisconnected() noexcept {
+    if (choreography_display_lease_active_ && display_owner_ != nullptr) {
+        display_owner_->ReleaseChoreographyLease(
+            choreography_command_.action_id);
+    }
     adapter_.DisableOutputs();
     session_id_ = 0;
     last_action_id_ = 0;
@@ -152,6 +214,38 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
     RuntimeWaypoint waypoint{};
     if (runtime_action_ == RuntimeAction::kRecenter) {
         waypoint = RuntimeWaypoint{{0, 0}, 0, true};
+    } else if (runtime_action_ == RuntimeAction::kChoreography) {
+        if (choreography_returning_center_) {
+            waypoint = RuntimeWaypoint{{0, 0}, 0, true};
+        } else if (choreography_beat_index_ >=
+                   choreography_command_.beat_count) {
+            LatchRuntimeFault(MotionPresetResult::kFaulted);
+            return;
+        } else {
+            const auto& beat =
+                choreography_command_.beats[choreography_beat_index_];
+            auto target = choreography_target_;
+            const auto yaw =
+                ChoreographyYawMagnitude(choreography_command_.intensity);
+            if (beat.yaw == ChoreographyYaw::kLeft) {
+                target.horizontal_units = static_cast<std::int16_t>(-yaw);
+            } else if (beat.yaw == ChoreographyYaw::kCenter) {
+                target.horizontal_units = 0;
+            } else if (beat.yaw == ChoreographyYaw::kRight) {
+                target.horizontal_units = yaw;
+            }
+            if (beat.pitch == ChoreographyPitch::kUp) {
+                target.vertical_units =
+                    ChoreographyPitchUp(choreography_command_.intensity);
+            } else if (beat.pitch == ChoreographyPitch::kCenter) {
+                target.vertical_units = 0;
+            } else if (beat.pitch == ChoreographyPitch::kDown) {
+                target.vertical_units =
+                    ChoreographyPitchDown(choreography_command_.intensity);
+            }
+            waypoint = RuntimeWaypoint{
+                target, ChoreographyHoldMs(choreography_command_), false};
+        }
     } else {
         const auto plan = PlanFor(active_or_last_preset_);
         if (plan.waypoints == nullptr || waypoint_index_ >= plan.count) {
@@ -162,6 +256,20 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
     }
 
     if (!runtime_target_submitted_) {
+        if (runtime_action_ == RuntimeAction::kChoreography &&
+            !choreography_returning_center_) {
+            const auto expression = choreography_command_
+                                        .beats[choreography_beat_index_]
+                                        .expression;
+            if (expression != ChoreographyExpression::kHold &&
+                (display_owner_ == nullptr ||
+                 !display_owner_->SetChoreographyLeaseState(
+                     choreography_command_.action_id,
+                     ChoreographyAgentState(expression)))) {
+                LatchRuntimeFault(MotionPresetResult::kFaulted);
+                return;
+            }
+        }
         if (waypoint.recenter) {
             normal_motion_.CancelSource(MotionSource::kDialogueAction);
         }
@@ -182,6 +290,10 @@ void MotionCoordinator::Tick(std::uint32_t now_ms) noexcept {
             return;
         }
         runtime_target_ = waypoint.target;
+        if (runtime_action_ == RuntimeAction::kChoreography &&
+            !choreography_returning_center_) {
+            choreography_target_ = waypoint.target;
+        }
         runtime_target_submitted_ = true;
         waypoint_arrived_ = false;
         if (!waypoint.recenter) runtime_centered_ = false;
@@ -251,6 +363,27 @@ bool MotionCoordinator::SamePresetCommand(
            left.source == right.source;
 }
 
+bool MotionCoordinator::SameChoreographyCommand(
+    const ChoreographyCommand& left,
+    const ChoreographyCommand& right) noexcept {
+    if (left.session_id != right.session_id ||
+        left.action_id != right.action_id || left.source != right.source ||
+        left.beat_count != right.beat_count ||
+        left.beat_ms != right.beat_ms ||
+        left.repeat_count != right.repeat_count ||
+        left.intensity != right.intensity || left.tempo != right.tempo) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.beat_count; ++index) {
+        if (left.beats[index].yaw != right.beats[index].yaw ||
+            left.beats[index].pitch != right.beats[index].pitch ||
+            left.beats[index].expression != right.beats[index].expression) {
+            return false;
+        }
+    }
+    return true;
+}
+
 MotionPresetResult MotionCoordinator::CheckPresetAction(
     const MotionPresetCommand& command) const noexcept {
     if (command.session_id == 0 || command.session_id != session_id_) {
@@ -274,6 +407,27 @@ MotionPresetResult MotionCoordinator::CheckPresetAction(
     return MotionPresetResult::kAccepted;
 }
 
+MotionPresetResult MotionCoordinator::CheckChoreographyAction(
+    const ChoreographyCommand& command) const noexcept {
+    if (command.session_id == 0 || command.session_id != session_id_) {
+        return MotionPresetResult::kWrongSession;
+    }
+    if (command.action_id == 0) return MotionPresetResult::kBadPayload;
+    for (const auto& record : choreography_action_history_) {
+        if (!record.valid ||
+            record.command.action_id != command.action_id) {
+            continue;
+        }
+        return SameChoreographyCommand(record.command, command)
+                   ? MotionPresetResult::kDuplicate
+                   : MotionPresetResult::kSequenceConflict;
+    }
+    if (command.action_id <= last_choreography_action_id_) {
+        return MotionPresetResult::kStaleAction;
+    }
+    return MotionPresetResult::kAccepted;
+}
+
 void MotionCoordinator::RecordPresetAction(
     const MotionPresetCommand& command) noexcept {
     preset_action_history_[preset_action_history_cursor_] = {command, true};
@@ -282,6 +436,18 @@ void MotionCoordinator::RecordPresetAction(
     if (command.operation != MotionPresetOperation::kEmergencyStop &&
         command.action_id > last_normal_preset_action_id_) {
         last_normal_preset_action_id_ = command.action_id;
+    }
+}
+
+void MotionCoordinator::RecordChoreographyAction(
+    const ChoreographyCommand& command) noexcept {
+    choreography_action_history_[choreography_action_history_cursor_] =
+        {command, true};
+    choreography_action_history_cursor_ =
+        (choreography_action_history_cursor_ + 1u) %
+        choreography_action_history_.size();
+    if (command.action_id > last_choreography_action_id_) {
+        last_choreography_action_id_ = command.action_id;
     }
 }
 
@@ -329,6 +495,23 @@ void MotionCoordinator::ResetPresetSession() noexcept {
     runtime_centered_ = false;
     runtime_servo_output_enabled_ = false;
     preset_operation_terminal_ = false;
+    choreography_action_history_ = {};
+    choreography_action_history_cursor_ = 0;
+    choreography_command_ = {};
+    choreography_target_ = {};
+    last_choreography_action_id_ = 0;
+    completed_choreography_count_ = 0;
+    choreography_beat_index_ = 0;
+    choreography_completed_repeats_ = 0;
+    choreography_returning_center_ = false;
+    choreography_operation_terminal_ = false;
+    choreography_display_lease_active_ = false;
+    choreography_result_ = faulted_ ? MotionPresetResult::kFaulted
+                           : emergency_stop_latched_
+                               ? MotionPresetResult::kEmergencyStopped
+                               : RuntimeMotionAvailable()
+                                   ? MotionPresetResult::kRecenterRequired
+                                   : MotionPresetResult::kNotReady;
     preset_operation_ = MotionPresetOperation::kNone;
     active_or_last_preset_ = MotionPreset::kNone;
     preset_source_ = MotionPresetSource::kNone;
@@ -339,6 +522,7 @@ void MotionCoordinator::ResetPresetSession() noexcept {
                              ? MotionPresetResult::kRecenterRequired
                              : MotionPresetResult::kNotReady;
     RefreshPresetState();
+    RefreshChoreographyState();
 }
 
 void MotionCoordinator::RefreshPresetState() noexcept {
@@ -354,6 +538,20 @@ void MotionCoordinator::RefreshPresetState() noexcept {
         preset_state_ = MotionPresetState::kReady;
     } else {
         preset_state_ = MotionPresetState::kNotReady;
+    }
+}
+
+void MotionCoordinator::RefreshChoreographyState() noexcept {
+    if (faulted_) {
+        choreography_state_ = MotionPresetState::kFaulted;
+    } else if (emergency_stop_latched_) {
+        choreography_state_ = MotionPresetState::kEmergencyStopped;
+    } else if (runtime_action_ == RuntimeAction::kChoreography) {
+        choreography_state_ = MotionPresetState::kRunning;
+    } else if (RuntimeMotionAvailable() && runtime_centered_) {
+        choreography_state_ = MotionPresetState::kReady;
+    } else {
+        choreography_state_ = MotionPresetState::kNotReady;
     }
 }
 
@@ -379,14 +577,17 @@ void MotionCoordinator::CancelRuntimeForManual() noexcept {
     waypoint_arrived_ = false;
     runtime_centered_ = false;
     runtime_servo_output_enabled_ = false;
+    CancelChoreography(MotionPresetResult::kCancelled);
     preset_result_ = MotionPresetResult::kCancelled;
     preset_operation_terminal_ = true;
     ResetNormalMotion();
     RefreshPresetState();
+    RefreshChoreographyState();
 }
 
 void MotionCoordinator::BeginRuntimeRecenter(
     const MotionPresetCommand& command, std::uint32_t now_ms) noexcept {
+    CancelChoreography(MotionPresetResult::kCancelled);
     adapter_.DisableOutputs();
     runtime_axis_initialized_ = {};
     ConsumeArm();
@@ -412,6 +613,7 @@ void MotionCoordinator::BeginRuntimeRecenter(
     next_runtime_tick_ms_ = now_ms;
     RefreshState();
     RefreshPresetState();
+    RefreshChoreographyState();
 }
 
 void MotionCoordinator::BeginRuntimePreset(
@@ -435,6 +637,38 @@ void MotionCoordinator::BeginRuntimePreset(
         now_ms + plan.watchdog_per_repeat_ms * command.repeat_count + 1000;
     next_runtime_tick_ms_ = now_ms;
     RefreshPresetState();
+    RefreshChoreographyState();
+}
+
+bool MotionCoordinator::BeginRuntimeChoreography(
+    const ChoreographyCommand& command, std::uint32_t now_ms) noexcept {
+    if (display_owner_ == nullptr ||
+        !display_owner_->AcquireChoreographyLease(command.action_id)) {
+        return false;
+    }
+    choreography_display_lease_active_ = true;
+    choreography_command_ = command;
+    choreography_target_ = {};
+    choreography_beat_index_ = 0;
+    choreography_completed_repeats_ = 0;
+    choreography_returning_center_ = false;
+    choreography_operation_terminal_ = false;
+    choreography_result_ = MotionPresetResult::kAccepted;
+    runtime_action_ = RuntimeAction::kChoreography;
+    runtime_target_submitted_ = false;
+    waypoint_arrived_ = false;
+    runtime_centered_ = false;
+    runtime_servo_output_enabled_ = true;
+    const auto maximum_hold =
+        static_cast<std::uint32_t>(command.beat_ms) * 3u / 2u;
+    const auto travel_budget = 500u;
+    preset_watchdog_deadline_ms_ =
+        now_ms + command.repeat_count * command.beat_count *
+                     (maximum_hold + travel_budget) +
+                 3000u;
+    next_runtime_tick_ms_ = now_ms;
+    RefreshChoreographyState();
+    return true;
 }
 
 void MotionCoordinator::AdvanceRuntimeAction(std::uint32_t now_ms) noexcept {
@@ -442,6 +676,30 @@ void MotionCoordinator::AdvanceRuntimeAction(std::uint32_t now_ms) noexcept {
         runtime_centered_ = true;
         recenter_required_ = false;
         CompleteRuntimeAction();
+        return;
+    }
+
+    if (runtime_action_ == RuntimeAction::kChoreography) {
+        if (choreography_returning_center_) {
+            runtime_centered_ = true;
+            CompleteRuntimeAction();
+            return;
+        }
+        if (choreography_beat_index_ + 1u <
+            choreography_command_.beat_count) {
+            ++choreography_beat_index_;
+        } else {
+            ++choreography_completed_repeats_;
+            if (choreography_completed_repeats_ >=
+                choreography_command_.repeat_count) {
+                choreography_returning_center_ = true;
+            } else {
+                choreography_beat_index_ = 0;
+            }
+        }
+        runtime_target_submitted_ = false;
+        waypoint_arrived_ = false;
+        next_runtime_tick_ms_ = now_ms + kRuntimeTickPeriodMs;
         return;
     }
 
@@ -470,8 +728,11 @@ void MotionCoordinator::AdvanceRuntimeAction(std::uint32_t now_ms) noexcept {
 }
 
 void MotionCoordinator::CompleteRuntimeAction() noexcept {
-    if (runtime_action_ == RuntimeAction::kRun) {
+    const auto completed_action = runtime_action_;
+    if (completed_action == RuntimeAction::kRun) {
         IncrementSaturatedPreset(completed_preset_count_);
+    } else if (completed_action == RuntimeAction::kChoreography) {
+        IncrementSaturatedPreset(completed_choreography_count_);
     }
     runtime_action_ = RuntimeAction::kNone;
     runtime_target_submitted_ = false;
@@ -480,9 +741,40 @@ void MotionCoordinator::CompleteRuntimeAction() noexcept {
     adapter_.DisableOutputs();
     runtime_axis_initialized_ = {};
     runtime_servo_output_enabled_ = false;
-    preset_operation_terminal_ = true;
-    preset_result_ = MotionPresetResult::kCompleted;
+    if (completed_action != RuntimeAction::kChoreography) {
+        preset_operation_terminal_ = true;
+        preset_result_ = MotionPresetResult::kCompleted;
+    }
+    if (completed_action == RuntimeAction::kChoreography) {
+        choreography_result_ = MotionPresetResult::kCompleted;
+        choreography_operation_terminal_ = true;
+        choreography_beat_index_ = 0xff;
+        choreography_returning_center_ = false;
+        if (choreography_display_lease_active_ && display_owner_ != nullptr) {
+            display_owner_->ReleaseChoreographyLease(
+                choreography_command_.action_id);
+        }
+        choreography_display_lease_active_ = false;
+    }
     RefreshPresetState();
+    RefreshChoreographyState();
+}
+
+void MotionCoordinator::CancelChoreography(
+    MotionPresetResult result) noexcept {
+    if (choreography_command_.action_id == 0 &&
+        !choreography_display_lease_active_) {
+        return;
+    }
+    if (choreography_display_lease_active_ && display_owner_ != nullptr) {
+        display_owner_->ReleaseChoreographyLease(
+            choreography_command_.action_id);
+    }
+    choreography_display_lease_active_ = false;
+    choreography_result_ = result;
+    choreography_operation_terminal_ = true;
+    choreography_beat_index_ = 0xff;
+    choreography_returning_center_ = false;
 }
 
 void MotionCoordinator::LatchRuntimeFault(MotionPresetResult result) noexcept {
@@ -496,9 +788,11 @@ void MotionCoordinator::LatchRuntimeFault(MotionPresetResult result) noexcept {
     faulted_ = true;
     normal_motion_.LatchFault();
     preset_result_ = result;
+    CancelChoreography(result);
     preset_operation_terminal_ = true;
     RefreshState();
     RefreshPresetState();
+    RefreshChoreographyState();
 }
 
 ServoAdapterResult MotionCoordinator::ApplyRuntimeTarget(
@@ -661,6 +955,7 @@ ManualCalibrationResult MotionCoordinator::Execute(
         runtime_axis_initialized_ = {};
         runtime_centered_ = false;
         runtime_servo_output_enabled_ = false;
+        CancelChoreography(MotionPresetResult::kEmergencyStopped);
         emergency_stop_latched_ = true;
         recenter_required_ = true;
         normal_motion_.EmergencyStop();
@@ -670,6 +965,7 @@ ManualCalibrationResult MotionCoordinator::Execute(
         last_error_ = ManualCalibrationResult::kAccepted;
         RefreshState();
         RefreshPresetState();
+        RefreshChoreographyState();
         return ManualCalibrationResult::kAccepted;
     }
     if (faulted_) {
@@ -785,6 +1081,7 @@ ManualCalibrationResult MotionCoordinator::Execute(
             preset_operation_terminal_ = true;
             ResetNormalMotion();
             RefreshPresetState();
+            RefreshChoreographyState();
             result = ManualCalibrationResult::kAccepted;
             break;
         case ManualCalibrationOperation::kEmergencyStop:
@@ -820,6 +1117,7 @@ MotionPresetResult MotionCoordinator::ExecuteMotionPreset(
         runtime_axis_initialized_ = {};
         runtime_centered_ = false;
         runtime_servo_output_enabled_ = false;
+        CancelChoreography(MotionPresetResult::kEmergencyStopped);
         emergency_stop_latched_ = true;
         normal_motion_.EmergencyStop();
         preset_action_id_ = command.action_id;
@@ -833,6 +1131,7 @@ MotionPresetResult MotionCoordinator::ExecuteMotionPreset(
         RecordPresetAction(command);
         RefreshState();
         RefreshPresetState();
+        RefreshChoreographyState();
         return MotionPresetResult::kEmergencyStopped;
     }
 
@@ -879,7 +1178,36 @@ MotionPresetResult MotionCoordinator::ExecuteMotionPreset(
     }
 
     RecordPresetAction(command);
+    RefreshChoreographyState();
     return RejectPreset(result);
+}
+
+MotionPresetResult MotionCoordinator::ExecuteChoreography(
+    const ChoreographyCommand& command, std::uint32_t now_ms) noexcept {
+    Tick(now_ms);
+    const auto action_check = CheckChoreographyAction(command);
+    if (action_check != MotionPresetResult::kAccepted) {
+        return action_check;
+    }
+    MotionPresetResult result = MotionPresetResult::kBadPayload;
+    if (!RuntimeMotionAvailable()) {
+        result = MotionPresetResult::kAdapterUnavailable;
+    } else if (faulted_) {
+        result = MotionPresetResult::kFaulted;
+    } else if (emergency_stop_latched_) {
+        result = MotionPresetResult::kEmergencyStopped;
+    } else if (armed_ || selected_axis_ != kManualCalibrationNoAxis ||
+               runtime_action_ != RuntimeAction::kNone) {
+        result = MotionPresetResult::kBusy;
+    } else if (!runtime_centered_) {
+        result = MotionPresetResult::kRecenterRequired;
+    } else if (!BeginRuntimeChoreography(command, now_ms)) {
+        result = MotionPresetResult::kNotReady;
+    } else {
+        result = MotionPresetResult::kAccepted;
+    }
+    RecordChoreographyAction(command);
+    return result;
 }
 
 MotionResult MotionCoordinator::SubmitNormalMotion(
@@ -915,6 +1243,31 @@ MotionPresetSnapshot MotionCoordinator::motion_preset_snapshot() const
         faulted_,
         runtime_servo_output_enabled_,
         preset_operation_terminal_,
+    };
+}
+
+ChoreographySnapshot MotionCoordinator::choreography_snapshot() const
+    noexcept {
+    return ChoreographySnapshot{
+        session_id_,
+        choreography_command_.action_id,
+        completed_choreography_count_,
+        choreography_result_,
+        choreography_state_,
+        choreography_command_.beat_count,
+        choreography_beat_index_,
+        choreography_command_.repeat_count,
+        choreography_completed_repeats_,
+        choreography_command_.source,
+        choreography_command_.intensity,
+        choreography_command_.tempo,
+        RuntimeMotionAvailable(),
+        runtime_centered_,
+        emergency_stop_latched_,
+        faulted_,
+        runtime_servo_output_enabled_,
+        choreography_operation_terminal_,
+        choreography_display_lease_active_,
     };
 }
 

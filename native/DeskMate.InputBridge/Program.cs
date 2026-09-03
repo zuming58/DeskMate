@@ -105,6 +105,16 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         reportBase64: Convert.ToBase64String(report)));
 
+    public void ChoreographyWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
+        1, "choreography-write", "easyinput-hid", "Choreography", ok ? "written" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, ok: ok, reason: reason));
+
+    public void ChoreographyReport(ReadOnlySpan<byte> report) => Write(new BridgeEvent(
+        1, "choreography-report", "easyinput-hid", "Choreography", "report",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        reportBase64: Convert.ToBase64String(report)));
+
     public void ConfigAck(bool ok, bool saved, int bytes, int crc16, int phase) => Write(new BridgeEvent(
         1, "config-ack", "easyinput-hid", "Config", ok ? "accepted" : "rejected",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -225,11 +235,20 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request") ||
+                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request" && type.GetString() != "choreography-request") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
             commandType = type.GetString()!;
+            if (commandType == "choreography-request")
+            {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-choreography-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (!VendorReportProtocol.IsValidChoreographyRequest(report)) throw new InvalidOperationException("invalid-choreography-report");
+                var choreographyResult = HidFeatureDevice.WriteChoreographyRequest(report);
+                _writer.ChoreographyWrite(requestId, choreographyResult.ok, choreographyResult.reason);
+                return Task.CompletedTask;
+            }
             if (commandType == "motion-preset-request")
             {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-motion-preset-report");
@@ -317,6 +336,7 @@ internal sealed class ConfigCommandListener : IDisposable
             if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
             else if (commandType == "manual-calibration-request") _writer.ManualCalibrationWrite(requestId, false, reason);
             else if (commandType == "motion-preset-request") _writer.MotionPresetWrite(requestId, false, reason);
+            else if (commandType == "choreography-request") _writer.ChoreographyWrite(requestId, false, reason);
             else _writer.ConfigWrite(requestId, false, reason);
         }
         return Task.CompletedTask;
@@ -365,7 +385,7 @@ internal static class HidCollectionContracts
 {
     // Frozen EasyInput descriptor: reports 0x10..0x15 share FF00:0002;
     // manual calibration 0x16/0x17 lives on FF00:0007; runtime motion
-    // 0x18/0x19 lives on its own FF00:0009 top-level collection.
+    // 0x18..0x1b live on the FF00:0009 runtime motion collection.
     public static readonly HidCollectionContract Config = new(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64);
     public static readonly HidCollectionContract ManualCalibration = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
     public static readonly HidCollectionContract MotionPresets = new(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64);
@@ -375,6 +395,7 @@ internal static class HidCollectionContracts
         >= 0x10 and <= 0x15 => Config,
         0x16 => ManualCalibration,
         0x18 => MotionPresets,
+        0x1a => MotionPresets,
         _ => throw new ArgumentOutOfRangeException(nameof(reportId), "unsupported-feature-report"),
     };
 
@@ -382,6 +403,7 @@ internal static class HidCollectionContracts
         ForFeatureReport(0x14) == Config &&
         ForFeatureReport(0x16) == ManualCalibration &&
         ForFeatureReport(0x18) == MotionPresets &&
+        ForFeatureReport(0x1a) == MotionPresets &&
         Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
@@ -448,6 +470,16 @@ internal static class HidFeatureDevice
     public static (bool ok, string reason) WriteMotionPresetRequest(byte[] report)
     {
         if (!VendorReportProtocol.IsValidMotionPresetRequest(report)) return (false, "invalid-motion-preset-report");
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
+        if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
+        return HidD_SetFeature(handle, report, report.Length)
+            ? (true, "")
+            : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
+    }
+
+    public static (bool ok, string reason) WriteChoreographyRequest(byte[] report)
+    {
+        if (!VendorReportProtocol.IsValidChoreographyRequest(report)) return (false, "invalid-choreography-report");
         using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         return HidD_SetFeature(handle, report, report.Length)
@@ -828,6 +860,11 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         if (report.Length == 64 && report[0] == 0x19)
         {
             if (VendorReportProtocol.IsValidMotionPresetResponse(report)) _writer.MotionPresetReport(report);
+            return;
+        }
+        if (report.Length == 64 && report[0] == 0x1b)
+        {
+            if (VendorReportProtocol.IsValidChoreographyResponse(report)) _writer.ChoreographyReport(report);
             return;
         }
         if (report.Length == 64 && report[0] == 0x17)

@@ -49,14 +49,15 @@ const { ManualCalibrationController } = require("./manual-calibration-controller
 const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
 const { ManualControlCoordinator } = require("./manual-control-controller.cjs");
 const { MotionPresetService } = require("./motion-preset-service.cjs");
-const { ChoreographyStore, PendingChoreographyAdapter } = require("./choreography-store.cjs");
+const { ChoreographyStore } = require("./choreography-store.cjs");
+const { ChoreographyService } = require("./choreography-service.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t15d-desktop-choreography-editor-v1";
+const DESKMATE_BUILD_ID = "t15d-real-choreography-settings-v1";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -117,7 +118,7 @@ let manualCalibrationController;
 let manualControlCoordinator;
 let motionPresetService;
 let choreographyStore;
-let choreographyAdapter;
+let choreographyService;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
@@ -139,7 +140,7 @@ function safeAgentStateReason(value) {
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
   const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
-  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" } };
+  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" }, choreography: choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" } };
 }
 
 function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
@@ -768,6 +769,7 @@ function createWindow() {
     sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
     sendToMain("manual-control-status", manualControlCoordinator?.snapshot?.() || { available: false, active: false, phase: "unavailable", linkState: "unavailable" });
     sendToMain("motion-preset-status", motionPresetService?.snapshot?.() || { available: false, phase: "unavailable", busy: false, endpointReportedComplete: false });
+    sendToMain("choreography-status", choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" });
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -793,6 +795,7 @@ function startInputBridge() {
     manualCalibrationController?.handleBridgeStatus(value);
     manualControlCoordinator?.handleBridgeStatus(value);
     motionPresetService?.handleBridgeStatus(value);
+    choreographyService?.handleBridgeStatus(value);
     emitInputBridgeStatus(value);
     const linkAction = linkRecoveryGate.observe(value);
     if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
@@ -980,7 +983,6 @@ app.whenReady().then(async () => {
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
-  choreographyAdapter = new PendingChoreographyAdapter();
   const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
@@ -995,6 +997,15 @@ app.whenReady().then(async () => {
     isManualControlActive: () => manualControlCoordinator?.snapshot?.().active === true,
   });
   motionPresetService.on("status", (value) => { sendToMain("motion-preset-status", value); emitInputBridgeStatus(); });
+  choreographyService = new ChoreographyService({
+    send: (report, options) => inputBridge?.sendChoreography?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+    requestIdSequence: manualCalibrationRequestIds,
+    prepareCenter: (source) => motionPresetService.stopAndCenter(source),
+    settings: () => choreographyStore.getMotionSettings(),
+    defaultDance: () => choreographyStore.getDefaultDance(),
+    isManualControlActive: () => manualControlCoordinator?.snapshot?.().active === true,
+  });
+  choreographyService.on("status", (value) => { sendToMain("choreography-status", value); emitInputBridgeStatus(); });
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
   companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
@@ -1033,7 +1044,17 @@ app.whenReady().then(async () => {
   });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
   codexTaskBriefStore = new CodexTaskBriefStore();
-  companionIntentBridge = new CompanionIntentBridge({ loadSecret: () => loadTextModelSecret(), appActions: appActionStore, codexStatus: () => codexHookStatus, codexTasks: codexTaskBriefStore });
+  companionIntentBridge = new CompanionIntentBridge({
+    loadSecret: () => loadTextModelSecret(),
+    appActions: appActionStore,
+    codexStatus: () => codexHookStatus,
+    codexTasks: codexTaskBriefStore,
+    motionAction: (preset) => {
+      const saved = preset === "dance" ? choreographyStore.getDefaultDance() : null;
+      const repeat = saved?.repeat || (["nod", "dance"].includes(preset) ? 2 : 1);
+      return choreographyService.executePreset(preset, repeat, "voice");
+    },
+  });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
   const codexReceiver = await codexHookServer.start();
@@ -1058,9 +1079,9 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
   handleTrusted("desktop:get-manual-calibration-status", () => manualCalibrationController.snapshot());
   handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
-  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => motionPresetService?.snapshot?.().busy ? { ok: false, reason: "motion-preset-active" } : manualCalibrationController.command(value));
+  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => motionPresetService?.snapshot?.().busy || choreographyService?.snapshot?.().busy ? { ok: false, reason: "motion-preset-active" } : manualCalibrationController.command(value));
   handleTrusted("desktop:get-manual-control-status", () => manualControlCoordinator.snapshot());
-  handleTrusted("desktop:start-manual-control", (value = {}) => { motionPresetService?.close("motion-operation-cancelled"); return manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }); });
+  handleTrusted("desktop:start-manual-control", (value = {}) => { motionPresetService?.close("motion-operation-cancelled"); choreographyService?.close(); return manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }); });
   handleTrusted("desktop:manual-control-establish-center", () => manualControlCoordinator.establishCenter());
   handleTrusted("desktop:manual-control-press", (direction) => manualControlCoordinator.press(String(direction || "")));
   handleTrusted("desktop:manual-control-release", (direction) => manualControlCoordinator.release(String(direction || "")));
@@ -1068,26 +1089,41 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:manual-control-emergency-stop", () => manualControlCoordinator.emergencyStop());
   handleTrusted("desktop:end-manual-control", (reason) => manualControlCoordinator.end(["document-hidden", "page-leave"].includes(reason) ? reason : "page-leave"));
   handleTrusted("desktop:get-motion-status", () => motionPresetService.getStatus());
-  handleTrusted("desktop:run-motion-preset", (value = {}) => motionPresetService.runPreset(String(value.preset || ""), value.repeat, String(value.source || "")));
-  handleTrusted("desktop:stop-motion-and-center", (source) => motionPresetService.stopAndCenter(String(source || "UI")));
-  handleTrusted("desktop:emergency-stop-motion", (source) => motionPresetService.emergencyStop(String(source || "UI")));
-  handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")));
-  handleTrusted("desktop:list-choreographies", () => ({ ok: true, actions: choreographyStore.list() }));
-  handleTrusted("desktop:get-choreography-status", () => choreographyAdapter.status());
+  handleTrusted("desktop:run-motion-preset", async (value = {}) => {
+    const preset = String(value.preset || "");
+    const source = String(value.source || "");
+    const result = await choreographyService.executePreset(preset, value.repeat, source);
+    const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
+    return result?.ok || !canFallback ? result : motionPresetService.runPreset(preset, value.repeat, source);
+  });
+  handleTrusted("desktop:stop-motion-and-center", (source) => { choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
+  handleTrusted("desktop:emergency-stop-motion", (source) => { choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });
+  handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => { choreographyService.close(); return motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")); });
+  handleTrusted("desktop:list-choreographies", () => ({ ok: true, ...choreographyStore.snapshot() }));
+  handleTrusted("desktop:get-choreography-status", () => choreographyService.getStatus());
+  handleTrusted("desktop:set-default-dance", (name) => {
+    try { return choreographyStore.setDefaultDance(String(name || "")); }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", ...choreographyStore.snapshot() }; }
+  });
+  handleTrusted("desktop:get-motion-settings", () => ({ ok: true, motionSettings: choreographyStore.getMotionSettings() }));
+  handleTrusted("desktop:set-motion-settings", (value = {}) => {
+    try { return choreographyStore.setMotionSettings(value); }
+    catch (error) { return { ok: false, reason: error?.message === "motion-settings-invalid" ? error.message : "motion-settings-save-failed", ...choreographyStore.snapshot() }; }
+  });
   handleTrusted("desktop:save-choreography", (value = {}) => {
     try { return choreographyStore.save(value.action, value.previousName); }
-    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", actions: choreographyStore.list() }; }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", ...choreographyStore.snapshot() }; }
   });
   handleTrusted("desktop:copy-choreography", (name) => {
     try { return choreographyStore.copy(name); }
-    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-copy-failed", actions: choreographyStore.list() }; }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-copy-failed", ...choreographyStore.snapshot() }; }
   });
   handleTrusted("desktop:delete-choreography", (name) => {
     try { return choreographyStore.delete(name); }
-    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-delete-failed", actions: choreographyStore.list() }; }
+    catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-delete-failed", ...choreographyStore.snapshot() }; }
   });
   handleTrusted("desktop:run-choreography", async (value = {}) => {
-    try { return await choreographyAdapter.execute(value); }
+    try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
     catch (error) { return { ok: false, ready: false, state: "not-ready", reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-execute-failed" }; }
   });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
@@ -1321,6 +1357,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", () => showMain());
 });
 
-app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });
