@@ -169,6 +169,18 @@ test("T15D preload and renderer expose persistence, default dance, settings and 
   assert.doesNotMatch(preload, /choreograph.*Path/i);
   assert.match(editor, /激活为跳舞动作/);
   assert.match(editor, /内置默认舞蹈/);
+  assert.match(editor, /choreography-selection-bar/);
+  assert.match(editor, /choreography-active-dance/);
+  assert.match(editor, /当前跳舞动作/);
+  assert.match(editor, /保存后可激活/);
+  assert.match(editor, /恢复为内置舞蹈/);
+  assert.match(editor, /两者都只运行当前画面，不会改变已激活舞蹈/);
+  const activationCalls = editor.match(/setDefaultDance\(/g) || [];
+  assert.equal(activationCalls.length, 1, "only the explicit activation handler may change the active dance");
+  const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.choreography-selection-bar\s*\{[^}]*grid-template-columns:\s*minmax\(260px,1fr\)\s+minmax\(150px,\.42fr\)\s+auto/);
+  assert.match(styles, /@media \(max-width: 640px\)[\s\S]*\.choreography-selection-bar\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(styles, /\.choreography-activate-button\s*\{[^}]*min-width:\s*154px/);
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /label: "动作设置"/);
   assert.match(pages, /title="左右动作角度"/);
