@@ -25,6 +25,15 @@ test("codex-task-brief-v1 accepts only the exact privacy-safe schema", () => {
   assert.equal(decodeCodexTaskBrief(JSON.stringify(withoutMilestone)).milestone, "");
 });
 
+test("automatic task briefs use the Doubao companion path and never browser speech synthesis", () => {
+  const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  assert.doesNotMatch(appSource, /speechSynthesis|SpeechSynthesisUtterance/);
+  assert.match(mainSource, /announceCodexTaskBrief/);
+  assert.match(mainSource, /initialAnnouncement/);
+  assert.match(mainSource, /voice: "doubao-realtime"/);
+});
+
 test("optional local reporter reaches the bounded receiver without exposing the opaque key", async (context) => {
   const pipePath = `\\\\.\\pipe\\deskmate-t16-test-${process.pid}-${Date.now()}`;
   const received = [];

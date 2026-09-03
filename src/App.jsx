@@ -249,11 +249,6 @@ function AppContent() {
       const text = String(value?.text || "").slice(0, 240);
       if (!text) return;
       setToast(text);
-      if (value?.speak === true && "speechSynthesis" in window && typeof globalThis.SpeechSynthesisUtterance === "function") {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "zh-CN";
-        window.speechSynthesis.speak(utterance);
-      }
     });
     return () => { active = false; unsubscribeStatus?.(); unsubscribeAnnouncement?.(); };
   }, [mergeRuntime]);

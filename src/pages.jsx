@@ -307,7 +307,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     return () => { active = false; };
   }, []);
   const conversationCopy = {
-    idle: [`你好，我是${companionName}`, conversation.sessionPolicy?.lastStopReason === "listening-idle-timeout" ? "长时间未说话，已结束。按一下可重新进入连续对话。" : "按一下进入连续对话；文字语音输入会优先中断陪伴会话。"],
+    idle: [`你好，我是${companionName}`, conversation.sessionPolicy?.lastStopReason === "listening-idle-timeout" ? "长时间未说话，已结束。按一下可重新进入连续对话。" : "按一下进入连续对话；可信 Codex 简报也会临时启动豆包会话。"],
     connecting: ["正在连接…", "正在建立豆包实时对话会话。"],
     listening: ["我在聆听…", conversation.transcript || "请开始说话，再按一次或 Esc 结束。"],
     thinking: ["让我想一想…", conversation.transcript || "正在理解这一轮对话。"],
@@ -456,7 +456,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <Notice tone="info" title="从下一次会话生效">保存后从下一次新建陪伴会话生效。{sessionActive ? "当前会话正在使用启动时冻结的参数，请结束并重新开始。" : "当前没有活动会话。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone="info" title="语音唤醒待接入 / 未启用">“{state.settings.companionWakePhrase}”只保存为未来的本地离线唤醒配置；当前不会后台打开麦克风，也不会保持豆包在线。EasyInput 的“AI 陪伴呼唤”按键可独立使用。</Notice>
+            <Notice tone="info" title="语音唤醒待接入 / 未启用">“{state.settings.companionWakePhrase}”只保存为未来的本地离线唤醒配置，当前不会常驻后台监听。点击“开始陪伴”、按 EasyInput 呼叫键，或收到可信 Codex 自动简报后，会进入豆包实时会话；界面显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />
@@ -1824,7 +1824,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
                 <SettingRow title="服务商" description="首个适配目标为豆包实时语音；自定义服务需要另写协议适配器"><select value={realtimeService.provider} onChange={(event) => setRealtimeService((current) => ({ ...current, provider: event.target.value }))}><option value="doubao">豆包实时语音</option><option value="custom">自定义 WebSocket</option></select></SettingRow>
                 <label className="field-label">WebSocket 地址<input value={realtimeService.endpoint} onChange={(event) => setRealtimeService((current) => ({ ...current, endpoint: event.target.value }))} placeholder="wss://..." /></label>
                 <div className="service-config-grid"><label className="field-label">App ID<input value={realtimeService.appId} onChange={(event) => setRealtimeService((current) => ({ ...current, appId: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "重新保存时请填写" : "App ID"} /></label><label className="field-label">Access Key<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.accessKey} onChange={(event) => setRealtimeService((current) => ({ ...current, accessKey: event.target.value }))} placeholder={aiServiceStatus.realtime?.configured ? "已加密保存；重新保存时请填写" : "Access Key"} /></label>{realtimeService.provider === "doubao" ? <label className="field-label">App Key（协议固定）<input value="由豆包协议自动设置" readOnly /></label> : <label className="field-label">App Key<input type={showServiceSecrets ? "text" : "password"} autoComplete="off" value={realtimeService.appKey} onChange={(event) => setRealtimeService((current) => ({ ...current, appKey: event.target.value }))} /></label>}<label className="field-label">Resource ID<input value={realtimeService.resourceId} onChange={(event) => setRealtimeService((current) => ({ ...current, resourceId: event.target.value }))} /></label><label className="field-label">模型版本<input value={realtimeService.model} onChange={(event) => setRealtimeService((current) => ({ ...current, model: event.target.value }))} /></label><label className="field-label">女性音色<input value={realtimeService.voice} onChange={(event) => setRealtimeService((current) => ({ ...current, voice: event.target.value }))} /></label></div>
-                <Notice tone="info" title="按需连接">凭据保存后仍不会后台联网；只有用户点击“开始陪伴对话”才建立会话。当前生产音频闭环使用所选麦克风和电脑扬声器，连接状态会在陪伴页明确显示。</Notice>
+                <Notice tone="info" title="按需连接">凭据保存后不会常驻后台联网；用户点击“开始陪伴对话”、按 EasyInput 呼叫键或收到可信 Codex 自动简报时才建立会话。简报由豆包音色播报，结束后进入“聆听中”；当前音频闭环使用所选麦克风和电脑扬声器。</Notice>
                 <div className="button-row"><Button variant="primary" icon={DeviceFloppy} disabled={!realtimeService.appId.trim() || !realtimeService.accessKey.trim() || !realtimeService.endpoint.trim()} onClick={saveRealtimeService}>加密保存实时语音</Button>{aiServiceStatus.realtime?.configured && <Button variant="ghost" icon={Trash} onClick={clearRealtimeService}>删除实时语音配置</Button>}</div>
               </section>
             </div>

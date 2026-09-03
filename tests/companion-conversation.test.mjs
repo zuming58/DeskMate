@@ -143,6 +143,12 @@ test("Doubao adapter performs the binary handshake and bounds PCM chunks", async
   assert.equal(session.sendAudio(Buffer.from([1, 2, 3])), true);
   assert.equal(socket.frames.at(-1).event, EVENTS.AUDIO_TASK_REQUEST);
   assert.equal(session.sendAudio(Buffer.alloc(64 * 1024 + 1)), false);
+  assert.equal(session.sayHello("可信任务简报"), true);
+  assert.deepEqual(socket.frames.at(-1).payloadJson, { content: "可信任务简报" });
+  assert.equal(socket.frames.at(-1).event, EVENTS.SAY_HELLO);
+  assert.equal(session.speakText("后续任务简报"), true);
+  assert.deepEqual(socket.frames.at(-1).payloadJson, { start: true, content: "后续任务简报", end: true });
+  assert.equal(socket.frames.at(-1).event, EVENTS.CHAT_TTS_TEXT);
   session.close();
 });
 
@@ -176,13 +182,44 @@ test("Doubao settings identify the protocol App Key as fixed and expose redacted
 });
 
 class FakeProvider {
-  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; }
+  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; this.hellos = []; this.spokenTexts = []; }
   async connect() { if (this.connectResult instanceof Error) throw this.connectResult; return this.connectResult; }
   sendAudio(value) { this.audio.push(Buffer.from(value)); return true; }
+  sayHello(value) { this.hellos.push(value); return true; }
+  speakText(value) { this.spokenTexts.push(value); return true; }
   interrupt() { this.interruptions += 1; }
   close() { this.closed = true; }
   emit(value) { this.onEvent(value); }
 }
+
+test("trusted task brief uses provider voice, then returns to continuous listening without a wake word", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  const started = await controller.start({ sessionId: "task-brief-session", generation: 1, initialAnnouncement: "任务已经完成" });
+  assert.equal(started.ok, true);
+  assert.deepEqual(provider.hellos, ["任务已经完成"]);
+  assert.equal(controller.snapshot().state, "thinking");
+  source.push(Buffer.from([1, 2, 3]));
+  assert.equal(provider.audio.length, 0);
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([9, 8]) });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().state, "listening");
+  source.push(Buffer.from([4, 5, 6]));
+  assert.deepEqual([...provider.audio.at(-1)], [4, 5, 6]);
+  assert.equal((await controller.announce("又有一条进度")).ok, true);
+  assert.deepEqual(provider.spokenTexts, ["又有一条进度"]);
+  assert.equal(controller.snapshot().state, "thinking");
+  await controller.stop("test-complete");
+});
 
 test("continuous companion session persists final turns before UI completion and owns state until stopped", async () => {
   const source = new SimulatedCompanionAudioSource();

@@ -219,6 +219,20 @@ class DoubaoRealtimeSession {
     return true;
   }
 
+  sayHello(value) {
+    const content = boundedText(value, 240).trim();
+    if (!this.ready || this.closed || !content) return false;
+    this.socket.send(encodeJsonEvent(EVENTS.SAY_HELLO, { content }, this.sessionId));
+    return true;
+  }
+
+  speakText(value) {
+    const content = boundedText(value, 240).trim();
+    if (!this.ready || this.closed || !content) return false;
+    this.socket.send(encodeJsonEvent(EVENTS.CHAT_TTS_TEXT, { start: true, content, end: true }, this.sessionId));
+    return true;
+  }
+
   interrupt() { this.state.replyText = ""; }
 
   close() {

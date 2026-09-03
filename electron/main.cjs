@@ -920,6 +920,10 @@ function normalizeCompanionStartOptions(value = {}) {
   };
 }
 
+function normalizeTrustedAnnouncement(value) {
+  return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 240);
+}
+
 async function startCompanionConversation(value = {}) {
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
@@ -931,6 +935,7 @@ async function startCompanionConversation(value = {}) {
   const started = startForegroundSession(foregroundSessionState, { mode: "companion", sessionId });
   foregroundSessionState = started.state;
   const lease = { sessionId, generation: foregroundSessionState.active.generation };
+  const initialAnnouncement = normalizeTrustedAnnouncement(value.initialAnnouncement);
   const options = normalizeCompanionStartOptions(value);
   companionStartOptions = options;
   const prepared = computerCompanionAudio.prepare({ ...lease, deviceId: options.microphoneId });
@@ -954,10 +959,22 @@ async function startCompanionConversation(value = {}) {
   const savedPersona = companionPersonaStore.snapshot();
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext() } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start(lease);
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement });
   if (!result.ok) releaseForegroundSession(lease);
   else void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
+}
+
+
+async function announceCodexTaskBrief(announcement = {}) {
+  const text = normalizeTrustedAnnouncement(announcement.text);
+  if (!text) return { ok: false, reason: "codex-task-brief-announcement-empty" };
+  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "doubao-realtime", listeningAfterPlayback: true });
+  if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
+    return { ok: false, reason: "voice-workflow-active" };
+  }
+  if (companionIsActive()) return companionConversationController.announce(text);
+  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text });
 }
 
 async function stopCompanionConversation(reason = "user") {
@@ -1094,7 +1111,7 @@ app.whenReady().then(async () => {
     const result = codexTaskBriefStore.ingest(report);
     if (!result.ok) return;
     sendToMain("codex-task-brief-status", codexTaskBriefStore.status());
-    if (result.announcement) sendToMain("codex-task-brief-announcement", { ...result.announcement, speak: !companionIsActive() && !isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) });
+    if (result.announcement) void announceCodexTaskBrief(result.announcement);
     if (report.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
   } });
   const taskBriefReceiver = await codexTaskBriefServer.start();

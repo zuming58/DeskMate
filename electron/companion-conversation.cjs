@@ -366,7 +366,7 @@ class CompanionConversationController {
     });
   }
 
-  async start({ sessionId = randomUUID(), generation = 1 } = {}) {
+  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "" } = {}) {
     if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     const sinkStatus = availability(this.audioSink, "audio-sink-unavailable");
@@ -396,12 +396,30 @@ class CompanionConversationController {
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
-      await this.transition("listening");
+      const announcement = boundedText(initialAnnouncement, 240).trim();
+      if (announcement) {
+        await this.transition("thinking", { reason: "trusted-proactive-announcement" });
+        if (!this.provider?.sayHello?.(announcement)) throw new Error("companion-announcement-unavailable");
+      } else await this.transition("listening");
       return { ok: true, status: this.snapshot() };
     } catch (error) {
       await this.fail(error?.message || "companion-start-failed", token);
       return { ok: false, reason: this.lastError || "companion-start-failed", status: this.snapshot() };
     }
+  }
+
+  async announce(value) {
+    const content = boundedText(value, 240).trim();
+    if (!content) return { ok: false, reason: "companion-announcement-empty", status: this.snapshot() };
+    if (!this.active || this.stopPromise || this.state !== "listening") return { ok: false, reason: "companion-announcement-busy", status: this.snapshot() };
+    const token = this.active.token;
+    await this.transition("thinking", { reason: "trusted-proactive-announcement" });
+    if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale", status: this.snapshot() };
+    if (!this.provider?.speakText?.(content)) {
+      await this.transition("listening", { reason: "announcement-send-failed" });
+      return { ok: false, reason: "companion-announcement-unavailable", status: this.snapshot() };
+    }
+    return { ok: true, status: this.snapshot() };
   }
 
   isCurrent(token) { return Boolean(this.active && this.active.token === token); }
