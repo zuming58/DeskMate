@@ -63,8 +63,18 @@ lifecycle and does not acquire content access.
 - If exactly one recent active task matches, “Codex 做完了吗/到哪一步了”
   returns a deterministic label, state and optional milestone.
 - If multiple tasks are active and the user did not name one, DeskMate asks
-  which task. A missing reporter is stated honestly and falls back only to the
-  coarse `codex-hook-v1` state.
+  which task. The user may answer with only the visible task/project name for
+  60 seconds; exact normalized labels and unique label terms are accepted,
+  while shared terms remain ambiguous. Candidate speech lists at most three
+  recent labels and reports the total count when more exist.
+- An explicit Codex progress question is a trusted local control turn, not a
+  model knowledge question. It bypasses the text-model classifier. After the
+  provider's `ASREnded` event, DeskMate sends the exact deterministic answer
+  through provider `ChatTTSText` and suppresses that turn's generated free-chat
+  partial/final text. The same companion session returns to listening after
+  playback drains.
+- A missing reporter is stated honestly and falls back only to the coarse
+  `codex-hook-v1` state.
 - Conversation speech/listening ownership remains above announcements;
   displaced announcements are dropped instead of replayed later.
 

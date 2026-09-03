@@ -29,8 +29,12 @@ EasyInput and Xiaozhi T15D V2 applications installed.
 5. Confirm start/ordinary progress is throttled and waiting/completed is
    immediate. While dictation or another voice owner is active, a report must
    remain visible without stealing the microphone or forcing speech.
-6. Start two named active tasks and ask without a name. DeskMate must ask which
-   task instead of guessing.
+6. Start two named active tasks and ask “Codex 进行到哪一步了” without a task
+   name. DeskMate must read both trusted reports, ask which task instead of
+   guessing, and must not answer with a generic explanation of Codex/Python.
+   After it returns to **Listening**, say only one complete task name. Within
+   60 seconds it must read that task's submitted state and milestone exactly.
+   A shared or ambiguous project term must ask for the complete name.
 7. Say “小智点点头 / 跳个舞 / 看看周围” and confirm the accepted semantic
    action path runs. Motion failure must remain visible and must not be described
    as success.

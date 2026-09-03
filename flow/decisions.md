@@ -1,5 +1,12 @@
 # Decisions
 
+## D087 - Codex progress questions are deterministic provider-owned turns
+
+- Date: 2026-09-03
+- Decision: an explicit spoken Codex progress/status question bypasses the language-model intent classifier. DeskMate resolves it only against the in-memory `codex-task-brief-v1` snapshots and the content-free `codex-hook-v1` fallback. After the official Doubao `ASREnded` boundary, it sends the exact local answer through provider `ChatTTSText`; generated free-chat partial/final text for that turn is suppressed so a plausible but untrusted answer cannot win.
+- Multi-task selection: every reporting task owns an opaque `taskKey` plus a user-visible `taskLabel`. A unique normalized label or label term selects one task; multiple active tasks, or multiple labels sharing the spoken term, require disambiguation. For 60 seconds after that prompt the next utterance may contain only the complete task name. DeskMate retains at most eight recent snapshots and keeps spoken candidate lists bounded.
+- Boundary: DeskMate knows only tasks that actively report through the repository-local reporter. It does not infer identity or progress from process lists, project folders, prompts, replies, tool parameters, window titles or chat content. A global all-project Codex view remains a later separately installed and authorized reporter/plugin. This is Windows-only and changes no firmware, HID, Link or motion behavior.
+
 ## D086 - Trusted Codex briefs use the Doubao companion session, not system TTS
 
 - Date: 2026-09-03
