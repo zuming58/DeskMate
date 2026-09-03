@@ -1,5 +1,13 @@
 # Progress log
 
+## 2026-09-03 - User HIL isolates T15D V2 failures to a Windows/EasyInput versus Xiaozhi version skew
+
+- The user's new sanitized diagnostic (SHA-256 `4E4D15E23A9E1864395573BD9649EB5B6B752A9A07E5BFF524150A5A180D8734`) confirms the Windows motion HID collection is writable and DeskMate Link is connected. The persisted store also confirms that the requested per-axis settings were saved, including Pitch `20°` at `100°/s`, and that a saved custom dance is active. This rules out settings persistence and activation persistence as the primary failures.
+- The exported terminal motion evidence is still the legacy fixed-preset path: `nod ×2` completed, while the Link counters contain `308` request timeouts and exactly `616` retries. The current diagnostic schema omits the separate choreography snapshot entirely, so it cannot show the failed V2 command or its endpoint reason.
+- Source review explains both physical symptoms. Quick actions first attempt V2 choreography and silently fall back to legacy `MotionPresetService` after selected transport/protocol failures. The legacy Xiaozhi nod is hard-coded to approximately `6°` down and `2°` up and does not consume the saved `20°/100°/s` values. Direct custom choreography has no legacy equivalent, so a peer without Link `0x26/0x27` produces no movement. This exactly matches “fixed nod still moves with the old small amplitude, custom entity execution does not move”.
+- Project history already records that only the exact EasyInput T15D V2 image has been authorized and written; the exact Xiaozhi T15D V2 image has not been authorized or written in this V2 round. Classification: `T15D_V2_VERSION_SKEW_CONFIRMED / WINDOWS_AND_EASYINPUT_V2_PRESENT / XIAOZHI_V2_NOT_FLASHED / LEGACY_PRESET_FALLBACK_MASKS_MISMATCH / CUSTOM_HIL_BLOCKED`.
+- No code, package, device command or firmware write was performed during this diagnosis. Next: obtain separate exact authorization for the Xiaozhi V2 app-only image, flash/read back and power-cycle it, then rerun custom choreography and maximum-Pitch nod. Independently, the Windows follow-up should export the bounded choreography status and must surface legacy fallback instead of presenting a V1 fallback as proof that V2 settings were applied.
+
 ## 2026-09-03 - Main Agent integrated the visible dance activation repair after EasyInput V2 flashing
 
 - The exact user-authorized EasyInput T15D V2 app-only image remains the flashed and independently read-back image at `0x10000`, SHA-256 `AC31B817AC3E2553D9D62A15FE3910ADE6FC3FCDB3C1E170301B90D4D9656097`. The board-specific power-off/power-on reboot and runtime observation remain pending user confirmation; no additional firmware write occurred in this integration step.
