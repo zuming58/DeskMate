@@ -12,8 +12,9 @@
 
 ## Current Windows software closure
 
+- T20: complete user-present acceptance of hidden local background wake, four-second utterance endpointing, ten-second foreground idle exit and built-in motion audio.
 - T19: make explicitly voice-enabled application opening discoverable and deterministic. “打开网易云音乐” must resolve only to the local registered application name and must not depend on a language model guess.
-- T19: let the user choose one local audio file for dance accompaniment. Windows plays it through the computer speaker while the accepted semantic dance runs; normal completion, stop and emergency stop end playback.
+- T19/T20: let the user choose one local audio file for dance accompaniment, with a built-in electronic fallback and short generated cues for the other actions. Windows plays it through the computer speaker; normal completion, stop and emergency stop end playback.
 - T16: finish real acceptance of deterministic Codex status and the bounded repository task-brief reporter.
 - T17: finish real dual-source companion/dictation memory acceptance, review-first daily summaries, local index and managed Markdown projection.
 - T15C/T12/T18: finish contextual-motion, companion-setting, wake, latency, history and internal-Beta regression without changing either firmware.

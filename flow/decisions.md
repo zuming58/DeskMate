@@ -1,5 +1,13 @@
 # Decisions
 
+## D095 - Background wake is silent in UI and foreground conversation is short
+
+- Date: 2026-09-04
+- Wake ownership: local Windows wake remains explicit opt-in, but once enabled it is the idle microphone owner. Its `ready`/status/idle bookkeeping never opens the floating capsule. Only a matched wake phrase or a manual start opens the existing Doubao companion session and visible capsule.
+- Timing: the product defaults become four seconds of end-of-utterance silence and ten seconds of listening-only foreground idle. The first controls provider VAD; the second closes the active provider/audio owner, hides the capsule and resumes local wake. They are not one 60-second answer delay.
+- Audio: all four frozen semantic actions receive locally synthesized computer-speaker audio. Dance selects an enabled encrypted local track when configured and otherwise uses the built-in electronic beat; the other three use short cues. No copyrighted default asset is bundled.
+- Privacy and safety: wake events are debounced, wake audio/transcript/confidence never enters DeskMate, and foreground dictation/conversation/microphone tests still preempt it. No firmware or board-audio change is allowed.
+
 ## D094 - Product scope is Windows-first and dance music stays local
 
 - Date: 2026-09-04

@@ -34,6 +34,7 @@ const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
 const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
 const { WindowsSpeechWakeWordAdapter } = require("./wake-word-adapter.cjs");
+const { shouldUpdateCompanionOverlay } = require("./companion-overlay-policy.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
 const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
@@ -62,7 +63,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t19-windows-app-local-media-hil";
+const DESKMATE_BUILD_ID = "t20-background-wake-fast-session-hil";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -249,6 +250,7 @@ function updateCompanionOverlay(event = {}) {
     if (!companionIsActive()) overlayWindow?.hide();
     return;
   }
+  if (!shouldUpdateCompanionOverlay(event)) return;
   const map = { connecting: "organizing", listening: "recording", thinking: "transcribing", speaking: "outputting", completed: "completed", error: "error", idle: "idle", stopping: "cancelled" };
   const state = event.type === "state" ? map[event.state] : null;
   const transcript = ["transcript.partial", "turn.user-final", "reply.partial", "turn.assistant-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
@@ -495,15 +497,16 @@ function emitDanceMusicStatus() {
   return value;
 }
 
-function startDanceMusic({ force = false } = {}) {
+function startDanceMusic({ force = false, preset = "dance" } = {}) {
   const status = localDanceMusicStore?.status?.();
-  if (!status?.configured || (!force && !status.enabled)) return { ok: false, reason: status?.reason || "dance-music-disabled" };
+  const normalizedPreset = ["attention", "nod", "search", "dance"].includes(preset) ? preset : "dance";
+  const useLocalTrack = normalizedPreset === "dance" && status?.configured && (force || status.enabled);
   const requestId = `dance-music-${Date.now()}-${++danceMusicSequence}`;
   activeDanceMusicRequestId = requestId;
   localDanceMusicStore.notePlayback({ state: "starting", requestId });
-  sendToMain("dance-music-command", { type: "play", requestId, label: status.label });
+  sendToMain("dance-music-command", { type: useLocalTrack ? "play" : "synthesize", requestId, preset: normalizedPreset, label: useLocalTrack ? status.label : `内置${normalizedPreset}音效` });
   emitDanceMusicStatus();
-  return { ok: true, requestId };
+  return { ok: true, requestId, source: useLocalTrack ? "local" : "built-in" };
 }
 
 function stopDanceMusic(reason = "dance-finished") {
@@ -518,7 +521,7 @@ function stopDanceMusic(reason = "dance-finished") {
 async function runMotionPreset(value = {}) {
   const preset = String(value.preset || "");
   const source = String(value.source || "");
-  const music = preset === "dance" ? startDanceMusic() : { ok: false };
+  const music = startDanceMusic({ preset });
   try {
     const result = await choreographyService.executePreset(preset, value.repeat, source);
     const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
@@ -531,7 +534,7 @@ async function runMotionPreset(value = {}) {
 }
 
 async function runCustomChoreography(value = {}) {
-  const music = startDanceMusic();
+  const music = startDanceMusic({ preset: "dance" });
   try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
   finally { if (music.ok) stopDanceMusic("dance-finished"); }
 }

@@ -1,5 +1,5 @@
 export const COMPANION_CALL_ACTION_ID = "f11135b4-7471-47f1-808a-629ae99eb63b";
-export const COMPANION_DEFAULTS = Object.freeze({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000, wakeEnabled: false });
+export const COMPANION_DEFAULTS = Object.freeze({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 4000, idleTimeoutMs: 10000, wakeEnabled: false });
 export const COMPANION_END_SMOOTH_RANGE = Object.freeze({ min: 500, max: 50000, step: 500 });
 export const COMPANION_IDLE_TIMEOUT_RANGE = Object.freeze({ min: 10000, max: 3600000, step: 1000 });
 

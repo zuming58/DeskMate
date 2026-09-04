@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { createLocalDanceMusicEngine } from "../src/domain/localDanceMusic.js";
+import { createMotionCueWav, MOTION_CUE_DURATION_MS, SAMPLE_RATE } from "../src/domain/generatedMotionAudio.js";
 
 const require = createRequire(import.meta.url);
 const { CompanionIntentBridge, localMediaCommandFromUtterance, matchRegisteredApplication } = require("../electron/companion-intent-bridge.cjs");
@@ -92,6 +93,28 @@ test("renderer music engine loads one bounded track and stops stale playback", a
   assert.equal(events.at(-1).state, "idle");
 });
 
+test("built-in motion audio is generated locally for every frozen preset", async () => {
+  for (const preset of ["attention", "nod", "search", "dance"]) {
+    const wav = createMotionCueWav(preset);
+    assert.equal(new TextDecoder().decode(wav.slice(0, 4)), "RIFF");
+    assert.equal(new TextDecoder().decode(wav.slice(8, 12)), "WAVE");
+    assert.equal(wav.byteLength, 44 + Math.ceil(SAMPLE_RATE * MOTION_CUE_DURATION_MS[preset] / 1000) * 2);
+  }
+  let localReads = 0;
+  const audio = { src: "", volume: 0, currentTime: 0, pause() {}, async play() {} };
+  const events = [];
+  const engine = createLocalDanceMusicEngine({
+    bridge: { loadDanceMusic: async () => { localReads += 1; return { ok: false }; }, sendDanceMusicPlaybackEvent: (value) => events.push(value) },
+    audioFactory: () => audio,
+    createObjectURL: () => "blob:generated-cue",
+    revokeObjectURL: () => {},
+  });
+  assert.equal((await engine.handleCommand({ type: "synthesize", preset: "dance", requestId: "built-in" })).ok, true);
+  assert.equal(localReads, 0);
+  assert.equal(events.at(-1).state, "playing");
+  engine.close();
+});
+
 test("desktop surface exposes app whitelist and dance music without renderer paths", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const preload = fs.readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
@@ -103,5 +126,7 @@ test("desktop surface exposes app whitelist and dance music without renderer pat
   assert.match(preload, /onDanceMusicCommand/);
   assert.match(pages, /直接说“打开网易云音乐”/);
   assert.match(pages, /跳舞配乐/);
+  assert.match(pages, /跳舞使用内置电子节拍/);
+  assert.match(main, /startDanceMusic\(\{ preset \}\)/);
   assert.doesNotMatch(preload, /danceMusicPath|selectedMusicPath/);
 });

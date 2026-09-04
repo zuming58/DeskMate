@@ -151,7 +151,7 @@ test("the strict half-duplex keep-alive request enables custom endpointing and c
   const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" } });
   const payload = session.buildSessionPayload();
-  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 5000, enable_custom_vad: true } });
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 4000, enable_custom_vad: true } });
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
   assert.equal(providerFailureBucket(52000042), "audio-idle-timeout");
@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes an explicit voice latency, history and wake HIL build identity", () => {
+test("current package exposes an explicit background-wake and fast-session HIL build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t19-windows-app-local-media-hil/);
+  assert.match(main, /t20-background-wake-fast-session-hil/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 

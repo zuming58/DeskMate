@@ -1,3 +1,5 @@
+import { createMotionCueWav } from "./generatedMotionAudio.js";
+
 export function createLocalDanceMusicEngine({ bridge, audioFactory = () => new Audio(), createObjectURL = (blob) => URL.createObjectURL(blob), revokeObjectURL = (value) => URL.revokeObjectURL(value) } = {}) {
   let generation = 0;
   let audio = null;
@@ -24,10 +26,12 @@ export function createLocalDanceMusicEngine({ bridge, audioFactory = () => new A
       release({ reportStopped: true, requestId });
       return { ok: true };
     }
-    if (command.type !== "play" || !requestId) return { ok: false, reason: "dance-music-command-invalid" };
+    if (!["play", "synthesize"].includes(command.type) || !requestId) return { ok: false, reason: "dance-music-command-invalid" };
     release();
     const currentGeneration = generation;
-    const track = await bridge?.loadDanceMusic?.();
+    const track = command.type === "synthesize"
+      ? { ok: true, label: "内置电子音效", mimeType: "audio/wav", data: createMotionCueWav(command.preset) }
+      : await bridge?.loadDanceMusic?.();
     if (currentGeneration !== generation) return { ok: false, reason: "dance-music-command-superseded" };
     if (!track?.ok || !track.data) {
       report({ state: "error", requestId, reason: track?.reason || "dance-music-read-failed" });

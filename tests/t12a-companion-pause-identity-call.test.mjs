@@ -19,6 +19,7 @@ const { HostActionExecutor } = require("../electron/app-actions.cjs");
 const { COMPANION_CALL_ACTION } = require("../electron/companion-call.cjs");
 const { CompanionPreferenceStore, normalizeCompanionPreferences } = require("../electron/companion-preferences.cjs");
 const { WindowsSpeechWakeWordAdapter } = require("../electron/wake-word-adapter.cjs");
+const { shouldUpdateCompanionOverlay } = require("../electron/companion-overlay-policy.cjs");
 const { mergeKeyboardPatch, sanitizeKeyboardConfig } = require("../electron/config-merge.cjs");
 
 class FakeProvider {
@@ -48,7 +49,7 @@ function fakeClock() {
 test("T12A preferences migrate to 小言, persist enums, and reject malformed imports", () => {
   const migrated = migrateState({ schemaVersion: 11, settings: {} });
   assert.equal(migrated.schemaVersion, SCHEMA_VERSION);
-  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小言", wake: "你好，小言", pause: 5000, idle: 60000 });
+  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小言", wake: "你好，小言", pause: 4000, idle: 10000 });
   assert.throws(() => validateConfig({ settings: { companionEndSmoothWindowMs: 650 } }), /停顿阈值/);
   assert.throws(() => validateConfig({ settings: { companionIdleTimeoutMs: 999 } }), /会话空闲/);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-t12a-preferences-"));
@@ -69,7 +70,7 @@ test("Doubao StartSession receives the companion-only server endpointing and ide
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(payload.dialog.bot_name, "小言");
   assert.match(payload.dialog.system_role, /小言/);
-  assert.deepEqual(normalizeCompanionPreferences({ endSmoothWindowMs: 650 }).endSmoothWindowMs, 5000);
+  assert.deepEqual(normalizeCompanionPreferences({ endSmoothWindowMs: 650 }).endSmoothWindowMs, 4000);
 });
 
 test("listening idle timer stops normally, accepted input cancels it, and call resets it", async () => {
@@ -127,7 +128,7 @@ test("reserved companion Host Action round-trips without entering AppActionStore
 
 test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v1", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v1", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
@@ -156,7 +157,7 @@ test("Windows local wake listener emits only a wake event and can yield the micr
     };
     children.push(child);
     if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
-    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"wake"}\n'));
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"wake"}\n{"type":"wake"}\n'));
     return child;
   };
   let wakes = 0;
@@ -174,8 +175,16 @@ test("Windows local wake listener emits only a wake event and can yield the micr
 test("T12A UI exposes the key test and the opt-in local wake-word control", () => {
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /测试此动作/);
-  assert.match(pages, /启用本地语音唤醒/);
+  assert.match(pages, /启用后台本地唤醒/);
   assert.match(pages, /Windows 本机中文识别器/);
-  assert.match(pages, /说完后等待回答/);
-  assert.match(pages, /整段会话保持聆听/);
+  assert.match(pages, /一句话结束静音/);
+  assert.match(pages, /前台对话空闲收起/);
+});
+
+test("background wake lifecycle never opens the visible companion capsule", () => {
+  assert.equal(shouldUpdateCompanionOverlay({ type: "wake-word.status" }), false);
+  assert.equal(shouldUpdateCompanionOverlay({ type: "idle.timer" }), false);
+  assert.equal(shouldUpdateCompanionOverlay({ type: "intent.status" }), false);
+  assert.equal(shouldUpdateCompanionOverlay({ type: "state", state: "listening" }), true);
+  assert.equal(shouldUpdateCompanionOverlay({ type: "transcript.partial" }), true);
 });

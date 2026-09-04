@@ -44,12 +44,15 @@ function cleanPhrases(value) {
 }
 
 class WindowsSpeechWakeWordAdapter {
-  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.72 } = {}) {
+  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.62, now = () => Date.now(), wakeDebounceMs = 3000 } = {}) {
     this.platform = platform;
     this.spawnImpl = spawnImpl;
     this.onWake = onWake;
     this.onStatus = onStatus;
-    this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.72));
+    this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.62));
+    this.now = now;
+    this.wakeDebounceMs = Math.max(1000, Math.min(10000, Number(wakeDebounceMs) || 3000));
+    this.lastWakeAt = null;
     this.available = platform === "win32";
     this.probed = false;
     this.desiredEnabled = false;
@@ -59,7 +62,7 @@ class WindowsSpeechWakeWordAdapter {
   }
 
   status() {
-    return Object.freeze({ version: WAKE_WORD_ADAPTER_VERSION, available: this.available && this.probed, enabled: Boolean(this.process), desiredEnabled: this.desiredEnabled, reason: this.process ? "listening" : this.reason, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
+    return Object.freeze({ version: WAKE_WORD_ADAPTER_VERSION, available: this.available && this.probed, enabled: Boolean(this.process), desiredEnabled: this.desiredEnabled, reason: this.process ? "listening" : this.reason, mode: "background-local", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
   }
 
   emitStatus() { this.onStatus(this.status()); }
@@ -102,6 +105,7 @@ class WindowsSpeechWakeWordAdapter {
     if (!this.desiredEnabled) return { ok: false, reason: "wake-word-disabled", status: this.status() };
     if (!this.phrases.length) return { ok: false, reason: "wake-word-phrase-empty", status: this.status() };
     if (this.process) return { ok: true, alreadyStarted: true, status: this.status() };
+    this.lastWakeAt = null;
     const environment = { DESKMATE_WAKE_PHRASES: Buffer.from(JSON.stringify(this.phrases), "utf8").toString("base64"), DESKMATE_WAKE_CONFIDENCE: this.confidence.toFixed(2) };
     const child = this.spawnImpl("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(LISTENER_SCRIPT)], { windowsHide: true, env: { ...process.env, ...environment } });
     this.process = child;
@@ -113,7 +117,10 @@ class WindowsSpeechWakeWordAdapter {
       for (const line of lines) {
         let event; try { event = JSON.parse(line); } catch { continue; }
         if (event.type === "ready") { this.reason = "listening"; this.emitStatus(); }
-        if (event.type === "wake") this.onWake();
+        if (event.type === "wake") {
+          const at = this.now();
+          if (this.lastWakeAt === null || at - this.lastWakeAt >= this.wakeDebounceMs) { this.lastWakeAt = at; this.onWake(); }
+        }
       }
     });
     child.once("error", () => { if (this.process === child) { this.process = null; this.reason = "wake-word-engine-unavailable"; this.emitStatus(); } });

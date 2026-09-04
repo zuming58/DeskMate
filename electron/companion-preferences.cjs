@@ -12,8 +12,8 @@ const COMPANION_IDLE_TIMEOUT_STEP_MS = 1000;
 const COMPANION_PREFERENCES_DEFAULT = Object.freeze({
   name: COMPANION_NAME_DEFAULT,
   wakePhrase: COMPANION_WAKE_PHRASE_DEFAULT,
-  endSmoothWindowMs: 5000,
-  idleTimeoutMs: 60000,
+  endSmoothWindowMs: 4000,
+  idleTimeoutMs: 10000,
   codexBriefAnnouncementsEnabled: true,
   wakeEnabled: false,
 });

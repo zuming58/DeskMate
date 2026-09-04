@@ -143,7 +143,7 @@ test("Doubao adapter performs the binary handshake and bounds PCM chunks", async
   assert.equal(socket.options.headers["X-Api-App-Key"], DOUBAO_PROTOCOL_APP_KEY);
   assert.deepEqual(socket.frames.slice(0, 2).map((frame) => frame.event), [EVENTS.START_CONNECTION, EVENTS.START_SESSION]);
   assert.equal(STRICT_HALF_DUPLEX_INPUT_MODE, "keep_alive");
-  assert.deepEqual(socket.frames[1].payloadJson.asr, { extra: { end_smooth_window_ms: 5000, enable_custom_vad: true } });
+  assert.deepEqual(socket.frames[1].payloadJson.asr, { extra: { end_smooth_window_ms: 4000, enable_custom_vad: true } });
   assert.equal(socket.frames[1].payloadJson.dialog.extra.input_mod, "keep_alive");
   assert.equal(session.sendAudio(Buffer.from([1, 2, 3])), true);
   assert.equal(socket.frames.at(-1).event, EVENTS.AUDIO_TASK_REQUEST);
