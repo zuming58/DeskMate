@@ -41,21 +41,25 @@ EasyInput and Xiaozhi T15D V2 applications installed.
 
 ### Realtime Bridge repair check
 
-1. Submit one named `waiting` report, allow its Doubao announcement to finish,
+1. Before speaking, open **Settings -> Diagnostics** and confirm **Realtime
+   conversation Bridge** says started and **Codex task reporter** says listening.
+   After submitting one report, its bounded task count must be one.
+2. Submit one named `waiting` report, allow its Doubao announcement to finish,
    and speak directly while the same session shows **Listening**. No wake phrase
    is required inside that active session.
-2. Say “我的这个任务跑到哪一步了” and then repeat with “Code S 进行到哪一步”.
+3. First say only “那现在怎么样了”, then repeat with “我的这个任务跑到哪一步了”
+   and “Code S 进行到哪一步”.
    Both forms must return the trusted task label/state/milestone rather than a
    generic explanation of Codex, Python or the DeskMate development roadmap.
-3. Ask one unrelated ordinary question. It must pass through to normal Doubao
+4. Ask one unrelated ordinary question. It must pass through to normal Doubao
    conversation after about five seconds of end silence. The configured
    60-second value means the whole quiet session remains listening for another
    utterance; it must not delay this answer.
-4. Under **AI companion -> AI linkage -> Codex recent task briefs**, disable
+5. Under **AI companion -> AI linkage -> Codex recent task briefs**, disable
    proactive voice. Submit a new report and confirm its status remains visible
    and queryable but silent. Re-enable the switch, submit `waiting`, `completed`
    or `error`, and confirm bounded Doubao speech.
-5. Export sanitized diagnostics and confirm `bridgeChecks` advances for every
+6. Export sanitized diagnostics and confirm `bridgeChecks` advances for every
    accepted final while each turn increments either `bridgeOwnedTurns` or
    `bridgePassThroughTurns`. Do not export recognized text.
 

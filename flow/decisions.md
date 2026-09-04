@@ -1,5 +1,13 @@
 # Decisions
 
+## D089 - A trusted task report opens bounded conversational context and health must be observable
+
+- Date: 2026-09-04
+- Decision: accepting a valid `codex-task-brief-v1` report opens a 60-second Bridge context lease. During the lease, compact follow-ups such as “那现在怎么样了”“做到哪了”“完成了吗” query the trusted task store without requiring the user to repeat Codex or the task label. Explicit task queries refresh the same lease; unrelated questions remain ordinary provider conversation.
+- Lifecycle: the lease holds no transcript and expires automatically. Task snapshots remain memory-only under V1, so restarting DeskMate clears them and every still-running task must report again. An empty store must be displayed honestly and must not be filled from process names, folders, prompts, replies, commands or window titles.
+- Observability: Settings -> Diagnostics must separately show whether the realtime Bridge is ready and whether the task reporter is listening. Sanitized diagnostics include only ready/listening state, bounded task count, the announcement boolean and numeric check/owned/pass-through/failure counters. They never include task labels, milestones or recognized conversation text.
+- Boundary: this changes Windows routing and diagnostics only. It does not change provider audio, firmware, Host HID, DeskMate Link or motion behavior.
+
 ## D088 - The realtime Bridge is the mandatory front door for every completed utterance
 
 - Date: 2026-09-04
