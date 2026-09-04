@@ -84,6 +84,36 @@ function deterministicTaskAnswer(task) {
   return copy[task.state];
 }
 
+function hookMilestone(value = {}) {
+  if (value.event === "UserPromptSubmit") return "开始处理新任务";
+  if (value.event === "PermissionRequest") return "需要你确认";
+  if (value.event === "PreToolUse" && value.toolName === "request_user_input") return "需要你输入";
+  if (value.event === "PreToolUse") {
+    if (/apply_patch|Edit|Write/i.test(value.toolName)) return "正在修改文件";
+    if (/Bash|exec|command/i.test(value.toolName)) return "正在执行检查";
+    if (/web|browser/i.test(value.toolName)) return "正在查找资料";
+    return "正在执行任务";
+  }
+  if (value.event === "PostToolUse") return "继续处理任务";
+  if (value.event === "Stop") return "本轮已结束，等待下一步";
+  if (value.event === "SessionEnd") return "任务会话已关闭";
+  return "";
+}
+
+function isAggregateTaskQuery(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
+  return /(?:几个|多少个|哪些|什么任务|哪个任务|所有|全部|每个|都在|任务情况|项目情况|整体情况|工作情况|现在情况|目前情况|正在运行)/u.test(source);
+}
+
+function aggregateTaskAnswer(tasks) {
+  const active = tasks.filter((task) => ["thinking", "working", "waiting"].includes(task.state));
+  const candidates = (active.length ? active : tasks).slice(0, MAX_RECENT_TASKS);
+  const prefix = active.length ? `目前有 ${active.length} 个 Codex 任务正在运行。` : "目前没有正在运行的 Codex 任务。";
+  if (!candidates.length) return prefix;
+  const detail = candidates.map((task, index) => `${index + 1}，${deterministicTaskAnswer(task)}`).join("；");
+  return `${prefix}${detail}`.slice(0, 500);
+}
+
 function normalizeTaskReference(value) {
   return String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
 }
@@ -131,6 +161,35 @@ class CodexTaskBriefStore {
     };
   }
 
+  ingestHook(value = {}, { taskLabel = "" } = {}) {
+    const taskKey = typeof value.taskKey === "string" ? value.taskKey : "";
+    const label = taskLabel || value.taskLabel;
+    if (!taskKey || !label) return { ok: false, reason: "codex-hook-task-identity-unavailable" };
+    const previous = this.tasks.get(taskKey);
+    if (value.event === "SessionStart") return { ok: true, registered: true, task: previous ? this.sanitize(previous) : null, announcement: null };
+    if (value.event === "SessionEnd" && !previous) return { ok: true, registered: false, task: null, announcement: null };
+    const state = value.event === "SessionEnd" ? "completed" : value.state;
+    if (!STATES.has(state)) return { ok: false, reason: "codex-hook-task-state-unavailable" };
+    return this.ingest({
+      version: CODEX_TASK_BRIEF_VERSION,
+      provider: "codex",
+      taskKey,
+      taskLabel: label,
+      state,
+      milestone: hookMilestone(value),
+      sequence: (previous?.sequence || 0) + 1,
+    });
+  }
+
+  relabel(taskKey, taskLabel) {
+    const previous = this.tasks.get(String(taskKey || ""));
+    const label = boundedVisibleText(taskLabel, 60);
+    if (!previous || !label || previous.taskLabel === label) return { ok: false, changed: false };
+    const updated = Object.freeze({ ...previous, taskLabel: label });
+    this.tasks.set(previous.taskKey, updated);
+    return { ok: true, changed: true, task: this.sanitize(updated) };
+  }
+
   sanitize(task) {
     return Object.freeze({ taskLabel: task.taskLabel, state: task.state, milestone: task.milestone, sequence: task.sequence, receivedAt: task.receivedAt });
   }
@@ -158,12 +217,11 @@ class CodexTaskBriefStore {
       const labels = matches.slice(0, this.maxTasks).map((task) => task.taskLabel);
       return { ok: true, available: true, needsDisambiguation: true, answer: candidatePrompt(labels, { similar: true }), tasks: labels };
     }
+    if (isAggregateTaskQuery(utterance)) return { ok: true, available: true, needsDisambiguation: false, aggregate: true, answer: aggregateTaskAnswer(tasks), tasks: tasks.map((task) => this.sanitize(task)) };
     const active = tasks.filter((task) => ["thinking", "working", "waiting"].includes(task.state));
     if (active.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(active[0]), task: this.sanitize(active[0]) };
     if (!active.length && tasks.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(tasks[0]), task: this.sanitize(tasks[0]) };
-    const candidates = active.length ? active : tasks;
-    const labels = candidates.slice(0, this.maxTasks).map((task) => task.taskLabel);
-    return { ok: true, available: true, needsDisambiguation: true, answer: candidatePrompt(labels), tasks: labels };
+    return { ok: true, available: true, needsDisambiguation: false, aggregate: true, answer: aggregateTaskAnswer(tasks), tasks: tasks.map((task) => this.sanitize(task)) };
   }
 
   status() { return Object.freeze({ receiver: "listening", protocol: "codex-task-brief-v1", tasks: this.list() }); }
@@ -200,4 +258,4 @@ class CodexTaskBriefServer {
   }
 }
 
-module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskReferenceTerms };
+module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, aggregateTaskAnswer, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, hookMilestone, isAggregateTaskQuery, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskReferenceTerms };

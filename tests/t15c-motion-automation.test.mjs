@@ -50,7 +50,7 @@ test("T15C policy defaults off, persists exact booleans, and fails closed on mal
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test("T15C maps companion start, sustained thinking, confirmations, and Codex completion to bounded presets", async () => {
+test("T15C maps companion start, sustained thinking, spoken replies, and Codex milestones to bounded presets", async () => {
   const directory = temporaryDirectory();
   const clock = new FakeClock();
   const calls = [];
@@ -84,9 +84,19 @@ test("T15C maps companion start, sustained thinking, confirmations, and Codex co
     await coordinator.onIntentResult({ ok: true, type: "query_codex_status" });
     await coordinator.onIntentResult({ ok: true, type: "run_motion_preset" });
     assert.equal(calls.filter(([preset]) => preset === "nod").length, 2);
-    await coordinator.onCodexCompleted();
-    await coordinator.onCodexCompleted();
+    coordinator.onCompanionState("speaking");
+    await clock.advance(2_001);
+    coordinator.onCompanionState("listening");
+    await Promise.resolve();
+    await Promise.resolve();
     assert.equal(calls.filter(([preset]) => preset === "nod").length, 3);
+    await coordinator.onCodexState("waiting");
+    await coordinator.onCodexState("error");
+    assert.equal(calls.filter(([preset]) => preset === "search").length, 2);
+    assert.equal(coordinator.snapshot().last.reason, "duplicate-attention");
+    await coordinator.onCodexCompleted();
+    await coordinator.onCodexCompleted();
+    assert.equal(calls.filter(([preset]) => preset === "nod").length, 4);
     assert.equal(coordinator.snapshot().last.reason, "duplicate-completion");
     coordinator.close();
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }

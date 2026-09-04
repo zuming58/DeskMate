@@ -231,9 +231,9 @@ test("trusted Codex status owns the turn after ASR ended and suppresses the free
   const sink = new SimulatedCompanionAudioSink();
   const commits = [];
   const events = [];
-  let provider;
+  const providers = [];
   const controller = new CompanionConversationController({
-    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
     audioSource: source,
     audioSink: sink,
     commitTurn: async (value) => { commits.push(value); },
@@ -242,15 +242,25 @@ test("trusted Codex status owns the turn after ASR ended and suppresses the free
     wait: async () => {},
   });
   await controller.start({ sessionId: "trusted-status", generation: 1 });
-  provider.emit({ type: "asr.final", text: "Codex 进行到哪一步了" });
-  provider.emit({ type: "asr.ended" });
-  provider.emit({ type: "chat.partial", text: "随便", fullText: "随便回答" });
-  provider.emit({ type: "chat.final", text: "随便回答" });
-  provider.emit({ type: "tts.start" });
-  provider.emit({ type: "audio", audio: Buffer.from([7, 8]) });
-  provider.emit({ type: "tts.end" });
+  const freeChatProvider = providers[0];
+  freeChatProvider.emit({ type: "asr.final", text: "Codex 进行到哪一步了" });
+  freeChatProvider.emit({ type: "asr.ended" });
+  freeChatProvider.emit({ type: "chat.partial", text: "随便", fullText: "随便回答" });
+  freeChatProvider.emit({ type: "chat.final", text: "随便回答" });
+  freeChatProvider.emit({ type: "tts.start" });
+  freeChatProvider.emit({ type: "audio", audio: Buffer.from([7, 8]) });
+  freeChatProvider.emit({ type: "tts.end" });
   await controller.eventChain;
-  assert.deepEqual(provider.spokenTexts, ["DeskMate 软件闭环 正在执行：修复确定性回答"]);
+  assert.equal(providers.length, 2);
+  const trustedProvider = providers[1];
+  assert.equal(freeChatProvider.closed, true);
+  assert.deepEqual(trustedProvider.spokenTexts, ["DeskMate 软件闭环 正在执行：修复确定性回答"]);
+  assert.equal(sink.chunks.length, 0);
+  trustedProvider.emit({ type: "tts.start" });
+  trustedProvider.emit({ type: "audio", audio: Buffer.from([9, 6]) });
+  trustedProvider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.deepEqual(sink.chunks.map((chunk) => [...chunk]), [[9, 6]]);
   assert.deepEqual(commits.map(({ role, content, intentHandled = false }) => ({ role, content, intentHandled })), [
     { role: "user", content: "Codex 进行到哪一步了", intentHandled: true },
     { role: "assistant", content: "DeskMate 软件闭环 正在执行：修复确定性回答", intentHandled: false },

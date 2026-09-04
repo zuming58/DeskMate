@@ -573,6 +573,35 @@ class CompanionConversationController {
     return this.reconnecting;
   }
 
+  async speakTrustedOnFreshProvider(response, token) {
+    if (!this.isCurrent(token) || !response?.text) return { ok: false, reason: "companion-trusted-response-stale" };
+    const previousProvider = this.provider;
+    this.provider = null;
+    this.abandonOpenTurn("provider");
+    this.setHalfDuplexPhase("reconnecting");
+    await this.audioSink.interrupt("trusted-response");
+    previousProvider?.close?.();
+    if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale" };
+    await this.transition("connecting", { reason: "trusted-response-provider-replace" });
+    await this.connectWithRetry(token);
+    if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale" };
+    this.discardResponseUntilTtsEnd = false;
+    this.postInterruptState = "";
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = true;
+    await this.transition("thinking", { reason: "trusted-response-owned" });
+    if (!this.provider?.speakText?.(response.text)) {
+      this.trustedResponseActive = false;
+      await this.transition("listening", { reason: "trusted-response-send-failed" });
+      return { ok: false, reason: "companion-trusted-response-unavailable" };
+    }
+    if (await this.commitFinalTurn("assistant", response.text, token)) {
+      if (!this.isCurrent(token)) return { ignored: true };
+      this.onEvent({ type: "turn.assistant-final", text: response.text, trusted: true, sessionId: this.active.sessionId, generation: this.active.generation });
+    }
+    return { ok: true, trusted: true };
+  }
+
   async commitFinalTurn(role, text, token, metadata = {}) {
     if (!this.isCurrent(token)) return false;
     const content = boundedText(text);
@@ -635,30 +664,22 @@ class CompanionConversationController {
         if (trustedText) this.turnLifecycle.bridgeOwnedTurns += 1;
         else this.turnLifecycle.bridgePassThroughTurns += 1;
       }
-      if (trustedText) this.pendingTrustedResponse = Object.freeze({ text: trustedText, result: trusted?.result || null });
+      if (trustedText) {
+        this.pendingTrustedResponse = Object.freeze({ text: trustedText, result: trusted?.result || null });
+        this.discardResponseUntilTtsEnd = true;
+        this.postInterruptState = "thinking";
+        this.setHalfDuplexPhase("thinking");
+      }
       if (await this.commitFinalTurn("user", event.text, token, { intentChecked: trusted?.checked === true, intentHandled: Boolean(trustedText) })) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
         if (trustedText && trusted?.result) this.onEvent({ type: "intent.result", result: trusted.result, sessionId: this.active.sessionId, generation: this.active.generation });
         await this.transition("thinking");
       }
+      if (trustedText && this.isCurrent(token)) return this.speakTrustedOnFreshProvider(this.pendingTrustedResponse, token);
       return { ok: true };
     }
-    if (event.type === "asr.ended" && this.pendingTrustedResponse) {
-      const response = this.pendingTrustedResponse;
-      this.pendingTrustedResponse = null;
-      this.trustedResponseActive = true;
-      if (!this.provider?.speakText?.(response.text)) {
-        this.trustedResponseActive = false;
-        await this.transition("listening", { reason: "trusted-response-send-failed" });
-        return { ok: false, reason: "companion-trusted-response-unavailable" };
-      }
-      if (await this.commitFinalTurn("assistant", response.text, token)) {
-        if (!this.isCurrent(token)) return { ignored: true };
-        this.onEvent({ type: "turn.assistant-final", text: response.text, trusted: true, sessionId: this.active.sessionId, generation: this.active.generation });
-      }
-      return { ok: true, trusted: true };
-    }
+    if (event.type === "asr.ended" && this.pendingTrustedResponse) return { ignored: true, reason: "companion-trusted-response-owned" };
     if (event.type === "chat.partial") {
       if (this.pendingTrustedResponse || this.trustedResponseActive) return { ignored: true, reason: "companion-trusted-response-owned" };
       if (this.discardResponseUntilTtsEnd) return { ignored: true, reason: "companion-response-interrupted" };

@@ -1,10 +1,11 @@
 const net = require("net");
 const os = require("os");
 const path = require("path");
+const crypto = require("crypto");
 
-const CODEX_HOOK_PROTOCOL_VERSION = 1;
+const CODEX_HOOK_PROTOCOL_VERSION = 2;
 const CODEX_PIPE_NAME = "deskmate-codex-status-v1";
-const MAX_MESSAGE_BYTES = 512;
+const MAX_MESSAGE_BYTES = 1024;
 const CODEX_EVENTS = new Set([
   "SessionStart",
   "SessionEnd",
@@ -25,23 +26,51 @@ function normalizeToolName(value) {
   return /^[A-Za-z0-9_.:-]{1,128}$/.test(toolName) ? toolName : "";
 }
 
+function normalizeTaskKey(value) {
+  const taskKey = typeof value === "string" ? value : "";
+  return /^codex_[A-Za-z0-9_-]{16,40}$/.test(taskKey) ? taskKey : "";
+}
+
+function normalizeTaskLabel(value) {
+  const label = typeof value === "string" ? value.normalize("NFKC").trim() : "";
+  if (!label || [...label].length > 60 || /[\u0000-\u001f\u007f]/.test(label)) return "";
+  return label;
+}
+
+function opaqueCodexTaskKey(value) {
+  const sessionId = typeof value === "string" ? value : "";
+  if (!sessionId || Buffer.byteLength(sessionId, "utf8") > 256 || /[\u0000-\u001f\u007f]/.test(sessionId)) return "";
+  return `codex_${crypto.createHash("sha256").update(sessionId, "utf8").digest("base64url").slice(0, 24)}`;
+}
+
+function fallbackCodexTaskLabel(value) {
+  const cwd = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2048 ? value : "";
+  const label = normalizeTaskLabel(path.basename(cwd));
+  return label || "Codex 任务";
+}
+
 function mapCodexHookEvent(value = {}) {
   const event = typeof value.hook_event_name === "string" ? value.hook_event_name : "";
   if (!CODEX_EVENTS.has(event)) return null;
   const toolName = normalizeToolName(value.tool_name);
-  if (event === "SessionStart" || event === "SessionEnd") return { event, toolName: "", state: "idle" };
-  if (event === "UserPromptSubmit") return { event, toolName: "", state: "thinking" };
-  if (event === "PermissionRequest") return { event, toolName, state: "waiting" };
-  if (event === "PreToolUse") return { event, toolName, state: toolName === "request_user_input" ? "waiting" : "working" };
-  if (event === "PostToolUse") return { event, toolName, state: "working" };
-  if (event === "Stop") return { event, toolName: "", state: "completed" };
+  const taskKey = normalizeTaskKey(value.taskKey);
+  const taskLabel = taskKey ? normalizeTaskLabel(value.taskLabel) : "";
+  const metadata = taskKey && taskLabel ? { taskKey, taskLabel } : {};
+  if (event === "SessionStart" || event === "SessionEnd") return { event, toolName: "", state: "idle", ...metadata };
+  if (event === "UserPromptSubmit") return { event, toolName: "", state: "thinking", ...metadata };
+  if (event === "PermissionRequest") return { event, toolName, state: "waiting", ...metadata };
+  if (event === "PreToolUse") return { event, toolName, state: toolName === "request_user_input" ? "waiting" : "working", ...metadata };
+  if (event === "PostToolUse") return { event, toolName, state: "working", ...metadata };
+  if (event === "Stop") return { event, toolName: "", state: "completed", ...metadata };
   return null;
 }
 
 function encodeCodexHookMessage(value = {}) {
   const mapped = mapCodexHookEvent(value);
   if (!mapped) return null;
-  return `${JSON.stringify({ version: CODEX_HOOK_PROTOCOL_VERSION, provider: "codex", event: mapped.event, toolName: mapped.toolName })}\n`;
+  const taskKey = opaqueCodexTaskKey(value.session_id);
+  if (!taskKey) return `${JSON.stringify({ version: 1, provider: "codex", event: mapped.event, toolName: mapped.toolName })}\n`;
+  return `${JSON.stringify({ version: CODEX_HOOK_PROTOCOL_VERSION, provider: "codex", event: mapped.event, toolName: mapped.toolName, taskKey, taskLabel: fallbackCodexTaskLabel(value.cwd) })}\n`;
 }
 
 function decodeCodexHookMessage(line) {
@@ -49,10 +78,11 @@ function decodeCodexHookMessage(line) {
   let value;
   try { value = JSON.parse(line); } catch { return null; }
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const keys = Object.keys(value).sort();
-  if (keys.join(",") !== "event,provider,toolName,version") return null;
-  if (value.version !== CODEX_HOOK_PROTOCOL_VERSION || value.provider !== "codex") return null;
-  return mapCodexHookEvent({ hook_event_name: value.event, tool_name: value.toolName });
+  const keys = Object.keys(value).sort().join(",");
+  if (value.provider !== "codex") return null;
+  if (value.version === 1 && keys === "event,provider,toolName,version") return mapCodexHookEvent({ hook_event_name: value.event, tool_name: value.toolName });
+  if (value.version !== CODEX_HOOK_PROTOCOL_VERSION || keys !== "event,provider,taskKey,taskLabel,toolName,version") return null;
+  return mapCodexHookEvent({ hook_event_name: value.event, tool_name: value.toolName, taskKey: value.taskKey, taskLabel: value.taskLabel });
 }
 
 function sendCodexHookEvent(value, { pipePath = resolveCodexPipePath(), timeoutMs = 150 } = {}) {
@@ -121,6 +151,10 @@ module.exports = {
   decodeCodexHookMessage,
   encodeCodexHookMessage,
   mapCodexHookEvent,
+  opaqueCodexTaskKey,
+  fallbackCodexTaskLabel,
+  normalizeTaskKey,
+  normalizeTaskLabel,
   resolveCodexPipePath,
   sendCodexHookEvent,
 };

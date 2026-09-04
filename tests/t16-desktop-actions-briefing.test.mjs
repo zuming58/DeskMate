@@ -8,7 +8,7 @@ import { normalizeMotionState, MOTION_REPEAT_DEFAULTS } from "../src/domain/moti
 
 const require = createRequire(import.meta.url);
 const { CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, encodeCodexTaskBrief, sendCodexTaskBrief } = require("../electron/codex-task-brief.cjs");
-const { CompanionIntentBridge, isCodexStatusQuery, isContextualCodexStatusFollowUp, shouldClassifyWithModel } = require("../electron/companion-intent-bridge.cjs");
+const { CompanionIntentBridge, isCodexStatusQuery, isContextualCodexStatusFollowUp, motionPresetFromUtterance, shouldClassifyWithModel } = require("../electron/companion-intent-bridge.cjs");
 const { parseArguments, reportCodexTaskBrief, reserveCodexTaskBrief, stateFileFor } = require("../scripts/report-codex-task-brief.cjs");
 
 const task = (overrides = {}) => ({ version: "codex-task-brief-v1", provider: "codex", taskKey: "opaque_01", taskLabel: "DeskMate 软件", state: "working", milestone: "正在补齐测试", sequence: 1, ...overrides });
@@ -102,17 +102,33 @@ test("thinking announces once while waiting, completed and error remain immediat
   }
 });
 
-test("multiple Codex tasks require a named label and deterministic templates never invent progress", () => {
+test("aggregate Codex query reports every active task while deterministic templates never invent progress", () => {
   const store = new CodexTaskBriefStore();
   store.ingest(task({ taskKey: "task_one", taskLabel: "桌面软件", state: "working", milestone: "代码门通过" }));
   store.ingest(task({ taskKey: "task_two", taskLabel: "固件审计", state: "waiting", milestone: "等待人工验证" }));
-  const ambiguous = store.query("做到哪一步了");
-  assert.equal(ambiguous.needsDisambiguation, true);
-  assert.match(ambiguous.answer, /请说出任务名称/);
+  const aggregate = store.query("Codex 项目情况怎么样");
+  assert.equal(aggregate.needsDisambiguation, false);
+  assert.equal(aggregate.aggregate, true);
+  assert.match(aggregate.answer, /目前有 2 个 Codex 任务正在运行/);
+  assert.match(aggregate.answer, /桌面软件 正在执行：代码门通过/);
+  assert.match(aggregate.answer, /固件审计 正在等你回复：等待人工验证/);
   const named = store.query("桌面软件做完了吗");
   assert.equal(named.needsDisambiguation, false);
   assert.equal(named.answer, "桌面软件 正在执行：代码门通过");
   assert.doesNotMatch(named.answer, /%/);
+  assert.doesNotMatch(aggregate.answer, /%/);
+});
+
+test("automatic hook lifecycle creates separate real tasks and can later hydrate their titles", () => {
+  const store = new CodexTaskBriefStore();
+  const first = store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
+  assert.equal(first.task.state, "thinking");
+  assert.match(first.announcement.text, /开始处理新任务/);
+  const waiting = store.ingestHook({ event: "PermissionRequest", state: "waiting", toolName: "Bash", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
+  assert.equal(waiting.task.state, "waiting");
+  assert.match(waiting.announcement.text, /需要你确认/);
+  assert.equal(store.relabel("codex_1234567890123456", "DeskMate 软件闭环").changed, true);
+  assert.equal(store.query("DeskMate 软件闭环怎么样").answer, "DeskMate 软件闭环 正在等你回复：需要你确认");
 });
 
 test("task lookup tolerates spoken spacing, matches a unique project term, and keeps similar names ambiguous", () => {
@@ -144,12 +160,33 @@ test("Codex status questions and a named follow-up bypass the language model", a
   assert.equal(isCodexStatusQuery("Codex 已经进行到哪一步了"), true);
   assert.equal(isCodexStatusQuery("Code S 进行到哪一步了"), true);
   assert.equal(isCodexStatusQuery("我的这个任务跑到哪一步了"), true);
-  const ambiguous = await bridge.analyze("Codex 已经进行到哪一步了");
-  assert.equal(ambiguous.result.codex.needsDisambiguation, true);
+  const aggregate = await bridge.analyze("Codex 已经进行到哪一步了");
+  assert.equal(aggregate.result.codex.aggregate, true);
+  assert.match(aggregate.result.answer, /目前有 2 个 Codex 任务正在运行/);
   assert.equal(modelCalls, 0);
   now += 1_000;
   const selected = bridge.resolveDeterministic("EasyInput 固件");
   assert.equal(selected.result.answer, "EasyInput 固件 正在等你回复：等待人工验证");
+  assert.equal(modelCalls, 0);
+});
+
+test("explicit motion phrases bypass the model and run only a frozen preset", async () => {
+  let modelCalls = 0;
+  const motions = [];
+  const bridge = new CompanionIntentBridge({
+    loadSecret: () => ({ apiKey: "x" }),
+    appActions: { listRegistered: () => [] },
+    codexStatus: () => ({ state: "idle" }),
+    codexTasks: new CodexTaskBriefStore(),
+    motionAction: async (preset) => { motions.push(preset); return { ok: true }; },
+    requestJson: async () => { modelCalls += 1; return { type: "none" }; },
+  });
+  assert.equal(motionPresetFromUtterance("小智，跳个舞"), "dance");
+  assert.equal((await bridge.analyze("小智，跳个舞")).result.ok, true);
+  assert.deepEqual(motions, ["dance"]);
+  assert.equal(modelCalls, 0);
+  assert.equal((await bridge.analyze("小智，不要跳舞")).proposal, null);
+  assert.equal(motions.length, 1);
   assert.equal(modelCalls, 0);
 });
 
@@ -210,7 +247,7 @@ test("proactive Codex speech is user-switchable while task status remains availa
   assert.match(pagesSource, /主动语音播报/);
   assert.match(pagesSource, /关闭后仍保留状态，可随时询问/);
   assert.match(pagesSource, /实时对话 Bridge/);
-  assert.match(pagesSource, /Codex 任务报告器/);
+  assert.match(pagesSource, /Codex 真实任务监控/);
 });
 
 test("voice intent opens enabled apps, rejects disabled apps, answers Codex deterministically, and reserves motion without wire output", async () => {

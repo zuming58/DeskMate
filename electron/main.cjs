@@ -44,6 +44,8 @@ const { AgentStatePublisher } = require("./agent-state-hid.cjs");
 const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 const { CodexTaskBriefServer, CodexTaskBriefStore } = require("./codex-task-brief.cjs");
+const { CodexTaskCatalog } = require("./codex-app-server-catalog.cjs");
+const { refreshExistingCodexHookHelper } = require("./codex-hook-integration.cjs");
 const { HermesHookStateServer } = require("./hermes-hook-state.cjs");
 const { ManualCalibrationController } = require("./manual-calibration-controller.cjs");
 const { ManualCalibrationRequestIdStore } = require("./manual-calibration-request-ids.cjs");
@@ -58,7 +60,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t18-realtime-bridge-context-hil";
+const DESKMATE_BUILD_ID = "t16a-codex-live-monitor-hil";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -114,6 +116,7 @@ let activeAgentProvider = "codex";
 let codexHookServer;
 let codexTaskBriefServer;
 let codexTaskBriefStore;
+let codexTaskCatalog;
 let hermesHookServer;
 let manualCalibrationController;
 let manualControlCoordinator;
@@ -123,6 +126,8 @@ let choreographyService;
 let motionAutomationPolicyStore;
 let motionAutomationCoordinator;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
+let codexHookIntegrationStatus = { ok: false, installed: false, version: 1, reason: "codex-hook-not-checked" };
+let codexTaskBriefReceiver = "starting";
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
 let linkStatusPollTimer = null;
@@ -530,7 +535,40 @@ async function handleAutomaticAgentHookState(provider, value) {
 
 async function handleCodexHookState(value) {
   await handleAutomaticAgentHookState("codex", value);
-  if (value?.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
+  if (value?.taskKey && codexTaskBriefStore) {
+    const result = codexTaskBriefStore.ingestHook(value, { taskLabel: codexTaskCatalog?.labelFor?.(value.taskKey) || value.taskLabel });
+    if (result.ok && result.task) handleCodexTaskBriefResult(result, result.task.state);
+    void refreshCodexTaskCatalog().catch(() => {});
+  } else if (value?.state === "completed") void motionAutomationCoordinator?.onCodexState?.("completed");
+}
+
+function codexTaskBriefStatusSnapshot() {
+  return {
+    ...codexTaskBriefStore.status(),
+    receiver: codexTaskBriefReceiver,
+    announcementsEnabled: companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true,
+    hookIntegration: { ...codexHookIntegrationStatus },
+    catalog: codexTaskCatalog?.status?.() || { available: false, count: 0, lastRefreshAt: "", reason: "codex-app-server-not-checked" },
+  };
+}
+
+function handleCodexTaskBriefResult(result, state = "") {
+  if (!result?.ok) return result;
+  companionIntentBridge?.noteCodexReport?.();
+  sendToMain("codex-task-brief-status", codexTaskBriefStatusSnapshot());
+  const announcementsEnabled = companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true;
+  if (result.announcement && announcementsEnabled) void announceCodexTaskBrief(result.announcement);
+  if (state) void motionAutomationCoordinator?.onCodexState?.(state);
+  return result;
+}
+
+async function refreshCodexTaskCatalog({ force = false } = {}) {
+  if (!codexTaskCatalog || !codexTaskBriefStore) return { ok: false, reason: "codex-task-catalog-unavailable" };
+  const result = await codexTaskCatalog.refresh({ force });
+  let changed = false;
+  for (const [taskKey, taskLabel] of result.entries || []) changed = codexTaskBriefStore.relabel(taskKey, taskLabel).changed || changed;
+  if (changed) sendToMain("codex-task-brief-status", codexTaskBriefStatusSnapshot());
+  return result;
 }
 
 async function handleHermesHookState(value) {
@@ -1097,6 +1135,9 @@ app.whenReady().then(async () => {
   });
   appActionStore = new AppActionStore({ userDataPath: app.getPath("userData"), dialog, shell });
   codexTaskBriefStore = new CodexTaskBriefStore();
+  codexTaskCatalog = new CodexTaskCatalog();
+  codexHookIntegrationStatus = refreshExistingCodexHookHelper();
+  void refreshCodexTaskCatalog({ force: true }).catch(() => {});
   companionIntentBridge = new CompanionIntentBridge({
     loadSecret: () => loadTextModelSecret(),
     appActions: appActionStore,
@@ -1115,14 +1156,10 @@ app.whenReady().then(async () => {
   codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
   codexTaskBriefServer = new CodexTaskBriefServer({ onReport: (report) => {
     const result = codexTaskBriefStore.ingest(report);
-    if (!result.ok) return;
-    companionIntentBridge?.noteCodexReport?.();
-    const announcementsEnabled = companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true;
-    sendToMain("codex-task-brief-status", { ...codexTaskBriefStore.status(), announcementsEnabled });
-    if (result.announcement && announcementsEnabled) void announceCodexTaskBrief(result.announcement);
-    if (report.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
+    handleCodexTaskBriefResult(result, report.state);
   } });
   const taskBriefReceiver = await codexTaskBriefServer.start();
+  codexTaskBriefReceiver = taskBriefReceiver.ok ? "listening" : "unavailable";
   hermesHookServer = new HermesHookStateServer({ onState: (value) => { void handleHermesHookState(value); } });
   const hermesReceiver = await hermesHookServer.start();
   hermesHookStatus = { ...hermesHookStatus, receiver: hermesReceiver.ok ? "listening" : "unavailable" };
@@ -1218,10 +1255,10 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
   handleTrusted("desktop:get-application-voice-policy", (id) => appActionStore.describe(id) || { ok: false, reason: "host-action-not-mapped" });
   handleTrusted("desktop:set-application-voice-enabled", (value = {}) => appActionStore.setVoiceEnabled(value.id, value.enabled));
-  handleTrusted("desktop:get-codex-task-brief-status", () => ({ ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable", announcementsEnabled: companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true }));
+  handleTrusted("desktop:get-codex-task-brief-status", () => codexTaskBriefStatusSnapshot());
   handleTrusted("desktop:set-codex-task-brief-announcements", (enabled) => {
     companionPreferenceStore.setCodexBriefAnnouncementsEnabled(enabled);
-    const status = { ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable", announcementsEnabled: enabled };
+    const status = codexTaskBriefStatusSnapshot();
     sendToMain("codex-task-brief-status", status);
     return { ok: true, ...status };
   });

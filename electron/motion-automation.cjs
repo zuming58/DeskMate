@@ -5,7 +5,7 @@ const path = require("path");
 const { EventEmitter } = require("events");
 
 const DEFAULT_POLICY = Object.freeze({ version: 1, enabled: false, idleEnabled: false });
-const TRIGGERS = new Set(["companion-start", "companion-thinking", "intent-confirmed", "codex-completed", "idle-search"]);
+const TRIGGERS = new Set(["companion-start", "companion-thinking", "companion-replied", "intent-confirmed", "codex-waiting", "codex-error", "codex-completed", "idle-search"]);
 const PRESETS = new Set(["attention", "nod", "search"]);
 
 function normalizePolicy(value) {
@@ -54,7 +54,7 @@ class MotionAutomationPolicyStore {
 }
 
 class MotionAutomationCoordinator extends EventEmitter {
-  constructor({ policyStore, executePreset, getActivity = () => ({}), now = () => Date.now(), schedule = setTimeout, cancel = clearTimeout, thinkingDelayMs = 4_000, idleDelayMs = 90_000, completionDedupeMs = 5_000 } = {}) {
+  constructor({ policyStore, executePreset, getActivity = () => ({}), now = () => Date.now(), schedule = setTimeout, cancel = clearTimeout, thinkingDelayMs = 4_000, idleDelayMs = 90_000, completionDedupeMs = 5_000, contextDedupeMs = 2_000 } = {}) {
     super();
     if (!policyStore || typeof executePreset !== "function" || typeof getActivity !== "function") throw new Error("motion-automation-dependency-invalid");
     this.policyStore = policyStore;
@@ -66,6 +66,7 @@ class MotionAutomationCoordinator extends EventEmitter {
     this.thinkingDelayMs = Math.max(1, Number(thinkingDelayMs) || 4_000);
     this.idleDelayMs = Math.max(1, Number(idleDelayMs) || 90_000);
     this.completionDedupeMs = Math.max(1, Number(completionDedupeMs) || 5_000);
+    this.contextDedupeMs = Math.max(1, Number(contextDedupeMs) || 2_000);
     this.thinkingTimer = null;
     this.idleTimer = null;
     this.thinkingCycle = 0;
@@ -73,6 +74,8 @@ class MotionAutomationCoordinator extends EventEmitter {
     this.confirmationPending = false;
     this.running = false;
     this.lastCodexCompletionAt = 0;
+    this.lastCodexAttentionAt = 0;
+    this.lastReplyMotionAt = 0;
     this.last = Object.freeze({ state: this.policyStore.snapshot().enabled ? "ready" : "disabled", trigger: "", preset: "", reason: "", ok: null, at: "" });
     this._scheduleIdle();
   }
@@ -105,12 +108,19 @@ class MotionAutomationCoordinator extends EventEmitter {
 
   onCompanionState(state) {
     this.touchActivity();
+    const previousState = this.companionState;
     this.companionState = String(state || "idle");
     const cycle = ++this.thinkingCycle;
     this._clearThinking();
-    if (this.companionState === "completed" && this.confirmationPending) {
+    if ((this.companionState === "completed" || (previousState === "speaking" && this.companionState === "listening")) && this.confirmationPending) {
       this.confirmationPending = false;
       void this.trigger("intent-confirmed", "nod", 1, "context");
+    } else if (previousState === "speaking" && this.companionState === "listening") {
+      const at = this.now();
+      if (at - this.lastReplyMotionAt >= this.contextDedupeMs) {
+        this.lastReplyMotionAt = at;
+        void this.trigger("companion-replied", "nod", 1, "context");
+      }
     }
     if (this.companionState !== "thinking" || !this.policyStore.snapshot().enabled) return this.snapshot();
     this.last = Object.freeze({ ...this.last, state: "waiting-thinking", trigger: "companion-thinking", preset: "search", reason: "", ok: null, at: new Date(this.now()).toISOString() });
@@ -134,11 +144,25 @@ class MotionAutomationCoordinator extends EventEmitter {
   }
 
   async onCodexCompleted() {
+    return this.onCodexState("completed");
+  }
+
+  async onCodexState(state) {
     this.touchActivity();
+    const normalized = String(state || "");
     const at = this.now();
-    if (at - this.lastCodexCompletionAt < this.completionDedupeMs) return this._skip("codex-completed", "nod", "duplicate-completion");
-    this.lastCodexCompletionAt = at;
-    return this.trigger("codex-completed", "nod", 1, "context");
+    if (normalized === "completed") {
+      if (at - this.lastCodexCompletionAt < this.completionDedupeMs) return this._skip("codex-completed", "nod", "duplicate-completion");
+      this.lastCodexCompletionAt = at;
+      return this.trigger("codex-completed", "nod", 1, "context");
+    }
+    if (["waiting", "error"].includes(normalized)) {
+      const trigger = normalized === "error" ? "codex-error" : "codex-waiting";
+      if (at - this.lastCodexAttentionAt < this.completionDedupeMs) return this._skip(trigger, "search", "duplicate-attention");
+      this.lastCodexAttentionAt = at;
+      return this.trigger(trigger, "search", 1, "context");
+    }
+    return this._skip("", "", "codex-state-no-motion");
   }
 
   async trigger(trigger, preset, repeat = 1, source = "context") {

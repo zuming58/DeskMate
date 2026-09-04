@@ -34,9 +34,10 @@ not repeat the checklist below with that build. The next candidate must first:
 2. Say “打开 <enabled app>”; it must open once. Ask for the disabled target; it
    must be refused. A path, URL, argument or shell-style sentence must never be
    executed.
-3. With DeskMate running, use the repository reporter documented in
-   `docs/setup/codex-task-brief-reporter.md` to send `working`, `waiting` and
-   `completed` for one test task.
+3. With DeskMate running, start or continue one real Codex task. Confirm the
+   existing global DeskMate lifecycle Hook populates that task automatically;
+   the optional repository reporter remains only an explicit richer-milestone
+   fallback.
 4. Confirm the audible brief uses the configured Doubao voice rather than
    Windows/browser TTS. After playback, wait for the same companion session to
    show **Listening**, then directly say “Codex 进行到哪一步了” without saying a
@@ -44,12 +45,12 @@ not repeat the checklist below with that build. The next candidate must first:
 5. Confirm start/ordinary progress is throttled and waiting/completed is
    immediate. While dictation or another voice owner is active, a report must
    remain visible without stealing the microphone or forcing speech.
-6. Start two named active tasks and ask “Codex 进行到哪一步了” without a task
-   name. DeskMate must read both trusted reports, ask which task instead of
-   guessing, and must not answer with a generic explanation of Codex/Python.
-   After it returns to **Listening**, say only one complete task name. Within
-   60 seconds it must read that task's submitted state and milestone exactly.
-   A shared or ambiguous project term must ask for the complete name.
+6. Start two named active tasks and ask “Codex 项目情况怎么样”. DeskMate must
+   report the active-task count and one deterministic line for each task; it
+   must not answer with a generic explanation of Codex/Python or a percentage.
+   After it returns to **Listening**, say one complete task name. Within 60
+   seconds it must read that task's current state and bounded milestone. A
+   shared or ambiguous project term must ask for the complete name.
 7. Say “小智点点头 / 跳个舞 / 看看周围” and confirm the accepted semantic
    action path runs. Motion failure must remain visible and must not be described
    as success.
@@ -57,8 +58,9 @@ not repeat the checklist below with that build. The next candidate must first:
 ### Realtime Bridge repair check
 
 1. Before speaking, open **Settings -> Diagnostics** and confirm **Realtime
-   conversation Bridge** says started and **Codex task reporter** says listening.
-   After submitting one report, its bounded task count must be one.
+   conversation Bridge** says started and **Codex real task monitor** says
+   listening. After one real task emits a lifecycle event, its bounded task
+   count must be one or greater.
 2. Submit one named `waiting` report, allow its Doubao announcement to finish,
    and speak directly while the same session shows **Listening**. No wake phrase
    is required inside that active session.
@@ -70,7 +72,7 @@ not repeat the checklist below with that build. The next candidate must first:
    conversation after about five seconds of end silence. The configured
    60-second value means the whole quiet session remains listening for another
    utterance; it must not delay this answer.
-5. Under **AI companion -> AI linkage -> Codex recent task briefs**, disable
+5. Under **AI companion -> AI linkage -> Codex recent real tasks**, disable
    proactive voice. Submit a new report and confirm its status remains visible
    and queryable but silent. Re-enable the switch, submit `waiting`, `completed`
    or `error`, and confirm bounded Doubao speech.

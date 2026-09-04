@@ -10,16 +10,31 @@ function safeReason(value) { return /^[a-z0-9-]{1,80}$/.test(String(value || "")
 function isCodexStatusQuery(value, { hasKnownTasks = false } = {}) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
   const namesCodex = /(?:codex|code\s*[xs]?|代码助手|编程任务)/i.test(source);
-  const asksStatus = /(?:状态|进度|进行到|做到|完成|做完|结束|哪一步|怎么样|如何|跑到|还在|工作情况|报错|出错|失败)/u.test(source);
+  const asksStatus = /(?:状态|进度|进行到|做到|完成|做完|结束|哪一步|怎么样|如何|跑到|还在|情况|几个|多少个|哪些|什么任务|哪个任务|正在运行|报错|出错|失败)/u.test(source);
   const explicitlyPersonalTask = /(?:我的|这个|那个|当前|现在|哪个|哪一个).{0,8}(?:任务|项目)/u.test(source)
-    && /(?:状态|进度|进行到|做到|完成|做完|结束|哪一步|跑到|还在|工作情况|报错|出错|失败)/u.test(source);
+    && /(?:状态|进度|进行到|做到|完成|做完|结束|哪一步|跑到|还在|情况|几个|多少个|哪些|什么任务|哪个任务|正在运行|报错|出错|失败)/u.test(source);
   const knownTaskReference = hasKnownTasks && /(?:任务|项目)/u.test(source) && asksStatus;
   return (namesCodex && asksStatus) || explicitlyPersonalTask || knownTaskReference;
 }
 
 function isContextualCodexStatusFollowUp(value) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
-  return /^(?:那|那么|然后|所以|它|他|这个|那个|这边|现在|目前|后来|刚才|我的|你的|咱们的|我们的)*(?:怎么样了|如何了|到哪了|到哪一步了|做到哪了|跑到哪了|进展呢|状态呢|完成了吗|做完了吗|结束了吗|好了没有|好了吗|有结果了吗|报错了吗|出错了吗|失败了吗|还在跑吗|还在做吗|还在进行吗|还没好吗)$/u.test(source);
+  return /^(?:那|那么|然后|所以|它|他|这个|那个|这边|现在|目前|后来|刚才|我的|你的|咱们的|我们的)*(?:怎么样了|如何了|到哪了|到哪一步了|做到哪了|跑到哪了|进展呢|状态呢|什么任务|哪个任务|有哪些任务|几个任务|多少个任务|任务情况|项目情况|完成了吗|做完了吗|结束了吗|好了没有|好了吗|有结果了吗|报错了吗|出错了吗|失败了吗|还在跑吗|还在做吗|还在进行吗|还没好吗)$/u.test(source);
+}
+
+function motionPresetFromUtterance(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
+  if (isMotionNegation(source)) return "";
+  if (/(?:跳.{0,3}舞|舞蹈)/u.test(source)) return "dance";
+  if (/(?:点.{0,3}头)/u.test(source)) return "nod";
+  if (/(?:寻找|看看周围|看一看周围|环视)/u.test(source)) return "search";
+  if (/(?:看着我|关注我|关注动作)/u.test(source)) return "attention";
+  return "";
+}
+
+function isMotionNegation(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
+  return /(?:不要|别|不用|停止|取消).{0,5}(?:跳舞|点头|寻找|看看周围|看着我|关注)/u.test(source);
 }
 
 function shouldClassifyWithModel(value, apps = []) {
@@ -62,9 +77,9 @@ class CompanionIntentBridge {
   codexStatusResult(source) {
     const brief = this.codexTasks?.query?.(source);
     const coarse = summarizeCodexWork(this.codexStatus());
-    const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到 Codex 任务简报；${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
+    const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到可识别任务名称的 Codex 实时状态；目前只能确认总体状态是${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
     const answer = String(codex.answer || codex.summary || "Codex 当前状态不可用").slice(0, 500);
-    this.codexSelectionExpiresAt = codex.needsDisambiguation ? this.now() + TOKEN_TTL_MS : 0;
+    this.codexSelectionExpiresAt = codex.needsDisambiguation || codex.aggregate ? this.now() + TOKEN_TTL_MS : 0;
     if (brief?.available || brief?.needsDisambiguation) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;
     this.last = { status: "completed", type: "query_codex_status", label: answer, reason: "", expiresAt: 0 };
     return { ok: true, proposal: null, result: { type: "query_codex_status", ok: true, answer, codex } };
@@ -85,6 +100,12 @@ class CompanionIntentBridge {
     if (!source) return { ok: true, proposal: null };
     const deterministic = this.resolveDeterministic(source);
     if (deterministic) return deterministic;
+    if (isMotionNegation(source)) {
+      this.last = { status: "none", type: "none", label: "已识别为不执行动作", reason: "", expiresAt: 0 };
+      return { ok: true, proposal: null };
+    }
+    const deterministicMotion = motionPresetFromUtterance(source);
+    if (deterministicMotion) return this.executeMotion(deterministicMotion);
     const apps = this.appActions?.listRegistered?.({ limit: 100 }) || [];
     if (!shouldClassifyWithModel(source, apps)) {
       this.last = { status: "none", type: "none", label: "本轮已由 Bridge 判定为普通对话", reason: "", expiresAt: 0 };
@@ -127,6 +148,11 @@ class CompanionIntentBridge {
       return this.codexStatusResult(source);
     }
     const preset = ["attention", "search", "nod", "dance"].includes(parsed?.preset) ? parsed.preset : "";
+    return this.executeMotion(preset);
+  }
+
+  async executeMotion(preset) {
+    const type = "run_motion_preset";
     if (!preset || typeof this.motionAction !== "function") {
       this.last = { status: "failed", type, label: "动作控制暂不可用", reason: "motion-action-unavailable", expiresAt: 0 };
       return { ok: false, reason: "motion-action-unavailable", proposal: null, result: { type, ok: false, reason: "motion-action-unavailable", preset } };
@@ -157,4 +183,4 @@ class CompanionIntentBridge {
   }
 }
 
-module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, isContextualCodexStatusFollowUp, shouldClassifyWithModel };
+module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, isContextualCodexStatusFollowUp, isMotionNegation, motionPresetFromUtterance, shouldClassifyWithModel };
