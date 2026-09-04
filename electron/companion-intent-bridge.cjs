@@ -74,10 +74,31 @@ class CompanionIntentBridge {
     if ((this.codexTasks?.list?.().length || 0) > 0) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;
   }
 
+  claimsTurn(text) {
+    const source = String(text || "").trim().slice(0, 4000);
+    if (!source) return false;
+    const hasKnownTasks = (this.codexTasks?.list?.().length || 0) > 0;
+    const namedFollowUp = this.codexSelectionExpiresAt > this.now() && this.codexTasks?.matchesTaskLabel?.(source);
+    const contextualFollowUp = hasKnownTasks && this.codexContextExpiresAt > this.now() && isContextualCodexStatusFollowUp(source);
+    return Boolean(
+      isCodexStatusQuery(source, { hasKnownTasks })
+      || namedFollowUp
+      || contextualFollowUp
+      || (!isMotionNegation(source) && motionPresetFromUtterance(source)),
+    );
+  }
+
   codexStatusResult(source) {
     const brief = this.codexTasks?.query?.(source);
-    const coarse = summarizeCodexWork(this.codexStatus());
-    const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到可识别任务名称的 Codex 实时状态；目前只能确认总体状态是${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
+    const codex = brief?.available || brief?.needsDisambiguation
+      ? brief
+      : {
+          answer: "我还没有收到任何可信的 Codex 任务状态，所以不能判断任务名称、进度或是否完成。",
+          available: false,
+          needsDisambiguation: false,
+          evidenceAvailable: false,
+          source: "no-trusted-task-report",
+        };
     const answer = String(codex.answer || codex.summary || "Codex 当前状态不可用").slice(0, 500);
     this.codexSelectionExpiresAt = codex.needsDisambiguation || codex.aggregate ? this.now() + TOKEN_TTL_MS : 0;
     if (brief?.available || brief?.needsDisambiguation) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;

@@ -170,6 +170,22 @@ test("Codex status questions and a named follow-up bypass the language model", a
   assert.equal(modelCalls, 0);
 });
 
+test("Codex status with no trusted report is claimed and fails closed without invented progress", async () => {
+  let modelCalls = 0;
+  const bridge = new CompanionIntentBridge({
+    loadSecret: () => ({ apiKey: "x" }),
+    appActions: { listRegistered: () => [] },
+    codexStatus: () => ({ state: "working" }),
+    codexTasks: new CodexTaskBriefStore(),
+    requestJson: async () => { modelCalls += 1; return { type: "none" }; },
+  });
+  assert.equal(bridge.claimsTurn("Codex 现在进行到哪一步了"), true);
+  const answer = (await bridge.analyze("Codex 现在进行到哪一步了")).result.answer;
+  assert.match(answer, /没有收到任何可信的 Codex 任务状态/);
+  assert.doesNotMatch(answer, /\d+%|百分之/u);
+  assert.equal(modelCalls, 0);
+});
+
 test("explicit motion phrases bypass the model and run only a frozen preset", async () => {
   let modelCalls = 0;
   const motions = [];
@@ -217,6 +233,7 @@ test("every realtime final turn is classified by the Bridge before Doubao may an
   const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const controllerSource = fs.readFileSync(new URL("../electron/companion-conversation.cjs", import.meta.url), "utf8");
   assert.match(mainSource, /resolveTrustedTurn:\s*async[\s\S]{0,240}companionIntentBridge\?\.analyze/);
+  assert.match(mainSource, /claimsTrustedTurn:[\s\S]{0,160}companionIntentBridge\?\.claimsTurn/);
   assert.match(mainSource, /!intentChecked\s*&&\s*!intentHandled/);
   assert.match(controllerSource, /intentChecked:\s*trusted\?\.checked\s*===\s*true/);
 });

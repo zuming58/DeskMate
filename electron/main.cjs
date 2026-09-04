@@ -60,7 +60,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t16a-codex-live-monitor-hil";
+const DESKMATE_BUILD_ID = "t16a-trusted-bridge-recovery-hil";
 const FOREGROUND_SCRIPT = "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'; [DeskMateForeground]::GetForegroundWindow().ToInt64()";
 const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
@@ -1125,10 +1125,16 @@ app.whenReady().then(async () => {
     audioSource: computerCompanionAudio.source,
     audioSink: computerCompanionAudio.sink,
     commitTurn: commitCompanionTurn,
+    claimsTrustedTurn: (text) => companionIntentBridge?.claimsTurn?.(text) === true,
     resolveTrustedTurn: async (text) => {
-      const analysis = await companionIntentBridge?.analyze?.(text);
-      const answer = String(analysis?.result?.answer || "").trim();
-      return { checked: true, failed: analysis?.ok === false, text: answer, result: analysis?.result || null };
+      const claimed = companionIntentBridge?.claimsTurn?.(text) === true;
+      try {
+        const analysis = await companionIntentBridge?.analyze?.(text);
+        const answer = String(analysis?.result?.answer || (claimed ? "这项可信操作暂时不可用，我没有交给对话模型猜测。" : "")).trim();
+        return { checked: true, failed: analysis?.ok === false, text: answer, result: analysis?.result || null };
+      } catch {
+        return { checked: true, failed: true, text: claimed ? "这项可信操作暂时不可用，我没有交给对话模型猜测。" : "", result: null };
+      }
     },
     publishState: (value) => agentStatePublisher.publishCompanionState(value),
     onEvent: handleCompanionConversationEvent,

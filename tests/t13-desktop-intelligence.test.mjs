@@ -21,11 +21,14 @@ async function temp(prefix, run) {
 test("versioned persona persists and safety boundary remains after user persona", () => temp("deskmate-persona-", (directory) => {
   const store = new CompanionPersonaStore({ userDataPath: directory });
   const saved = store.save({ role: "我的工作搭档", traits: "直接、耐心", speakingStyle: "先结论", boundaries: "打开应用前先问我" });
-  assert.equal(saved.persona.version, 1);
+  assert.equal(saved.persona.version, 2);
+  assert.equal(saved.persona.ownerName, "祖名");
   const loaded = new CompanionPersonaStore({ userDataPath: directory }).snapshot().persona;
   assert.equal(loaded.role, "我的工作搭档");
   const prompt = buildPersonaInstructions({ name: "小智", persona: loaded });
   assert.match(prompt, /小智/);
+  assert.match(prompt, /用户称呼：祖名/);
+  assert.match(prompt, /不得.*编造百分比/);
   assert.match(prompt, /打开应用前先问我/);
   assert.ok(prompt.indexOf("安全边界优先于人设") > prompt.indexOf("打开应用前先问我"));
 }));

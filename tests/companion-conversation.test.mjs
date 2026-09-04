@@ -271,6 +271,64 @@ test("trusted Codex status owns the turn after ASR ended and suppresses the free
   await controller.stop("test-complete");
 });
 
+test("a synchronously claimed trusted turn suppresses free-chat audio while its resolver is pending", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  let resolveBridge;
+  const bridgeResult = new Promise((resolve) => { resolveBridge = resolve; });
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: sink,
+    claimsTrustedTurn: (text) => text.includes("Codex"),
+    resolveTrustedTurn: () => bridgeResult,
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "trusted-preclaim", generation: 1 });
+  const freeChatProvider = providers[0];
+  freeChatProvider.emit({ type: "asr.final", text: "Codex 进行到哪一步了" });
+  freeChatProvider.emit({ type: "chat.final", text: "任务完成了百分之六十五" });
+  freeChatProvider.emit({ type: "tts.start" });
+  freeChatProvider.emit({ type: "audio", audio: Buffer.from([6, 5]) });
+  resolveBridge({ checked: true, text: "尚未收到可信任务状态", result: { type: "query_codex_status", ok: true, answer: "尚未收到可信任务状态" } });
+  await controller.eventChain;
+  assert.equal(providers.length, 2);
+  assert.equal(freeChatProvider.closed, true);
+  assert.equal(sink.chunks.length, 0);
+  assert.deepEqual(providers[1].spokenTexts, ["尚未收到可信任务状态"]);
+  providers[1].emit({ type: "tts.start" });
+  providers[1].emit({ type: "tts.end" });
+  await controller.eventChain;
+  await controller.stop("test-complete");
+});
+
+test("a missing trusted tts end times out, reconnects, and resumes listening", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  const events = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: sink,
+    trustedSpeechTimeoutMs: 10,
+    onEvent: (event) => events.push(event),
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "trusted-timeout", generation: 1 });
+  assert.equal((await controller.announce("已经执行点头动作")).ok, true);
+  assert.equal(controller.snapshot().state, "thinking");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  await controller.eventChain;
+  assert.equal(providers.length, 2);
+  assert.equal(providers[0].closed, true);
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(controller.snapshot().turnLifecycle.trustedSpeechTimeouts, 1);
+  assert.equal(events.some((event) => event.type === "trusted-speech.timeout"), true);
+  await controller.stop("test-complete");
+});
+
 test("continuous companion session persists final turns before UI completion and owns state until stopped", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();

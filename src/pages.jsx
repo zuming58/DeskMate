@@ -286,8 +286,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const [section, setSection] = useState("overview");
   const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
-  const [personaDraft, setPersonaDraft] = useState({ role: "可靠、温暖的桌面工作伙伴", traits: "耐心、诚实、克制、主动但不打扰", speakingStyle: "自然、简短、清晰；先给结论，再补必要说明", boundaries: "不编造事实；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时先说明并等待确认" });
+  const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
   const [personaStatus, setPersonaStatus] = useState({ state: "idle", message: "" });
+  const [overviewMotionAutomation, setOverviewMotionAutomation] = useState({ policy: { version: 1, enabled: false, idleEnabled: false }, running: false, idleDelaySeconds: 90, thinkingDelaySeconds: 4, last: { state: "disabled", trigger: "", reason: "" } });
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
   const sessionActive = Boolean(conversation.active);
   const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
@@ -305,6 +306,12 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     let active = true;
     globalThis.desktopBridge?.getCompanionPersona?.().then((value) => { if (active && value?.persona) setPersonaDraft(value.persona); }).catch(() => {});
     return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    voiceAdapters.desktop.getMotionAutomationPolicy().then((value) => { if (active && value?.policy) setOverviewMotionAutomation(value); }).catch(() => {});
+    const unsubscribe = voiceAdapters.desktop.onMotionAutomationStatus((value) => { if (active && value?.policy) setOverviewMotionAutomation(value); });
+    return () => { active = false; unsubscribe?.(); };
   }, []);
   const conversationCopy = {
     idle: [`你好，我是${companionName}`, conversation.sessionPolicy?.lastStopReason === "listening-idle-timeout" ? "长时间未说话，已结束。按一下可重新进入连续对话。" : "按一下进入连续对话；可信 Codex 简报也会临时启动豆包会话。"],
@@ -387,6 +394,15 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       notify("陪伴人设已保存并回读");
     } catch { setPersonaStatus({ state: "error", message: "人设保存或回读失败，原有配置保持不变" }); }
   };
+  const updateOverviewMotionAutomation = async (patch) => {
+    const policy = { version: 1, ...overviewMotionAutomation.policy, ...patch };
+    if (!policy.enabled) policy.idleEnabled = false;
+    try {
+      const result = await voiceAdapters.desktop.setMotionAutomationPolicy(policy);
+      if (result?.policy) setOverviewMotionAutomation(result);
+      notify(result?.ok ? `自动情境动作已${policy.enabled ? "开启" : "关闭"}` : `自动动作设置未保存：${result?.reason || "motion-automation-save-failed"}`);
+    } catch (error) { notify(`自动动作设置未保存：${error?.message || "motion-automation-save-failed"}`); }
+  };
   const confirmIntent = async () => {
     const token = conversation.proposal?.token;
     if (!token) return;
@@ -439,8 +455,16 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
           <AgentStateTestPanel notify={notify} navigate={navigate} index="04" />
         </div>
         <div className="companion-side-stack">
+          <Card className="companion-automation-card">
+            <SectionTitle index="01" title="自动情境动作" description="一个总开关控制陪伴中的关注、寻找和轻点头；跳舞仍只接受明确指令。" />
+            <div className="companion-automation-control">
+              <div><strong>{overviewMotionAutomation.policy.enabled ? "已开启" : "已关闭"}</strong><small>{overviewMotionAutomation.policy.enabled ? "开始陪伴、持续思考和回答结束时可自动配合实体动作。" : "当前不会因对话情境自动转动。"}</small></div>
+              <Toggle label="自动情境动作总开关" checked={overviewMotionAutomation.policy.enabled} onChange={(enabled) => { void updateOverviewMotionAutomation({ enabled }); }} />
+            </div>
+            <div className="companion-automation-footer"><small>空闲环视仍默认关闭，可在动作编排页单独开启。</small><Button variant="ghost" onClick={() => setSection("motion")}>打开动作编排</Button></div>
+          </Card>
           <Card>
-            <SectionTitle index="01" title="陪伴提醒" description="提醒功能将在接入本地调度器后显示真实日程。" />
+            <SectionTitle index="02" title="陪伴提醒" description="提醒功能将在接入本地调度器后显示真实日程。" />
             <div className="companion-info-list">
               <button onClick={() => notify("提醒功能待接入本地调度器")}><span className="companion-info-icon"><BellRinging size={20} /></span><span><small>下一个提醒 · 演示</small><strong>14:30 准备产品周会材料</strong></span><StatusBadge tone="demo">今天</StatusBadge></button>
             </div>
@@ -449,7 +473,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <SectionTitle index="03" title="陪伴对话设置" description="只影响实时陪伴，不改变普通语音输入和文字整理的停顿规则。" />
             <div className="companion-settings-form">
               <label className="field-label">陪伴名称<input value={companionDraft.name} maxLength={32} onChange={(event) => setCompanionDraft({ ...companionDraft, name: event.target.value })} /></label>
-              <label className="field-label">唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /></label>
+              <label className="field-label">唤醒短语（尚未启用）<input value={companionDraft.wakePhrase} maxLength={64} disabled readOnly /><small>离线唤醒引擎尚未开发；现在请点击“开始陪伴”或按 EasyInput 呼叫键。</small></label>
               <label className="field-label">说完后等待回答<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>你说完后连续静音这么久，豆包就判定本句话结束并开始回答；推荐 5 秒。</small></label>
               <label className="field-label">整段会话保持聆听<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>60 秒只表示没有任何新讲话时仍保持会话，不会让已经说完的一句话等待 60 秒；0 表示关闭自动结束。</small></label>
               {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
@@ -460,7 +484,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />
-            <div className="companion-settings-form">
+            <div className="companion-settings-form companion-persona-form">
+              <label className="field-label">如何称呼你<input maxLength={32} value={personaDraft.ownerName || ""} onChange={(event) => setPersonaDraft({ ...personaDraft, ownerName: event.target.value })} /></label>
               <label className="field-label">角色定位<input maxLength={160} value={personaDraft.role} onChange={(event) => setPersonaDraft({ ...personaDraft, role: event.target.value })} /></label>
               <label className="field-label">性格特征<textarea maxLength={240} value={personaDraft.traits} onChange={(event) => setPersonaDraft({ ...personaDraft, traits: event.target.value })} /></label>
               <label className="field-label">表达风格<textarea maxLength={240} value={personaDraft.speakingStyle} onChange={(event) => setPersonaDraft({ ...personaDraft, speakingStyle: event.target.value })} /></label>
@@ -471,7 +496,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <Notice tone="info" title="不可覆盖的安全边界">自定义人设不会获得执行命令、读取密钥或操控未接入硬件的权限；桌面动作仍必须通过白名单确认桥。</Notice>
           </Card>
           <Card>
-            <SectionTitle index="02" title="设备与服务" description="真实状态与待接入状态分开显示。" />
+            <SectionTitle index="05" title="设备与服务" description="真实状态与待接入状态分开显示。" />
             <div className="companion-status-list">
               <div><span><Keyboard size={18} />EasyInput HID</span><StatusBadge tone={serviceStatus.easyInput.tone}>{serviceStatus.easyInput.label}</StatusBadge></div>
               <div><span><Robot size={18} />小智 DeskMate Link</span><StatusBadge tone={serviceStatus.xiaozhi.tone}>{serviceStatus.xiaozhi.label}</StatusBadge></div>
