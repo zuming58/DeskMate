@@ -39,6 +39,26 @@ EasyInput and Xiaozhi T15D V2 applications installed.
    action path runs. Motion failure must remain visible and must not be described
    as success.
 
+### Realtime Bridge repair check
+
+1. Submit one named `waiting` report, allow its Doubao announcement to finish,
+   and speak directly while the same session shows **Listening**. No wake phrase
+   is required inside that active session.
+2. Say “我的这个任务跑到哪一步了” and then repeat with “Code S 进行到哪一步”.
+   Both forms must return the trusted task label/state/milestone rather than a
+   generic explanation of Codex, Python or the DeskMate development roadmap.
+3. Ask one unrelated ordinary question. It must pass through to normal Doubao
+   conversation after about five seconds of end silence. The configured
+   60-second value means the whole quiet session remains listening for another
+   utterance; it must not delay this answer.
+4. Under **AI companion -> AI linkage -> Codex recent task briefs**, disable
+   proactive voice. Submit a new report and confirm its status remains visible
+   and queryable but silent. Re-enable the switch, submit `waiting`, `completed`
+   or `error`, and confirm bounded Doubao speech.
+5. Export sanitized diagnostics and confirm `bridgeChecks` advances for every
+   accepted final while each turn increments either `bridgeOwnedTurns` or
+   `bridgePassThroughTurns`. Do not export recognized text.
+
 ## 3. T17 dual-source memory
 
 1. In **Memory management**, keep **Companion conversation** and **Voice input**

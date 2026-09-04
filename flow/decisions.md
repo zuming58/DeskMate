@@ -1,5 +1,14 @@
 # Decisions
 
+## D088 - The realtime Bridge is the mandatory front door for every completed utterance
+
+- Date: 2026-09-04
+- Decision: every accepted companion `asr.final` is synchronously presented to one Bridge before the turn may remain provider free chat. Trusted task status is resolved from `codex-task-brief-v1` snapshots before any general answer; application and motion controls remain closed allowlists. A Bridge-owned turn suppresses provider-generated chat output and sends its exact bounded answer through the configured Doubao session.
+- Latency: ordinary conversation is still explicitly inspected by the Bridge but is immediately returned as pass-through without a second model request. Only an ambiguous control-like sentence may use the bounded intent classifier. This avoids adding text-model latency to every normal conversational turn while removing the former post-hoc observer race.
+- Timing: end-of-utterance silence and whole-session idle listening are independent. The user-facing default/selected endpoint wait is five seconds; 60 seconds means how long an otherwise quiet companion session remains available for another utterance and must never delay an already completed utterance.
+- Announcements: proactive Codex brief speech has one persisted software switch. Turning it off does not delete or stop bounded reports and does not disable explicit status queries. When enabled, permitted brief states use provider-native Doubao speech and the existing voice-owner arbitration.
+- Boundary: Bridge diagnostics remain content-free. Task identity still comes only from the reporting task's opaque key and visible label; DeskMate does not monitor processes, folders, prompts, replies, commands, window titles or raw chat transcripts. This decision changes Windows software only and does not change firmware, Host HID, DeskMate Link, audio transport or motion behavior.
+
 ## D087 - Codex progress questions are deterministic provider-owned turns
 
 - Date: 2026-09-03
