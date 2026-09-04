@@ -245,9 +245,9 @@ function handleCompanionConversationEvent(event = {}) {
 }
 
 async function commitCompanionTurn(turn) {
-  const { intentHandled = false, ...memoryTurn } = turn || {};
+  const { intentChecked = false, intentHandled = false, ...memoryTurn } = turn || {};
   const result = companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
-  if (memoryTurn?.role === "user" && companionIntentBridge && !intentHandled) {
+  if (memoryTurn?.role === "user" && companionIntentBridge && !intentChecked && !intentHandled) {
     void companionIntentBridge.analyze(memoryTurn.content).then((analysis) => {
       if (analysis?.proposal) handleCompanionConversationEvent({ type: "intent.proposal", proposal: analysis.proposal });
       if (analysis?.result) handleCompanionConversationEvent({ type: "intent.result", result: analysis.result });
@@ -1087,10 +1087,10 @@ app.whenReady().then(async () => {
     audioSource: computerCompanionAudio.source,
     audioSink: computerCompanionAudio.sink,
     commitTurn: commitCompanionTurn,
-    resolveTrustedTurn: (text) => {
-      const analysis = companionIntentBridge?.resolveDeterministic?.(text);
+    resolveTrustedTurn: async (text) => {
+      const analysis = await companionIntentBridge?.analyze?.(text);
       const answer = String(analysis?.result?.answer || "").trim();
-      return answer ? { text: answer, result: analysis.result } : null;
+      return { checked: true, failed: analysis?.ok === false, text: answer, result: analysis?.result || null };
     },
     publishState: (value) => agentStatePublisher.publishCompanionState(value),
     onEvent: handleCompanionConversationEvent,
@@ -1116,8 +1116,9 @@ app.whenReady().then(async () => {
   codexTaskBriefServer = new CodexTaskBriefServer({ onReport: (report) => {
     const result = codexTaskBriefStore.ingest(report);
     if (!result.ok) return;
-    sendToMain("codex-task-brief-status", codexTaskBriefStore.status());
-    if (result.announcement) void announceCodexTaskBrief(result.announcement);
+    const announcementsEnabled = companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true;
+    sendToMain("codex-task-brief-status", { ...codexTaskBriefStore.status(), announcementsEnabled });
+    if (result.announcement && announcementsEnabled) void announceCodexTaskBrief(result.announcement);
     if (report.state === "completed") void motionAutomationCoordinator?.onCodexCompleted();
   } });
   const taskBriefReceiver = await codexTaskBriefServer.start();
@@ -1216,7 +1217,13 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
   handleTrusted("desktop:get-application-voice-policy", (id) => appActionStore.describe(id) || { ok: false, reason: "host-action-not-mapped" });
   handleTrusted("desktop:set-application-voice-enabled", (value = {}) => appActionStore.setVoiceEnabled(value.id, value.enabled));
-  handleTrusted("desktop:get-codex-task-brief-status", () => ({ ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable" }));
+  handleTrusted("desktop:get-codex-task-brief-status", () => ({ ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable", announcementsEnabled: companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true }));
+  handleTrusted("desktop:set-codex-task-brief-announcements", (enabled) => {
+    companionPreferenceStore.setCodexBriefAnnouncementsEnabled(enabled);
+    const status = { ...codexTaskBriefStore.status(), receiver: taskBriefReceiver.ok ? "listening" : "unavailable", announcementsEnabled: enabled };
+    sendToMain("codex-task-brief-status", status);
+    return { ok: true, ...status };
+  });
   handleTrusted("desktop:sync-keyboard-config", () => ({ ok: false, reason: "config-write-requires-preview-and-confirmation" }));
   handleTrusted("desktop:read-keyboard-config", async () => {
     const result = await inputBridge?.readConfig?.() || { ok: false, reason: "input-bridge-unavailable" };

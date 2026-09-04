@@ -8,7 +8,7 @@ import { normalizeMotionState, MOTION_REPEAT_DEFAULTS } from "../src/domain/moti
 
 const require = createRequire(import.meta.url);
 const { CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, encodeCodexTaskBrief, sendCodexTaskBrief } = require("../electron/codex-task-brief.cjs");
-const { CompanionIntentBridge, isCodexStatusQuery } = require("../electron/companion-intent-bridge.cjs");
+const { CompanionIntentBridge, isCodexStatusQuery, shouldClassifyWithModel } = require("../electron/companion-intent-bridge.cjs");
 const { parseArguments, reportCodexTaskBrief, reserveCodexTaskBrief, stateFileFor } = require("../scripts/report-codex-task-brief.cjs");
 
 const task = (overrides = {}) => ({ version: "codex-task-brief-v1", provider: "codex", taskKey: "opaque_01", taskLabel: "DeskMate 软件", state: "working", milestone: "正在补齐测试", sequence: 1, ...overrides });
@@ -142,6 +142,8 @@ test("Codex status questions and a named follow-up bypass the language model", a
     now: () => now,
   });
   assert.equal(isCodexStatusQuery("Codex 已经进行到哪一步了"), true);
+  assert.equal(isCodexStatusQuery("Code S 进行到哪一步了"), true);
+  assert.equal(isCodexStatusQuery("我的这个任务跑到哪一步了"), true);
   const ambiguous = await bridge.analyze("Codex 已经进行到哪一步了");
   assert.equal(ambiguous.result.codex.needsDisambiguation, true);
   assert.equal(modelCalls, 0);
@@ -149,6 +151,41 @@ test("Codex status questions and a named follow-up bypass the language model", a
   const selected = bridge.resolveDeterministic("EasyInput 固件");
   assert.equal(selected.result.answer, "EasyInput 固件 正在等你回复：等待人工验证");
   assert.equal(modelCalls, 0);
+});
+
+test("every realtime final turn is classified by the Bridge before Doubao may answer", () => {
+  const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const controllerSource = fs.readFileSync(new URL("../electron/companion-conversation.cjs", import.meta.url), "utf8");
+  assert.match(mainSource, /resolveTrustedTurn:\s*async[\s\S]{0,240}companionIntentBridge\?\.analyze/);
+  assert.match(mainSource, /!intentChecked\s*&&\s*!intentHandled/);
+  assert.match(controllerSource, /intentChecked:\s*trusted\?\.checked\s*===\s*true/);
+});
+
+test("the realtime Bridge passes ordinary chat immediately and escalates only control-like ambiguity", async () => {
+  let modelCalls = 0;
+  const bridge = new CompanionIntentBridge({
+    loadSecret: () => ({ apiKey: "x" }),
+    appActions: { listRegistered: () => [] },
+    codexStatus: () => ({ state: "idle" }),
+    requestJson: async () => { modelCalls += 1; return { type: "none" }; },
+  });
+  assert.equal(shouldClassifyWithModel("今天天气怎么样", []), false);
+  assert.equal((await bridge.analyze("今天天气怎么样")).proposal, null);
+  assert.equal(modelCalls, 0);
+  assert.equal(shouldClassifyWithModel("软件项目做到哪一步了", []), true);
+  await bridge.analyze("软件项目做到哪一步了");
+  assert.equal(modelCalls, 1);
+});
+
+test("proactive Codex speech is user-switchable while task status remains available", () => {
+  const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
+  const preloadSource = fs.readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
+  const pagesSource = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
+  assert.match(mainSource, /result\.announcement\s*&&\s*announcementsEnabled/);
+  assert.match(mainSource, /desktop:set-codex-task-brief-announcements/);
+  assert.match(preloadSource, /setCodexTaskBriefAnnouncements/);
+  assert.match(pagesSource, /主动语音播报/);
+  assert.match(pagesSource, /关闭后仍保留状态，可随时询问/);
 });
 
 test("voice intent opens enabled apps, rejects disabled apps, answers Codex deterministically, and reserves motion without wire output", async () => {

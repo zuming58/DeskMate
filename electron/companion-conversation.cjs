@@ -146,6 +146,7 @@ class CompanionConversationController {
       ttsImplicitStarts: 0, ttsStartsWhileOpen: 0, ttsEndsWithoutStart: 0,
       chatFinals: 0, chatFinalsSuppressed: 0, chatFinalTtsEndPairs: 0, chatFinalsWithoutTtsEnd: 0,
       asrFinalsAccepted: 0, asrFinalsSuppressed: 0,
+      bridgeChecks: 0, bridgeOwnedTurns: 0, bridgePassThroughTurns: 0, bridgeFailures: 0,
       lastAsrFinalArrivalPhase: "idle", lastTtsTurnOutcome: "none",
       asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, 0])),
     };
@@ -626,10 +627,16 @@ class CompanionConversationController {
       }
       this.lastPartialAt = null;
       let trusted = null;
-      try { trusted = await this.resolveTrustedTurn(event.text); } catch { trusted = null; }
+      try { trusted = await this.resolveTrustedTurn(event.text); } catch { trusted = null; this.turnLifecycle.bridgeFailures += 1; }
       const trustedText = boundedText(trusted?.text || trusted?.answer, 240).trim();
+      if (trusted?.checked === true) {
+        this.turnLifecycle.bridgeChecks += 1;
+        if (trusted.failed === true) this.turnLifecycle.bridgeFailures += 1;
+        if (trustedText) this.turnLifecycle.bridgeOwnedTurns += 1;
+        else this.turnLifecycle.bridgePassThroughTurns += 1;
+      }
       if (trustedText) this.pendingTrustedResponse = Object.freeze({ text: trustedText, result: trusted?.result || null });
-      if (await this.commitFinalTurn("user", event.text, token, { intentHandled: Boolean(trustedText) })) {
+      if (await this.commitFinalTurn("user", event.text, token, { intentChecked: trusted?.checked === true, intentHandled: Boolean(trustedText) })) {
         if (!this.isCurrent(token)) return { ignored: true };
         this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
         if (trustedText && trusted?.result) this.onEvent({ type: "intent.result", result: trusted.result, sessionId: this.active.sessionId, generation: this.active.generation });

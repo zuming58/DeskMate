@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getApplicationVoicePolicy: (id) => ipcRenderer.invoke("desktop:get-application-voice-policy", id),
   setApplicationVoiceEnabled: (id, enabled) => ipcRenderer.invoke("desktop:set-application-voice-enabled", { id, enabled }),
   getCodexTaskBriefStatus: () => ipcRenderer.invoke("desktop:get-codex-task-brief-status"),
+  setCodexTaskBriefAnnouncements: (enabled) => ipcRenderer.invoke("desktop:set-codex-task-brief-announcements", Boolean(enabled)),
   onCodexTaskBriefStatus: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("codex-task-brief-status", handler); return () => ipcRenderer.removeListener("codex-task-brief-status", handler); },
   onCodexTaskBriefAnnouncement: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("codex-task-brief-announcement", handler); return () => ipcRenderer.removeListener("codex-task-brief-announcement", handler); },
   readKeyboardConfig: () => ipcRenderer.invoke("desktop:read-keyboard-config"),

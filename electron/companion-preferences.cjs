@@ -14,6 +14,7 @@ const COMPANION_PREFERENCES_DEFAULT = Object.freeze({
   wakePhrase: COMPANION_WAKE_PHRASE_DEFAULT,
   endSmoothWindowMs: 5000,
   idleTimeoutMs: 60000,
+  codexBriefAnnouncementsEnabled: true,
 });
 
 function boundedDisplayText(value, fallback, maxLength) {
@@ -38,7 +39,8 @@ function validateCompanionPreferences(value = {}) {
   if (!wakePhrase || wakePhrase.length > 64) throw new Error("companion-wake-phrase-invalid");
   if (!isValidEndSmoothWindowMs(value.endSmoothWindowMs)) throw new Error("companion-end-smooth-window-invalid");
   if (!isValidIdleTimeoutMs(value.idleTimeoutMs)) throw new Error("companion-idle-timeout-invalid");
-  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs) });
+  if (value.codexBriefAnnouncementsEnabled !== undefined && typeof value.codexBriefAnnouncementsEnabled !== "boolean") throw new Error("companion-codex-brief-announcements-invalid");
+  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs), codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false });
 }
 
 function normalizeCompanionPreferences(value = {}) {
@@ -49,6 +51,7 @@ function normalizeCompanionPreferences(value = {}) {
     wakePhrase: boundedDisplayText(value.wakePhrase, COMPANION_WAKE_PHRASE_DEFAULT, 64),
     endSmoothWindowMs: isValidEndSmoothWindowMs(endSmoothWindowMs) ? endSmoothWindowMs : COMPANION_PREFERENCES_DEFAULT.endSmoothWindowMs,
     idleTimeoutMs: isValidIdleTimeoutMs(idleTimeoutMs) ? idleTimeoutMs : COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs,
+    codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false,
   });
 }
 
@@ -77,12 +80,17 @@ class CompanionPreferenceStore {
   }
 
   save(value) {
-    const validated = validateCompanionPreferences(value);
+    const validated = validateCompanionPreferences({ ...this.value, ...value });
     const readback = this.writeAndReadback(validated);
     if (JSON.stringify(readback) !== JSON.stringify(validated)) throw new Error("companion-preferences-readback-mismatch");
     this.value = readback;
     this.revision += 1;
     return this.value;
+  }
+
+  setCodexBriefAnnouncementsEnabled(enabled) {
+    if (typeof enabled !== "boolean") throw new Error("companion-codex-brief-announcements-invalid");
+    return this.save({ codexBriefAnnouncementsEnabled: enabled });
   }
 }
 

@@ -53,7 +53,9 @@ test("T12A preferences migrate to 小言, persist enums, and reject malformed im
   try {
     const store = new CompanionPreferenceStore({ userDataPath: root });
     assert.equal(store.get().name, "小言");
-    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 });
+    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true });
+    assert.equal(store.setCodexBriefAnnouncementsEnabled(false).codexBriefAnnouncementsEnabled, false);
+    assert.equal(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000 }).codexBriefAnnouncementsEnabled, false);
     assert.deepEqual(new CompanionPreferenceStore({ userDataPath: root }).get(), store.get());
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
@@ -142,6 +144,6 @@ test("T12A UI exposes the key test and marks wake word as unavailable", () => {
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /测试此动作/);
   assert.match(pages, /语音唤醒待接入 \/ 未启用/);
-  assert.match(pages, /单句话内停顿/);
-  assert.match(pages, /无人说话自动结束/);
+  assert.match(pages, /说完后等待回答/);
+  assert.match(pages, /整段会话保持聆听/);
 });

@@ -43,7 +43,7 @@ export const defaultState = {
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
     companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
     memory: { ready: false, storage: "unavailable" },
-    codexTasks: { receiver: "unavailable", protocol: "codex-task-brief-v1", tasks: [] },
+    codexTasks: { receiver: "unavailable", protocol: "codex-task-brief-v1", announcementsEnabled: true, tasks: [] },
     lastTrigger: null,
   },
   expressionMapping: { idle: "sleep", listening: "listen", thinking: "think", working: "focus", waiting_user: "listen", completed: "happy", error: "alert" },
