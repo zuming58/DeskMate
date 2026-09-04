@@ -17,6 +17,11 @@ function isCodexStatusQuery(value, { hasKnownTasks = false } = {}) {
   return (namesCodex && asksStatus) || explicitlyPersonalTask || knownTaskReference;
 }
 
+function isContextualCodexStatusFollowUp(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
+  return /^(?:那|那么|然后|所以|它|他|这个|那个|这边|现在|目前|后来|刚才|我的|你的|咱们的|我们的)*(?:怎么样了|如何了|到哪了|到哪一步了|做到哪了|跑到哪了|进展呢|状态呢|完成了吗|做完了吗|结束了吗|好了没有|好了吗|有结果了吗|报错了吗|出错了吗|失败了吗|还在跑吗|还在做吗|还在进行吗|还没好吗)$/u.test(source);
+}
+
 function shouldClassifyWithModel(value, apps = []) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
   if (/(?:点.{0,3}头|跳.{0,3}舞|寻找|看看周围|看着我|关注动作)/u.test(source)) return true;
@@ -41,12 +46,17 @@ class CompanionIntentBridge {
     this.createToken = createToken;
     this.pending = new Map();
     this.codexSelectionExpiresAt = 0;
+    this.codexContextExpiresAt = 0;
     this.last = { status: "idle", type: "none", label: "没有待确认动作", reason: "", expiresAt: 0 };
   }
 
   status() {
     if (this.last.expiresAt && this.last.expiresAt <= this.now()) this.last = { status: "expired", type: "none", label: "动作建议已过期", reason: "intent-confirmation-expired", expiresAt: 0 };
-    return { ...this.last };
+    return { ...this.last, bridge: "ready", contextActive: this.codexContextExpiresAt > this.now(), taskCount: Math.min(8, this.codexTasks?.list?.().length || 0) };
+  }
+
+  noteCodexReport() {
+    if ((this.codexTasks?.list?.().length || 0) > 0) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;
   }
 
   codexStatusResult(source) {
@@ -55,6 +65,7 @@ class CompanionIntentBridge {
     const codex = brief?.available || brief?.needsDisambiguation ? brief : { ...coarse, answer: `尚未收到 Codex 任务简报；${coarse.summary}`, available: Boolean(this.codexStatus()?.connected), needsDisambiguation: false, source: "codex-hook-v1" };
     const answer = String(codex.answer || codex.summary || "Codex 当前状态不可用").slice(0, 500);
     this.codexSelectionExpiresAt = codex.needsDisambiguation ? this.now() + TOKEN_TTL_MS : 0;
+    if (brief?.available || brief?.needsDisambiguation) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;
     this.last = { status: "completed", type: "query_codex_status", label: answer, reason: "", expiresAt: 0 };
     return { ok: true, proposal: null, result: { type: "query_codex_status", ok: true, answer, codex } };
   }
@@ -64,7 +75,8 @@ class CompanionIntentBridge {
     if (!source) return null;
     const namedFollowUp = this.codexSelectionExpiresAt > this.now() && this.codexTasks?.matchesTaskLabel?.(source);
     const hasKnownTasks = (this.codexTasks?.list?.().length || 0) > 0;
-    if (!isCodexStatusQuery(source, { hasKnownTasks }) && !namedFollowUp) return null;
+    const contextualFollowUp = hasKnownTasks && this.codexContextExpiresAt > this.now() && isContextualCodexStatusFollowUp(source);
+    if (!isCodexStatusQuery(source, { hasKnownTasks }) && !namedFollowUp && !contextualFollowUp) return null;
     return this.codexStatusResult(source);
   }
 
@@ -145,4 +157,4 @@ class CompanionIntentBridge {
   }
 }
 
-module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, shouldClassifyWithModel };
+module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, isContextualCodexStatusFollowUp, shouldClassifyWithModel };

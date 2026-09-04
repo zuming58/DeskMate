@@ -8,7 +8,7 @@ import { normalizeMotionState, MOTION_REPEAT_DEFAULTS } from "../src/domain/moti
 
 const require = createRequire(import.meta.url);
 const { CodexTaskBriefServer, CodexTaskBriefStore, decodeCodexTaskBrief, encodeCodexTaskBrief, sendCodexTaskBrief } = require("../electron/codex-task-brief.cjs");
-const { CompanionIntentBridge, isCodexStatusQuery, shouldClassifyWithModel } = require("../electron/companion-intent-bridge.cjs");
+const { CompanionIntentBridge, isCodexStatusQuery, isContextualCodexStatusFollowUp, shouldClassifyWithModel } = require("../electron/companion-intent-bridge.cjs");
 const { parseArguments, reportCodexTaskBrief, reserveCodexTaskBrief, stateFileFor } = require("../scripts/report-codex-task-brief.cjs");
 
 const task = (overrides = {}) => ({ version: "codex-task-brief-v1", provider: "codex", taskKey: "opaque_01", taskLabel: "DeskMate 软件", state: "working", milestone: "正在补齐测试", sequence: 1, ...overrides });
@@ -153,6 +153,29 @@ test("Codex status questions and a named follow-up bypass the language model", a
   assert.equal(modelCalls, 0);
 });
 
+test("a received Codex report gives the realtime Bridge a bounded conversational follow-up context", async () => {
+  let now = 5_000;
+  let modelCalls = 0;
+  const store = new CodexTaskBriefStore({ now: () => now });
+  store.ingest(task({ taskKey: "task_one", taskLabel: "DeskMate 实时 Bridge", state: "waiting", milestone: "等待语音复测" }));
+  const bridge = new CompanionIntentBridge({
+    loadSecret: () => ({ apiKey: "x" }),
+    appActions: { listRegistered: () => [] },
+    codexStatus: () => ({ state: "working" }),
+    codexTasks: store,
+    requestJson: async () => { modelCalls += 1; return { type: "none" }; },
+    now: () => now,
+  });
+  assert.equal(isContextualCodexStatusFollowUp("那现在怎么样了？"), true);
+  assert.equal(isContextualCodexStatusFollowUp("今天天气怎么样？"), false);
+  bridge.noteCodexReport();
+  assert.equal((await bridge.analyze("那现在怎么样了？")).result.answer, "DeskMate 实时 Bridge 正在等你回复：等待语音复测");
+  assert.equal(modelCalls, 0);
+  now += 60_001;
+  assert.equal((await bridge.analyze("那现在怎么样了？")).proposal, null);
+  assert.equal(modelCalls, 0);
+});
+
 test("every realtime final turn is classified by the Bridge before Doubao may answer", () => {
   const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const controllerSource = fs.readFileSync(new URL("../electron/companion-conversation.cjs", import.meta.url), "utf8");
@@ -186,6 +209,8 @@ test("proactive Codex speech is user-switchable while task status remains availa
   assert.match(preloadSource, /setCodexTaskBriefAnnouncements/);
   assert.match(pagesSource, /主动语音播报/);
   assert.match(pagesSource, /关闭后仍保留状态，可随时询问/);
+  assert.match(pagesSource, /实时对话 Bridge/);
+  assert.match(pagesSource, /Codex 任务报告器/);
 });
 
 test("voice intent opens enabled apps, rejects disabled apps, answers Codex deterministically, and reserves motion without wire output", async () => {

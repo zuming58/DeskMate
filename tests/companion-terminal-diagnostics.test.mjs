@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes an explicit T15D adjustable motion build identity", () => {
+test("current package exposes an explicit realtime Bridge HIL build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t18-software-closure-beta/);
+  assert.match(main, /t18-realtime-bridge-context-hil/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 
@@ -366,25 +366,35 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
       chatFinalsWithoutTtsEnd: 1,
       asrFinalsAccepted: 2,
       asrFinalsSuppressed: 5,
+      bridgeChecks: 7,
+      bridgeOwnedTurns: 2,
+      bridgePassThroughTurns: 5,
+      bridgeFailures: 0,
       lastAsrFinalArrivalPhase: "draining",
       lastTtsTurnOutcome: "manual",
       asrFinalArrivalPhases: { listening: 2, thinking: 1, speaking: 3, draining: 1, privatePhase: 99 },
       transcript: "private user sentence",
       replyText: "private assistant sentence",
     },
+    intentBridge: { status: "ready", taskCount: 1, taskLabel: "private task label" },
     sinkCancelReasons: { manual: 7, stop: 1, renderer: 2, provider: 3, "asr-final": 0, privateReason: 88 },
     lastSinkCancelReason: "manual",
     echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, phase: "listening", uplinkAllowed: true },
-  } });
+  }, codexTaskBrief: { receiver: "listening", taskCount: 1, announcementsEnabled: true, tasks: [{ taskLabel: "private task label", milestone: "private milestone" }] } });
   assert.equal(report.conversation.turnLifecycle.ttsTurnStarted, 4);
   assert.equal(report.conversation.turnLifecycle.ttsTurnCompleted, 3);
   assert.equal(report.conversation.turnLifecycle.ttsTurnAbandoned, 1);
   assert.equal(report.conversation.turnLifecycle.asrFinalArrivalPhases.speaking, 3);
   assert.equal(report.conversation.turnLifecycle.asrFinalArrivalPhases.draining, 1);
   assert.equal(report.conversation.turnLifecycle.lastTtsTurnOutcome, "manual");
+  assert.equal(report.conversation.turnLifecycle.bridgeChecks, 7);
+  assert.equal(report.conversation.turnLifecycle.bridgeOwnedTurns, 2);
+  assert.equal(report.conversation.turnLifecycle.bridgePassThroughTurns, 5);
+  assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1 });
+  assert.deepEqual(report.codexTaskBrief, { receiver: "listening", taskCount: 1, announcementsEnabled: true });
   assert.equal(report.conversation.sinkCancellation.reasons.manual, 7);
   assert.equal(report.conversation.sinkCancellation.reasons["asr-final"], 0);
   assert.equal(report.conversation.sinkCancellation.lastReason, "manual");
   assert.deepEqual(report.conversation.echoGuard, { policy: "computer-speaker-echo-guard-v1", active: false, phase: "listening", uplinkAllowed: true, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } });
-  assert.doesNotMatch(JSON.stringify(report), /private user|private assistant|privatePhase|privateReason/);
+  assert.doesNotMatch(JSON.stringify(report), /private user|private assistant|private task|private milestone|privatePhase|privateReason/);
 });

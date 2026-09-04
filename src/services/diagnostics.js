@@ -176,6 +176,7 @@ export function createDiagnosticReport(input = {}) {
   const stopSource = conversationSource.stopLifecycle || {};
   const providerSource = conversationSource.providerLifecycle || {};
   const turnSource = conversationSource.turnLifecycle || {};
+  const intentBridgeSource = conversationSource.intentBridge || {};
   const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
   const sinkCancelSource = conversationSource.sinkCancelReasons || {};
   const mainStateSource = conversationSource.mainState || {};
@@ -230,10 +231,14 @@ export function createDiagnosticReport(input = {}) {
       lastDialogErrorAdjacency: DIALOG_ERROR_ADJACENCY.has(providerSource.lastDialogErrorAdjacency) ? providerSource.lastDialogErrorAdjacency : "none",
     },
     turnLifecycle: {
-      ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
+      ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
       lastAsrFinalArrivalPhase: HALF_DUPLEX_PHASES.has(turnSource.lastAsrFinalArrivalPhase) ? turnSource.lastAsrFinalArrivalPhase : "idle",
       lastTtsTurnOutcome: TTS_TURN_OUTCOMES.has(turnSource.lastTtsTurnOutcome) ? turnSource.lastTtsTurnOutcome : "none",
       asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, Math.max(0, Number(asrPhaseSource[phase]) || 0)])),
+    },
+    intentBridge: {
+      status: intentBridgeSource.status === "ready" ? "ready" : "unavailable",
+      taskCount: Math.max(0, Math.min(8, Number(intentBridgeSource.taskCount) || 0)),
     },
     sinkCancellation: {
       reasons: Object.fromEntries(SINK_CANCEL_REASONS.map((reason) => [reason, Math.max(0, Number(sinkCancelSource[reason]) || 0)])),
@@ -251,5 +256,11 @@ export function createDiagnosticReport(input = {}) {
   const safeInput = sanitize(input);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets, choreography };
+  const taskBriefSource = input.codexTaskBrief || {};
+  const codexTaskBrief = {
+    receiver: taskBriefSource.receiver === "listening" ? "listening" : "unavailable",
+    taskCount: Math.max(0, Math.min(8, Number(taskBriefSource.taskCount) || 0)),
+    announcementsEnabled: taskBriefSource.announcementsEnabled !== false,
+  };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, codexTaskBrief, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets, choreography };
 }

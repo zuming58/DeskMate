@@ -41,7 +41,7 @@ export const defaultState = {
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
-    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
+    companion: { active: false, state: "idle", provider: "doubao", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "doubao" }, serviceConfigured: false, intentBridge: { status: "unavailable", taskCount: 0 }, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
     memory: { ready: false, storage: "unavailable" },
     codexTasks: { receiver: "unavailable", protocol: "codex-task-brief-v1", announcementsEnabled: true, tasks: [] },
     lastTrigger: null,
@@ -196,7 +196,7 @@ export function reduceAppState(state, action) {
       next.sessionId = value.sessionId || (next.state === "idle" ? "" : next.sessionId || "");
       next.generation = incomingGeneration || (next.state === "idle" ? 0 : currentGeneration);
       next.error = value.error || (next.state === "error" ? next.error : "");
-      for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "build", "mainState", "stopLifecycle", "providerLifecycle", "turnLifecycle", "sessionPolicy", "preferences", "wakeWord"]) if (value[key] !== undefined) next[key] = value[key];
+      for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "intentBridge", "build", "mainState", "stopLifecycle", "providerLifecycle", "turnLifecycle", "sessionPolicy", "preferences", "wakeWord"]) if (value[key] !== undefined) next[key] = value[key];
       if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
     } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
     else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
@@ -210,7 +210,7 @@ export function reduceAppState(state, action) {
       Object.assign(next, value);
       if (preserveTerminalGeneration) { next.generation = currentGeneration; next.sessionId = current.sessionId || ""; }
     }
-    for (const key of ["providerLifecycle", "turnLifecycle", "sessionPolicy", "asrTiming", "preferences", "savedPreferences", "wakeWord", "mainState", "build"]) {
+    for (const key of ["providerLifecycle", "turnLifecycle", "sessionPolicy", "asrTiming", "intentBridge", "preferences", "savedPreferences", "wakeWord", "mainState", "build"]) {
       if (value[key] !== undefined) next[key] = value[key];
     }
     if (incomingSequence) next.eventSequence = incomingSequence;
