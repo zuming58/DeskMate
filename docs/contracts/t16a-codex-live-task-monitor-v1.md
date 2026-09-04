@@ -60,6 +60,12 @@ DeskMate closes that provider generation and opens a fresh Doubao generation
 before speaking the deterministic answer. Late text and audio from the old
 generation are stale and discarded. This keeps the configured Doubao voice
 while preventing free-chat audio from being mixed with the trusted answer.
+Recognition of a closed Codex-status or motion phrase synchronously claims the
+turn before any asynchronous lookup begins. If the provider omits the trusted
+speech `tts.end`, a bounded watchdog abandons that provider generation,
+reconnects without replay and returns the existing companion session to
+listening. Absence or failure of trusted task evidence may produce only an
+explicit unavailable answer; it never releases the same utterance to free chat.
 
 ## Proactive speech and motion
 
@@ -81,6 +87,11 @@ DeskMate may refresh the standalone helper only when an existing user-level
 DeskMate hook registration is already present. It does not silently add or
 replace unrelated global hooks. `codex-hook-v1` messages remain accepted for
 coarse status compatibility but cannot populate a per-task list.
+Installed user-level hooks do not execute until Codex marks the exact handler
+hash as trusted. Installation and helper version are therefore insufficient
+runtime evidence: acceptance must also verify the seven DeskMate handlers are
+trusted and then observe a fresh lifecycle event in DeskMate. Unrelated hook
+handlers are outside this authorization and remain unchanged.
 
 ## Acceptance
 

@@ -1,5 +1,14 @@
 # Decisions
 
+## D092 - Trusted voice turns claim synchronously and missing TTS terminals recover by generation
+
+- Date: 2026-09-04
+- Decision: closed Codex-status and motion phrases claim the ASR-final turn synchronously, before any asynchronous store lookup or motion execution. From that point, every free-conversation text/audio event from the old Doubao generation is suppressed. A missing or failed trusted result receives only a fixed unavailable answer and cannot fall through to provider free chat.
+- Recovery: every proactive or Bridge-authored trusted utterance owns a bounded speech watchdog sized from its visible text. If the provider omits `tts.end`, DeskMate marks that TTS generation abandoned, interrupts playback, reconnects without replay and returns the existing companion session to listening. It does not leave the UI in processing and does not replay the triggering action.
+- Hook trust: an installed Hook file is not active evidence. Only the exact inspected DeskMate lifecycle-handler hashes may be trusted for this integration; unrelated handlers remain untouched. User HIL requires a fresh real Hook event and non-empty bounded task list, not merely `receiver=listening`.
+- Product truth: offline wake remains unavailable until a separate local wake engine is selected and accepted. Its configuration surface is disabled and labeled accordingly. The automatic-context-motion switch must be visible from the Companion overview rather than discoverable only inside the motion editor.
+- Boundary: Windows software and local Codex configuration only. No firmware, HID, DeskMate Link, Flash, audio-device or motion contract changes.
+
 ## D091 - Live Codex task state comes from per-task hooks; App Server supplies titles only
 
 - Date: 2026-09-04

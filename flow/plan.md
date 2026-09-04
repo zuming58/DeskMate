@@ -2,7 +2,7 @@
 
 ## Current stage: T16/T17 software closure and T15C automatic contextual motion
 
-目标：以已经通过用户真机验收的手动控制、固定动作、可调角度/速度和自定义舞蹈为冻结硬件基线，优先关闭 Windows 软件链。T16A 已完成真实 Codex 多任务 Hook、只读标题目录、可信语音所有权和主动简报候选；下一人工门是两个真实并行 Codex 任务的聚合/点名查询与主动播报。随后验收 T17 双来源长期记忆、T15C 自动情境动作和 T12 陪伴设置回归。当前阶段不修改 Host HID、DeskMate Link 或两套动作固件；只有新的诊断证据证明冻结合同失效时才重新开启固件切片。
+目标：以已经通过用户真机验收的手动控制、固定动作、可调角度/速度和自定义舞蹈为冻结硬件基线，优先关闭 Windows 软件链。T16A 已补齐可信指令同步抢占、缺失 `tts.end` 自动恢复，并将七个已审计的 DeskMate Codex Hook 设为可信；下一人工门是动作播报后回聆听，以及新 Codex 事件进入任务列表后的聚合/点名查询与主动播报。随后验收 T17 双来源长期记忆、T15C 自动情境动作和 T12 陪伴设置回归。离线唤醒仍属于后续阶段，当前页面必须明确显示未启用。当前阶段不修改 Host HID、DeskMate Link 或两套动作固件；只有新的诊断证据证明冻结合同失效时才重新开启固件切片。
 
 ### Current execution point
 
@@ -14,7 +14,7 @@
 
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
-| T18 current software closure | `codex/t18-software-closure@8e025406819780f6ff2d509eab353b6cc12e4fb3` | T16A real per-task Hook + read-only title catalog + trusted-audio provider separation; Desktop `401/401`, package and local App Server identity/title smoke passed | `WINDOWS_CODE_BUILD_CONFIRMED / TWO_REAL_TASK_HIL_PENDING / FIRMWARE_UNCHANGED` |
+| T18 current software closure | `codex/t18-software-closure@dffbd6f7f14f7ad4f2528b0848b38967da654a77` | Trusted-turn synchronous claim, missing-TTS-terminal recovery, seven audited Hook trusts, visible automation switch and persona v2; Desktop `404/404`, package/native self-test passed | `WINDOWS_CODE_BUILD_CONFIRMED / REAL_CODEX_EVENT_AND_VOICE_HIL_PENDING / FIRMWARE_UNCHANGED` |
 | T15/T16 current integration | `codex/t15-t16-integration@42138d7aab8180941efc5ec387edeb78608a8635` | Fixed and adjustable actions, active custom dance and native V2 path physically accepted; both exact T15D V2 apps flashed/read back; Desktop `378/378`, package and native self-test passed | `T15D_HIL_ACCEPTED / DUAL_V2_FIRMWARE_FLASH_VERIFIED / FROZEN_BASELINE` |
 | T15D physical choreography | implementation `d6ffb595dd4ea20decdfe6f114c5ffe56838e83c`, activation UX merged at `563c58b`, native repair `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110` | Frozen Host `0x1A/0x1B` V2 and Link `0x26/0x27`; maximum Pitch, independent speed/angle settings and custom choreography all passed user observation | `V2_WIRE_FROZEN / DUAL_FIRMWARE_FLASH_VERIFIED / PHYSICAL_HIL_ACCEPTED / NO_REFLASH_REQUIRED` |
 | T16 Windows delivery | `codex/t16-desktop-actions-briefing@5ed4a1e18822a337a36c50e53e998b2326faa6a0`, merged as `77e3647` | Explicit voice-enabled AppAction and bounded `codex-task-brief-v1` exist, but the reporter is manual, real Codex task identity is absent and provider audio can still improvise | `MERGED / CODE_BUILD_CONFIRMED / CODEX_VOICE_HIL_REJECTED / DATA_SOURCE_AND_AUDIO_REDESIGN_REQUIRED` |

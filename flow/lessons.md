@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A registered integration can still be completely inactive when trust is unresolved
+
+- Symptom: DeskMate's named-pipe receiver reports listening, Hook JSON and helper files are present, yet the real task list remains empty and the conversation model fills the gap with invented project status.
+- Practice: inspect the host application's resolved hook list, exact current hash and trust classification. Trust only the audited handlers in scope, then require a fresh lifecycle event at the receiver; file presence and a listening socket are setup evidence, not delivery evidence.
+- Rule: never infer live task coverage from installation. If no trusted report arrived, answer unavailable deterministically and keep the turn away from free chat.
+
+## Cloud speech completion needs a local terminal watchdog
+
+- Symptom: the requested action completes, but one provider speech turn omits its terminal event and leaves microphone upload, state display and the next turn frozen indefinitely.
+- Practice: arm a bounded timer only for trusted speech, cancel it on the real terminal, and on expiry abandon exactly that provider generation before reconnecting without replay. Count the timeout in content-free diagnostics and preserve the enclosing session.
+- Rule: a requested TTS start is not proof that the turn will terminate. Safety and liveness must not depend forever on one cloud event.
+
 ## Automatic behavior must lose conflicts instead of becoming delayed behavior
 
 - Symptom: a low-priority idle or contextual action blocked by speaking, manual control or another motion can become surprising if it is queued and runs after the user believes the event has passed.
