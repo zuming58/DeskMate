@@ -190,9 +190,11 @@ test("T15D preload and renderer expose persistence, default dance, settings and 
     assert.match(adapter, new RegExp(`${api}\\(`));
   }
   assert.match(main, /new ChoreographyService\(/);
-  assert.match(main, /desktop:run-choreography[\s\S]*choreographyService\.execute\(value\.action \|\| value/);
+  assert.match(main, /desktop:run-choreography[\s\S]*runCustomChoreography\(value\)/);
+  assert.match(main, /runCustomChoreography[\s\S]*choreographyService\.execute\(value\.action \|\| value/);
   assert.doesNotMatch(main.match(/desktop:run-choreography[\s\S]{0,500}/)?.[0] || "", /motionPresetService\.runPreset/);
-  assert.match(main, /desktop:run-motion-preset[\s\S]*noteLegacyFallback/);
+  assert.match(main, /desktop:run-motion-preset[\s\S]*runMotionPreset\(value\)/);
+  assert.match(main, /runMotionPreset[\s\S]*noteLegacyFallback/);
   assert.match(editor, /Windows 输入桥拒绝了 V2 动作报文/);
   assert.match(editor, /disabled={!adapter\.ready/);
   assert.match(editor, /if \(adapter\.ready !== true\)/);

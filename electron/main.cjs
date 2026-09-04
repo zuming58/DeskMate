@@ -54,6 +54,7 @@ const { MotionPresetService } = require("./motion-preset-service.cjs");
 const { ChoreographyStore } = require("./choreography-store.cjs");
 const { ChoreographyService } = require("./choreography-service.cjs");
 const { MotionAutomationCoordinator, MotionAutomationPolicyStore } = require("./motion-automation.cjs");
+const { LocalDanceMusicStore } = require("./local-dance-music.cjs");
 const { normalizeHotwords, normalizeRules, normalizeTranscript } = require("./transcript-normalizer.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
@@ -61,7 +62,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t18-voice-latency-history-wake-hil";
+const DESKMATE_BUILD_ID = "t19-windows-app-local-media-hil";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -133,6 +134,9 @@ let choreographyStore;
 let choreographyService;
 let motionAutomationPolicyStore;
 let motionAutomationCoordinator;
+let localDanceMusicStore;
+let activeDanceMusicRequestId = "";
+let danceMusicSequence = 0;
 let codexHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", updatedAt: "", delivery: "not-received" };
 let codexHookIntegrationStatus = { ok: false, installed: false, version: 1, reason: "codex-hook-not-checked" };
 let codexTaskBriefReceiver = "starting";
@@ -483,6 +487,53 @@ async function captureVoiceEditSelection(targetWindow) {
 
 function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+function emitDanceMusicStatus() {
+  const value = localDanceMusicStore?.status?.() || { configured: false, enabled: false, label: "", storage: "unavailable", state: "idle", reason: "dance-music-unavailable" };
+  sendToMain("dance-music-status", value);
+  return value;
+}
+
+function startDanceMusic({ force = false } = {}) {
+  const status = localDanceMusicStore?.status?.();
+  if (!status?.configured || (!force && !status.enabled)) return { ok: false, reason: status?.reason || "dance-music-disabled" };
+  const requestId = `dance-music-${Date.now()}-${++danceMusicSequence}`;
+  activeDanceMusicRequestId = requestId;
+  localDanceMusicStore.notePlayback({ state: "starting", requestId });
+  sendToMain("dance-music-command", { type: "play", requestId, label: status.label });
+  emitDanceMusicStatus();
+  return { ok: true, requestId };
+}
+
+function stopDanceMusic(reason = "dance-finished") {
+  const requestId = activeDanceMusicRequestId;
+  activeDanceMusicRequestId = "";
+  sendToMain("dance-music-command", { type: "stop", requestId, reason });
+  localDanceMusicStore?.notePlayback?.({ state: "idle", requestId, reason: "" });
+  emitDanceMusicStatus();
+  return { ok: true };
+}
+
+async function runMotionPreset(value = {}) {
+  const preset = String(value.preset || "");
+  const source = String(value.source || "");
+  const music = preset === "dance" ? startDanceMusic() : { ok: false };
+  try {
+    const result = await choreographyService.executePreset(preset, value.repeat, source);
+    const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
+    if (result?.ok || !canFallback) return result;
+    const legacyResult = await motionPresetService.runPreset(preset, value.repeat, source);
+    return choreographyService.noteLegacyFallback({ preset, repeat: value.repeat, source, triggerReason: result.reason }, legacyResult);
+  } finally {
+    if (music.ok) stopDanceMusic("dance-finished");
+  }
+}
+
+async function runCustomChoreography(value = {}) {
+  const music = startDanceMusic();
+  try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
+  finally { if (music.ok) stopDanceMusic("dance-finished"); }
 }
 
 function createAudioSetupWindow() {
@@ -849,6 +900,7 @@ function createWindow() {
     sendToMain("motion-preset-status", motionPresetService?.snapshot?.() || { available: false, phase: "unavailable", busy: false, endpointReportedComplete: false });
     sendToMain("choreography-status", choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" });
     sendToMain("motion-automation-status", motionAutomationCoordinator?.snapshot?.() || { policy: { version: 1, enabled: false, idleEnabled: false }, running: false, last: { state: "disabled" } });
+    emitDanceMusicStatus();
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
@@ -1083,6 +1135,7 @@ app.whenReady().then(async () => {
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
+  localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
   motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });
   const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
@@ -1169,7 +1222,7 @@ app.whenReady().then(async () => {
       const claimed = companionIntentBridge?.claimsTurn?.(text) === true;
       try {
         const analysis = await companionIntentBridge?.analyze?.(text);
-        const answer = String(analysis?.result?.answer || (claimed ? "这项可信操作暂时不可用，我没有交给对话模型猜测。" : "")).trim();
+        const answer = String(analysis?.result?.silent === true ? "" : analysis?.result?.answer || (claimed ? "这项可信操作暂时不可用，我没有交给对话模型猜测。" : "")).trim();
         return { checked: true, failed: analysis?.ok === false, text: answer, result: analysis?.result || null };
       } catch {
         return { checked: true, failed: true, text: claimed ? "这项可信操作暂时不可用，我没有交给对话模型猜测。" : "", result: null };
@@ -1193,8 +1246,9 @@ app.whenReady().then(async () => {
       motionAutomationCoordinator?.touchActivity();
       const saved = preset === "dance" ? choreographyStore.getDefaultDance() : null;
       const repeat = saved?.repeat || (["nod", "dance"].includes(preset) ? 2 : 1);
-      return choreographyService.executePreset(preset, repeat, "voice");
+      return runMotionPreset({ preset, repeat, source: "voice" });
     },
+    mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
   });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
@@ -1229,17 +1283,9 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:manual-control-emergency-stop", () => manualControlCoordinator.emergencyStop());
   handleTrusted("desktop:end-manual-control", (reason) => manualControlCoordinator.end(["document-hidden", "page-leave"].includes(reason) ? reason : "page-leave"));
   handleTrusted("desktop:get-motion-status", () => motionPresetService.getStatus());
-  handleTrusted("desktop:run-motion-preset", async (value = {}) => {
-    const preset = String(value.preset || "");
-    const source = String(value.source || "");
-    const result = await choreographyService.executePreset(preset, value.repeat, source);
-    const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
-    if (result?.ok || !canFallback) return result;
-    const legacyResult = await motionPresetService.runPreset(preset, value.repeat, source);
-    return choreographyService.noteLegacyFallback({ preset, repeat: value.repeat, source, triggerReason: result.reason }, legacyResult);
-  });
-  handleTrusted("desktop:stop-motion-and-center", (source) => { choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
-  handleTrusted("desktop:emergency-stop-motion", (source) => { choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });
+  handleTrusted("desktop:run-motion-preset", (value = {}) => runMotionPreset(value));
+  handleTrusted("desktop:stop-motion-and-center", (source) => { stopDanceMusic("motion-stopped"); choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
+  handleTrusted("desktop:emergency-stop-motion", (source) => { stopDanceMusic("emergency-stop"); choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });
   handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => { choreographyService.close(); return motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")); });
   handleTrusted("desktop:list-choreographies", () => ({ ok: true, ...choreographyStore.snapshot() }));
   handleTrusted("desktop:get-choreography-status", () => choreographyService.getStatus());
@@ -1267,7 +1313,7 @@ app.whenReady().then(async () => {
     catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-delete-failed", ...choreographyStore.snapshot() }; }
   });
   handleTrusted("desktop:run-choreography", async (value = {}) => {
-    try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
+    try { return await runCustomChoreography(value); }
     catch (error) { return { ok: false, ready: false, state: "not-ready", reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-execute-failed" }; }
   });
   handleTrusted("desktop:get-network-summary", () => summarizeNetworkInterfaces(os.networkInterfaces()));
@@ -1296,11 +1342,26 @@ app.whenReady().then(async () => {
   handleTrusted("desktop:set-global-shortcuts-enabled", (value) => setGlobalShortcutsEnabled(value));
   handleTrusted("desktop:set-shortcut-capture", (value) => setShortcutCapture(value));
   handleTrusted("desktop:list-applications", () => appActionStore.discover());
+  handleTrusted("desktop:list-registered-applications", () => appActionStore.listRegistered({ limit: 200 }));
   handleTrusted("desktop:register-application", (token) => appActionStore.registerDiscovered(token));
   handleTrusted("desktop:choose-application", () => appActionStore.choose(mainWindow));
   handleTrusted("desktop:test-application", (id) => appActionStore.execute(id));
   handleTrusted("desktop:get-application-voice-policy", (id) => appActionStore.describe(id) || { ok: false, reason: "host-action-not-mapped" });
   handleTrusted("desktop:set-application-voice-enabled", (value = {}) => appActionStore.setVoiceEnabled(value.id, value.enabled));
+  handleTrusted("desktop:get-dance-music-status", () => localDanceMusicStore.status());
+  handleTrusted("desktop:choose-dance-music", () => localDanceMusicStore.choose(mainWindow));
+  handleTrusted("desktop:set-dance-music-enabled", (enabled) => { const result = localDanceMusicStore.setEnabled(enabled); emitDanceMusicStatus(); return result; });
+  handleTrusted("desktop:load-dance-music", () => localDanceMusicStore.readTrack());
+  handleTrusted("desktop:preview-dance-music", () => startDanceMusic({ force: true }));
+  handleTrusted("desktop:stop-dance-music", () => stopDanceMusic("user-stop"));
+  onTrusted("desktop:dance-music-playback-event", (value = {}) => {
+    const requestId = String(value.requestId || "");
+    if (!requestId || requestId !== activeDanceMusicRequestId) return;
+    const state = ["playing", "error"].includes(value.state) ? value.state : "idle";
+    localDanceMusicStore.notePlayback({ state, requestId, reason: value.reason || "" });
+    if (state !== "playing") activeDanceMusicRequestId = "";
+    emitDanceMusicStatus();
+  });
   handleTrusted("desktop:get-codex-task-brief-status", () => codexTaskBriefStatusSnapshot());
   handleTrusted("desktop:set-codex-task-brief-announcements", (enabled) => {
     companionPreferenceStore.setCodexBriefAnnouncementsEnabled(enabled);

@@ -25,6 +25,7 @@ import { createDeviceEvent, deviceEventBus } from "./domain/deviceEvents.js";
 import { formatDashboardDate } from "./domain/dashboardStatus.js";
 import { createComputerCompanionAudioEngine } from "./domain/computerCompanionAudio.js";
 import { createCompanionStopAction } from "./domain/companionStop.js";
+import { createLocalDanceMusicEngine } from "./domain/localDanceMusic.js";
 import {
   AgentsPage,
   CompanionPage,
@@ -227,6 +228,13 @@ function AppContent() {
       void bridge.setCompanionComputerAudioReady?.(false);
       void engine.close();
     };
+  }, []);
+  useEffect(() => {
+    const bridge = globalThis.desktopBridge;
+    if (!bridge?.onDanceMusicCommand || !bridge?.sendDanceMusicPlaybackEvent || !bridge?.loadDanceMusic) return undefined;
+    const engine = createLocalDanceMusicEngine({ bridge });
+    const unsubscribe = bridge.onDanceMusicCommand((command) => { void engine.handleCommand(command); });
+    return () => { unsubscribe?.(); engine.close(); };
   }, []);
   useEffect(() => {
     let active = true;

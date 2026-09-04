@@ -1,5 +1,13 @@
 # Decisions
 
+## D094 - Product scope is Windows-first and dance music stays local
+
+- Date: 2026-09-04
+- Scope: hardware expansion, new sensors, face tracking, speaker identification/person dossiers and all non-Codex Agent adapters are cancelled. They are not backlog items. Only an explicit future product decision may reopen one of them.
+- Applications: a spoken application launch is trusted only after the user registers that local `.exe`/`.lnk` and enables its voice permission. A launch verb plus the longest unique registered label is matched deterministically before any model classifier; negation and ambiguous equal matches fail closed. Paths, URLs, arguments and Shell commands remain forbidden.
+- Music: the user may choose one bounded local audio file. Its path is encrypted by Electron and never exposed to React or diagnostics. Windows plays the file through the computer speaker while either the built-in or activated custom dance runs; completion, stop and emergency stop terminate playback. Generic “播放音乐/停止音乐” controls this same selected file without requiring a firmware change.
+- Boundary: Xiaozhi does not sing and its retained microphone/speaker hardware remains unused. EasyInput and Xiaozhi firmware, Host HID and DeskMate Link remain the accepted T15D baseline.
+
 ## D093 - Local wake is opt-in and ordinary task progress must stay silent
 
 - Date: 2026-09-04

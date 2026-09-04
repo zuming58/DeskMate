@@ -10,18 +10,20 @@
 - Three-end DeskMate Link, real Xiaozhi state display, bounded manual servo control, four physical presets, independent Yaw/Pitch angle and speed settings, and activated custom choreography.
 - EasyInput board microphone capture, with explicit Windows fallback and source evidence.
 
-## Current software closure
+## Current Windows software closure
 
-- T16: real acceptance of explicitly voice-enabled application opening, deterministic Codex status and the bounded repository task-brief reporter.
-- T17: real dual-source companion/dictation memory acceptance, review-first daily summaries, local index and managed Markdown projection.
-- T15C: opt-in contextual and idle motions over the already accepted semantic action contracts.
-- T12: persona, pause, idle-timeout and EasyInput companion-call regression.
-- T18: an unsigned, installable internal Windows Beta for clean-install, upgrade, recovery, retention, export/delete and diagnostic-redaction acceptance.
+- T19: make explicitly voice-enabled application opening discoverable and deterministic. “打开网易云音乐” must resolve only to the local registered application name and must not depend on a language model guess.
+- T19: let the user choose one local audio file for dance accompaniment. Windows plays it through the computer speaker while the accepted semantic dance runs; normal completion, stop and emergency stop end playback.
+- T16: finish real acceptance of deterministic Codex status and the bounded repository task-brief reporter.
+- T17: finish real dual-source companion/dictation memory acceptance, review-first daily summaries, local index and managed Markdown projection.
+- T15C/T12/T18: finish contextual-motion, companion-setting, wake, latency, history and internal-Beta regression without changing either firmware.
+- Automatic update distribution, code signing and public-release hardening remain later Windows software work. The internal NSIS Beta installer remains deliberately unsigned.
 
-## Subsequent hardware and ecosystem delivery
+## Removed from the product roadmap
 
-- Freeze and implement desktop-to-EasyInput realtime speaker downlink; the existing local low-volume speaker probe does not prove this path.
-- Add an explicitly opt-in local offline wake-word engine; the current saved phrase is configuration only.
-- Complete real Hermes/Claude Code/Workbody lifecycle providers after separate trusted adapter contracts.
-- Light, temperature/humidity and direction sensors after separate contracts.
-- Automatic update distribution, code signing and public-release hardening. The internal NSIS Beta installer remains deliberately unsigned.
+- Hardware expansion, new sensors and face tracking.
+- Speaker identification, per-person voice profiles and automatic person dossiers.
+- Hermes, Claude Code, WorkBuddy and other Agent adapters; only Codex remains in active scope.
+- A new EasyInput speaker-downlink firmware project. Current music and companion output use the computer speaker.
+
+These items are intentionally cancelled rather than merely deferred. Reopening any one of them requires a new explicit product decision and a separate contract; they must not quietly reappear in routine software fixes.

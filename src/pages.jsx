@@ -13,7 +13,6 @@ import {
   IconBrain as Brain,
   IconCheck as Check,
   IconCloudDownload as CloudDownload,
-  IconCode as Code,
   IconCopy as Copy,
   IconDeviceFloppy as DeviceFloppy,
   IconDownload as Download,
@@ -47,7 +46,7 @@ import {
   IconUpload as Upload,
   IconUser as User,
 } from "@tabler/icons-react";
-import { agents, expressionPresets, historyItems } from "./appData.js";
+import { expressionPresets, historyItems } from "./appData.js";
 import { CompanionFace, expressionAssetUrl } from "./CompanionFace.jsx";
 import { ChoreographyEditor } from "./ChoreographyEditor.jsx";
 import { useAppStore } from "./store/appStore.js";
@@ -61,7 +60,7 @@ import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
 import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, limitUtf8Bytes, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
 import { keyboardConfigReadMessage, readKeyboardConfigWithRetry } from "./domain/keyboardConfigRead.js";
-import { MANUAL_AGENT_OPTIONS, MANUAL_AGENT_STATES, manualAgentName, manualAgentState, normalizeAgentControl } from "./domain/agentControl.js";
+import { MANUAL_AGENT_STATES, manualAgentName, manualAgentState, normalizeAgentControl } from "./domain/agentControl.js";
 import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicrophoneSession } from "./domain/microphoneSource.js";
@@ -211,6 +210,54 @@ function ApplicationPicker({ binding, onChange, notify }) {
       <div className="application-picker__footer"><Button icon={FolderOpen} variant="ghost" onClick={choose}>选择其他应用</Button><Button variant="ghost" onClick={load}>刷新</Button></div>
     </div>
   );
+}
+
+function VoiceApplicationManager({ notify }) {
+  const [apps, setApps] = useState([]);
+  const [registered, setRegistered] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const refreshRegistered = useCallback(async () => {
+    try { setRegistered(await voiceAdapters.desktop.listRegisteredApplications()); }
+    catch { setRegistered([]); }
+  }, []);
+  const discover = useCallback(async () => {
+    setLoading(true);
+    try { setApps(await voiceAdapters.desktop.listApplications()); }
+    catch { notify("无法读取 Windows 开始菜单应用"); }
+    finally { setLoading(false); }
+  }, [notify]);
+  useEffect(() => { void refreshRegistered(); void discover(); }, [discover, refreshRegistered]);
+  const enableRegistered = async (action, enabled = true) => {
+    const result = await voiceAdapters.desktop.setApplicationVoiceEnabled(action.id, enabled);
+    if (!result?.ok) return notify(`语音权限未保存：${result?.reason || "unknown"}`);
+    await refreshRegistered();
+    notify(enabled ? `现在可以说“打开${result.label}”` : `已关闭 ${result.label} 的语音打开`);
+  };
+  const registerAndEnable = async (token) => {
+    try {
+      const action = await voiceAdapters.desktop.registerApplication(token);
+      if (!action?.id) throw new Error(action?.reason || "application-register-failed");
+      await enableRegistered(action, true);
+    } catch (error) { notify(`应用未加入：${error?.message || "unknown"}`); }
+  };
+  const chooseAndEnable = async () => {
+    try {
+      const action = await voiceAdapters.desktop.chooseApplication();
+      if (action?.cancelled) return;
+      if (!action?.id) throw new Error(action?.reason || "application-register-failed");
+      await enableRegistered(action, true);
+    } catch (error) { notify(`应用未加入：${error?.message || "unknown"}`); }
+  };
+  const knownLabels = new Set(registered.map((item) => item.label.toLocaleLowerCase("zh-CN")));
+  const filtered = apps.filter((app) => app.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).slice(0, 24);
+  return <Card className="voice-app-manager">
+    <SectionTitle index="01" title="语音打开应用" description="登记一次并开启权限后，直接说“打开网易云音乐”。应用名由本机白名单确定匹配，不交给大模型猜。" />
+    <Notice tone="info" title="只允许明确登记的 Windows 应用">不接受路径、网址、参数或 Shell 命令；已有登记项也必须单独打开语音权限。</Notice>
+    {registered.length > 0 && <div className="voice-app-manager__registered">{registered.map((action) => <div key={action.id}><span><AppWindow size={18} /><strong>{action.label}</strong></span><Button variant="ghost" onClick={() => { void voiceAdapters.desktop.testApplication(action.id).then((result) => notify(result?.ok ? `已打开 ${result.label}` : `测试失败：${result?.reason || "unknown"}`)); }}>测试打开</Button><Toggle label={`${action.label} 语音权限`} checked={action.voiceEnabled} onChange={(enabled) => { void enableRegistered(action, enabled); }} /></div>)}</div>}
+    <div className="voice-app-manager__search"><SearchField value={query} onChange={setQuery} placeholder={loading ? "正在读取应用…" : "搜索应用，例如：网易云音乐"} /><Button icon={FolderOpen} onClick={() => { void chooseAndEnable(); }}>选择其他应用</Button><Button icon={Refresh} variant="ghost" onClick={() => { void discover(); }}>刷新</Button></div>
+    <div className="voice-app-manager__results">{filtered.map((app) => <button key={app.token} type="button" onClick={() => { void registerAndEnable(app.token); }}><AppWindow size={17} /><span>{app.label}</span><small>{knownLabels.has(app.label.toLocaleLowerCase("zh-CN")) ? "已登记，可再次开启权限" : "加入并允许语音打开"}</small></button>)}</div>
+  </Card>;
 }
 
 function BindingEditor({ binding, onChange, options = KEY_ACTIONS, notify }) {
@@ -430,7 +477,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
         options={[
           { value: "overview", label: "陪伴对话" },
           { value: "motion", label: "动作编排" },
-          { value: "agents", label: "AI 联动" },
+          { value: "agents", label: "智能控制" },
         ]}
       />
       {section === "overview" && <>
@@ -1455,7 +1502,7 @@ export function ConnectionsPage({ notify, embedded = false }) {
 export function AgentsPage({ notify, embedded = false }) {
   const { state, patch, event } = useAppStore();
   const mapping = state.agentExpressionMapping;
-  const control = normalizeAgentControl(state.agentControl);
+  const control = normalizeAgentControl({ ...state.agentControl, agentId: "codex", customName: "" });
   const [sendState, setSendState] = useState({ status: "idle", label: "尚未发送" });
   const [providerStatus, setProviderStatus] = useState({ provider: control.agentId, receiver: "starting", connected: false, state: "idle", delivery: "not-received" });
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
@@ -1466,7 +1513,7 @@ export function AgentsPage({ notify, embedded = false }) {
     patch({ agentExpressionMapping: { ...mapping, [agentId]: value } });
     if (state.aiEvent.type === "working" && state.aiEvent.agent?.toLowerCase().includes(agentId === "claude" ? "claude" : agentId)) event({ ...state.aiEvent });
   };
-  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
+  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value, agentId: "codex", customName: "" }) });
   useEffect(() => {
     let active = true;
     const supportsAutomaticStatus = ["codex", "hermes"].includes(control.agentId);
@@ -1510,34 +1557,21 @@ export function AgentsPage({ notify, embedded = false }) {
   };
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="AI 联动" description="选择当前编程助手，把真实或手动工作状态发送到小智 OLED 表情" actions={<Button icon={Plus} variant="primary" onClick={() => notify("Codex 与 Hermes 已有自动适配基础；WorkBuddy 需先确认具体产品和版本")}>适配器说明</Button>} />}
-      {embedded && <div className="embedded-heading"><div><span>AI LINK</span><h2>AI 联动</h2><p>Codex 与 Hermes 支持真实生命周期；其他 Agent 保留手动状态。</p></div><Button icon={Plus} onClick={() => notify("Hermes 插件必须由用户显式启用；WorkBuddy 暂不猜测接入")}>适配器说明</Button></div>}
-      <Notice tone="info" title="Codex 与 Hermes 生命周期适配">Codex 使用官方 Hook；Hermes 使用需由用户显式启用的本地插件 Hook。两者只传开始任务、模型/工具执行、等待授权和每轮结果等事件名，不读取或上传提示词、回复正文、工具参数、命令、工作目录、会话标识或错误详情。WorkBuddy 产品身份未确认，当前只提供手动状态。语音输入和陪伴会话始终优先。</Notice>
+      {!embedded && <PageIntro title="智能控制" description="管理语音应用白名单与 Codex 真实任务状态" />}
+      {embedded && <div className="embedded-heading"><div><span>SMART CONTROL</span><h2>智能控制</h2><p>语音只打开明确授权的应用；任务简报只读取 Codex 的可信状态。</p></div></div>}
+      <Notice tone="info" title="当前范围只保留 Codex">其他 Agent 适配已从近期计划移除。Codex Hook 只传生命周期与脱敏简报，不读取提示词、回复正文、工具参数、命令、工作目录或窗口标题。</Notice>
+      <VoiceApplicationManager notify={notify} />
       <Card className="manual-agent-control">
-        <div className="manual-agent-control__header"><SectionTitle index="01" title="当前 Agent 与工作状态" description="Codex 与 Hermes 可自动更新；七个按钮继续保留为人工校验和其他 Agent 的手动入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
+        <div className="manual-agent-control__header"><SectionTitle index="02" title="Codex 工作状态" description="真实状态由 Codex Hook 自动更新；七个按钮只保留为本机校验入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
         <div className="manual-agent-control__agent">
-          <label>当前 Agent<Select value={control.agentId} onChange={(agentId) => { updateControl({ agentId }); setSendState({ status: "idle", label: "尚未发送" }); }} ariaLabel="当前 Agent">{MANUAL_AGENT_OPTIONS.map((agent) => <option value={agent.id} key={agent.id}>{agent.name}</option>)}</Select></label>
-          {control.agentId === "custom" && <label>Agent 名称<input maxLength={48} value={control.customName} onChange={(changeEvent) => updateControl({ customName: changeEvent.target.value })} placeholder="例如 Cursor、OpenCode" /></label>}
-          {["codex", "hermes"].includes(control.agentId) && <SettingRow title={`${manualAgentName(control)} 自动状态`} description={control.automaticStatusEnabled ? `使用 ${control.agentId === "codex" ? "codex-hook-v1" : "hermes-plugin-hooks-v1"}；语音与陪伴会话优先` : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>}
+          <SettingRow title="Codex 自动状态" description={control.automaticStatusEnabled ? "使用 codex-hook-v1；语音与陪伴会话优先" : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>
         </div>
         <div className="manual-agent-state-grid" aria-label="选择并发送 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={sendState.status === "sending"} key={item.id} onClick={() => { void sendManualState(item.id); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
         <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{["codex", "hermes"].includes(control.agentId) ? !control.automaticStatusEnabled ? `${manualAgentName(control)} 自动状态已禁用` : providerStatus.connected ? `${providerStatus.work?.summary || `${manualAgentName(control)} 生命周期已连接`} · ${providerStatus.sourceVersion}` : providerStatus.receiver === "listening" ? `DeskMate 正在等待 ${manualAgentName(control)} 的首个真实事件${control.agentId === "hermes" ? "；需先在 Hermes 中显式启用插件" : ""}` : `${manualAgentName(control)} 生命周期接收器不可用` : "自动适配未启用；点击任意状态会立即手动发送"}</small>{["codex", "hermes"].includes(control.agentId) && providerStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
       </Card>
-      <Card><SectionTitle index="02" title="当前桌宠意图" description="手动状态成功发送后，软件预览与小智表情使用同一状态语义；舵机仍保持关闭。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
-      <Card><SectionTitle index="02A" title="Codex 近期真实任务" description="Codex 生命周期 Hook 提供每个任务的真实状态，标题目录只补充任务名称；不读取提示词、回复、工具参数、完整路径或窗口标题，也不会编造百分比。" /><SettingRow title="主动语音播报" description="任务开始、需要你确认或输入、完成、明确失败时由豆包语音提醒；关闭后仍保留状态，可随时询问。"><Toggle checked={codexAnnouncementsEnabled} onChange={async (enabled) => { const result = await voiceAdapters.desktop.setCodexTaskBriefAnnouncements(enabled); if (!result?.ok) return notify(`播报设置未保存：${result?.reason || "unknown-error"}`); patch({ runtime: { ...state.runtime, codexTasks: { ...state.runtime.codexTasks, ...result } } }); notify(enabled ? "已开启 Codex 主动语音播报" : "已关闭 Codex 主动语音播报"); }} /></SettingRow>{recentCodexTasks.length ? <div className="companion-info-list">{recentCodexTasks.map((task) => <div key={`${task.taskLabel}-${task.sequence}`}><span><small>{task.state} · sequence {task.sequence}</small><strong>{task.taskLabel}</strong>{task.milestone && <small>{task.milestone}</small>}</span></div>)}</div> : <Notice tone="info" title="等待 Codex 的首个真实任务事件">全局 Hook 已有安装时会自动升级为多任务版本；任务标题由只读目录补充。单独启动的目录进程不冒充实时状态。</Notice>}</Card>
-      <div className="agent-grid">{agents.map((agent) => {
-        const active = control.agentId === agent.id;
-        const displayState = active ? eventLabel[state.aiEvent.type] : "可选择";
-        const displayProgress = active ? state.aiEvent.progress : 0;
-        return <Card key={agent.id} className={`agent-card agent-card--${agent.tone} ${active ? "is-selected" : ""}`}>
-          <div className="agent-card__head"><span className="agent-icon"><Code size={24} /></span><StatusBadge tone={active ? "success" : "neutral"}>{displayState}</StatusBadge></div>
-          <h3>{agent.name}</h3><p>{active ? state.aiEvent.detail : "点击下方按钮切换为当前 Agent"}</p>
-          {displayProgress > 0 && <div className="agent-progress"><span style={{ width: `${displayProgress}%` }} /><small>{displayProgress}%</small></div>}
-          <label>软件预览工作表情<Select value={mapping[agent.id]} onChange={(value) => updateMapping(agent.id, value)}>{expressionPresets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></label>
-          <Button icon={active ? Check : Refresh} variant={active ? "soft" : "secondary"} onClick={() => { updateControl({ agentId: agent.id }); setSendState({ status: "idle", label: "待发送" }); }}>{active ? "当前 Agent" : "切换到此 Agent"}</Button>
-        </Card>;
-      })}</div>
-      <Card><SectionTitle index="03" title="状态来源边界" description="Codex 与 Hermes 使用官方生命周期 Hook；其余 Agent 仍为人工选择，最终统一为同一套七状态。" /><div className="state-flow"><span>Codex / Hermes Hook / 手动状态</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
+      <Card><SectionTitle index="03" title="当前桌宠意图" description="Codex 状态成功发送后，软件预览与小智表情使用同一状态语义。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
+      <Card><SectionTitle index="04" title="Codex 近期真实任务" description="Codex 生命周期 Hook 提供每个任务的真实状态；不会编造百分比。" /><SettingRow title="主动语音播报" description="任务开始、需要你确认或输入、完成、明确失败时由豆包语音提醒；关闭后仍保留状态，可随时询问。"><Toggle checked={codexAnnouncementsEnabled} onChange={async (enabled) => { const result = await voiceAdapters.desktop.setCodexTaskBriefAnnouncements(enabled); if (!result?.ok) return notify(`播报设置未保存：${result?.reason || "unknown-error"}`); patch({ runtime: { ...state.runtime, codexTasks: { ...state.runtime.codexTasks, ...result } } }); notify(enabled ? "已开启 Codex 主动语音播报" : "已关闭 Codex 主动语音播报"); }} /></SettingRow>{recentCodexTasks.length ? <div className="companion-info-list">{recentCodexTasks.map((task) => <div key={`${task.taskLabel}-${task.sequence}`}><span><small>{task.state} · sequence {task.sequence}</small><strong>{task.taskLabel}</strong>{task.milestone && <small>{task.milestone}</small>}</span></div>)}</div> : <Notice tone="info" title="等待 Codex 的首个真实任务事件">全局 Hook 已有安装时会自动升级为多任务版本；任务标题由只读目录补充。单独启动的目录进程不冒充实时状态。</Notice>}</Card>
+      <Card><SectionTitle index="05" title="状态来源边界" description="近期只维护 Codex 这一条 Agent 状态链。" /><div className="state-flow"><span>Codex Hook / 手动校验</span><ArrowRight /><span>DeskMate 状态总线</span><ArrowRight /><span>EasyInput</span><ArrowRight /><span>小智 OLED</span></div></Card>
     </div>
   );
 }
@@ -1611,6 +1645,7 @@ export function MotionPage({ notify, embedded = false }) {
   const [motionStatus, setMotionStatus] = useState({ ok: false, reason: "motion-status-not-read", endpointReportedComplete: false, endpoint: null });
   const [motionAutomation, setMotionAutomation] = useState({ policy: { version: 1, enabled: false, idleEnabled: false }, running: false, idleDelaySeconds: 90, thinkingDelaySeconds: 4, last: { state: "disabled", trigger: "", reason: "" } });
   const [activeDance, setActiveDance] = useState({ name: "", repeat: 2 });
+  const [danceMusic, setDanceMusic] = useState({ configured: false, enabled: false, label: "", storage: "unknown", state: "idle", reason: "" });
   const [runningPreset, setRunningPreset] = useState("");
   const [safetyAction, setSafetyAction] = useState("");
   const syncDanceLibrary = useCallback((value) => {
@@ -1652,6 +1687,27 @@ export function MotionPage({ notify, embedded = false }) {
     const unsubscribeAutomation = voiceAdapters.desktop.onMotionAutomationStatus((value) => { if (active && value?.policy) setMotionAutomation(value); });
     return () => { active = false; if (retryTimer) clearTimeout(retryTimer); unsubscribe?.(); unsubscribeAutomation?.(); };
   }, [refreshStatus, syncDanceLibrary]);
+  useEffect(() => {
+    let active = true;
+    voiceAdapters.desktop.getDanceMusicStatus().then((value) => { if (active && value) setDanceMusic(value); }).catch(() => {});
+    const unsubscribe = voiceAdapters.desktop.onDanceMusicStatus((value) => { if (active && value) setDanceMusic(value); });
+    return () => { active = false; unsubscribe?.(); };
+  }, []);
+  const chooseDanceMusic = async () => {
+    const result = await voiceAdapters.desktop.chooseDanceMusic();
+    if (result?.cancelled) return;
+    if (result) setDanceMusic(result);
+    notify(result?.ok ? `已选择“${result.label}”，跳舞时会由电脑同步播放` : `音乐未选择：${result?.reason || "dance-music-select-failed"}`);
+  };
+  const toggleDanceMusic = async (enabled) => {
+    const result = await voiceAdapters.desktop.setDanceMusicEnabled(enabled);
+    if (result) setDanceMusic(result);
+    notify(result?.ok ? `跳舞音乐已${enabled ? "开启" : "关闭"}` : `设置未保存：${result?.reason || "dance-music-policy-invalid"}`);
+  };
+  const previewDanceMusic = async () => {
+    const result = await voiceAdapters.desktop.previewDanceMusic();
+    notify(result?.ok ? `正在试听“${danceMusic.label}”` : `无法试听：${result?.reason || "dance-music-playback-failed"}`);
+  };
   const updateMotionAutomation = async (patch) => {
     const policy = { version: 1, ...motionAutomation.policy, ...patch };
     if (!policy.enabled) policy.idleEnabled = false;
@@ -1744,6 +1800,10 @@ export function MotionPage({ notify, embedded = false }) {
             <Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
             <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
             {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}
+          </div>
+          <div className="motion-music-panel">
+            <span className="motion-music-panel__copy"><Music size={20} /><span><strong>跳舞配乐</strong><small>{danceMusic.configured ? `电脑本地音乐：${danceMusic.label}${danceMusic.state === "playing" ? " · 正在播放" : ""}` : "选择一首本地歌曲；小智跳舞，电脑扬声器播放。"}</small></span></span>
+            <div className="motion-music-panel__actions"><Button icon={FolderOpen} variant="ghost" onClick={() => { void chooseDanceMusic(); }}>{danceMusic.configured ? "更换歌曲" : "选择歌曲"}</Button>{danceMusic.configured && <><Button icon={danceMusic.state === "playing" ? PlayerPause : PlayerPlay} variant="ghost" onClick={() => { void (danceMusic.state === "playing" ? voiceAdapters.desktop.stopDanceMusic() : previewDanceMusic()); }}>{danceMusic.state === "playing" ? "停止试听" : "试听"}</Button><Toggle label="跳舞同步播放音乐" checked={danceMusic.enabled} onChange={(enabled) => { void toggleDanceMusic(enabled); }} /></>}</div>
           </div>
           <div className="motion-automation-panel">
             <div className="motion-automation-row"><span><strong>自动情境动作</strong><small>开始陪伴时关注；思考超过 {motionAutomation.thinkingDelaySeconds || 4} 秒时寻找；回答结束轻点头；Codex 等待确认或遇到问题时寻找，完成后点头。</small></span><Toggle label="自动情境动作总开关" checked={motionAutomation.policy.enabled} onChange={(enabled) => { void updateMotionAutomation({ enabled }); }} /></div>

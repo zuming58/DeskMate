@@ -78,11 +78,18 @@ export class DesktopBridgeAdapter {
   async setGlobalShortcutsEnabled(enabled) { return this.bridge?.setGlobalShortcutsEnabled ? this.bridge.setGlobalShortcutsEnabled(enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setShortcutCapture(active) { return this.bridge?.setShortcutCapture ? this.bridge.setShortcutCapture(active) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async listApplications() { return this.bridge?.listApplications ? this.bridge.listApplications() : []; }
+  async listRegisteredApplications() { return this.bridge?.listRegisteredApplications ? this.bridge.listRegisteredApplications() : []; }
   async registerApplication(token) { return this.bridge?.registerApplication ? this.bridge.registerApplication(token) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async chooseApplication() { return this.bridge?.chooseApplication ? this.bridge.chooseApplication() : { cancelled: true }; }
   async testApplication(id) { return this.bridge?.testApplication ? this.bridge.testApplication(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getApplicationVoicePolicy(id) { return this.bridge?.getApplicationVoicePolicy ? this.bridge.getApplicationVoicePolicy(id) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setApplicationVoiceEnabled(id, enabled) { return this.bridge?.setApplicationVoiceEnabled ? this.bridge.setApplicationVoiceEnabled(id, enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async getDanceMusicStatus() { return this.bridge?.getDanceMusicStatus ? this.bridge.getDanceMusicStatus() : { configured: false, enabled: false, label: "", storage: "unavailable", state: "idle", reason: "desktop-bridge-unavailable" }; }
+  async chooseDanceMusic() { return this.bridge?.chooseDanceMusic ? this.bridge.chooseDanceMusic() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async setDanceMusicEnabled(enabled) { return this.bridge?.setDanceMusicEnabled ? this.bridge.setDanceMusicEnabled(enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async previewDanceMusic() { return this.bridge?.previewDanceMusic ? this.bridge.previewDanceMusic() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  async stopDanceMusic() { return this.bridge?.stopDanceMusic ? this.bridge.stopDanceMusic() : { ok: false, reason: "desktop-bridge-unavailable" }; }
+  onDanceMusicStatus(listener) { return this.bridge?.onDanceMusicStatus ? this.bridge.onDanceMusicStatus(listener) : () => {}; }
   async getCodexTaskBriefStatus() { return this.bridge?.getCodexTaskBriefStatus ? this.bridge.getCodexTaskBriefStatus() : { receiver: "unavailable", announcementsEnabled: true, tasks: [] }; }
   async setCodexTaskBriefAnnouncements(enabled) { return this.bridge?.setCodexTaskBriefAnnouncements ? this.bridge.setCodexTaskBriefAnnouncements(enabled) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   onCodexTaskBriefStatus(listener) { return this.bridge?.onCodexTaskBriefStatus ? this.bridge.onCodexTaskBriefStatus(listener) : () => {}; }

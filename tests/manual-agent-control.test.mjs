@@ -19,16 +19,16 @@ test("manual Agent model keeps identity local and maps waiting_user to the froze
   assert.equal(normalizeAgentControl({ agentId: "codex", state: "idle", automaticStatusEnabled: false }).automaticStatusEnabled, false);
 });
 
-test("desktop Agent UI keeps manual fallback and exposes trusted Codex and Hermes lifecycle adapters", async () => {
+test("desktop Agent UI keeps Codex-only controls after other Agent work is removed from scope", async () => {
   const [pages, preload, main] = await Promise.all([
     readFile(new URL("../src/pages.jsx", import.meta.url), "utf8"),
     readFile(new URL("../electron/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../electron/main.cjs", import.meta.url), "utf8"),
   ]);
-  assert.match(pages, /Codex 与 Hermes 生命周期适配/);
+  assert.match(pages, /当前范围只保留 Codex/);
   assert.match(pages, /重新发送当前状态/);
-  assert.match(pages, /Hermes 插件必须由用户显式启用/);
-  assert.match(pages, /WorkBuddy 产品身份未确认/);
+  assert.match(pages, /其他 Agent 适配已从近期计划移除/);
+  assert.doesNotMatch(pages, /<option value={agent\.id}/);
   assert.doesNotMatch(pages, /simulateNextStatus/);
   assert.match(preload, /setManualAgentState/);
   assert.match(preload, /setActiveAgentProvider/);
@@ -39,7 +39,7 @@ test("desktop Agent UI keeps manual fallback and exposes trusted Codex and Herme
   assert.match(main, /desktop:set-active-agent-provider/);
   assert.match(main, /desktop:get-agent-provider-status/);
   assert.match(main, /new CodexHookStateServer/);
-  assert.match(main, /new HermesHookStateServer/);
+  assert.match(main, /new HermesHookStateServer/); // Legacy receiver remains compatible but is not exposed for new development.
   assert.match(main, /sourceVersionForProvider/);
   assert.match(main, /"disabled"/);
   assert.match(main, /voice-workflow-active/);

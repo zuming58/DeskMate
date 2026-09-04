@@ -1,14 +1,14 @@
 # Development plan
 
-## Current stage: T16/T17 software closure and T15C automatic contextual motion
+## Current stage: T19 Windows-only application and local-media closure
 
-目标：以已经通过用户真机验收的手动控制、固定动作、可调角度/速度和自定义舞蹈为冻结硬件基线，优先关闭 Windows 软件链。T18 当前候选缩短可信动作播报结束后的恢复时间，抑制普通 Codex 检查/工作状态的主动打扰，把热词接入批量 ASR 上下文与实时本地纠错，开放真实逐句历史，并增加显式选择后才运行的 Windows 本地中文语音唤醒。下一人工门是普通语音输入回 Codex、动作后快速回聆听、逐句历史、本地唤醒，以及等待/完成/失败三类 Codex 提醒。当前阶段不修改 Host HID、DeskMate Link 或两套动作固件；只有新的诊断证据证明冻结合同失效时才重新开启固件切片。
+目标：以已经通过用户真机验收的手动控制、固定动作、可调角度/速度和自定义舞蹈为冻结硬件基线，只关闭 Windows 软件链。T19 让白名单应用在“智能控制”中可发现、可单独授权并按名称确定性打开，同时让电脑本地音乐与内置/自定义舞蹈同步启停。随后继续 T16 Codex 简报、T17 长期记忆和 T12/T15C 陪伴回归。硬件扩展、人脸跟随、人物/声纹识别、其他 Agent 和新的 EasyInput 扬声器下行均已由用户取消，不再列入后续开发。当前阶段不修改 Host HID、DeskMate Link 或两套动作固件。
 
 ### Current execution point
 
 > **主 Agent 总控快照（2026-09-04，以下内容优先于本节后面的历史分支记录）**
 >
-> 三个开发窗口的 Flow、Git 分支和验收事实已经重新汇总。T10D-D 手动控制、T15 四个固定动作和 T15D V2 可调动作/自定义舞蹈均已完成用户真机验收。T15D 实现提交 `d6ffb595dd4ea20decdfe6f114c5ffe56838e83c` 冻结 Host `0x1A/0x1B` 与 Link `0x26/0x27`，提供 Yaw `4..40°`、Pitch `4..20°` 及两轴 `20..100°/s`；EasyInput `AC31B817...56097` 与小智 `61193549...8EF43` 两个精确 V2 app-only 镜像均已获授权写入并独立回读一致。Windows 原生 V1/V2 修复 `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110` 已集成到 `42138d7aab8180941efc5ec387edeb78608a8635`，Desktop `378/378`、打包和包内原生自检通过。用户随后确认快速动作、自定义舞蹈、角度和速度全部正常；T15D 升级为冻结基线且无需再次烧录。T16 最新真机语音验收已失败：Bridge 虽然运行，但只持有一条手工测试报告，未接入用户实际同时运行的多个 Codex 任务；`什么任务/哪个任务` 会漏到豆包自由聊天，且现有组合式豆包会话没有证明自由回答音频已被阻断。`65%` 不存在于可信合同中，属于不可信生成。当前不再重复原验收，先完成失败关闭、音频所有权隔离和真实 Codex 任务事件适配器。
+> T10D-D 手动控制、T15 四个固定动作和 T15D V2 可调动作/自定义舞蹈均已完成用户真机验收并保持冻结。当前工作树 `codex/t18-software-closure` 继续承接 Windows 软件修复；T19 在该树上新增确定性应用白名单入口和本地舞蹈音乐，不触碰固件。产品范围已收缩为 Windows 软件、现有 EasyInput/小智已验收能力和 Codex 单一 Agent；硬件扩展、人脸跟随、人物/声纹、其他 Agent 与新音频下行均取消。
 
 #### Current source-of-truth map
 
@@ -53,10 +53,9 @@ The exact evidence and ancestry analysis are maintained in [`current-integration
 
 #### Ownership and reporting
 
-- `EasyInput固件开发`（本窗口）是主 Agent / integration owner：维护唯一总 `flow/`，审计两个实现窗口，决定合并与人工验收顺序。
-- `DeskMate软件开发` 独立实现 Windows 软件；不直接把自己的 Flow 状态升级为总项目完成，交付时必须返回 exact branch/HEAD、测试、打包、HIL 和未完成项。
-- `小智云台固件开发` 独立实现 T15 高层动作执行端；只使用已验收的 Stage 2 adapter 与 `MotionSafetyCore`，不允许把角度、PWM、脉宽或 GPIO 暴露到板间合同。
-- 三个窗口均不得在自己的功能分支里宣布“总项目主线已更新”；主 Agent 完成整合审计后，才在本计划和 `flow/progress.md` 顶部统一记账。
+- 当前剩余工作由本项目窗口直接在 Windows 软件分支完成，不再为普通软件修复来回转交固件窗口。
+- 两块板保持用户已验收的 T15D V2 固件；历史固件分支只保留为可追溯证据，不接受顺手修改或烧录。
+- 每次软件交付仍需记录 exact branch/HEAD、测试、打包、人工验收和未完成项；只有新的诊断证据证明冻结合同失效时，才单独重开固件切片。
 
 #### Historical detail below
 

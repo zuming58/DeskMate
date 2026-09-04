@@ -37,6 +37,36 @@ function isMotionNegation(value) {
   return /(?:不要|别|不用|停止|取消).{0,5}(?:跳舞|点头|寻找|看看周围|看着我|关注)/u.test(source);
 }
 
+function normalizeApplicationText(value) {
+  return String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[\s，。！？、,.!?·_()（）\[\]【】《》<>\-]+/gu, "");
+}
+
+function isApplicationLaunchNegation(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
+  return /(?:不要|别|不用|取消|停止).{0,8}(?:打开|启动|运行|开启|播放)/u.test(source);
+}
+
+function matchRegisteredApplication(value, apps = []) {
+  const source = normalizeApplicationText(value);
+  if (!source || isApplicationLaunchNegation(value) || !/(?:打开|启动|运行|开启)/u.test(source)) return { action: null, ambiguous: false };
+  const matches = apps
+    .map((action) => ({ action, label: normalizeApplicationText(action?.label) }))
+    .filter((item) => item.label.length >= 2 && source.includes(item.label))
+    .sort((left, right) => right.label.length - left.label.length || String(left.action?.label || "").localeCompare(String(right.action?.label || ""), "zh-CN"));
+  if (!matches.length) return { action: null, ambiguous: false };
+  const longest = matches[0].label.length;
+  const strongest = matches.filter((item) => item.label.length === longest);
+  if (strongest.length !== 1) return { action: null, ambiguous: true };
+  return { action: strongest[0].action, ambiguous: false };
+}
+
+function localMediaCommandFromUtterance(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
+  if (/(?:停止|暂停|关掉|关闭|别放|不要放).{0,6}(?:音乐|歌曲|歌)|(?:音乐|歌曲|歌).{0,6}(?:停止|暂停|停掉|关掉|关闭)/u.test(source)) return "stop";
+  if (/(?:播放|放一首|放首|来一首|来首).{0,8}(?:音乐|歌曲|歌)/u.test(source)) return "play";
+  return "";
+}
+
 function shouldClassifyWithModel(value, apps = []) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN");
   if (/(?:点.{0,3}头|跳.{0,3}舞|寻找|看看周围|看着我|关注动作)/u.test(source)) return true;
@@ -50,12 +80,13 @@ function shouldClassifyWithModel(value, apps = []) {
 }
 
 class CompanionIntentBridge {
-  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
+  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
     this.loadSecret = loadSecret;
     this.appActions = appActions;
     this.codexStatus = codexStatus;
     this.codexTasks = codexTasks;
     this.motionAction = motionAction;
+    this.mediaAction = mediaAction;
     this.requestJson = requestJson;
     this.now = now;
     this.createToken = createToken;
@@ -80,11 +111,15 @@ class CompanionIntentBridge {
     const hasKnownTasks = (this.codexTasks?.list?.().length || 0) > 0;
     const namedFollowUp = this.codexSelectionExpiresAt > this.now() && this.codexTasks?.matchesTaskLabel?.(source);
     const contextualFollowUp = hasKnownTasks && this.codexContextExpiresAt > this.now() && isContextualCodexStatusFollowUp(source);
+    const applicationMatch = matchRegisteredApplication(source, this.appActions?.listRegistered?.({ limit: 100 }) || []);
     return Boolean(
       isCodexStatusQuery(source, { hasKnownTasks })
       || namedFollowUp
       || contextualFollowUp
-      || (!isMotionNegation(source) && motionPresetFromUtterance(source)),
+      || (!isMotionNegation(source) && motionPresetFromUtterance(source))
+      || applicationMatch.action
+      || applicationMatch.ambiguous
+      || localMediaCommandFromUtterance(source)
     );
   }
 
@@ -128,6 +163,14 @@ class CompanionIntentBridge {
     const deterministicMotion = motionPresetFromUtterance(source);
     if (deterministicMotion) return this.executeMotion(deterministicMotion);
     const apps = this.appActions?.listRegistered?.({ limit: 100 }) || [];
+    const applicationMatch = matchRegisteredApplication(source, apps);
+    if (applicationMatch.ambiguous) {
+      this.last = { status: "failed", type: "open_application", label: "应用名称不唯一，未执行", reason: "intent-application-ambiguous", expiresAt: 0 };
+      return { ok: false, reason: "intent-application-ambiguous", proposal: null, result: { type: "open_application", ok: false, reason: "intent-application-ambiguous", answer: "我找到了多个同名应用，请在智能控制里只保留一个语音入口" } };
+    }
+    if (applicationMatch.action) return this.executeApplication(applicationMatch.action);
+    const mediaCommand = localMediaCommandFromUtterance(source);
+    if (mediaCommand) return this.executeMedia(mediaCommand);
     if (!shouldClassifyWithModel(source, apps)) {
       this.last = { status: "none", type: "none", label: "本轮已由 Bridge 判定为普通对话", reason: "", expiresAt: 0 };
       return { ok: true, proposal: null };
@@ -156,20 +199,38 @@ class CompanionIntentBridge {
       const actionId = String(parsed.actionId || "");
       const action = UUID_PATTERN.test(actionId) ? this.appActions.describe(actionId) : null;
       if (!action) return { ok: false, reason: "intent-application-not-registered", proposal: null };
-      if (action.voiceEnabled !== true) {
-        this.last = { status: "failed", type, label: `未打开应用：${action.label}`, reason: "application-voice-not-enabled", expiresAt: 0 };
-        return { ok: false, reason: "application-voice-not-enabled", proposal: null, result: { type, ok: false, reason: "application-voice-not-enabled", label: action.label } };
-      }
-      const result = await this.appActions.executeVoice(actionId);
-      this.last = { status: result?.ok ? "completed" : "failed", type, label: result?.ok ? `已打开应用：${action.label}` : `未打开应用：${action.label}`, reason: result?.ok ? "" : safeReason(result?.reason), expiresAt: 0 };
-      const answer = result?.ok ? `已打开${action.label}` : `没有打开${action.label}，请检查应用白名单设置`;
-      return { ok: Boolean(result?.ok), reason: result?.ok ? "" : safeReason(result?.reason), proposal: null, result: { type, ...result, answer } };
+      return this.executeApplication(action);
     }
     if (type === "query_codex_status") {
       return this.codexStatusResult(source);
     }
     const preset = ["attention", "search", "nod", "dance"].includes(parsed?.preset) ? parsed.preset : "";
     return this.executeMotion(preset);
+  }
+
+  async executeApplication(action) {
+    const type = "open_application";
+    if (!action?.id) return { ok: false, reason: "intent-application-not-registered", proposal: null };
+    if (action.voiceEnabled !== true) {
+      this.last = { status: "failed", type, label: `未打开应用：${action.label}`, reason: "application-voice-not-enabled", expiresAt: 0 };
+      return { ok: false, reason: "application-voice-not-enabled", proposal: null, result: { type, ok: false, reason: "application-voice-not-enabled", label: action.label, answer: `${action.label}还没有允许语音打开，请先到智能控制里开启` } };
+    }
+    const result = await this.appActions.executeVoice(action.id);
+    this.last = { status: result?.ok ? "completed" : "failed", type, label: result?.ok ? `已打开应用：${action.label}` : `未打开应用：${action.label}`, reason: result?.ok ? "" : safeReason(result?.reason), expiresAt: 0 };
+    const answer = result?.ok ? `已打开${action.label}` : `没有打开${action.label}，请检查应用白名单设置`;
+    return { ok: Boolean(result?.ok), reason: result?.ok ? "" : safeReason(result?.reason), proposal: null, result: { type, ...result, answer } };
+  }
+
+  async executeMedia(command) {
+    const type = "control_local_media";
+    if (typeof this.mediaAction !== "function") {
+      this.last = { status: "failed", type, label: "本地音乐暂不可用", reason: "local-media-action-unavailable", expiresAt: 0 };
+      return { ok: false, reason: "local-media-action-unavailable", proposal: null, result: { type, ok: false, reason: "local-media-action-unavailable", answer: "还没有选择可播放的本地音乐" } };
+    }
+    const result = await this.mediaAction(command);
+    const ok = result?.ok === true;
+    this.last = { status: ok ? "completed" : "failed", type, label: command === "play" ? "播放本地音乐" : "停止本地音乐", reason: ok ? "" : safeReason(result?.reason), expiresAt: 0 };
+    return { ok, reason: ok ? "" : safeReason(result?.reason), proposal: null, result: { type, command, ...result, silent: ok, answer: ok ? "" : command === "play" ? "还没有选择可播放的本地音乐" : "音乐暂时无法停止" } };
   }
 
   async executeMotion(preset) {
@@ -204,4 +265,4 @@ class CompanionIntentBridge {
   }
 }
 
-module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, isContextualCodexStatusFollowUp, isMotionNegation, motionPresetFromUtterance, shouldClassifyWithModel };
+module.exports = { CompanionIntentBridge, TOKEN_TTL_MS, isCodexStatusQuery, isContextualCodexStatusFollowUp, isMotionNegation, motionPresetFromUtterance, shouldClassifyWithModel, isApplicationLaunchNegation, matchRegisteredApplication, localMediaCommandFromUtterance };
