@@ -1,5 +1,14 @@
 # Decisions
 
+## D090 - Codex status must fail closed and spoken ownership includes audio
+
+- Date: 2026-09-04
+- Decision: a sentence or contextual follow-up that may be asking about a Codex task must never fall through to general provider conversation when exact task identity or a trusted snapshot is unavailable. Forms such as `什么任务`, `哪个任务` and `你说的是什么任务` are status-context queries. The only valid fallback is an explicit bounded answer that no trustworthy task data is available.
+- Progress boundary: `codex-task-brief-v1` has no progress-percentage field. DeskMate must never invent or repeat a percentage, ETA or completion fraction from a language model. Such values may be added only through a future separately frozen, measured and source-attributed contract.
+- Audio ownership: suppressing `chat.partial` or `chat.final` is insufficient when the provider session can still emit generated audio. A Bridge-owned turn is accepted only when competing free-chat audio is prevented, cancelled with verified provider acknowledgement, or separated through an ASR-first routing architecture. Tests and diagnostics must cover heard audio ownership, not only renderer text.
+- Task identity: the manual repository reporter and coarse lifecycle hook are not a complete multi-project Codex monitor. Multi-task acceptance requires an opt-in adapter with stable task/thread identity and lifecycle events. Codex App Server is the preferred official integration surface to evaluate because it exposes thread listing/status and turn/plan events; prompt bodies, replies, tool arguments, window titles and broad process scans remain out of scope by default.
+- Boundary: this is a Windows architecture correction. It does not change or authorize firmware, HID, DeskMate Link, Flash, audio hardware or motion operations.
+
 ## D089 - A trusted task report opens bounded conversational context and health must be observable
 
 - Date: 2026-09-04

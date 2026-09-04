@@ -4,6 +4,21 @@ Use the exact internal Beta package recorded in the latest `flow/progress.md`.
 This checklist does not authorize a firmware write. Keep the already accepted
 EasyInput and Xiaozhi T15D V2 applications installed.
 
+## Rejected candidate notice - 2026-09-04
+
+Build `t18-realtime-bridge-context-hil` failed user-present Codex voice HIL. It
+spoke an unsupported `65%` value and could not answer which task it meant. Do
+not repeat the checklist below with that build. The next candidate must first:
+
+1. populate the trusted store from two real, stable Codex task identities rather
+   than manually injecting one synthetic test task;
+2. answer `什么任务`, `哪个任务` and equivalent follow-ups deterministically;
+3. refuse to state any percentage, ETA or completion fraction absent a frozen
+   trusted field;
+4. prove that a Bridge-owned turn blocks competing free-chat **audio**, not only
+   renderer text; and
+5. identify the source of every status answer in the UI during acceptance.
+
 ## 1. Baseline motion regression
 
 1. Open **AI companion -> Motion** and leave automatic contextual motion off.
