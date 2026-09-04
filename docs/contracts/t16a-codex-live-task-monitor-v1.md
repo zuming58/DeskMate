@@ -71,8 +71,10 @@ explicit unavailable answer; it never releases the same utterance to free chat.
 
 - The existing user switch controls proactive Codex speech. Querying state
   remains available while it is off.
-- `waiting`, `completed` and explicit `error` reports announce immediately;
-  ordinary progress is throttled to at most once per 15 seconds.
+- `waiting`, `completed` and explicit `error` reports may announce immediately.
+- `thinking`, `working` and tool/check progress update the bounded task store silently;
+  they never auto-open the companion or repeatedly show a voice capsule. The user
+  can still ask for current status at any time.
 - With automatic context motion enabled: companion start uses `attention`, a
   completed spoken answer uses one light `nod`, sustained thinking uses one
   `search`, Codex waiting/error uses one `search`, and Codex completion uses one

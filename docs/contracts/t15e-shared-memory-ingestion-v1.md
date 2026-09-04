@@ -39,6 +39,13 @@ Voice edit, mock STT, failed/cancelled/empty transcription, raw audio, credentia
 - UI listing and local hybrid retrieval support `all`, `companion`, and `dictation` source filters.
 - External edits are preserved through the existing managed-manifest conflict rule.
 
+## Raw-turn history
+
+- The user may explicitly open `逐句记录` to browse the authoritative companion and dictation turns that already exist in SQLite.
+- Electron applies a source filter, a bounded 200-character search and a maximum 200-row result before returning display records.
+- A display record contains only generated row ID, source, role, content and local timestamp. Session ID, source event ID, outbox metadata and digest identifiers never cross preload.
+- Browsing does not approve a candidate, modify source text or add the turn to model context.
+
 ## Safety and privacy
 
-Only bounded status, source labels, counts, and sanitized failure codes cross preload. Raw turns, digests, vectors, database paths, Wi-Fi information, device identity, and credentials remain in Electron main.
+Status, source labels, counts, sanitized failure codes and the explicit bounded raw-turn listing may cross preload. Digests, vectors, database paths, session/event identifiers, Wi-Fi information, device identity and credentials remain in Electron main. Reviewed exports continue to exclude raw turns.

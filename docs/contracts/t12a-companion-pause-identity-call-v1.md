@@ -2,6 +2,10 @@
 
 Status: `T12A_COMPANION_PAUSE_IDENTITY_CALL_V1_FROZEN`
 
+Wake implementation note: the unavailable V1 boundary below is superseded by
+[`T18_LOCAL_WAKE_AND_TRANSCRIPT_V1_FROZEN`](./t18-local-wake-and-transcript-v1.md).
+The endpointing, identity, call and privacy rules in this document remain frozen.
+
 ## Product boundary
 
 - Windows DeskMate software only. No EasyInput firmware, Xiaozhi firmware, HID report, GPIO, OLED, servo, speaker or Flash change.

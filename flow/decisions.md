@@ -1,5 +1,15 @@
 # Decisions
 
+## D093 - Local wake is opt-in and ordinary task progress must stay silent
+
+- Date: 2026-09-04
+- Wake: D092's temporary unavailable boundary is superseded. An installed Windows `System.Speech` `zh-CN` recognizer is the selected first local engine. It is disabled by default, uses only an exact bounded phrase grammar, emits no transcript/audio, and participates in the existing foreground microphone arbitration. Dictation, voice edit, realtime companion and microphone test always pause it; the owner release may resume it.
+- Task notifications: ordinary Codex `thinking`, `working`, tool and check states update the trusted task store silently. They must not start a companion session, open the voice capsule or speak repeatedly. With proactive notifications enabled, only `waiting`, `completed` and explicit `error` may interrupt the user; explicit spoken status queries still report all trusted states.
+- Transcript: the configured vocabulary now affects recognition through bounded Qwen ASR context where supported and one deterministic local correction pass for realtime/batch results. A technical alias is corrected only when its canonical hotword is configured; explicit user replacement rules run first.
+- History: raw companion and successful dictation turns remain authoritative in SQLite and are now visible on demand through a bounded `逐句记录` query. The display omits internal session/event identifiers, and reviewed exports continue to exclude raw turns.
+- Recovery: after the final trusted audio chunk, a bounded quiet timer repairs a missing provider `tts.end`, drains/interrupts playback as necessary, replaces that provider generation without replay and returns to listening. Ordinary recording persistence runs concurrently with ASR and active-window output retries only the exact captured HWND for 300 ms.
+- Boundary: Windows software only. No firmware, HID, DeskMate Link, device, Flash, NVS, eFuse or servo behavior changes.
+
 ## D092 - Trusted voice turns claim synchronously and missing TTS terminals recover by generation
 
 - Date: 2026-09-04
