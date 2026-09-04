@@ -146,10 +146,7 @@ class CodexTaskBriefStore {
     const previous = this.tasks.get(report.taskKey);
     if (previous && report.sequence <= previous.sequence) return { ok: false, reason: "codex-task-brief-stale" };
     const receivedAt = this.now();
-    const firstReport = !previous;
-    const thinkingAnnouncement = report.state === "thinking" && previous?.thinkingAnnounced !== true;
-    const workingAnnouncement = report.state === "working" && (firstReport || receivedAt - (previous?.lastAnnouncementAt || 0) >= this.throttleMs);
-    const shouldAnnounce = firstReport || thinkingAnnouncement || workingAnnouncement || IMMEDIATE_STATES.has(report.state);
+    const shouldAnnounce = IMMEDIATE_STATES.has(report.state);
     const task = Object.freeze({ ...report, receivedAt, lastAnnouncementAt: shouldAnnounce ? receivedAt : previous?.lastAnnouncementAt || 0, thinkingAnnounced: report.state === "thinking" || previous?.thinkingAnnounced === true });
     this.tasks.delete(report.taskKey);
     this.tasks.set(report.taskKey, task);

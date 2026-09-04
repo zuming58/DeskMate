@@ -12,7 +12,7 @@ export function describeTranscriptionFailure(transcript = {}) {
 export async function processVoiceRecording({ blob, stt, organizer, organizerOptions, editor, operation = "input", saveHistory, output, outputMode = "history", signal, onPhase }) {
   onPhase?.("transcribing");
   let transcript;
-  try { transcript = await stt.transcribe(blob, { signal }); } catch (error) { transcript = { status: "error", text: "", provider: "unknown", durationMs: 0, message: error.message }; }
+  try { transcript = await stt.transcribe(blob, { signal, hotwords: organizerOptions?.hotwords || [] }); } catch (error) { transcript = { status: "error", text: "", provider: "unknown", durationMs: 0, message: error.message }; }
   if (transcript.status === "success" && !String(transcript.text || "").trim()) transcript = { ...transcript, status: "error", text: "", message: "transcription-empty" };
   let organized = null;
   if (transcript.status === "success") {

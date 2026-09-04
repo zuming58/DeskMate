@@ -10,7 +10,7 @@ import { COMPANION_DEFAULTS, isValidCompanionEndSmoothWindowMs, isValidCompanion
 import { normalizeMotionState } from "../domain/motionPresets.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -37,7 +37,7 @@ export const defaultState = {
   vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ from: "桌面宠物", to: "桌宠" }, { from: "克劳德代码", to: "Claude Code" }] },
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
-  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "", companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs },
+  settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "", companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs, companionWakeEnabled: false },
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
@@ -65,7 +65,7 @@ function mergeDefaults(value) {
     keymap: Array.isArray(value.keymap) && value.keymap.length === 8 ? value.keymap.map((item, index) => normalizeKeyBinding(item, defaultState.keymap[index])) : structuredClone(defaultState.keymap),
     encoder: normalizeEncoder(value.encoder),
     vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
-    settings: (() => { const companion = normalizeCompanionPreferences({ name: value.settings?.companionName, wakePhrase: value.settings?.companionWakePhrase, endSmoothWindowMs: value.settings?.companionEndSmoothWindowMs, idleTimeoutMs: value.settings?.companionIdleTimeoutMs }); return { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle", companionName: companion.name, companionWakePhrase: companion.wakePhrase, companionEndSmoothWindowMs: companion.endSmoothWindowMs, companionIdleTimeoutMs: companion.idleTimeoutMs }; })(),
+    settings: (() => { const companion = normalizeCompanionPreferences({ name: value.settings?.companionName, wakePhrase: value.settings?.companionWakePhrase, endSmoothWindowMs: value.settings?.companionEndSmoothWindowMs, idleTimeoutMs: value.settings?.companionIdleTimeoutMs, wakeEnabled: value.settings?.companionWakeEnabled }); return { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle", companionName: companion.name, companionWakePhrase: companion.wakePhrase, companionEndSmoothWindowMs: companion.endSmoothWindowMs, companionIdleTimeoutMs: companion.idleTimeoutMs, companionWakeEnabled: companion.wakeEnabled }; })(),
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
     agentControl: normalizeAgentControl(value.agentControl),
@@ -91,6 +91,7 @@ export function migrateState(raw) {
   if ((raw.schemaVersion ?? 0) < 11) raw = { ...raw, runtime: { ...(raw.runtime || {}), companion: { ...(raw.runtime?.companion || {}), audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null } } } };
   if ((raw.schemaVersion ?? 0) < 12) raw = { ...raw, settings: { ...(raw.settings || {}), companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs } };
   if ((raw.schemaVersion ?? 0) < 13) raw = { ...raw, motion: normalizeMotionState(raw.motion) };
+  if ((raw.schemaVersion ?? 0) < 14) raw = { ...raw, settings: { ...(raw.settings || {}), companionWakeEnabled: false } };
   return mergeDefaults(raw);
 }
 
@@ -137,6 +138,7 @@ export function validateConfig(value) {
   if (value.settings?.companionWakePhrase !== undefined && (typeof value.settings.companionWakePhrase !== "string" || !value.settings.companionWakePhrase.trim() || value.settings.companionWakePhrase.length > 64)) throw new Error("唤醒短语无效");
   if (value.settings?.companionEndSmoothWindowMs !== undefined && !isValidCompanionEndSmoothWindowMs(value.settings.companionEndSmoothWindowMs)) throw new Error("停顿阈值无效");
   if (value.settings?.companionIdleTimeoutMs !== undefined && !isValidCompanionIdleTimeoutMs(value.settings.companionIdleTimeoutMs)) throw new Error("会话空闲时长无效");
+  if (value.settings?.companionWakeEnabled !== undefined && typeof value.settings.companionWakeEnabled !== "boolean") throw new Error("语音唤醒开关无效");
   if (value.settings?.sttEndpoint !== undefined && (typeof value.settings.sttEndpoint !== "string" || value.settings.sttEndpoint.length > 2048)) throw new Error("STT 端点格式无效");
   if (value.settings?.customOrganizerRule !== undefined && (typeof value.settings.customOrganizerRule !== "string" || value.settings.customOrganizerRule.length > 4000)) throw new Error("自定义整理规则格式无效");
   const expressionIds = new Set(expressionPresets.map((item) => item.id));

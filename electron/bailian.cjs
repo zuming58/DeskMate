@@ -27,10 +27,19 @@ function normalizeAudio(audio, mimeType = "audio/webm") {
   return `data:${safeMime};base64,${bytes.toString("base64")}`;
 }
 
-function buildRequest(audio, { mimeType = "audio/webm", model = DEFAULT_MODEL } = {}) {
+function normalizeHotwords(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.slice(0, 100).map((item) => String(item || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 64)).filter(Boolean))];
+}
+
+function buildRequest(audio, { mimeType = "audio/webm", model = DEFAULT_MODEL, hotwords = [] } = {}) {
+  const glossary = normalizeHotwords(hotwords);
   return {
     model,
-    messages: [{ role: "user", content: [{ type: "input_audio", input_audio: { data: normalizeAudio(audio, mimeType) } }] }],
+    messages: [
+      ...(glossary.length ? [{ role: "system", content: `以下是本次识别可能出现的实体词表，请优先按这些写法转写，不要补充音频中没有的内容：${glossary.join("、")}` }] : []),
+      { role: "user", content: [{ type: "input_audio", input_audio: { data: normalizeAudio(audio, mimeType) } }] },
+    ],
     stream: false,
     asr_options: { enable_itn: true },
   };
@@ -47,7 +56,7 @@ function parseResponse(data) {
   };
 }
 
-async function transcribe({ apiKey, workspaceId = "", audio, mimeType, fetchImpl = globalThis.fetch, timeoutMs = 60000, signal }) {
+async function transcribe({ apiKey, workspaceId = "", audio, mimeType, hotwords = [], fetchImpl = globalThis.fetch, timeoutMs = 60000, signal }) {
   const key = validateApiKey(apiKey);
   if (typeof fetchImpl !== "function") throw new Error("当前运行环境不支持千问 ASR 请求");
   const controller = new AbortController();
@@ -59,7 +68,7 @@ async function transcribe({ apiKey, workspaceId = "", audio, mimeType, fetchImpl
     const response = await fetchImpl(endpointForWorkspace(workspaceId), {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildRequest(audio, { mimeType })),
+      body: JSON.stringify(buildRequest(audio, { mimeType, hotwords })),
       signal: controller.signal,
     });
     let data;

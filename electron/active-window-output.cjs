@@ -1,10 +1,10 @@
 const PASTE_CAPTURED_WINDOW_SCRIPT = [
   "$expected = [Int64]::Parse($env:DESKMATE_TARGET_WINDOW)",
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
-  "$current = [DeskMateForeground]::GetForegroundWindow().ToInt64()",
-  "if ($current -ne $expected) { [Console]::Error.Write('target-window-changed'); exit 2 }",
   "Add-Type -AssemblyName System.Windows.Forms",
-  "[System.Windows.Forms.SendKeys]::SendWait('^v')",
+  "$deadline = [DateTime]::UtcNow.AddMilliseconds(300)",
+  "do { $current = [DeskMateForeground]::GetForegroundWindow().ToInt64(); if ($current -eq $expected) { [System.Windows.Forms.SendKeys]::SendWait('^v'); exit 0 }; Start-Sleep -Milliseconds 10 } while ([DateTime]::UtcNow -lt $deadline)",
+  "[Console]::Error.Write('target-window-changed'); exit 2",
 ].join("; ");
 
 async function pasteIntoCapturedWindow({ text, targetWindow, writeClipboard, runPaste } = {}) {

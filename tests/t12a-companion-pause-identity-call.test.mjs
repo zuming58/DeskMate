@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { migrateState, SCHEMA_VERSION, validateConfig } from "../src/store/appStore.js";
 import { createDiagnosticReport } from "../src/services/diagnostics.js";
 import { createKeyboardConfig, DEFAULT_ENCODER, DEFAULT_KEYMAP, firmwareAction } from "../src/domain/keymap.js";
@@ -16,7 +18,7 @@ const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
 const { HostActionExecutor } = require("../electron/app-actions.cjs");
 const { COMPANION_CALL_ACTION } = require("../electron/companion-call.cjs");
 const { CompanionPreferenceStore, normalizeCompanionPreferences } = require("../electron/companion-preferences.cjs");
-const { UnavailableWakeWordAdapter } = require("../electron/wake-word-adapter.cjs");
+const { WindowsSpeechWakeWordAdapter } = require("../electron/wake-word-adapter.cjs");
 const { mergeKeyboardPatch, sanitizeKeyboardConfig } = require("../electron/config-merge.cjs");
 
 class FakeProvider {
@@ -53,7 +55,7 @@ test("T12A preferences migrate to 小言, persist enums, and reject malformed im
   try {
     const store = new CompanionPreferenceStore({ userDataPath: root });
     assert.equal(store.get().name, "小言");
-    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true });
+    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true, wakeEnabled: false });
     assert.equal(store.setCodexBriefAnnouncementsEnabled(false).codexBriefAnnouncementsEnabled, false);
     assert.equal(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000 }).codexBriefAnnouncementsEnabled, false);
     assert.deepEqual(new CompanionPreferenceStore({ userDataPath: root }).get(), store.get());
@@ -123,9 +125,9 @@ test("reserved companion Host Action round-trips without entering AppActionStore
   assert.equal((await executor.execute("11111111-2222-3333-4444-555555555555")).reason, "host-action-not-mapped");
 });
 
-test("wake boundary is unavailable without opening a microphone and diagnostics separate saved from applied endpointing", async () => {
-  const wake = new UnavailableWakeWordAdapter();
-  assert.deepEqual(wake.status(), { version: "wake-word-adapter-v1", available: false, enabled: false, reason: "wake-word-engine-not-integrated", localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
+test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
+  const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v1", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
@@ -140,10 +142,40 @@ test("wake boundary is unavailable without opening a microphone and diagnostics 
   assert.doesNotMatch(JSON.stringify(report), /private-name|private-phrase/);
 });
 
-test("T12A UI exposes the key test and marks wake word as unavailable", () => {
+test("Windows local wake listener emits only a wake event and can yield the microphone", async () => {
+  const children = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.killed = false;
+    child.kill = () => {
+      if (child.killed) return;
+      child.killed = true;
+      queueMicrotask(() => child.emit("exit", 0));
+    };
+    children.push(child);
+    if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"wake"}\n'));
+    return child;
+  };
+  let wakes = 0;
+  const wake = new WindowsSpeechWakeWordAdapter({ platform: "win32", spawnImpl, onWake: () => { wakes += 1; } });
+  assert.equal((await wake.probe()).available, true);
+  wake.configure({ enabled: true, phrases: ["你好，小言", "你好，小言"] });
+  assert.equal((await wake.start()).ok, true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(wakes, 1);
+  assert.equal(wake.status().enabled, true);
+  assert.equal((await wake.pause()).paused, true);
+  assert.equal(wake.status().enabled, false);
+});
+
+test("T12A UI exposes the key test and the opt-in local wake-word control", () => {
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /测试此动作/);
-  assert.match(pages, /语音唤醒待接入 \/ 未启用/);
+  assert.match(pages, /启用本地语音唤醒/);
+  assert.match(pages, /Windows 本机中文识别器/);
   assert.match(pages, /说完后等待回答/);
   assert.match(pages, /整段会话保持聆听/);
 });

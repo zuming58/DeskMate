@@ -18,6 +18,15 @@ test("Bailian request uses base64 audio without exposing key in the body", () =>
   assert.doesNotMatch(JSON.stringify(request), /sk-/);
 });
 
+test("Bailian ASR receives the configured glossary as bounded context", () => {
+  const request = buildRequest(Buffer.from("audio"), { mimeType: "audio/webm", hotwords: ["Codex", "Codex", "DeskMate"] });
+  assert.equal(request.messages[0].role, "system");
+  assert.match(request.messages[0].content, /Codex/);
+  assert.match(request.messages[0].content, /DeskMate/);
+  assert.equal(request.messages[1].role, "user");
+  assert.equal((request.messages[0].content.match(/Codex/g) || []).length, 1);
+});
+
 test("Bailian validates keys and workspace endpoints", () => {
   assert.equal(validateApiKey("sk-12345678"), "sk-12345678");
   assert.throws(() => validateApiKey("secret"), /格式/);

@@ -15,6 +15,7 @@ const COMPANION_PREFERENCES_DEFAULT = Object.freeze({
   endSmoothWindowMs: 5000,
   idleTimeoutMs: 60000,
   codexBriefAnnouncementsEnabled: true,
+  wakeEnabled: false,
 });
 
 function boundedDisplayText(value, fallback, maxLength) {
@@ -40,7 +41,8 @@ function validateCompanionPreferences(value = {}) {
   if (!isValidEndSmoothWindowMs(value.endSmoothWindowMs)) throw new Error("companion-end-smooth-window-invalid");
   if (!isValidIdleTimeoutMs(value.idleTimeoutMs)) throw new Error("companion-idle-timeout-invalid");
   if (value.codexBriefAnnouncementsEnabled !== undefined && typeof value.codexBriefAnnouncementsEnabled !== "boolean") throw new Error("companion-codex-brief-announcements-invalid");
-  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs), codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false });
+  if (value.wakeEnabled !== undefined && typeof value.wakeEnabled !== "boolean") throw new Error("companion-wake-enabled-invalid");
+  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs), codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false, wakeEnabled: value.wakeEnabled === true });
 }
 
 function normalizeCompanionPreferences(value = {}) {
@@ -52,6 +54,7 @@ function normalizeCompanionPreferences(value = {}) {
     endSmoothWindowMs: isValidEndSmoothWindowMs(endSmoothWindowMs) ? endSmoothWindowMs : COMPANION_PREFERENCES_DEFAULT.endSmoothWindowMs,
     idleTimeoutMs: isValidIdleTimeoutMs(idleTimeoutMs) ? idleTimeoutMs : COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs,
     codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false,
+    wakeEnabled: value.wakeEnabled === true,
   });
 }
 

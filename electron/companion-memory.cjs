@@ -474,6 +474,16 @@ class CompanionMemoryStore {
     return [...summaries, ...candidates].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, boundedLimit);
   }
 
+  listTurns({ source = "all", query = "", limit = 100 } = {}) {
+    const normalizedQuery = String(query || "").trim().slice(0, 200);
+    const boundedLimit = Math.max(1, Math.min(200, Number(limit) || 100));
+    const like = `%${normalizedQuery.replace(/[\\%_]/g, (value) => `\\${value}`)}%`;
+    const normalizedSource = source === "all" ? "all" : boundedSource(source);
+    return this.db.prepare("SELECT id, 'turn' AS type, source, role, content, created_at AS createdAt FROM conversation_turns WHERE (?='' OR content LIKE ? ESCAPE '\\') AND (?='all' OR source=?) ORDER BY created_at DESC LIMIT ?")
+      .all(normalizedQuery, like, normalizedSource, normalizedSource, boundedLimit)
+      .map((item) => ({ ...item, day: localDayAt(item.createdAt) }));
+  }
+
   close() { this.db.close(); }
 }
 

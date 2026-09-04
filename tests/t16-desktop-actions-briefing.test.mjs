@@ -77,10 +77,10 @@ test("repository reporter fails closed on missing labels, unsafe text and unknow
   }
 });
 
-test("task brief store keeps eight recent tasks, rejects stale sequence and throttles only ordinary progress", () => {
+test("task brief store keeps eight recent tasks, rejects stale sequence and suppresses ordinary progress announcements", () => {
   let now = 1_000;
   const store = new CodexTaskBriefStore({ now: () => now });
-  assert.match(store.ingest(task()).announcement.text, /正在执行/);
+  assert.equal(store.ingest(task()).announcement, null);
   now += 1_000;
   assert.equal(store.ingest(task({ sequence: 2, milestone: "继续开发" })).announcement, null);
   assert.equal(store.ingest(task({ sequence: 2 })).reason, "codex-task-brief-stale");
@@ -90,10 +90,10 @@ test("task brief store keeps eight recent tasks, rejects stale sequence and thro
   assert.equal(store.list().length, 8);
 });
 
-test("thinking announces once while waiting, completed and error remain immediate", () => {
+test("thinking stays silent while waiting, completed and error remain immediate", () => {
   let now = 10_000;
   const store = new CodexTaskBriefStore({ now: () => now });
-  assert.ok(store.ingest(task({ state: "thinking" })).announcement);
+  assert.equal(store.ingest(task({ state: "thinking" })).announcement, null);
   now += 16_000;
   assert.equal(store.ingest(task({ state: "thinking", sequence: 2 })).announcement, null);
   for (const [sequence, state] of [[3, "waiting"], [4, "completed"], [5, "error"]]) {
@@ -123,7 +123,7 @@ test("automatic hook lifecycle creates separate real tasks and can later hydrate
   const store = new CodexTaskBriefStore();
   const first = store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
   assert.equal(first.task.state, "thinking");
-  assert.match(first.announcement.text, /开始处理新任务/);
+  assert.equal(first.announcement, null);
   const waiting = store.ingestHook({ event: "PermissionRequest", state: "waiting", toolName: "Bash", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
   assert.equal(waiting.task.state, "waiting");
   assert.match(waiting.announcement.text, /需要你确认/);

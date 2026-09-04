@@ -13,7 +13,7 @@ export function validateSttEndpoint(value) {
 export class MockSttAdapter { constructor(text = "这是设备模拟器生成的测试转写。", { maxBytes = DEFAULT_MAX_BYTES } = {}) { this.text = text; this.maxBytes = maxBytes; } async transcribe(blob, { signal } = {}) { const started = Date.now(); if (signal?.aborted) return result("cancelled", "mock", started, { message: "转写已取消" }); return audioError(blob, this.maxBytes, "mock", started) || result("success", "mock", started, { text: this.text }); } }
 export class BailianSttAdapter {
   constructor({ bridge = globalThis.desktopBridge, maxBytes = 10 * 1024 * 1024 } = {}) { this.bridge = bridge; this.maxBytes = maxBytes; }
-  async transcribe(blob, { signal } = {}) {
+  async transcribe(blob, { signal, hotwords = [] } = {}) {
     const started = Date.now();
     if (signal?.aborted) return result("cancelled", "qwen3-asr-flash", started, { message: "转写已取消" });
     const invalidAudio = audioError(blob, this.maxBytes, "qwen3-asr-flash", started); if (invalidAudio) return invalidAudio;
@@ -22,7 +22,7 @@ export class BailianSttAdapter {
     const cancel = () => this.bridge?.cancelBailian?.(requestId);
     signal?.addEventListener("abort", cancel, { once: true });
     try {
-      const response = await this.bridge.transcribeBailian({ requestId, audio: await blob.arrayBuffer(), mimeType: blob.type || "audio/webm" });
+      const response = await this.bridge.transcribeBailian({ requestId, audio: await blob.arrayBuffer(), mimeType: blob.type || "audio/webm", hotwords });
       if (signal?.aborted) return result("cancelled", "qwen3-asr-flash", started, { message: "转写已取消" });
       return result("success", "qwen3-asr-flash", started, { text: response.text, language: response.language, emotion: response.emotion, requestId: response.requestId });
     } catch (error) { return signal?.aborted ? result("cancelled", "qwen3-asr-flash", started, { message: "转写已取消" }) : result("error", "qwen3-asr-flash", started, { message: error.message || "千问 ASR 转写失败" }); }

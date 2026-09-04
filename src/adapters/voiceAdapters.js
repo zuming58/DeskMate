@@ -105,6 +105,7 @@ export class DesktopBridgeAdapter {
   async setCompanionStartOptions(value) { return this.bridge?.setCompanionStartOptions ? this.bridge.setCompanionStartOptions(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async testCompanionCallAction() { return this.bridge?.testCompanionCallAction ? this.bridge.testCompanionCallAction() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getMemoryPolicy() { return this.bridge?.getMemoryPolicy ? this.bridge.getMemoryPolicy() : { version: 1, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", lastResults: {} }; }
+  async listMemoryTurns(value) { return this.bridge?.listMemoryTurns ? this.bridge.listMemoryTurns(value) : []; }
   async setMemoryPolicy(value) { return this.bridge?.setMemoryPolicy ? this.bridge.setMemoryPolicy(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async commitDictationMemory(value) { return this.bridge?.commitDictationMemory ? this.bridge.commitDictationMemory(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async setTriggerConfig(value) { return this.bridge?.setTriggerConfig ? this.bridge.setTriggerConfig(value) : { ok: false, reason: "desktop-bridge-unavailable" }; }

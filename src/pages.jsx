@@ -284,7 +284,7 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
 export function CompanionPage({ notify, navigate, stopCompanion }) {
   const { state, patch, updateCompanion } = useAppStore();
   const [section, setSection] = useState("overview");
-  const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }));
+  const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
   const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
   const [personaStatus, setPersonaStatus] = useState({ state: "idle", message: "" });
@@ -300,8 +300,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const serviceStatus = deviceServiceStatus({ inputBridge: state.runtime?.inputBridge, audioStatus: state.runtime?.easyInputAudio, preferredMicrophoneSource: state.settings.microphoneSource, companion: conversation, memory: state.runtime?.memory });
   const companionName = (sessionActive ? conversation.sessionPolicy?.sessionApplied?.name : state.settings.companionName) || state.settings.companionName || COMPANION_DEFAULTS.name;
   useEffect(() => {
-    setCompanionDraft(companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs }));
-  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs]);
+    setCompanionDraft(companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, wakeEnabled: state.settings.companionWakeEnabled }));
+  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs, state.settings.companionWakeEnabled]);
   useEffect(() => {
     let active = true;
     globalThis.desktopBridge?.getCompanionPersona?.().then((value) => { if (active && value?.persona) setPersonaDraft(value.persona); }).catch(() => {});
@@ -350,7 +350,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   };
   const toggleSession = async () => {
     try {
-      const result = sessionActive ? await stopCompanion?.("page") : await globalThis.desktopBridge?.startCompanionConversation?.({ microphoneSource: preferredCompanionSource, microphoneId: state.settings.microphoneId || "" });
+      const result = sessionActive ? await stopCompanion?.("page") : await globalThis.desktopBridge?.startCompanionConversation?.({ microphoneSource: preferredCompanionSource, microphoneId: state.settings.microphoneId || "", hotwords: state.vocabulary.hotwords, rules: state.vocabulary.rules });
       if (!result?.ok) return notify(blockerCopy[result?.reason] || `陪伴对话未启动：${result?.reason || "服务不可用"}`);
       const fallback = result.status?.audioSelection?.fallback || result.status?.audioSource?.fallback;
       if (fallback) notify(`${microphoneSourceFailureMessage(fallback.reason)}，本次陪伴会话已回退电脑麦克风`);
@@ -374,10 +374,10 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       const result = await voiceAdapters.desktop.setCompanionPreferences(parsed.value);
       if (!result?.preferences) throw new Error("companion-preferences-readback-unavailable");
       const preferences = result.preferences;
-      patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs } });
+      patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs, companionWakeEnabled: preferences.wakeEnabled === true } });
       setCompanionDraft(companionPreferencesToDraft(preferences));
       updateCompanion({ preferences, savedPreferences: { revision: result.revision, endSmoothWindowMs: preferences.endSmoothWindowMs, idleTimeoutMs: preferences.idleTimeoutMs }, wakeWord: result.wakeWord });
-      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}。${sessionActive ? "当前会话不变；结束并重新开始后，软件会向豆包提交新的判停请求。" : "下一次新建陪伴会话时，软件会向豆包提交新的判停请求。"}`;
+      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}，本地唤醒${preferences.wakeEnabled ? "开启" : "关闭"}。${sessionActive ? "当前会话不变；结束并重新开始后，软件会向豆包提交新的判停请求。" : "下一次新建陪伴会话时，软件会向豆包提交新的判停请求。"}`;
       setCompanionSettingsStatus({ state: "saved", message });
       notify(message);
     } catch {
@@ -473,14 +473,15 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <SectionTitle index="03" title="陪伴对话设置" description="只影响实时陪伴，不改变普通语音输入和文字整理的停顿规则。" />
             <div className="companion-settings-form">
               <label className="field-label">陪伴名称<input value={companionDraft.name} maxLength={32} onChange={(event) => setCompanionDraft({ ...companionDraft, name: event.target.value })} /></label>
-              <label className="field-label">唤醒短语（尚未启用）<input value={companionDraft.wakePhrase} maxLength={64} disabled readOnly /><small>离线唤醒引擎尚未开发；现在请点击“开始陪伴”或按 EasyInput 呼叫键。</small></label>
+              <label className="field-label">本地唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /><small>使用 Windows 本机中文识别器；唤醒音频不上传云端。</small></label>
+              <div className="companion-automation-control"><div><strong>{companionDraft.wakeEnabled ? "本地语音唤醒已选择" : "本地语音唤醒已关闭"}</strong><small>{conversation.wakeWord?.available ? companionDraft.wakeEnabled ? "保存后在空闲时监听；语音输入和实时陪伴期间会自动暂停。" : "只有你明确开启后才会占用麦克风。" : "这台电脑没有可用的 Windows 中文识别器。"}</small></div><Toggle label="启用本地语音唤醒" checked={Boolean(companionDraft.wakeEnabled)} disabled={!conversation.wakeWord?.available} onChange={(enabled) => setCompanionDraft({ ...companionDraft, wakeEnabled: enabled })} /></div>
               <label className="field-label">说完后等待回答<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>你说完后连续静音这么久，豆包就判定本句话结束并开始回答；推荐 5 秒。</small></label>
               <label className="field-label">整段会话保持聆听<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>60 秒只表示没有任何新讲话时仍保持会话，不会让已经说完的一句话等待 60 秒；0 表示关闭自动结束。</small></label>
               {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
               <Notice tone="info" title="从下一次会话生效">保存后从下一次新建陪伴会话生效。{sessionActive ? "当前会话正在使用启动时冻结的参数，请结束并重新开始。" : "当前没有活动会话。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone="info" title="语音唤醒待接入 / 未启用">“{state.settings.companionWakePhrase}”只保存为未来的本地离线唤醒配置，当前不会常驻后台监听。点击“开始陪伴”、按 EasyInput 呼叫键，或收到可信 Codex 自动简报后，会进入豆包实时会话；界面显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
+            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "本地语音唤醒正在监听" : state.settings.companionWakeEnabled ? "本地语音唤醒暂时暂停" : "本地语音唤醒未开启"}>“{state.settings.companionWakePhrase}”由 Windows 本机中文识别器匹配。空闲时才监听；开始普通语音输入或实时陪伴后自动让出麦克风，会话结束后恢复。界面显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />
@@ -549,7 +550,7 @@ export function MemoryManagementPage({ notify }) {
   };
   const refreshMemory = useCallback(async () => {
     try {
-      const [status, items, knowledgeBase, policy] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.()]);
+      const [status, items, knowledgeBase, policy] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), filter === "turns" ? globalThis.desktopBridge?.listMemoryTurns?.({ source: sourceFilter, query, limit: 100 }) : globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.()]);
       if (status) setMemoryStatus(status);
       setMemoryItems(Array.isArray(items) ? items : []);
       if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
@@ -691,14 +692,14 @@ export function MemoryManagementPage({ notify }) {
         <Metric label="本地索引" value={String(memoryStatus.indexedChunks || memoryStatus.embeddings)} unit="切片" trend="可删除重建" tone="violet" />
       </div>
       <Card className="memory-toolbar">
-        <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "全部" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
+        <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "整理结果" }, { value: "turns", label: "逐句记录" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
         <Segmented compact value={sourceFilter} onChange={setSourceFilter} options={[{ value: "all", label: "全部来源" }, { value: "companion", label: "陪伴" }, { value: "dictation", label: "语音输入" }]} />
         <SearchField value={query} onChange={setQuery} placeholder="搜索日期、主题或记忆内容" /><Button variant="soft" disabled={busy || !memoryStatus.longTermMemories} onClick={() => { void rebuildIndex(); }}>重建本地索引</Button><Button variant="soft" disabled={!query.trim()} onClick={() => { void searchIndex(); }}>混合检索</Button>
       </Card>
       {indexResults.length > 0 && <Card><SectionTitle index="R" title="检索预览" description="关键词与本地可重建 embedding 的有界结果；不会向 React 暴露向量。" /><div className="memory-item-list">{indexResults.map((item) => <article key={item.chunkId}><div><span>{item.kind}</span><time>{item.day} · {Math.round(item.score * 100)}%</time></div><p>{item.content}</p></article>)}</div></Card>}
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title="尚无可管理的摘要或候选" description="真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。" action={<Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}<div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div></article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title={filter === "turns" ? "尚无逐句记录" : "尚无可管理的摘要或候选"} description={filter === "turns" ? "实时陪伴的你问我答、以及成功的普通语音输入，会原样写入本地 SQLite；这里不显示演示数据。" : "真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。"} action={filter === "turns" ? null : <Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "turn" ? item.source === "dictation" ? "语音输入原文" : item.role === "user" ? "你" : state.settings.companionName || "小智" : item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.type === "turn" ? `${item.day} ${new Date(Number(item.createdAt)).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}{item.type !== "turn" && <div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div>}</article>)}</div>}
         </Card>
         <Card>
           <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />
@@ -798,6 +799,7 @@ export function VoicePage({ notify }) {
   const realtimeAttemptRef = useRef(0);
   const realtimeWantedRef = useRef(false);
   const pendingRealtimeAudioRef = useRef([]);
+  const realtimeFinalRef = useRef({ attempt: 0, text: "", language: "", emotion: "" });
   const workflowRef = useRef("input");
   const hardwareVoiceSourceRef = useRef("voice-workflow");
   const lockedMicrophoneSourceRef = useRef(null);
@@ -809,16 +811,18 @@ export function VoicePage({ notify }) {
     dispatchSession({ type: "transition", state: "transcribing", detail: { message: "正在发送到千问语音识别" } });
     const id = globalThis.crypto?.randomUUID?.() || `recording-${Date.now()}`;
     let audioId;
-    if (item.blob) {
-      try {
-        await saveRecordingBlob(id, item.blob);
-        audioId = id;
-      } catch (cause) {
-        notify(`录音已完成，但音频无法持久保存：${cause.message}`);
-      }
-    }
-    const stt = state.settings.sttMode === "mock" ? new MockSttAdapter() : state.settings.sttMode === "bailian" ? new BailianSttAdapter() : state.settings.sttMode === "http" ? new HttpSttAdapter({ endpoint: state.settings.sttEndpoint }) : voiceAdapters.stt;
-    setRecordingItem({ ...item, id, audioId });
+    const audioSavePromise = item.blob ? saveRecordingBlob(id, item.blob).then(() => id).catch((cause) => { notify(`录音已完成，但音频无法持久保存：${cause.message}`); return undefined; }) : Promise.resolve(undefined);
+    const baseStt = state.settings.sttMode === "mock" ? new MockSttAdapter() : state.settings.sttMode === "bailian" ? new BailianSttAdapter() : state.settings.sttMode === "http" ? new HttpSttAdapter({ endpoint: state.settings.sttEndpoint }) : voiceAdapters.stt;
+    const realtimeResult = item.microphoneSource === "computer" && state.settings.sttMode === "bailian" ? realtimeFinalRef.current : null;
+    const stt = realtimeResult ? {
+      transcribe: async (blob, options) => {
+        const started = Date.now();
+        if (!realtimeResult.text) await new Promise((resolve) => window.setTimeout(resolve, 350));
+        if (realtimeResult.text.trim()) return { status: "success", text: realtimeResult.text.trim(), provider: "qwen3-asr-flash-realtime", durationMs: Date.now() - started, language: realtimeResult.language, emotion: realtimeResult.emotion };
+        return baseStt.transcribe(blob, options);
+      },
+    } : baseStt;
+    setRecordingItem({ ...item, id });
     const controller = new AbortController(); sttAbortRef.current = controller; setProcessing(true);
     const mode = workflow === "edit" ? "active-window" : state.settings.activeWindowOutputEnabled ? "active-window" : state.settings.outputMode;
     try {
@@ -837,6 +841,8 @@ export function VoicePage({ notify }) {
           if (phase === "outputting") dispatchSession({ type: "transition", state: "outputting", detail: { message: "正在写入目标窗口" } });
         },
         saveHistory: async ({ text, transcript: result, organized, failure }) => {
+          audioId = await audioSavePromise;
+          setRecordingItem({ ...item, id, audioId });
           const organizer = organized ? { mode: organized.mode || "raw", model: organized.model || "unknown", durationMs: Number(organized.durationMs) || 0, status: organized.status || (organized.fallback ? "fallback" : "success"), fallback: Boolean(organized.fallback), errorType: organized.errorType || "" } : { mode: "raw", model: "none", durationMs: 0, status: "skipped", fallback: false };
           const transcription = { status: result.status, provider: result.provider || "unknown", durationMs: Number(result.durationMs) || 0, errorType: failure?.code || "", label: failure?.label || "转写成功" };
           const entry = { id, audioId, microphoneSource: item.microphoneSource || "computer", operation: workflow === "edit" ? "voice-edit" : "voice-input", time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
@@ -903,6 +909,7 @@ export function VoicePage({ notify }) {
   const processingRef = useRef(processing); processingRef.current = processing;
   const beginRealtimePreview = () => {
     const attempt = ++realtimeAttemptRef.current;
+    realtimeFinalRef.current = { attempt, text: "", language: "", emotion: "" };
     realtimeWantedRef.current = true;
     pendingRealtimeAudioRef.current = [];
     setRealtimeStatus("connecting");
@@ -1001,6 +1008,7 @@ export function VoicePage({ notify }) {
     if (["preview", "completed"].includes(event.kind)) {
       setLiveTranscript(String(event.preview || event.text || ""));
       setRealtimeStatus("receiving");
+      if (event.kind === "completed") Object.assign(realtimeFinalRef.current, { text: String(event.preview || event.text || ""), language: String(event.language || ""), emotion: String(event.emotion || "") });
     } else if (event.kind === "error") setRealtimeStatus("unavailable");
     else if (event.kind === "ready") setRealtimeStatus("ready");
     else if (["finished", "closed"].includes(event.kind)) setRealtimeStatus("finished");

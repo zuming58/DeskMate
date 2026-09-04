@@ -256,14 +256,14 @@ function AppContent() {
     let active = true;
     voiceAdapters.desktop.getCompanionPreferences().then((value) => {
       if (!active || !value?.preferences) return;
-      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs } });
+      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs, companionWakeEnabled: value.preferences.wakeEnabled === true } });
       updateCompanion({ preferences: value.preferences, savedPreferences: { revision: value.revision, endSmoothWindowMs: value.preferences.endSmoothWindowMs, idleTimeoutMs: value.preferences.idleTimeoutMs }, wakeWord: value.wakeWord });
     }).catch(() => {});
     return () => { active = false; };
   }, [patch, updateCompanion]);
   useEffect(() => {
-    voiceAdapters.desktop.setCompanionStartOptions({ microphoneSource: state.settings.microphoneSource, microphoneId: state.settings.microphoneId }).catch(() => {});
-  }, [state.settings.microphoneSource, state.settings.microphoneId]);
+    voiceAdapters.desktop.setCompanionStartOptions({ microphoneSource: state.settings.microphoneSource, microphoneId: state.settings.microphoneId, hotwords: state.vocabulary.hotwords, rules: state.vocabulary.rules }).catch(() => {});
+  }, [state.settings.microphoneSource, state.settings.microphoneId, state.vocabulary.hotwords, state.vocabulary.rules]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
     window.location.hash = `/${route}`;

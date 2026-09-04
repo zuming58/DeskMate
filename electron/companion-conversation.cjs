@@ -8,6 +8,7 @@ const ECHO_GUARD_POLICY = "computer-speaker-echo-guard-v1";
 const DEFAULT_DRAIN_TIMEOUT_MS = 4500;
 const DEFAULT_TEARDOWN_STEP_TIMEOUT_MS = 750;
 const DEFAULT_TRUSTED_SPEECH_TIMEOUT_MS = 12000;
+const DEFAULT_TRUSTED_AUDIO_QUIET_MS = 1800;
 const DEFAULT_IDLE_TIMEOUT_MS = COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs;
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout", "trusted-timeout"]);
@@ -90,6 +91,7 @@ class CompanionConversationController {
     commitTurn = async () => ({ ok: true }),
     resolveTrustedTurn = () => null,
     claimsTrustedTurn = () => false,
+    normalizeTranscript = (text) => ({ normalized: String(text || ""), changed: false, matched: [] }),
     publishState = async () => ({ ok: true }),
     onEvent = () => {},
     wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
@@ -99,6 +101,7 @@ class CompanionConversationController {
     drainTimeoutMs = DEFAULT_DRAIN_TIMEOUT_MS,
     teardownStepTimeoutMs = DEFAULT_TEARDOWN_STEP_TIMEOUT_MS,
     trustedSpeechTimeoutMs,
+    trustedAudioQuietMs = DEFAULT_TRUSTED_AUDIO_QUIET_MS,
     retryDelaysMs = [0, 250, 750],
   } = {}) {
     if (typeof providerFactory !== "function") throw new Error("companion-provider-factory-required");
@@ -108,6 +111,7 @@ class CompanionConversationController {
     this.commitTurn = commitTurn;
     this.resolveTrustedTurn = resolveTrustedTurn;
     this.claimsTrustedTurn = claimsTrustedTurn;
+    this.normalizeTranscript = normalizeTranscript;
     this.publishState = publishState;
     this.onEvent = onEvent;
     this.wait = wait;
@@ -118,6 +122,7 @@ class CompanionConversationController {
     this.teardownStepTimeoutMs = teardownStepTimeoutMs;
     this.trustedSpeechTimeoutOverride = Number.isFinite(Number(trustedSpeechTimeoutMs)) && Number(trustedSpeechTimeoutMs) > 0;
     this.trustedSpeechTimeoutMs = this.trustedSpeechTimeoutOverride ? Math.max(10, Number(trustedSpeechTimeoutMs)) : DEFAULT_TRUSTED_SPEECH_TIMEOUT_MS;
+    this.trustedAudioQuietMs = Number.isFinite(Number(trustedAudioQuietMs)) ? Math.max(10, Number(trustedAudioQuietMs)) : DEFAULT_TRUSTED_AUDIO_QUIET_MS;
     this.retryDelaysMs = retryDelaysMs.slice(0, 3);
     this.state = "idle";
     this.active = null;
@@ -133,6 +138,7 @@ class CompanionConversationController {
     this.sessionProviderPreferences = Object.freeze({ revision: 0, ...COMPANION_PREFERENCES_DEFAULT });
     this.sessionPersona = normalizePersona();
     this.sessionMemoryContext = Object.freeze([]);
+    this.sessionTranscriptContext = Object.freeze({ hotwords: Object.freeze([]), rules: Object.freeze([]) });
     this.sessionApplied = null;
     this.lastPartialAt = null;
     this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
@@ -154,7 +160,8 @@ class CompanionConversationController {
       ttsImplicitStarts: 0, ttsStartsWhileOpen: 0, ttsEndsWithoutStart: 0,
       chatFinals: 0, chatFinalsSuppressed: 0, chatFinalTtsEndPairs: 0, chatFinalsWithoutTtsEnd: 0,
       asrFinalsAccepted: 0, asrFinalsSuppressed: 0,
-      bridgeChecks: 0, bridgeOwnedTurns: 0, bridgePassThroughTurns: 0, bridgeFailures: 0, trustedSpeechTimeouts: 0,
+      bridgeChecks: 0, bridgeOwnedTurns: 0, bridgePassThroughTurns: 0, bridgeFailures: 0, trustedSpeechTimeouts: 0, trustedAudioQuietRecoveries: 0,
+      transcriptNormalizations: 0, lastTranscriptNormalization: "none",
       lastAsrFinalArrivalPhase: "idle", lastTtsTurnOutcome: "none",
       asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, 0])),
     };
@@ -319,6 +326,10 @@ class CompanionConversationController {
     });
     this.sessionPersona = normalizePersona(candidate.persona);
     this.sessionMemoryContext = Object.freeze(Array.isArray(candidate.memoryContext) ? candidate.memoryContext.slice(0, 20).map((item) => Object.freeze({ day: boundedText(item?.day, 10), kind: boundedText(item?.kind, 60), summary: boundedText(item?.summary, 500) })).filter((item) => item.summary.trim()) : []);
+    this.sessionTranscriptContext = Object.freeze({
+      hotwords: Object.freeze(Array.isArray(candidate.hotwords) ? candidate.hotwords.slice(0, 100).map((item) => boundedText(item, 64)).filter(Boolean) : []),
+      rules: Object.freeze(Array.isArray(candidate.rules) ? candidate.rules.slice(0, 100).map((item) => Object.freeze({ from: boundedText(item?.from, 200), to: boundedText(item?.to, 200) })).filter((item) => item.from) : []),
+    });
     this.sessionApplied = Object.freeze({ ...this.sessionProviderPreferences });
     return { ok: true, status: this.snapshot() };
   }
@@ -340,23 +351,34 @@ class CompanionConversationController {
     return Math.max(this.trustedSpeechTimeoutMs, Math.min(60000, estimated));
   }
 
-  armTrustedSpeechTimer(text, token) {
+  armTrustedSpeechTimer(text, token, phase = "response-start") {
     this.clearTrustedSpeechTimer();
     if (!this.isCurrent(token)) return false;
     const generation = this.trustedSpeechTimerGeneration;
     this.trustedSpeechTimer = this.setTimer(() => {
       this.trustedSpeechTimer = null;
       this.eventChain = this.eventChain
-        .then(() => this.handleTrustedSpeechTimeout(token, generation))
+        .then(() => this.handleTrustedSpeechTimeout(token, generation, phase))
         .catch((error) => this.fail(error?.message || "companion-trusted-speech-timeout-failed", token));
-    }, this.trustedSpeechTimeoutFor(text));
+    }, phase === "audio-quiet" ? this.trustedAudioQuietMs : this.trustedSpeechTimeoutFor(text));
     return true;
   }
 
-  async handleTrustedSpeechTimeout(token, generation) {
+  async handleTrustedSpeechTimeout(token, generation, phase = "response-start") {
     if (!this.isCurrent(token) || generation !== this.trustedSpeechTimerGeneration) return { ignored: true, reason: "companion-trusted-speech-timeout-stale" };
     this.trustedSpeechTimerGeneration += 1;
     this.turnLifecycle.trustedSpeechTimeouts += 1;
+    if (phase === "audio-quiet") {
+      this.turnLifecycle.trustedAudioQuietRecoveries += 1;
+      this.playbackDraining = true;
+      const drained = await this.boundedOperation(() => this.audioSink.drain(), this.drainTimeoutMs, "companion-audio-drain-timeout");
+      if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
+      if (!drained.ok || !drained.value?.ok) {
+        this.echoGuardCounters.playbackDrainTimeouts += 1;
+        await this.boundedOperation(() => this.audioSink.interrupt("trusted-audio-quiet"), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
+      }
+      this.playbackDraining = false;
+    }
     this.markTtsTurnInterrupted("trusted-timeout");
     this.abandonOpenTurn("trusted-timeout");
     this.pendingTrustedResponse = null;
@@ -364,8 +386,8 @@ class CompanionConversationController {
     this.discardResponseUntilTtsEnd = false;
     this.postInterruptState = "";
     this.playbackDraining = false;
-    this.onEvent({ type: "trusted-speech.timeout", reason: "trusted-speech-timeout", sessionId: this.active.sessionId, generation: this.active.generation });
-    return this.reconnect(token, { reason: "trusted-speech-timeout" });
+    this.onEvent({ type: "trusted-speech.timeout", reason: phase === "audio-quiet" ? "trusted-tts-end-missing" : "trusted-speech-timeout", phase, sessionId: this.active.sessionId, generation: this.active.generation });
+    return this.reconnect(token, { reason: phase === "audio-quiet" ? "trusted-tts-end-missing" : "trusted-speech-timeout" });
   }
 
   armIdleTimer(reason = "listening") {
@@ -700,11 +722,14 @@ class CompanionConversationController {
         throw error;
       }
       if (written !== true) throw new Error("computer-audio-playback-write-failed");
+      if (this.trustedResponseActive) this.armTrustedSpeechTimer("", token, "audio-quiet");
       return { ok: true };
     }
     if (event.type === "asr.partial") {
       this.lastPartialAt = this.now();
-      this.onEvent({ type: "transcript.partial", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
+      let partial = boundedText(event.text);
+      try { partial = boundedText(this.normalizeTranscript(partial, this.sessionTranscriptContext)?.normalized || partial); } catch { /* original provider text remains visible */ }
+      this.onEvent({ type: "transcript.partial", text: partial, sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true };
     }
     if (event.type === "asr.final") {
@@ -713,15 +738,24 @@ class CompanionConversationController {
         this.asrTiming = { metric: "provider-partial-to-final-v1", status: "available", lastMs: elapsed, samples: this.asrTiming.samples + 1 };
       }
       this.lastPartialAt = null;
+      let finalText = boundedText(event.text);
+      try {
+        const normalized = this.normalizeTranscript(finalText, this.sessionTranscriptContext);
+        if (normalized?.changed) {
+          this.turnLifecycle.transcriptNormalizations += 1;
+          this.turnLifecycle.lastTranscriptNormalization = boundedText(normalized.matched?.join(",") || "configured", 120);
+        }
+        finalText = boundedText(normalized?.normalized || finalText);
+      } catch { /* provider text remains authoritative when local normalization fails */ }
       let trustedClaimed = false;
-      try { trustedClaimed = this.claimsTrustedTurn(event.text) === true; } catch { trustedClaimed = false; }
+      try { trustedClaimed = this.claimsTrustedTurn(finalText) === true; } catch { trustedClaimed = false; }
       if (trustedClaimed) {
         this.discardResponseUntilTtsEnd = true;
         this.postInterruptState = "thinking";
         this.setHalfDuplexPhase("thinking");
       }
       let trusted = null;
-      try { trusted = await this.resolveTrustedTurn(event.text); } catch { trusted = null; this.turnLifecycle.bridgeFailures += 1; }
+      try { trusted = await this.resolveTrustedTurn(finalText); } catch { trusted = null; this.turnLifecycle.bridgeFailures += 1; }
       const trustedText = boundedText(trusted?.text || trusted?.answer, 240).trim();
       if (trusted?.checked === true) {
         this.turnLifecycle.bridgeChecks += 1;
@@ -739,9 +773,9 @@ class CompanionConversationController {
         this.discardResponseUntilTtsEnd = false;
         this.postInterruptState = "";
       }
-      if (await this.commitFinalTurn("user", event.text, token, { intentChecked: trusted?.checked === true, intentHandled: Boolean(trustedText) })) {
+      if (await this.commitFinalTurn("user", finalText, token, { intentChecked: trusted?.checked === true, intentHandled: Boolean(trustedText) })) {
         if (!this.isCurrent(token)) return { ignored: true };
-        this.onEvent({ type: "turn.user-final", text: boundedText(event.text), sessionId: this.active.sessionId, generation: this.active.generation });
+        this.onEvent({ type: "turn.user-final", text: finalText, sessionId: this.active.sessionId, generation: this.active.generation });
         if (trustedText && trusted?.result) this.onEvent({ type: "intent.result", result: trusted.result, sessionId: this.active.sessionId, generation: this.active.generation });
         await this.transition("thinking");
       }

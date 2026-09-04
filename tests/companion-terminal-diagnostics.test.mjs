@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes an explicit Codex live-monitor HIL build identity", () => {
+test("current package exposes an explicit voice latency, history and wake HIL build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t16a-trusted-bridge-recovery-hil/);
+  assert.match(main, /t18-voice-latency-history-wake-hil/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
 

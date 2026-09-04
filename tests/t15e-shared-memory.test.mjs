@@ -119,6 +119,21 @@ test("shared ingestion is source-aware, idempotent, and never summarizes an empt
   } finally { store.close(); }
 }));
 
+test("raw companion and dictation turns can be browsed without exposing internal event identifiers", () => temporary("deskmate-t15e-turn-history-", (directory) => {
+  const fixed = new Date(2026, 8, 3, 12, 0, 0).getTime();
+  const store = new CompanionMemoryStore({ userDataPath: directory, now: () => fixed });
+  try {
+    const createdAt = new Date(fixed).toISOString();
+    store.commitConversationTurn({ eventId: "companion:private-event", sessionId: "companion:private-session", role: "assistant", content: "陪伴回答", source: "companion", createdAt });
+    store.commitConversationTurn({ eventId: "dictation:private-event", sessionId: "dictation:private-session", role: "user", content: "语音原文", source: "dictation", createdAt });
+    const companion = store.listTurns({ source: "companion", query: "陪伴", limit: 10 });
+    assert.deepEqual(companion.map(({ type, source, role, content, day }) => ({ type, source, role, content, day })), [{ type: "turn", source: "companion", role: "assistant", content: "陪伴回答", day: "2026-09-03" }]);
+    assert.equal("sessionId" in companion[0], false);
+    assert.equal("eventId" in companion[0], false);
+    assert.deepEqual(store.listTurns({ source: "dictation" }).map((item) => item.content), ["语音原文"]);
+  } finally { store.close(); }
+}));
+
 test("knowledge projection preserves bounded source provenance", () => {
   assert.match(dailyDocument({ day: "2026-09-03", summary: "摘要", source: "dictation", sourceTurnCount: 1 }, []), /source: "dictation"/);
   assert.match(memoryDocument({ id: "1234567890abcdef", day: "2026-09-03", kind: "fact", summary: "内容", source: "dictation" }), /source: "dictation"/);

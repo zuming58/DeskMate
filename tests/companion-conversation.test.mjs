@@ -329,6 +329,60 @@ test("a missing trusted tts end times out, reconnects, and resumes listening", a
   await controller.stop("test-complete");
 });
 
+test("trusted audio silence recovers promptly when the provider omits tts end", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const providers = [];
+  const events = [];
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: source,
+    audioSink: sink,
+    trustedSpeechTimeoutMs: 1000,
+    trustedAudioQuietMs: 10,
+    onEvent: (event) => events.push(event),
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "trusted-audio-quiet", generation: 1 });
+  assert.equal((await controller.announce("已经执行跳舞动作")).ok, true);
+  providers[0].emit({ type: "tts.start" });
+  providers[0].emit({ type: "audio", audio: Buffer.from([1, 2, 3]) });
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  await controller.eventChain;
+  assert.equal(providers.length, 2);
+  assert.equal(providers[0].closed, true);
+  assert.equal(controller.snapshot().state, "listening");
+  assert.equal(controller.snapshot().turnLifecycle.trustedAudioQuietRecoveries, 1);
+  assert.equal(events.some((event) => event.type === "trusted-speech.timeout" && event.reason === "trusted-tts-end-missing"), true);
+  await controller.stop("test-complete");
+});
+
+test("configured hotwords normalize the trusted turn before routing, storage and display", async () => {
+  const commits = [];
+  const events = [];
+  const providers = [];
+  const { normalizeTranscript } = require("../electron/transcript-normalizer.cjs");
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => { const provider = new FakeProvider(onEvent); providers.push(provider); return provider; },
+    audioSource: new SimulatedCompanionAudioSource(),
+    audioSink: new SimulatedCompanionAudioSink(),
+    commitTurn: async (value) => { commits.push(value); },
+    normalizeTranscript,
+    claimsTrustedTurn: (text) => text.includes("Codex"),
+    resolveTrustedTurn: (text) => text.includes("Codex") ? { checked: true, text: "可信状态", result: { type: "query_codex_status", ok: true } } : null,
+    onEvent: (event) => events.push(event),
+    wait: async () => {},
+  });
+  controller.configureSession({ preferences: { revision: 1, name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000, hotwords: ["Codex"] } });
+  await controller.start({ sessionId: "normalized-trusted-turn", generation: 1 });
+  providers[0].emit({ type: "asr.final", text: "Code S 进行到哪一步" });
+  await controller.eventChain;
+  assert.equal(commits[0].content, "Codex 进行到哪一步");
+  assert.equal(events.find((event) => event.type === "turn.user-final")?.text, "Codex 进行到哪一步");
+  assert.equal(controller.snapshot().turnLifecycle.transcriptNormalizations, 1);
+  await controller.stop("test-complete");
+});
+
 test("continuous companion session persists final turns before UI completion and owns state until stopped", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();

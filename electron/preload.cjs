@@ -101,6 +101,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   setMemoryPolicy: (value) => ipcRenderer.invoke("memory:set-policy", value),
   commitDictationMemory: (value) => ipcRenderer.invoke("memory:commit-dictation", value),
   listMemories: (value) => ipcRenderer.invoke("memory:list", value),
+  listMemoryTurns: (value) => ipcRenderer.invoke("memory:list-turns", value),
   setMemoryCandidateState: (value) => ipcRenderer.invoke("memory:set-candidate-state", value),
   updateMemoryCandidate: (value) => ipcRenderer.invoke("memory:update-candidate", value),
   prepareMemoryForget: (value) => ipcRenderer.invoke("memory:prepare-forget", value),

@@ -1,5 +1,5 @@
 export const COMPANION_CALL_ACTION_ID = "f11135b4-7471-47f1-808a-629ae99eb63b";
-export const COMPANION_DEFAULTS = Object.freeze({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000 });
+export const COMPANION_DEFAULTS = Object.freeze({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000, wakeEnabled: false });
 export const COMPANION_END_SMOOTH_RANGE = Object.freeze({ min: 500, max: 50000, step: 500 });
 export const COMPANION_IDLE_TIMEOUT_RANGE = Object.freeze({ min: 10000, max: 3600000, step: 1000 });
 
@@ -16,6 +16,7 @@ export function normalizeCompanionPreferences(value = {}) {
     wakePhrase: bounded(value.wakePhrase, COMPANION_DEFAULTS.wakePhrase, 64),
     endSmoothWindowMs: isValidCompanionEndSmoothWindowMs(endSmoothWindowMs) ? endSmoothWindowMs : COMPANION_DEFAULTS.endSmoothWindowMs,
     idleTimeoutMs: isValidCompanionIdleTimeoutMs(idleTimeoutMs) ? idleTimeoutMs : COMPANION_DEFAULTS.idleTimeoutMs,
+    wakeEnabled: value.wakeEnabled === true,
   };
 }
 
@@ -36,6 +37,7 @@ export function companionPreferencesToDraft(value = {}) {
     wakePhrase: normalized.wakePhrase,
     endSmoothSeconds: String(normalized.endSmoothWindowMs / 1000),
     idleTimeoutSeconds: String(normalized.idleTimeoutMs / 1000),
+    wakeEnabled: normalized.wakeEnabled,
   };
 }
 
@@ -48,5 +50,5 @@ export function parseCompanionPreferenceDraft(value = {}) {
   if (!wakePhrase || wakePhrase.length > 64) return { ok: false, field: "wakePhrase", reason: "唤醒短语应为 1–64 个字符" };
   if (!Number.isFinite(endSmoothSeconds) || !isValidCompanionEndSmoothWindowMs(endSmoothSeconds * 1000)) return { ok: false, field: "endSmoothSeconds", reason: "停顿需为 0.5–50 秒，并以 0.5 秒递增" };
   if (!Number.isFinite(idleTimeoutSeconds) || !isValidCompanionIdleTimeoutMs(idleTimeoutSeconds * 1000)) return { ok: false, field: "idleTimeoutSeconds", reason: "空闲结束需为 0（关闭）或 10–3600 的整数秒" };
-  return { ok: true, value: { name, wakePhrase, endSmoothWindowMs: Math.round(endSmoothSeconds * 1000), idleTimeoutMs: Math.round(idleTimeoutSeconds * 1000) } };
+  return { ok: true, value: { name, wakePhrase, endSmoothWindowMs: Math.round(endSmoothSeconds * 1000), idleTimeoutMs: Math.round(idleTimeoutSeconds * 1000), wakeEnabled: value.wakeEnabled === true } };
 }

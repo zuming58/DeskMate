@@ -48,7 +48,7 @@ function fakeClock() {
 test("manual companion seconds accept official boundaries and reject invalid drafts", () => {
   assert.deepEqual(parseCompanionPreferenceDraft({ name: "小言", wakePhrase: "你好，小言", endSmoothSeconds: "0.5", idleTimeoutSeconds: "0" }), {
     ok: true,
-    value: { name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 500, idleTimeoutMs: 0 },
+    value: { name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 500, idleTimeoutMs: 0, wakeEnabled: false },
   });
   assert.equal(parseCompanionPreferenceDraft({ name: "小言", wakePhrase: "你好，小言", endSmoothSeconds: "50", idleTimeoutSeconds: "3600" }).ok, true);
   for (const draft of [
@@ -58,7 +58,7 @@ test("manual companion seconds accept official boundaries and reject invalid dra
     { endSmoothSeconds: "5", idleTimeoutSeconds: "9" },
     { endSmoothSeconds: "5", idleTimeoutSeconds: "60.5" },
   ]) assert.equal(parseCompanionPreferenceDraft({ name: "小言", wakePhrase: "你好，小言", ...draft }).ok, false);
-  assert.deepEqual(companionPreferencesToDraft({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5500, idleTimeoutMs: 90000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothSeconds: "5.5", idleTimeoutSeconds: "90" });
+  assert.deepEqual(companionPreferencesToDraft({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5500, idleTimeoutMs: 90000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothSeconds: "5.5", idleTimeoutSeconds: "90", wakeEnabled: false });
   assert.equal(validateCompanionPreferences({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 5500, idleTimeoutMs: 90000 }).endSmoothWindowMs, 5500);
   assert.throws(() => validateCompanionPreferences({ name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 1200, idleTimeoutMs: 60000 }), /end-smooth/);
 });

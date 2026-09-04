@@ -131,7 +131,8 @@ test("desktop main restores the known PowerShell target capture and atomic targe
   assert.match(source, /voiceTargetCapturePromise = getForegroundWindowId\(\)/);
   assert.match(body, /runPowershell\(PASTE_CAPTURED_WINDOW_SCRIPT/);
   assert.doesNotMatch(body, /pasteActiveWindow/);
-  assert.match(output, /if \(\$current -ne \$expected\).*?SendKeys\]::SendWait\('\^v'\)/s);
+  assert.match(output, /do \{ \$current = .*?if \(\$current -eq \$expected\).*?SendKeys\]::SendWait\('\^v'\).*?target-window-changed/s);
+  assert.match(source, /AddMilliseconds\(250\).*?\$current -eq \$previous/s);
 });
 
 test("voice target capture keeps the known PowerShell path and the overlay stays compact", async () => {
