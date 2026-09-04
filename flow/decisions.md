@@ -1,5 +1,15 @@
 # Decisions
 
+## D091 - Live Codex task state comes from per-task hooks; App Server supplies titles only
+
+- Date: 2026-09-04
+- Decision: the already installed DeskMate Codex lifecycle Hook is upgraded in place to `codex-hook-v2`. It hashes the official `session_id` into an opaque per-task key and forwards only that key, a bounded working-directory basename fallback, the lifecycle event and canonical tool name. A separately spawned read-only Codex App Server may call `thread/list` to replace the fallback with the user-visible task title, but its separately observed thread status is not live evidence and is never stored or spoken.
+- Answers: a generic project/task-status question returns the active-task count and one deterministic line for every active task, capped at eight. A unique title returns that task; similar titles require the complete name. When there is no trusted evidence, DeskMate says that explicitly. Language models cannot supply task identity, progress, percentages, ETA, completion or failure.
+- Voice ownership: a Bridge-owned ASR final closes the current provider generation and opens a fresh Doubao generation before speaking the deterministic answer. Old-generation text/audio is stale and rejected, while the configured Doubao voice remains the only audible voice. The 60-second context lease may resolve aggregate-to-named follow-ups but stores no transcript.
+- Lifecycle limit: the official global Hook set supplies start/work/wait/stop events but no general root-turn failure event. A failed tool is not a failed task. Automatic failure speech therefore requires an explicit bounded `codex-task-brief-v1` error report until a future official terminal failure event is frozen.
+- Motion and media: with the existing opt-in automatic-motion switch, audible reply completion maps to one light nod, Codex wait/error maps to one search, and Codex completion maps to one nod; duplicate and busy requests are dropped. Explicit “跳舞” uses the active semantic choreography. Music accompaniment is deferred to a separate local-media allowlist contract and is not claimed active.
+- Boundary: Windows software only. No firmware, HID, DeskMate Link, Flash, audio-hardware or servo contract changes, and no board operation is authorized.
+
 ## D090 - Codex status must fail closed and spoken ownership includes audio
 
 - Date: 2026-09-04
