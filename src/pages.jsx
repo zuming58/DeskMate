@@ -60,7 +60,7 @@ import { DeviceSimulator } from "./adapters/deviceSimulator.js";
 import { deviceEventBus } from "./domain/deviceEvents.js";
 import { actionLabel, createKeyboardConfig, ENCODER_PRESS_ACTIONS, KEY_ACTIONS, limitUtf8Bytes, normalizeEncoder, normalizeKeyBinding } from "./domain/keymap.js";
 import { keyboardConfigReadMessage, readKeyboardConfigWithRetry } from "./domain/keyboardConfigRead.js";
-import { MANUAL_AGENT_STATES, manualAgentName, manualAgentState, normalizeAgentControl } from "./domain/agentControl.js";
+import { MANUAL_AGENT_STATES, manualAgentName, manualAgentState, manualOverrideAgentControl, normalizeAgentControl } from "./domain/agentControl.js";
 import { shortcutDisplay, shortcutFromKeyboardEvent } from "./domain/shortcutCapture.js";
 import { initialVoiceSession, voiceSessionReducer } from "./domain/voiceSession.js";
 import { microphoneSourceFailureMessage, normalizeMicrophoneSource, startMicrophoneSession } from "./domain/microphoneSource.js";
@@ -289,12 +289,13 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
   const control = normalizeAgentControl(state.agentControl);
   const evidence = agentStateEvidence(state.runtime?.inputBridge);
   const [request, setRequest] = useState({ status: "idle", label: "尚未发送", at: "" });
-  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value }) });
   const sendState = async (requestedState) => {
     const selected = manualAgentState(requestedState);
-    updateControl({ state: requestedState });
+    const manualControl = manualOverrideAgentControl(control, requestedState);
+    patch({ agentControl: manualControl });
+    await voiceAdapters.desktop.setActiveAgentProvider("disabled");
     setRequest({ status: "sending", label: `正在发送 ${selected.label}…`, at: "" });
-    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control, requestedState });
+    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control: manualControl, requestedState });
     if (!result.ok) {
       const label = manualAgentStateFailureMessage(result.reason);
       setRequest({ status: "error", label, at: new Date().toISOString() });
@@ -323,7 +324,7 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
         <div><small>小智 DeskMate Link</small><StatusBadge tone={evidence.link.status === "connected" ? "success" : "demo"}>{evidence.linkLabel}</StatusBadge></div>
         <div><small>显示证据</small><strong>{evidence.link.status === "connected" ? "需观察小智屏幕确认" : "当前不能确认"}</strong></div>
       </div>
-      <div className="companion-hardware-state-test__footer"><p>EasyInput ACK 只证明写入被总控接受，不等于小智已经显示。Link 未连接时绝不把它当成小智显示成功。</p><Button icon={Gauge} variant="ghost" onClick={() => navigate?.("settings/diagnostics")}>查看系统诊断</Button></div>
+      <div className="companion-hardware-state-test__footer"><p>Codex 工作状态不再占用小智表情；这里只做明确的手动真机测试。EasyInput ACK 只证明写入被总控接受，不等于小智已经显示。</p><Button icon={Gauge} variant="ghost" onClick={() => navigate?.("settings/diagnostics")}>查看系统诊断</Button></div>
     </Card>
   );
 }
@@ -525,10 +526,10 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <label className="field-label">一句话结束静音<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>你说完后连续静音这么久，就开始回答；默认 4 秒。</small></label>
               <label className="field-label">前台对话空闲收起<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>回答结束后如果 10 秒没有新讲话，就结束云端会话、收起胶囊并恢复后台本地唤醒。</small></label>
               {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
-              <Notice tone="info" title="从下一次会话生效">保存后从下一次新建陪伴会话生效。{sessionActive ? "当前会话正在使用启动时冻结的参数，请结束并重新开始。" : "当前没有活动会话。"}</Notice>
+              <Notice tone="info" title="唤醒词空闲时立即生效">名称和判停参数从下一次新建陪伴会话生效；本地唤醒短语保存后会立即重启后台监听器。{sessionActive ? "当前正在对话，结束后自动使用新唤醒短语。" : "当前空闲，可直接用新短语测试。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>“{state.settings.companionWakePhrase}”只由 Windows 本机中文识别器匹配，不上传唤醒音频。后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
+            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>“{state.settings.companionWakePhrase}”只由 Windows 本机中文识别器通过系统默认麦克风匹配，不上传唤醒音频。后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />
@@ -1508,41 +1509,31 @@ export function AgentsPage({ notify, embedded = false }) {
   const petIntent = state.aiIntent || mapAiStateToPetIntent({ state: state.aiEvent.type === "waiting_user" ? "waiting" : state.aiEvent.type });
   const recentCodexTasks = Array.isArray(state.runtime?.codexTasks?.tasks) ? state.runtime.codexTasks.tasks.slice(0, 8) : [];
   const codexAnnouncementsEnabled = state.runtime?.codexTasks?.announcementsEnabled !== false;
-  const eventLabel = { idle: "待命", listening: "倾听中", thinking: "思考中", working: "工作中", waiting_user: "等待用户", completed: "已完成", error: "异常" };
   const updateMapping = (agentId, value) => {
     patch({ agentExpressionMapping: { ...mapping, [agentId]: value } });
     if (state.aiEvent.type === "working" && state.aiEvent.agent?.toLowerCase().includes(agentId === "claude" ? "claude" : agentId)) event({ ...state.aiEvent });
   };
-  const updateControl = (value) => patch({ agentControl: normalizeAgentControl({ ...control, ...value, agentId: "codex", customName: "" }) });
   useEffect(() => {
     let active = true;
-    const supportsAutomaticStatus = ["codex", "hermes"].includes(control.agentId);
-    const selectedProvider = supportsAutomaticStatus && control.automaticStatusEnabled ? control.agentId : "disabled";
-    void voiceAdapters.desktop.setActiveAgentProvider(selectedProvider).then((result) => {
+    void voiceAdapters.desktop.setActiveAgentProvider("disabled").then((result) => {
       if (active && result?.status) setProviderStatus(result.status);
     });
     void voiceAdapters.desktop.getAgentProviderStatus(control.agentId).then((result) => { if (active && result) setProviderStatus(result); });
     return () => { active = false; };
-  }, [control.agentId, control.automaticStatusEnabled]);
+  }, [control.agentId]);
   useEffect(() => voiceAdapters.desktop.onAgentProviderState((payload) => {
     if (!payload || payload.provider !== control.agentId) return;
     setProviderStatus(payload);
-    if (!["codex", "hermes"].includes(control.agentId) || !control.automaticStatusEnabled || !payload.connected) return;
-    const stateId = payload.state === "waiting" ? "waiting_user" : payload.state;
-    const selected = manualAgentState(stateId);
-    const agentName = manualAgentName(control);
-    patch({ agentControl: normalizeAgentControl({ ...control, state: stateId }) });
-    event({ type: stateId, agent: agentName, progress: stateId === "completed" ? 100 : stateId === "idle" ? 0 : state.aiEvent.progress, detail: `${agentName} 生命周期 · ${selected.label}` });
-    const deliveryLabel = payload.delivery === "voice-workflow-active" ? "语音流程优先，未发送到小智" : payload.delivery === "not-selected" ? `${agentName} 当前未选中` : `${agentName} 自动 · ${selected.label}`;
-    setSendState({ status: payload.delivery === "sent" || payload.delivery === "suppressed" ? "success" : "idle", label: deliveryLabel });
-  }), [control.agentId, control.automaticStatusEnabled, control.customName, event, patch, state.aiEvent.progress]);
+  }), [control.agentId]);
   const sendManualState = async (requestedState = control.state) => {
     const selected = manualAgentState(requestedState);
     const agentName = manualAgentName(control);
     if (control.agentId === "custom" && !control.customName.trim()) { notify("请先填写自定义 Agent 名称"); return; }
-    updateControl({ state: requestedState });
+    const manualControl = manualOverrideAgentControl(control, requestedState);
+    patch({ agentControl: manualControl });
+    await voiceAdapters.desktop.setActiveAgentProvider("disabled");
     setSendState({ status: "sending", label: "正在发送…" });
-    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control, requestedState });
+    const result = await requestManualAgentState({ desktop: voiceAdapters.desktop, control: manualControl, requestedState });
     if (!result?.ok) {
       const reason = manualAgentStateFailureMessage(result?.reason);
       setSendState({ status: "error", label: reason });
@@ -1562,12 +1553,10 @@ export function AgentsPage({ notify, embedded = false }) {
       <Notice tone="info" title="当前范围只保留 Codex">其他 Agent 适配已从近期计划移除。Codex Hook 只传生命周期与脱敏简报，不读取提示词、回复正文、工具参数、命令、工作目录或窗口标题。</Notice>
       <VoiceApplicationManager notify={notify} />
       <Card className="manual-agent-control">
-        <div className="manual-agent-control__header"><SectionTitle index="02" title="Codex 工作状态" description="真实状态由 Codex Hook 自动更新；七个按钮只保留为本机校验入口。" /><StatusBadge tone={sendState.status === "success" ? "success" : sendState.status === "error" ? "warning" : "neutral"}>{sendState.label}</StatusBadge></div>
-        <div className="manual-agent-control__agent">
-          <SettingRow title="Codex 自动状态" description={control.automaticStatusEnabled ? "使用 codex-hook-v1；语音与陪伴会话优先" : "已禁用；仍可使用下面的手动状态按钮"}><Toggle checked={control.automaticStatusEnabled} onChange={(automaticStatusEnabled) => updateControl({ automaticStatusEnabled })} /></SettingRow>
-        </div>
+        <div className="manual-agent-control__header"><SectionTitle index="02" title="Codex 工作状态" description="Codex 状态只用于软件任务列表、查询和语音播报，不再改变小智表情。" /><StatusBadge tone={providerStatus.connected ? "success" : "neutral"}>{providerStatus.connected ? "任务状态已连接" : "等待真实状态"}</StatusBadge></div>
+        <Notice tone="info" title="小智空闲时保持待命">下面七个按钮只用于你明确发起的真机表情测试；讲话时的聆听、思考和回答表情仍由陪伴会话控制。</Notice>
         <div className="manual-agent-state-grid" aria-label="选择并发送 Agent 工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={sendState.status === "sending"} key={item.id} onClick={() => { void sendManualState(item.id); }}><strong>{item.label}</strong><span>{item.face}表情</span><small>{item.description}</small></button>)}</div>
-        <div className="manual-agent-control__footer"><div><strong>{manualAgentName(control)} · {manualAgentState(control.state).label}</strong><small>{["codex", "hermes"].includes(control.agentId) ? !control.automaticStatusEnabled ? `${manualAgentName(control)} 自动状态已禁用` : providerStatus.connected ? `${providerStatus.work?.summary || `${manualAgentName(control)} 生命周期已连接`} · ${providerStatus.sourceVersion}` : providerStatus.receiver === "listening" ? `DeskMate 正在等待 ${manualAgentName(control)} 的首个真实事件${control.agentId === "hermes" ? "；需先在 Hermes 中显式启用插件" : ""}` : `${manualAgentName(control)} 生命周期接收器不可用` : "自动适配未启用；点击任意状态会立即手动发送"}</small>{["codex", "hermes"].includes(control.agentId) && providerStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
+        <div className="manual-agent-control__footer"><div><strong>手动真机测试 · {manualAgentState(control.state).label}</strong><small>{providerStatus.connected ? "Codex 生命周期已连接，但不会发送到小智屏幕" : "Codex 状态接收器尚未连接；不影响手动真机测试"}</small>{providerStatus.work?.needsAttention && <StatusBadge tone="warning">需要你处理</StatusBadge>}</div><Button icon={Send} variant="primary" disabled={sendState.status === "sending"} onClick={() => { void sendManualState(control.state); }}>{sendState.status === "sending" ? "发送中…" : "重新发送当前状态"}</Button></div>
       </Card>
       <Card><SectionTitle index="03" title="当前桌宠意图" description="Codex 状态成功发送后，软件预览与小智表情使用同一状态语义。" /><div className="state-flow"><span>表情 · {petIntent.faceExpression}</span><span>动作 · {petIntent.motionIntent}</span><span>亮度 · {petIntent.screenBrightnessIntent}</span><span>关注 · {petIntent.attentionIntent}</span></div></Card>
       <Card><SectionTitle index="04" title="Codex 近期真实任务" description="Codex 生命周期 Hook 提供每个任务的真实状态；不会编造百分比。" /><SettingRow title="主动语音播报" description="任务开始、需要你确认或输入、完成、明确失败时由豆包语音提醒；关闭后仍保留状态，可随时询问。"><Toggle checked={codexAnnouncementsEnabled} onChange={async (enabled) => { const result = await voiceAdapters.desktop.setCodexTaskBriefAnnouncements(enabled); if (!result?.ok) return notify(`播报设置未保存：${result?.reason || "unknown-error"}`); patch({ runtime: { ...state.runtime, codexTasks: { ...state.runtime.codexTasks, ...result } } }); notify(enabled ? "已开启 Codex 主动语音播报" : "已关闭 Codex 主动语音播报"); }} /></SettingRow>{recentCodexTasks.length ? <div className="companion-info-list">{recentCodexTasks.map((task) => <div key={`${task.taskLabel}-${task.sequence}`}><span><small>{task.state} · sequence {task.sequence}</small><strong>{task.taskLabel}</strong>{task.milestone && <small>{task.milestone}</small>}</span></div>)}</div> : <Notice tone="info" title="等待 Codex 的首个真实任务事件">全局 Hook 已有安装时会自动升级为多任务版本；任务标题由只读目录补充。单独启动的目录进程不冒充实时状态。</Notice>}</Card>

@@ -40,16 +40,24 @@ function encodedCommand(script) {
 
 function cleanPhrases(value) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.slice(0, 8).map((item) => String(item || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 64)).filter(Boolean))];
+  const phrases = [];
+  for (const item of value) {
+    const phrase = String(item || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 64);
+    if (!phrase) continue;
+    phrases.push(phrase);
+    const compact = phrase.replace(/[\s，,。！？!?、]+/g, "");
+    if (compact && compact !== phrase) phrases.push(compact);
+  }
+  return [...new Set(phrases)].slice(0, 8);
 }
 
 class WindowsSpeechWakeWordAdapter {
-  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.62, now = () => Date.now(), wakeDebounceMs = 3000 } = {}) {
+  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.5, now = () => Date.now(), wakeDebounceMs = 3000 } = {}) {
     this.platform = platform;
     this.spawnImpl = spawnImpl;
     this.onWake = onWake;
     this.onStatus = onStatus;
-    this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.62));
+    this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.5));
     this.now = now;
     this.wakeDebounceMs = Math.max(1000, Math.min(10000, Number(wakeDebounceMs) || 3000));
     this.lastWakeAt = null;
@@ -58,6 +66,7 @@ class WindowsSpeechWakeWordAdapter {
     this.desiredEnabled = false;
     this.process = null;
     this.phrases = [];
+    this.configurationDirty = false;
     this.reason = this.available ? "wake-word-engine-not-probed" : "wake-word-windows-only";
   }
 
@@ -91,8 +100,11 @@ class WindowsSpeechWakeWordAdapter {
   }
 
   configure({ enabled, phrases } = {}) {
+    const nextPhrases = cleanPhrases(phrases);
+    const phrasesChanged = nextPhrases.length !== this.phrases.length || nextPhrases.some((phrase, index) => phrase !== this.phrases[index]);
     this.desiredEnabled = enabled === true;
-    this.phrases = cleanPhrases(phrases);
+    this.phrases = nextPhrases;
+    if (phrasesChanged && this.process) this.configurationDirty = true;
     if (!this.desiredEnabled) this.reason = "wake-word-disabled";
     this.emitStatus();
     return this.status();
@@ -104,7 +116,9 @@ class WindowsSpeechWakeWordAdapter {
     if (!this.available) return { ok: false, reason: this.reason, status: this.status() };
     if (!this.desiredEnabled) return { ok: false, reason: "wake-word-disabled", status: this.status() };
     if (!this.phrases.length) return { ok: false, reason: "wake-word-phrase-empty", status: this.status() };
-    if (this.process) return { ok: true, alreadyStarted: true, status: this.status() };
+    if (this.process && !this.configurationDirty) return { ok: true, alreadyStarted: true, status: this.status() };
+    if (this.process) await this.pause("wake-word-configuration-changed");
+    this.configurationDirty = false;
     this.lastWakeAt = null;
     const environment = { DESKMATE_WAKE_PHRASES: Buffer.from(JSON.stringify(this.phrases), "utf8").toString("base64"), DESKMATE_WAKE_CONFIDENCE: this.confidence.toFixed(2) };
     const child = this.spawnImpl("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(LISTENER_SCRIPT)], { windowsHide: true, env: { ...process.env, ...environment } });
@@ -132,8 +146,17 @@ class WindowsSpeechWakeWordAdapter {
   async pause(reason = "foreground-audio-active") {
     const child = this.process;
     this.process = null;
+    this.configurationDirty = false;
     this.reason = String(reason || "foreground-audio-active").slice(0, 80);
-    if (child) try { child.kill(); } catch { /* already stopped */ }
+    if (child) {
+      await new Promise((resolve) => {
+        let settled = false;
+        const finish = () => { if (settled) return; settled = true; clearTimeout(timer); resolve(); };
+        const timer = setTimeout(finish, 750);
+        child.once?.("exit", finish);
+        try { child.kill(); } catch { finish(); }
+      });
+    }
     this.emitStatus();
     return { ok: true, paused: Boolean(child), status: this.status() };
   }

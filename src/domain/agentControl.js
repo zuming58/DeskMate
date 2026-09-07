@@ -27,6 +27,10 @@ export function normalizeAgentControl(value = {}) {
   return { agentId, customName, state, automaticStatusEnabled };
 }
 
+export function manualOverrideAgentControl(control = {}, requestedState = "idle") {
+  return normalizeAgentControl({ ...control, state: requestedState, automaticStatusEnabled: false });
+}
+
 export function manualAgentName(control = {}) {
   const normalized = normalizeAgentControl(control);
   if (normalized.agentId === "custom") return normalized.customName.trim() || "其他 Agent";

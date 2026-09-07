@@ -6,6 +6,7 @@ import {
   MANUAL_AGENT_STATES,
   manualAgentName,
   manualAgentState,
+  manualOverrideAgentControl,
   normalizeAgentControl,
 } from "../src/domain/agentControl.js";
 
@@ -17,6 +18,7 @@ test("manual Agent model keeps identity local and maps waiting_user to the froze
   assert.equal(manualAgentName({ agentId: "custom", customName: "  Cursor  ", state: "idle" }), "Cursor");
   assert.deepEqual(normalizeAgentControl({ agentId: "invalid", state: "invalid", customName: "x\u0000y" }), { agentId: "codex", customName: "xy", state: "idle", automaticStatusEnabled: true });
   assert.equal(normalizeAgentControl({ agentId: "codex", state: "idle", automaticStatusEnabled: false }).automaticStatusEnabled, false);
+  assert.deepEqual(manualOverrideAgentControl({ agentId: "codex", state: "working", automaticStatusEnabled: true }, "idle"), { agentId: "codex", customName: "", state: "idle", automaticStatusEnabled: false });
 });
 
 test("desktop Agent UI keeps Codex-only controls after other Agent work is removed from scope", async () => {
@@ -27,6 +29,9 @@ test("desktop Agent UI keeps Codex-only controls after other Agent work is remov
   ]);
   assert.match(pages, /当前范围只保留 Codex/);
   assert.match(pages, /重新发送当前状态/);
+  assert.match(pages, /Codex 状态只用于软件任务列表、查询和语音播报，不再改变小智表情/);
+  assert.match(pages, /小智空闲时保持待命/);
+  assert.match(pages, /setActiveAgentProvider\("disabled"\)/);
   assert.match(pages, /其他 Agent 适配已从近期计划移除/);
   assert.doesNotMatch(pages, /<option value={agent\.id}/);
   assert.doesNotMatch(pages, /simulateNextStatus/);

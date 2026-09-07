@@ -122,7 +122,10 @@ let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
 let pendingEditShortcutTimer = null;
-let activeAgentProvider = "codex";
+// Codex lifecycle remains available for software status, queries and announcements,
+// but it must not occupy Xiaozhi's face. Hardware expressions belong to companion
+// conversation and explicit manual tests only.
+let activeAgentProvider = "disabled";
 let codexHookServer;
 let codexTaskBriefServer;
 let codexTaskBriefStore;

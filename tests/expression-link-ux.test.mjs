@@ -68,6 +68,7 @@ test("companion overview keeps the real face first and removes the conflicting s
   const companionOverview = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
   const expressionLibrary = pages.slice(pages.indexOf("export function ExpressionsPage"), pages.indexOf("export function ExpressionEditorPage"));
   for (const label of ["小智工作状态测试", "EasyInput 写入", "小智 DeskMate Link", "EasyInput ACK 只证明写入被总控接受", "查看系统诊断"]) assert.match(companion, new RegExp(label));
+  assert.match(companion, /Codex 工作状态不再占用小智表情/);
   assert.match(companionOverview, /<div className="companion-overview">[\s\S]*<AgentStateTestPanel/);
   assert.doesNotMatch(companionOverview, /本地表情预览已移到|打开软件表情库|value: "expressions"/);
   assert.doesNotMatch(companionOverview, /aria-label="Windows 软件表情预览"/);
