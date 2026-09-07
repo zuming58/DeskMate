@@ -19,12 +19,18 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
   let stream = null;
   let captureContext = null;
   let processor = null;
+  let wakeSession = null;
+  let wakeStream = null;
+  let wakeCaptureContext = null;
+  let wakeProcessor = null;
   let playbackContext = null;
+  let playbackGain = null;
   let playbackAt = 0;
   const playbackNodes = new Map();
   const drainWaiters = new Map();
 
   const emit = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: session?.sessionId || "", generation: session?.generation || 0, ...extra });
+  const emitWake = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: wakeSession?.sessionId || "", generation: wakeSession?.generation || 0, ...extra });
   const stopCapture = async () => {
     if (processor) processor.onaudioprocess = null;
     processor?.disconnect?.();
@@ -33,6 +39,16 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     stream = null;
     await captureContext?.close?.().catch?.(() => {});
     captureContext = null;
+  };
+  const stopWakeCapture = async () => {
+    if (wakeProcessor) wakeProcessor.onaudioprocess = null;
+    wakeProcessor?.disconnect?.();
+    wakeProcessor = null;
+    wakeStream?.getTracks?.().forEach((track) => track.stop());
+    wakeStream = null;
+    await wakeCaptureContext?.close?.().catch?.(() => {});
+    wakeCaptureContext = null;
+    wakeSession = null;
   };
   const finishDrainWaiter = (requestSequence) => {
     const waiter = drainWaiters.get(requestSequence);
@@ -68,10 +84,12 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     interruptPlayback();
     await playbackContext?.close?.().catch?.(() => {});
     playbackContext = null;
+    playbackGain = null;
     playbackAt = 0;
   };
 
   const startCapture = async (command) => {
+    await stopWakeCapture();
     await stopCapture();
     try {
       if (!mediaDevices?.getUserMedia || !AudioContextClass) throw new Error("computer-audio-renderer-unsupported");
@@ -108,6 +126,39 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     }
   };
 
+  const startWakeCapture = async (command) => {
+    await stopWakeCapture();
+    if (stream) return emitWake("wake.source.error", { reason: "wake-word-foreground-audio-active" });
+    try {
+      if (!mediaDevices?.getUserMedia || !AudioContextClass) throw new Error("computer-audio-renderer-unsupported");
+      wakeSession = Object.freeze({ sessionId: String(command.sessionId), generation: Number(command.generation) });
+      const deviceId = String(command.deviceId || "");
+      wakeStream = await mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) } });
+      if (!wakeStream?.getAudioTracks?.().length) throw Object.assign(new Error("computer-microphone-not-found"), { name: "NotFoundError" });
+      wakeCaptureContext = new AudioContextClass();
+      const input = wakeCaptureContext.createMediaStreamSource(wakeStream);
+      wakeProcessor = wakeCaptureContext.createScriptProcessor(4096, 1, 1);
+      const mute = wakeCaptureContext.createGain();
+      mute.gain.value = 0;
+      input.connect(wakeProcessor);
+      wakeProcessor.connect(mute);
+      mute.connect(wakeCaptureContext.destination);
+      wakeProcessor.onaudioprocess = (event) => {
+        if (!wakeSession || wakeSession.sessionId !== String(command.sessionId) || wakeSession.generation !== Number(command.generation)) return;
+        const pcm = downsampleToPcm16(event.inputBuffer.getChannelData(0), wakeCaptureContext.sampleRate, 16000);
+        if (pcm.byteLength > 0 && pcm.byteLength <= MAX_CHUNK_BYTES) emitWake("wake.source.audio", { audio: pcm });
+      };
+      wakeStream.getAudioTracks().forEach((track) => track.addEventListener("ended", () => emitWake("wake.source.error", { reason: "computer-microphone-disconnected" }), { once: true }));
+      emitWake("wake.source.started");
+    } catch (error) {
+      const context = wakeSession;
+      await stopWakeCapture();
+      wakeSession = context;
+      emitWake("wake.source.error", { reason: reasonFor(error, error?.message === "computer-audio-renderer-unsupported" ? error.message : "computer-microphone-start-failed") });
+      wakeSession = null;
+    }
+  };
+
   const startPlayback = async (command) => {
     await stopPlayback();
     try {
@@ -115,6 +166,9 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
       session = Object.freeze({ sessionId: String(command.sessionId), generation: Number(command.generation) });
       playbackContext = new AudioContextClass({ sampleRate: 24000 });
       await playbackContext.resume?.();
+      playbackGain = playbackContext.createGain();
+      playbackGain.gain.value = Math.max(0, Math.min(1, (Number.isFinite(Number(command.volume)) ? Number(command.volume) : 75) / 100));
+      playbackGain.connect(playbackContext.destination);
       playbackAt = playbackContext.currentTime;
       emit("sink.started");
     } catch (error) {
@@ -140,7 +194,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     for (let index = 0; index < samples.length; index += 1) channel[index] = samples[index] / (samples[index] < 0 ? 0x8000 : 0x7fff);
     const node = playbackContext.createBufferSource();
     node.buffer = buffer;
-    node.connect(playbackContext.destination);
+    node.connect(playbackGain || playbackContext.destination);
     const startAt = Math.max(now, playbackAt);
     playbackAt = startAt + buffer.duration;
     playbackNodes.set(node, audioSequence);
@@ -162,16 +216,25 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
 
   const handleCommand = async (command = {}) => {
     if (!command || command.version !== VERSION || !command.sessionId || !Number.isInteger(Number(command.generation))) return;
+    if (command.type === "wake.source.start") return startWakeCapture(command);
+    if (command.type === "wake.source.stop") {
+      if (!wakeSession || wakeSession.sessionId !== String(command.sessionId) || wakeSession.generation !== Number(command.generation)) return;
+      return stopWakeCapture();
+    }
     if (command.type === "source.start") return startCapture(command);
     if (command.type === "sink.start") return startPlayback(command);
     if (!sameSession(command, session)) return;
     if (command.type === "source.stop") return stopCapture();
     if (command.type === "sink.audio") return play(command);
+    if (command.type === "sink.volume" && playbackGain) {
+      playbackGain.gain.value = Math.max(0, Math.min(1, (Number(command.volume) || 0) / 100));
+      return;
+    }
     if (command.type === "sink.drain") return drainPlayback(command);
     if (command.type === "sink.interrupt") return interruptPlayback();
     if (command.type === "sink.stop") return stopPlayback();
   };
 
-  const close = async () => { await stopCapture(); await stopPlayback(); session = null; };
+  const close = async () => { await stopWakeCapture(); await stopCapture(); await stopPlayback(); session = null; };
   return Object.freeze({ close, handleCommand });
 }

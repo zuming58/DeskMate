@@ -12,8 +12,9 @@ function safeContext(value = {}) {
   const sessionId = String(value.sessionId || "").slice(0, 128);
   const generation = Math.max(1, Number(value.generation) || 1);
   const deviceId = String(value.deviceId || "").slice(0, 512);
+  const volume = Math.max(0, Math.min(100, Number.isFinite(Number(value.volume)) ? Number(value.volume) : 75));
   if (!sessionId) throw new Error("computer-audio-session-invalid");
-  return Object.freeze({ sessionId, generation, deviceId });
+  return Object.freeze({ sessionId, generation, deviceId, volume });
 }
 
 function matchesContext(event, context) {
@@ -56,6 +57,7 @@ class ComputerCompanionAudioSession {
       drain: () => this.drainSink(),
       interrupt: (reason) => this.interruptSink(reason),
       stop: (reason) => this.stopSink(reason),
+      setVolume: (volume) => this.setSinkVolume(volume),
     });
   }
 
@@ -145,9 +147,17 @@ class ComputerCompanionAudioSession {
 
   async startSink() {
     if (this.sinkActive) return { ok: true, alreadyStarted: true };
-    const result = await this.request("sink.start", "sink.started");
+    const result = await this.request("sink.start", "sink.started", { volume: this.context?.volume ?? 75 });
     if (result.ok) this.sinkActive = true;
     return result;
+  }
+
+  async setSinkVolume(value) {
+    const volume = Math.max(0, Math.min(100, Number(value) || 0));
+    if (!this.context) return { ok: false, reason: "computer-audio-session-unavailable" };
+    this.context = Object.freeze({ ...this.context, volume });
+    if (this.sinkActive) this.command("sink.volume", { volume });
+    return { ok: true, volume };
   }
 
   async writeSink(value) {

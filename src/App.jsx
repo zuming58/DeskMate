@@ -264,7 +264,7 @@ function AppContent() {
     let active = true;
     voiceAdapters.desktop.getCompanionPreferences().then((value) => {
       if (!active || !value?.preferences) return;
-      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs, companionWakeEnabled: value.preferences.wakeEnabled === true } });
+      patch({ settings: { ...state.settings, companionName: value.preferences.name, companionWakePhrase: value.preferences.wakePhrase, companionEndSmoothWindowMs: value.preferences.endSmoothWindowMs, companionIdleTimeoutMs: value.preferences.idleTimeoutMs, companionConversationVolume: value.preferences.conversationVolume, companionCodexBriefVolume: value.preferences.codexBriefVolume, companionWakeEnabled: value.preferences.wakeEnabled === true } });
       updateCompanion({ preferences: value.preferences, savedPreferences: { revision: value.revision, endSmoothWindowMs: value.preferences.endSmoothWindowMs, idleTimeoutMs: value.preferences.idleTimeoutMs }, wakeWord: value.wakeWord });
     }).catch(() => {});
     return () => { active = false; };

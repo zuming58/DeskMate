@@ -104,6 +104,8 @@ let companionPersonaStore;
 let companionIntentBridge;
 let wakeWordAdapter;
 let wakeWordTransitioning = false;
+let wakeCaptureContext = null;
+let wakeCaptureGeneration = 0;
 let companionStartOptions = { microphoneSource: "computer", microphoneId: "" };
 let companionEventSequence = 0;
 let computerCompanionAudio;
@@ -236,6 +238,26 @@ function configuredWakePhrases(preferences = companionPreferenceStore?.get?.() |
   return [...new Set([phrase, name ? `你好${name}` : "", name ? `${name}${name}` : ""].filter(Boolean))];
 }
 
+function startWakeCapture() {
+  const sessionId = `wake-${randomUUID()}`;
+  wakeCaptureContext = { sessionId, generation: ++wakeCaptureGeneration };
+  sendToMain("companion-computer-audio-command", { version: 1, type: "wake.source.start", ...wakeCaptureContext, sequence: wakeCaptureGeneration, deviceId: companionStartOptions.microphoneId || "" });
+}
+
+function stopWakeCapture() {
+  if (!wakeCaptureContext) return;
+  sendToMain("companion-computer-audio-command", { version: 1, type: "wake.source.stop", ...wakeCaptureContext, sequence: ++wakeCaptureGeneration });
+  wakeCaptureContext = null;
+}
+
+function handleWakeCaptureEvent(value = {}) {
+  if (!wakeCaptureContext || String(value.sessionId || "") !== wakeCaptureContext.sessionId || Number(value.generation) !== wakeCaptureContext.generation) return false;
+  if (value.type === "wake.source.started") return wakeWordAdapter?.markInputReady?.() === true;
+  if (value.type === "wake.source.audio") return wakeWordAdapter?.writeAudio?.(value.audio) === true;
+  if (value.type === "wake.source.error") return wakeWordAdapter?.inputError?.(value.reason) === true;
+  return false;
+}
+
 async function syncWakeWordListener(reason = "configuration") {
   if (!wakeWordAdapter || !companionPreferenceStore) return { ok: false, reason: "wake-word-unavailable" };
   const preferences = companionPreferenceStore.get();
@@ -243,6 +265,7 @@ async function syncWakeWordListener(reason = "configuration") {
   if (!preferences.wakeEnabled) return wakeWordAdapter.stop();
   const audioBusy = wakeWordTransitioning || companionIsActive() || Boolean(activeDictationSession) || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || easyInputAudioManager?.status?.().micTest;
   if (audioBusy) return wakeWordAdapter.pause(`foreground-${foregroundSessionState.active?.mode || "audio"}-active`);
+  if (!computerCompanionAudio?.diagnostics?.().ready) return wakeWordAdapter.pause("wake-word-audio-renderer-unavailable");
   const result = await wakeWordAdapter.start();
   if (!result.ok) handleCompanionConversationEvent({ type: "wake-word.status", reason: result.reason, trigger: reason });
   return result;
@@ -1069,7 +1092,10 @@ async function startCompanionConversation(value = {}) {
   const initialAnnouncement = normalizeTrustedAnnouncement(value.initialAnnouncement);
   const options = normalizeCompanionStartOptions(value);
   companionStartOptions = options;
-  const prepared = computerCompanionAudio.prepare({ ...lease, deviceId: options.microphoneId });
+  const savedPreferences = companionPreferenceStore.snapshot();
+  const conversationVolume = savedPreferences.preferences.conversationVolume;
+  const outputVolume = initialAnnouncement ? savedPreferences.preferences.codexBriefVolume : conversationVolume;
+  const prepared = computerCompanionAudio.prepare({ ...lease, deviceId: options.microphoneId, volume: outputVolume });
   if (!prepared.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: prepared.reason, status: companionConversationStatus() }; }
   let audioSource = computerCompanionAudio.source;
   if (options.microphoneSource === "easyinput") {
@@ -1086,11 +1112,10 @@ async function startCompanionConversation(value = {}) {
     selection: { requestedSource: options.microphoneSource, activeSource: options.microphoneSource === "computer" ? "computer" : "", output: "computer" },
   });
   if (!configured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: configured.reason, status: companionConversationStatus() }; }
-  const savedPreferences = companionPreferenceStore.snapshot();
   const savedPersona = companionPersonaStore.snapshot();
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext(), hotwords: options.hotwords, rules: options.rules } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start({ ...lease, initialAnnouncement });
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement, restoreVolume: initialAnnouncement ? conversationVolume : undefined });
   if (!result.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); }
   else void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
@@ -1104,7 +1129,10 @@ async function announceCodexTaskBrief(announcement = {}) {
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active" };
   }
-  if (companionIsActive()) return companionConversationController.announce(text);
+  if (companionIsActive()) {
+    const preferences = companionPreferenceStore.get();
+    return companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
+  }
   return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text });
 }
 
@@ -1199,6 +1227,9 @@ app.whenReady().then(async () => {
   wakeWordAdapter = new WindowsSpeechWakeWordAdapter({
     onWake: () => { if (!companionIsActive() && !activeDictationSession) void callCompanionConversation("wake-word"); },
     onStatus: (status) => { if (companionConversationController) handleCompanionConversationEvent({ type: "wake-word.status", wakeWord: status }); },
+    onInputStart: startWakeCapture,
+    onInputStop: stopWakeCapture,
+    externalAudio: true,
   });
   await wakeWordAdapter.probe();
   easyInputAudioSource = new EasyInputLanAudioSource();
@@ -1458,13 +1489,24 @@ app.whenReady().then(async () => {
   handleTrusted("companion:get-intent", () => companionIntentBridge.status());
   handleTrusted("companion:confirm-intent", async (token) => { const result = await companionIntentBridge.confirm(token); handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() }); return result; });
   handleTrusted("companion:reject-intent", (token) => { const result = companionIntentBridge.reject(token); handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() }); return result; });
-  handleTrusted("companion:set-start-options", (value = {}) => { companionStartOptions = normalizeCompanionStartOptions(value); return { ok: true }; });
+  handleTrusted("companion:set-start-options", (value = {}) => {
+    const next = normalizeCompanionStartOptions(value);
+    const microphoneChanged = next.microphoneId !== companionStartOptions.microphoneId || next.microphoneSource !== companionStartOptions.microphoneSource;
+    companionStartOptions = next;
+    if (microphoneChanged && !companionIsActive() && !activeDictationSession) { void wakeWordAdapter?.pause?.("wake-word-microphone-changed").then(() => syncWakeWordListener("microphone-selection-changed")); }
+    return { ok: true };
+  });
   handleTrusted("companion:test-call-action", () => callCompanionConversation("software-test"));
   handleTrusted("companion:start", (value) => startCompanionConversation(value));
   handleTrusted("companion:stop", () => stopCompanionConversation("user"));
   handleTrusted("companion:interrupt", () => interruptCompanionConversation("user"));
-  handleTrusted("companion:set-computer-audio-ready", (ready) => computerCompanionAudio.setRendererReady(Boolean(ready)));
-  onTrusted("companion:computer-audio-event", (value) => { computerCompanionAudio.handleRendererEvent(value); });
+  handleTrusted("companion:set-computer-audio-ready", (ready) => {
+    const result = computerCompanionAudio.setRendererReady(Boolean(ready));
+    if (ready) void syncWakeWordListener("audio-renderer-ready");
+    else void wakeWordAdapter?.pause?.("wake-word-audio-renderer-unavailable");
+    return result;
+  });
+  onTrusted("companion:computer-audio-event", (value) => { if (!String(value?.type || "").startsWith("wake.source.")) computerCompanionAudio.handleRendererEvent(value); else handleWakeCaptureEvent(value); });
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
   handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
   handleTrusted("memory:set-policy", (value = {}) => companionMemoryPolicyStore.save(value));

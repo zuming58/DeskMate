@@ -200,6 +200,8 @@ class FakeProvider {
 test("trusted task brief uses provider voice, then returns to continuous listening without a wake word", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();
+  const volumes = [];
+  sink.setVolume = async (volume) => { volumes.push(volume); return { ok: true, volume }; };
   let provider;
   const controller = new CompanionConversationController({
     providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
@@ -207,7 +209,7 @@ test("trusted task brief uses provider voice, then returns to continuous listeni
     audioSink: sink,
     wait: async () => {},
   });
-  const started = await controller.start({ sessionId: "task-brief-session", generation: 1, initialAnnouncement: "任务已经完成" });
+  const started = await controller.start({ sessionId: "task-brief-session", generation: 1, initialAnnouncement: "任务已经完成", restoreVolume: 75 });
   assert.equal(started.ok, true);
   assert.deepEqual(provider.hellos, ["任务已经完成"]);
   assert.equal(controller.snapshot().state, "thinking");
@@ -217,12 +219,18 @@ test("trusted task brief uses provider voice, then returns to continuous listeni
   provider.emit({ type: "audio", audio: Buffer.from([9, 8]) });
   provider.emit({ type: "tts.end" });
   await controller.eventChain;
+  assert.deepEqual(volumes, [75]);
   assert.equal(controller.snapshot().state, "listening");
   source.push(Buffer.from([4, 5, 6]));
   assert.deepEqual([...provider.audio.at(-1)], [4, 5, 6]);
-  assert.equal((await controller.announce("又有一条进度")).ok, true);
+  assert.equal((await controller.announce("又有一条进度", { volume: 30, restoreVolume: 75 })).ok, true);
   assert.deepEqual(provider.spokenTexts, ["又有一条进度"]);
   assert.equal(controller.snapshot().state, "thinking");
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([7, 6]) });
+  provider.emit({ type: "tts.end" });
+  await controller.eventChain;
+  assert.deepEqual(volumes, [75, 30, 75]);
   await controller.stop("test-complete");
 });
 
@@ -440,6 +448,7 @@ test("provider connection uses bounded retries and never replays audio after fai
     audioSink: sink,
     wait: async (value) => { delays.push(value); },
     retryDelaysMs: [0, 25, 75],
+    initialRetryDelaysMs: [0, 25, 75],
   });
   assert.equal((await controller.start({ sessionId: "conversation-retry", generation: 1 })).ok, true);
   assert.equal(attempts, 3);

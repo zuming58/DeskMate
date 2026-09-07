@@ -332,7 +332,7 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
 export function CompanionPage({ notify, navigate, stopCompanion }) {
   const { state, patch, updateCompanion } = useAppStore();
   const [section, setSection] = useState("overview");
-  const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, wakeEnabled: state.settings.companionWakeEnabled }));
+  const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
   const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
   const [personaStatus, setPersonaStatus] = useState({ state: "idle", message: "" });
@@ -346,6 +346,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     "wake-word-restarting": "本地监听器正在自动恢复，请稍候",
     "wake-word-listener-stopped": "本地监听器连续恢复失败，请重新保存设置或重启 DeskMate",
     "wake-word-engine-unavailable": "Windows 本地语音识别器暂时不可用",
+    "wake-word-microphone-starting": "正在连接 DeskMate 当前选择的电脑麦克风",
+    "wake-word-audio-renderer-unavailable": "DeskMate 电脑麦克风桥尚未就绪",
+    "wake-word-microphone-changed": "正在切换到新选择的电脑麦克风",
   })[conversation.wakeWord?.reason] || "后台监听会在前台语音空闲后自动恢复";
   const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
   const activeCompanionSource = conversation.audioSelection?.activeSource || (sessionActive ? preferredCompanionSource : "");
@@ -356,8 +359,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const serviceStatus = deviceServiceStatus({ inputBridge: state.runtime?.inputBridge, audioStatus: state.runtime?.easyInputAudio, preferredMicrophoneSource: state.settings.microphoneSource, companion: conversation, memory: state.runtime?.memory });
   const companionName = (sessionActive ? conversation.sessionPolicy?.sessionApplied?.name : state.settings.companionName) || state.settings.companionName || COMPANION_DEFAULTS.name;
   useEffect(() => {
-    setCompanionDraft(companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, wakeEnabled: state.settings.companionWakeEnabled }));
-  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs, state.settings.companionWakeEnabled]);
+    setCompanionDraft(companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
+  }, [state.settings.companionName, state.settings.companionWakePhrase, state.settings.companionEndSmoothWindowMs, state.settings.companionIdleTimeoutMs, state.settings.companionConversationVolume, state.settings.companionCodexBriefVolume, state.settings.companionWakeEnabled]);
   useEffect(() => {
     let active = true;
     globalThis.desktopBridge?.getCompanionPersona?.().then((value) => { if (active && value?.persona) setPersonaDraft(value.persona); }).catch(() => {});
@@ -430,10 +433,10 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       const result = await voiceAdapters.desktop.setCompanionPreferences(parsed.value);
       if (!result?.preferences) throw new Error("companion-preferences-readback-unavailable");
       const preferences = result.preferences;
-      patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs, companionWakeEnabled: preferences.wakeEnabled === true } });
+      patch({ settings: { ...state.settings, companionName: preferences.name, companionWakePhrase: preferences.wakePhrase, companionEndSmoothWindowMs: preferences.endSmoothWindowMs, companionIdleTimeoutMs: preferences.idleTimeoutMs, companionConversationVolume: preferences.conversationVolume, companionCodexBriefVolume: preferences.codexBriefVolume, companionWakeEnabled: preferences.wakeEnabled === true } });
       setCompanionDraft(companionPreferencesToDraft(preferences));
       updateCompanion({ preferences, savedPreferences: { revision: result.revision, endSmoothWindowMs: preferences.endSmoothWindowMs, idleTimeoutMs: preferences.idleTimeoutMs }, wakeWord: result.wakeWord });
-      const message = `已保存并回读：停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}，本地唤醒${preferences.wakeEnabled ? "开启" : "关闭"}。${sessionActive ? "当前会话不变；结束并重新开始后，软件会向豆包提交新的判停请求。" : "下一次新建陪伴会话时，软件会向豆包提交新的判停请求。"}`;
+      const message = `已保存并回读：陪伴音量 ${preferences.conversationVolume}%，工作提醒 ${preferences.codexBriefVolume}%，停顿 ${preferences.endSmoothWindowMs / 1000} 秒，空闲结束 ${preferences.idleTimeoutMs === 0 ? "关闭" : `${preferences.idleTimeoutMs / 1000} 秒`}，本地唤醒${preferences.wakeEnabled ? "开启" : "关闭"}。${sessionActive ? "当前会话不变；结束并重新开始后生效。" : "下一次新建陪伴会话时生效。"}`;
       setCompanionSettingsStatus({ state: "saved", message });
       notify(message);
     } catch {
@@ -533,11 +536,13 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <div className="companion-automation-control"><div><strong>{companionDraft.wakeEnabled ? "后台本地唤醒已选择" : "后台本地唤醒已关闭"}</strong><small>{conversation.wakeWord?.available ? companionDraft.wakeEnabled ? "保存后在空闲时后台监听；胶囊保持隐藏，只有命中唤醒短语才出现。" : "只有你明确开启后才会占用麦克风。" : "这台电脑没有可用的 Windows 中文识别器。"}</small></div><Toggle label="启用后台本地唤醒" checked={Boolean(companionDraft.wakeEnabled)} disabled={!conversation.wakeWord?.available} onChange={(enabled) => setCompanionDraft({ ...companionDraft, wakeEnabled: enabled })} /></div>
               <label className="field-label">一句话结束静音<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>你说完后连续静音这么久，就开始回答；默认 4 秒。</small></label>
               <label className="field-label">前台对话空闲收起<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>回答结束后如果 10 秒没有新讲话，就结束云端会话、收起胶囊并恢复后台本地唤醒。</small></label>
+              <label className="field-label">AI 陪伴音量<Slider label="AI 陪伴音量" min={0} max={100} step={5} value={companionDraft.conversationVolume} onChange={(conversationVolume) => setCompanionDraft({ ...companionDraft, conversationVolume })} /><small>只调节 DeskMate 的豆包陪伴声音，不改变 Windows 系统总音量。</small></label>
+              <label className="field-label">Codex 工作提醒音量<Slider label="Codex 工作提醒音量" min={0} max={100} step={5} value={companionDraft.codexBriefVolume} onChange={(codexBriefVolume) => setCompanionDraft({ ...companionDraft, codexBriefVolume })} /><small>开始、等待确认、完成和失败等主动播报单独使用较低音量。</small></label>
               {companionSettingsStatus.message && <Notice tone={companionSettingsStatus.state === "error" ? "warning" : "info"} title={companionSettingsStatus.state === "error" ? "设置未保存" : companionSettingsStatus.state === "saving" ? "正在保存" : "保存完成"}>{companionSettingsStatus.message}</Notice>}
               <Notice tone="info" title="唤醒词空闲时立即生效">名称和判停参数从下一次新建陪伴会话生效；本地唤醒短语保存后会立即重启后台监听器。{sessionActive ? "当前正在对话，结束后自动使用新唤醒短语。" : "当前空闲，可直接用新短语测试。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”只由 Windows 本机中文识别器通过系统默认麦克风匹配，不上传唤醒音频。后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
+            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.heardCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由 Windows 本机中文识别器通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已检测到声音 ${conversation.wakeWord.heardCount || 0} 次，未命中 ${conversation.wakeWord.rejectedCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />

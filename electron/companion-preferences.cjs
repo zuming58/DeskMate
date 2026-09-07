@@ -9,12 +9,17 @@ const COMPANION_END_SMOOTH_STEP_MS = 500;
 const COMPANION_IDLE_TIMEOUT_MIN_MS = 10000;
 const COMPANION_IDLE_TIMEOUT_MAX_MS = 3600000;
 const COMPANION_IDLE_TIMEOUT_STEP_MS = 1000;
+const COMPANION_VOLUME_MIN = 0;
+const COMPANION_VOLUME_MAX = 100;
+const COMPANION_VOLUME_STEP = 5;
 const COMPANION_PREFERENCES_DEFAULT = Object.freeze({
   name: COMPANION_NAME_DEFAULT,
   wakePhrase: COMPANION_WAKE_PHRASE_DEFAULT,
   endSmoothWindowMs: 4000,
   idleTimeoutMs: 10000,
   codexBriefAnnouncementsEnabled: true,
+  conversationVolume: 75,
+  codexBriefVolume: 30,
   wakeEnabled: false,
 });
 
@@ -33,6 +38,11 @@ function isValidIdleTimeoutMs(value) {
   return numeric === 0 || (Number.isInteger(numeric) && numeric >= COMPANION_IDLE_TIMEOUT_MIN_MS && numeric <= COMPANION_IDLE_TIMEOUT_MAX_MS && numeric % COMPANION_IDLE_TIMEOUT_STEP_MS === 0);
 }
 
+function isValidVolume(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= COMPANION_VOLUME_MIN && numeric <= COMPANION_VOLUME_MAX && numeric % COMPANION_VOLUME_STEP === 0;
+}
+
 function validateCompanionPreferences(value = {}) {
   const name = String(value.name || "").replace(/[\u0000-\u001f]/g, "").trim();
   const wakePhrase = String(value.wakePhrase || "").replace(/[\u0000-\u001f]/g, "").trim();
@@ -41,8 +51,12 @@ function validateCompanionPreferences(value = {}) {
   if (!isValidEndSmoothWindowMs(value.endSmoothWindowMs)) throw new Error("companion-end-smooth-window-invalid");
   if (!isValidIdleTimeoutMs(value.idleTimeoutMs)) throw new Error("companion-idle-timeout-invalid");
   if (value.codexBriefAnnouncementsEnabled !== undefined && typeof value.codexBriefAnnouncementsEnabled !== "boolean") throw new Error("companion-codex-brief-announcements-invalid");
+  const conversationVolume = value.conversationVolume === undefined ? COMPANION_PREFERENCES_DEFAULT.conversationVolume : value.conversationVolume;
+  const codexBriefVolume = value.codexBriefVolume === undefined ? COMPANION_PREFERENCES_DEFAULT.codexBriefVolume : value.codexBriefVolume;
+  if (!isValidVolume(conversationVolume)) throw new Error("companion-conversation-volume-invalid");
+  if (!isValidVolume(codexBriefVolume)) throw new Error("companion-codex-brief-volume-invalid");
   if (value.wakeEnabled !== undefined && typeof value.wakeEnabled !== "boolean") throw new Error("companion-wake-enabled-invalid");
-  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs), codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false, wakeEnabled: value.wakeEnabled === true });
+  return Object.freeze({ name, wakePhrase, endSmoothWindowMs: Number(value.endSmoothWindowMs), idleTimeoutMs: Number(value.idleTimeoutMs), codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false, conversationVolume: Number(conversationVolume), codexBriefVolume: Number(codexBriefVolume), wakeEnabled: value.wakeEnabled === true });
 }
 
 function normalizeCompanionPreferences(value = {}) {
@@ -54,6 +68,8 @@ function normalizeCompanionPreferences(value = {}) {
     endSmoothWindowMs: isValidEndSmoothWindowMs(endSmoothWindowMs) ? endSmoothWindowMs : COMPANION_PREFERENCES_DEFAULT.endSmoothWindowMs,
     idleTimeoutMs: isValidIdleTimeoutMs(idleTimeoutMs) ? idleTimeoutMs : COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs,
     codexBriefAnnouncementsEnabled: value.codexBriefAnnouncementsEnabled !== false,
+    conversationVolume: isValidVolume(value.conversationVolume) ? Number(value.conversationVolume) : COMPANION_PREFERENCES_DEFAULT.conversationVolume,
+    codexBriefVolume: isValidVolume(value.codexBriefVolume) ? Number(value.codexBriefVolume) : COMPANION_PREFERENCES_DEFAULT.codexBriefVolume,
     wakeEnabled: value.wakeEnabled === true,
   });
 }
@@ -107,8 +123,12 @@ module.exports = {
   COMPANION_IDLE_TIMEOUT_MAX_MS,
   COMPANION_IDLE_TIMEOUT_STEP_MS,
   COMPANION_PREFERENCES_DEFAULT,
+  COMPANION_VOLUME_MIN,
+  COMPANION_VOLUME_MAX,
+  COMPANION_VOLUME_STEP,
   isValidEndSmoothWindowMs,
   isValidIdleTimeoutMs,
+  isValidVolume,
   validateCompanionPreferences,
   normalizeCompanionPreferences,
   CompanionPreferenceStore,

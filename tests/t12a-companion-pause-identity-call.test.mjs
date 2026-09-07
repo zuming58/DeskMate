@@ -56,7 +56,7 @@ test("T12A preferences migrate to 小言, persist enums, and reject malformed im
   try {
     const store = new CompanionPreferenceStore({ userDataPath: root });
     assert.equal(store.get().name, "小言");
-    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true, wakeEnabled: false });
+    assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true, conversationVolume: 75, codexBriefVolume: 30, wakeEnabled: false });
     assert.equal(store.setCodexBriefAnnouncementsEnabled(false).codexBriefAnnouncementsEnabled, false);
     assert.equal(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000 }).codexBriefAnnouncementsEnabled, false);
     assert.deepEqual(new CompanionPreferenceStore({ userDataPath: root }).get(), store.get());
@@ -128,7 +128,7 @@ test("reserved companion Host Action round-trips without entering AppActionStore
 
 test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v1", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v1", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, heardCount: 0, rejectedCount: 0, wakeCount: 0, lastHeardAt: null });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
@@ -176,6 +176,86 @@ test("local wake normalizes punctuation and keeps the short-phrase confidence fl
   assert.deepEqual(cleanPhrases(["小岚, 小岚", "小岚小岚"]), ["小岚, 小岚", "小岚小岚"]);
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
   assert.equal(wake.confidence, 0.5);
+});
+
+test("local wake can consume DeskMate-selected PCM and reports privacy-safe microphone evidence", async () => {
+  const children = [];
+  const written = [];
+  let inputStarts = 0;
+  let inputStops = 0;
+  let wakes = 0;
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = { write: (value) => { written.push(Buffer.from(value)); return true; } };
+    child.kill = () => queueMicrotask(() => child.emit("exit", 0));
+    children.push(child);
+    if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"heard"}\n{"type":"rejected"}\n{"type":"wake"}\n'));
+    return child;
+  };
+  const wake = new WindowsSpeechWakeWordAdapter({
+    platform: "win32",
+    spawnImpl,
+    externalAudio: true,
+    onInputStart: () => { inputStarts += 1; queueMicrotask(() => wake.markInputReady()); },
+    onInputStop: () => { inputStops += 1; },
+    onWake: () => { wakes += 1; },
+  });
+  await wake.probe();
+  wake.configure({ enabled: true, phrases: ["小岚小岚"] });
+  await wake.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(wake.status().inputMode, "deskmate-selected-microphone");
+  assert.equal(wake.status().enabled, true);
+  assert.equal(wake.status().heardCount, 1);
+  assert.equal(wake.status().rejectedCount, 1);
+  assert.equal(wake.status().wakeCount, 1);
+  assert.equal(wakes, 1);
+  assert.equal(wake.writeAudio(Buffer.from([1, 2, 3, 4])), true);
+  assert.deepEqual([...written[0]], [1, 2, 3, 4]);
+  await wake.stop();
+  assert.equal(inputStarts, 1);
+  assert.equal(inputStops, 1);
+});
+
+test("local wake absorbs a closed PCM pipe and stops writing before bounded recovery", async () => {
+  const children = [];
+  let inputStops = 0;
+  const scheduled = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.stdin = new PassThrough();
+    child.kill = () => queueMicrotask(() => child.emit("exit", 0));
+    children.push(child);
+    if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n'));
+    return child;
+  };
+  const wake = new WindowsSpeechWakeWordAdapter({
+    platform: "win32",
+    spawnImpl,
+    externalAudio: true,
+    onInputStart: () => queueMicrotask(() => wake.markInputReady()),
+    onInputStop: () => { inputStops += 1; },
+    schedule: (callback, delay) => { scheduled.push({ callback, delay }); return scheduled.length; },
+    cancelSchedule: () => {},
+  });
+  await wake.probe();
+  wake.configure({ enabled: true, phrases: ["小岚小岚"] });
+  await wake.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  const listener = children[1];
+  listener.stdin.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(wake.writeAudio(Buffer.from([1, 2, 3, 4])), false);
+  assert.equal(wake.status().enabled, false);
+  assert.equal(wake.status().reason, "wake-word-restarting");
+  assert.equal(inputStops, 1);
+  assert.equal(scheduled[0].delay, 500);
 });
 
 test("saving a changed wake phrase replaces the live Windows listener", async () => {
@@ -243,7 +323,7 @@ test("T12A UI exposes the key test and the opt-in local wake-word control", () =
   assert.match(pages, /启用后台本地唤醒/);
   assert.match(pages, /Windows 本机中文识别器/);
   assert.match(pages, /唤醒词空闲时立即生效/);
-  assert.match(pages, /系统默认麦克风匹配/);
+  assert.match(pages, /DeskMate 当前选择的电脑麦克风匹配/);
   assert.match(pages, /本地监听器正在自动恢复/);
   assert.match(pages, /一句话结束静音/);
   assert.match(pages, /前台对话空闲收起/);

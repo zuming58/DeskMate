@@ -23,8 +23,11 @@ test("main-process computer audio bridge locks one session and rejects stale or 
     },
   });
   session.setRendererReady(true);
-  assert.deepEqual(session.prepare({ sessionId: "session-1", generation: 7, deviceId: "private-device-token" }), { ok: true });
+  assert.deepEqual(session.prepare({ sessionId: "session-1", generation: 7, deviceId: "private-device-token", volume: 30 }), { ok: true });
   assert.equal((await session.sink.start()).ok, true);
+  assert.equal(commands.find((item) => item.type === "sink.start")?.volume, 30);
+  assert.deepEqual(await session.sink.setVolume(75), { ok: true, volume: 75 });
+  assert.equal(commands.find((item) => item.type === "sink.volume")?.volume, 75);
   assert.equal((await session.source.start({ onAudio: (value) => chunks.push(Buffer.from(value)) })).ok, true);
   assert.equal(session.handleRendererEvent({ version: 1, type: "source.audio", sessionId: "stale", generation: 7, audio: Buffer.from([1, 2]) }).reason, "computer-audio-event-stale");
   assert.equal(session.handleRendererEvent({ version: 1, type: "source.audio", sessionId: "session-1", generation: 7, audio: Buffer.alloc(64 * 1024 + 1) }).reason, "computer-audio-chunk-invalid");
@@ -46,11 +49,12 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
   let stopped = false;
   let playbackStarts = 0;
   const playbackNodes = [];
+  const gains = [];
   class FakeAudioContext {
     constructor() { this.sampleRate = 48000; this.currentTime = 1; this.destination = {}; }
     createMediaStreamSource() { return { connect() {} }; }
     createScriptProcessor() { processor = { connect() {}, disconnect() {}, onaudioprocess: null }; return processor; }
-    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    createGain() { const gain = { gain: { value: 1 }, connect() {} }; gains.push(gain); return gain; }
     createBuffer(_channels, length, rate) { const data = new Float32Array(length); return { duration: length / rate, getChannelData: () => data }; }
     createBufferSource() { const node = { connect() {}, start() { playbackStarts += 1; }, stop() {}, onended: null, buffer: null }; playbackNodes.push(node); return node; }
     async resume() {}
@@ -66,7 +70,10 @@ test("renderer audio engine captures selected Windows input and plays bounded PC
     } },
   });
   const base = { version: 1, sessionId: "session-2", generation: 3 };
-  await engine.handleCommand({ ...base, type: "sink.start" });
+  await engine.handleCommand({ ...base, type: "sink.start", volume: 30 });
+  assert.equal(gains[0].gain.value, 0.3);
+  await engine.handleCommand({ ...base, type: "sink.volume", volume: 70 });
+  assert.equal(gains[0].gain.value, 0.7);
   await engine.handleCommand({ ...base, type: "source.start", deviceId: "chosen-device" });
   processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.25) } });
   await engine.handleCommand({ ...base, type: "sink.audio", sequence: 11, audio: new Int16Array([1, -1, 2, -2]).buffer });
@@ -106,6 +113,35 @@ test("renderer computer microphone keeps processing constraints when the system-
   await engine.handleCommand({ version: 1, type: "source.start", sessionId: "default-device", generation: 1 });
   assert.deepEqual(received, { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
   assert.equal(Object.hasOwn(received.audio, "deviceId"), false);
+  await engine.close();
+});
+
+test("renderer wake capture reuses the selected microphone without opening a companion session", async () => {
+  const events = [];
+  let processor;
+  let stopped = false;
+  class FakeAudioContext {
+    constructor() { this.sampleRate = 48000; this.destination = {}; }
+    createMediaStreamSource() { return { connect() {} }; }
+    createScriptProcessor() { processor = { connect() {}, disconnect() {}, onaudioprocess: null }; return processor; }
+    createGain() { return { gain: { value: 1 }, connect() {} }; }
+    async close() {}
+  }
+  const engine = createComputerCompanionAudioEngine({
+    bridge: { sendCompanionComputerAudioEvent: (value) => events.push(value) },
+    AudioContextClass: FakeAudioContext,
+    mediaDevices: { getUserMedia: async (constraints) => {
+      assert.deepEqual(constraints.audio.deviceId, { exact: "wake-device" });
+      return { getAudioTracks: () => [{ addEventListener() {} }], getTracks: () => [{ stop() { stopped = true; } }] };
+    } },
+  });
+  const base = { version: 1, sessionId: "wake-session", generation: 8 };
+  await engine.handleCommand({ ...base, type: "wake.source.start", deviceId: "wake-device" });
+  processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(4096).fill(0.2) } });
+  assert.ok(events.some((item) => item.type === "wake.source.started"));
+  assert.ok(events.some((item) => item.type === "wake.source.audio" && item.audio.byteLength > 0));
+  await engine.handleCommand({ ...base, type: "wake.source.stop" });
+  assert.equal(stopped, true);
   await engine.close();
 });
 
