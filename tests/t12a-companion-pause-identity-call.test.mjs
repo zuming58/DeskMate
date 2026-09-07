@@ -210,6 +210,33 @@ test("saving a changed wake phrase replaces the live Windows listener", async ()
   await wake.stop();
 });
 
+test("an unexpected local listener exit performs a bounded background restart", async () => {
+  const children = [];
+  const scheduled = [];
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => queueMicrotask(() => child.emit("exit", 0));
+    children.push(child);
+    if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n'));
+    return child;
+  };
+  const wake = new WindowsSpeechWakeWordAdapter({ platform: "win32", spawnImpl, schedule: (callback) => { scheduled.push(callback); return scheduled.length; }, cancelSchedule: () => {} });
+  await wake.probe();
+  wake.configure({ enabled: true, phrases: ["小岚小岚"] });
+  await wake.start();
+  children[1].emit("exit", 1);
+  assert.equal(wake.status().reason, "wake-word-restarting");
+  assert.equal(scheduled.length, 1);
+  await scheduled[0]();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(children.length, 3);
+  assert.equal(wake.status().enabled, true);
+  await wake.stop();
+});
+
 test("T12A UI exposes the key test and the opt-in local wake-word control", () => {
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /测试此动作/);
@@ -217,6 +244,7 @@ test("T12A UI exposes the key test and the opt-in local wake-word control", () =
   assert.match(pages, /Windows 本机中文识别器/);
   assert.match(pages, /唤醒词空闲时立即生效/);
   assert.match(pages, /系统默认麦克风匹配/);
+  assert.match(pages, /本地监听器正在自动恢复/);
   assert.match(pages, /一句话结束静音/);
   assert.match(pages, /前台对话空闲收起/);
 });

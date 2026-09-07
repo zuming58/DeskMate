@@ -52,13 +52,15 @@ function cleanPhrases(value) {
 }
 
 class WindowsSpeechWakeWordAdapter {
-  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.5, now = () => Date.now(), wakeDebounceMs = 3000 } = {}) {
+  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, confidence = 0.5, now = () => Date.now(), wakeDebounceMs = 3000, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     this.platform = platform;
     this.spawnImpl = spawnImpl;
     this.onWake = onWake;
     this.onStatus = onStatus;
     this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.5));
     this.now = now;
+    this.schedule = schedule;
+    this.cancelSchedule = cancelSchedule;
     this.wakeDebounceMs = Math.max(1000, Math.min(10000, Number(wakeDebounceMs) || 3000));
     this.lastWakeAt = null;
     this.available = platform === "win32";
@@ -67,6 +69,8 @@ class WindowsSpeechWakeWordAdapter {
     this.process = null;
     this.phrases = [];
     this.configurationDirty = false;
+    this.restartTimer = null;
+    this.restartAttempts = 0;
     this.reason = this.available ? "wake-word-engine-not-probed" : "wake-word-windows-only";
   }
 
@@ -104,13 +108,17 @@ class WindowsSpeechWakeWordAdapter {
     const phrasesChanged = nextPhrases.length !== this.phrases.length || nextPhrases.some((phrase, index) => phrase !== this.phrases[index]);
     this.desiredEnabled = enabled === true;
     this.phrases = nextPhrases;
-    if (phrasesChanged && this.process) this.configurationDirty = true;
+    if (phrasesChanged) {
+      this.restartAttempts = 0;
+      if (this.process) this.configurationDirty = true;
+    }
     if (!this.desiredEnabled) this.reason = "wake-word-disabled";
     this.emitStatus();
     return this.status();
   }
 
-  async start({ phrases } = {}) {
+  async start({ phrases, retry = false } = {}) {
+    if (!retry) this.restartAttempts = 0;
     if (phrases) this.phrases = cleanPhrases(phrases);
     if (!this.probed) await this.probe();
     if (!this.available) return { ok: false, reason: this.reason, status: this.status() };
@@ -137,13 +145,36 @@ class WindowsSpeechWakeWordAdapter {
         }
       }
     });
-    child.once("error", () => { if (this.process === child) { this.process = null; this.reason = "wake-word-engine-unavailable"; this.emitStatus(); } });
-    child.once("exit", (code) => { if (this.process === child) { this.process = null; this.reason = code === 3 ? "wake-word-zh-cn-recognizer-missing" : this.desiredEnabled ? "wake-word-listener-stopped" : "wake-word-disabled"; this.emitStatus(); } });
+    const unexpectedStop = (reason) => {
+      if (this.process !== child) return;
+      this.process = null;
+      this.reason = reason;
+      this.emitStatus();
+      this.scheduleRestart();
+    };
+    child.once("error", () => unexpectedStop("wake-word-engine-unavailable"));
+    child.once("exit", (code) => unexpectedStop(code === 3 ? "wake-word-zh-cn-recognizer-missing" : this.desiredEnabled ? "wake-word-listener-stopped" : "wake-word-disabled"));
     this.emitStatus();
     return { ok: true, status: this.status() };
   }
 
+  scheduleRestart() {
+    if (!this.desiredEnabled || !this.available || !this.phrases.length || this.restartTimer || this.restartAttempts >= 3) return false;
+    this.restartAttempts += 1;
+    const delay = 500 * (2 ** (this.restartAttempts - 1));
+    this.reason = "wake-word-restarting";
+    this.emitStatus();
+    this.restartTimer = this.schedule(async () => {
+      this.restartTimer = null;
+      const result = await this.start({ retry: true });
+      if (!result.ok) this.scheduleRestart();
+    }, delay);
+    return true;
+  }
+
   async pause(reason = "foreground-audio-active") {
+    if (this.restartTimer) this.cancelSchedule(this.restartTimer);
+    this.restartTimer = null;
     const child = this.process;
     this.process = null;
     this.configurationDirty = false;

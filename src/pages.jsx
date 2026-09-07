@@ -339,6 +339,14 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const [overviewMotionAutomation, setOverviewMotionAutomation] = useState({ policy: { version: 1, enabled: false, idleEnabled: false }, running: false, idleDelaySeconds: 90, thinkingDelaySeconds: 4, last: { state: "disabled", trigger: "", reason: "" } });
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
   const sessionActive = Boolean(conversation.active);
+  const wakePauseReason = ({
+    "foreground-companion-active": "实时陪伴正在使用麦克风；结束对话并空闲 10 秒后会自动恢复后台监听",
+    "foreground-dictation-active": "语音输入正在使用麦克风；结束输入后会自动恢复后台监听",
+    "foreground-audio-active": "前台语音功能正在使用麦克风；结束后会自动恢复后台监听",
+    "wake-word-restarting": "本地监听器正在自动恢复，请稍候",
+    "wake-word-listener-stopped": "本地监听器连续恢复失败，请重新保存设置或重启 DeskMate",
+    "wake-word-engine-unavailable": "Windows 本地语音识别器暂时不可用",
+  })[conversation.wakeWord?.reason] || "后台监听会在前台语音空闲后自动恢复";
   const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
   const activeCompanionSource = conversation.audioSelection?.activeSource || (sessionActive ? preferredCompanionSource : "");
   const companionSourceLabel = activeCompanionSource === "easyinput" ? "EasyInput 板载麦克风" : activeCompanionSource === "computer" ? "电脑麦克风" : preferredCompanionSource === "easyinput" ? "EasyInput（开始前可回退）" : "电脑麦克风";
@@ -529,7 +537,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <Notice tone="info" title="唤醒词空闲时立即生效">名称和判停参数从下一次新建陪伴会话生效；本地唤醒短语保存后会立即重启后台监听器。{sessionActive ? "当前正在对话，结束后自动使用新唤醒短语。" : "当前空闲，可直接用新短语测试。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>“{state.settings.companionWakePhrase}”只由 Windows 本机中文识别器通过系统默认麦克风匹配，不上传唤醒音频。后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
+            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”只由 Windows 本机中文识别器通过系统默认麦克风匹配，不上传唤醒音频。后台监听不会显示胶囊；命中后才进入豆包实时对话。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />
