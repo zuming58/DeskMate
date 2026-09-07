@@ -726,3 +726,10 @@
 - 决策：实时陪伴只在 `listening` 接受麦克风 PCM 与 ASR；`thinking`、`speaking` 和本地 playback drain 全部关闭上行。判断依据是 provider callback 到达时同步推进的封闭阶段，不是等待串行 handler 执行后才变化的 React/控制器显示状态。
 - 原因：`tts.start/audio` 与 ASR 可以在同一个事件循环中连续到达；若阶段只在异步 handler 内更新，后到的回声 ASR 会读取旧 `listening` 并被当成新用户轮次。旧代码又对每个 accepted ASR final 无条件取消 sink，能直接截断已排队回答。
 - 边界：普通 ASR final 只开启用户轮次，不拥有取消权。当前只有显式“打断回答并继续听”可以在会话内取消 TTS；自然语音抢话仍未开放。provider `interrupt()` 只清本地累积文本，不构成服务端取消确认。
+
+## D034 · Codex lifecycle does not own Xiaozhi facial expression
+
+- 日期：2026-09-07
+- 决策：Codex 生命周期继续作为任务列表、可信状态查询和主动语音简报的数据源，但不再自动发布 Agent State 到小智 OLED，也不修改 Windows 陪伴脸。小智空闲保持默认待命表情；聆听、思考和回答表情只由实时陪伴会话拥有；七状态写入只保留为用户明确触发的真机测试。
+- 原因：Codex 任务通常长时间处于 `working`，持续显示皱眼/方眼会让桌宠像卡在异常状态，并覆盖用户主动选择的待命。任务状态与陪伴表情是两个不同产品维度，不应共享默认所有权。
+- 边界：Codex 的可信报告、语音查询、需要输入/完成/失败播报均保留。未来可把任务状态映射到 EasyInput 的 5 颗灯，但必须另行冻结灯效语义、优先级和 GPIO8 共享电源边界；本轮不改灯效固件、不新增 HID/Link 合同、不烧录设备。
