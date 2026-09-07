@@ -175,6 +175,9 @@ export function createDiagnosticReport(input = {}) {
   const buildSource = conversationSource.build || {};
   const stopSource = conversationSource.stopLifecycle || {};
   const providerSource = conversationSource.providerLifecycle || {};
+  const pipelineSource = conversationSource.pipeline || {};
+  const pipelineCountersSource = pipelineSource.counters || {};
+  const pipelineTimingSource = pipelineSource.lastTiming || {};
   const turnSource = conversationSource.turnLifecycle || {};
   const intentBridgeSource = conversationSource.intentBridge || {};
   const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
@@ -229,6 +232,14 @@ export function createDiagnosticReport(input = {}) {
       terminalExpected: Boolean(providerSource.terminalExpected),
       lastDialogErrorStatusClass: DIALOG_ERROR_STATUS_CLASSES.has(providerSource.lastDialogErrorStatusClass) ? providerSource.lastDialogErrorStatusClass : "none",
       lastDialogErrorAdjacency: DIALOG_ERROR_ADJACENCY.has(providerSource.lastDialogErrorAdjacency) ? providerSource.lastDialogErrorAdjacency : "none",
+    },
+    pipeline: {
+      version: pipelineSource.version === 1 ? 1 : 0,
+      provider: pipelineSource.provider === "three-stage" ? "three-stage" : "unavailable",
+      ready: pipelineSource.ready === true,
+      active: pipelineSource.active === true,
+      counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
+      timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
     },
     turnLifecycle: {
       ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),

@@ -28,7 +28,10 @@ const { ComputerCompanionAudioSession } = require("./companion-computer-audio.cj
 const { EasyInputLanAudioSource } = require("./easyinput-audio-source.cjs");
 const { EasyInputAudioManager } = require("./easyinput-audio-manager.cjs");
 const { EasyInputVoiceRecorder } = require("./easyinput-voice-recorder.cjs");
-const { DoubaoRealtimeSession } = require("./doubao-realtime.cjs");
+const { BailianStreamingAsrAdapter } = require("./streaming-asr-adapter.cjs");
+const { OpenAiStreamingCompanionModelAdapter } = require("./companion-model-adapter.cjs");
+const { DoubaoStreamingTtsAdapter } = require("./streaming-tts-adapter.cjs");
+const { ThreeStageCompanionProvider } = require("./three-stage-companion-provider.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
@@ -63,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t20-background-wake-fast-session-hil";
+const DESKMATE_BUILD_ID = "t21-three-stage-streaming-companion";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -282,7 +285,7 @@ function updateCompanionOverlay(event = {}) {
   const transcript = ["transcript.partial", "turn.user-final", "reply.partial", "turn.assistant-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
   const snapshot = {
     state: state || (event.type?.startsWith("reply") ? "outputting" : event.type?.startsWith("transcript") ? "recording" : "organizing"),
-    message: event.error || ({ connecting: "正在连接豆包实时对话…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
+    message: event.error || ({ connecting: "正在连接三段式语音…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
     transcript,
     seconds: 0,
     level: event.type?.startsWith("transcript") ? 24 : 0,
@@ -314,15 +317,7 @@ function handleCompanionConversationEvent(event = {}) {
 
 async function commitCompanionTurn(turn) {
   const { intentChecked = false, intentHandled = false, ...memoryTurn } = turn || {};
-  const result = companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
-  if (memoryTurn?.role === "user" && companionIntentBridge && !intentChecked && !intentHandled) {
-    void companionIntentBridge.analyze(memoryTurn.content).then((analysis) => {
-      if (analysis?.proposal) handleCompanionConversationEvent({ type: "intent.proposal", proposal: analysis.proposal });
-      if (analysis?.result) handleCompanionConversationEvent({ type: "intent.result", result: analysis.result });
-      if (!analysis?.proposal) handleCompanionConversationEvent({ type: "intent.status", intent: companionIntentBridge.status() });
-    }).catch(() => {});
-  }
-  return result;
+  return companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
 }
 
 async function generateConfiguredMemories() {
@@ -1057,9 +1052,20 @@ async function runBailianOrganizerTest(text) {
   app.exit(report.ok ? 0 : 1);
 }
 
+function threeStageServiceStatus() {
+  const ai = aiServiceStore?.status?.() || {};
+  const bailian = bailianStore?.status?.() || {};
+  const stages = {
+    asr: { configured: Boolean(bailian.configured), provider: "bailian", model: "qwen3-asr-flash-realtime" },
+    model: { configured: Boolean(ai.text?.configured || bailian.configured), provider: ai.text?.configured ? ai.text.provider : "bailian", model: ai.text?.configured ? ai.text.model : "qwen3.7-flash" },
+    tts: { configured: Boolean(ai.realtime?.configured && ai.realtime?.provider === "doubao"), provider: ai.realtime?.provider || "doubao", voice: ai.realtime?.voice || "" },
+  };
+  return { configured: Object.values(stages).every((stage) => stage.configured), provider: "three-stage", stages };
+}
+
 function companionConversationStatus() {
-  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "doubao", audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } }, error: "" };
-  const service = aiServiceStore?.status?.().realtime || { configured: false, provider: "doubao" };
+  const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "three-stage", pipeline: null, audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } }, error: "" };
+  const service = threeStageServiceStatus();
   const saved = companionPreferenceStore?.snapshot?.() || { revision: 0, preferences: companionPreferenceStore?.get?.() };
   return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), preferences: saved.preferences, persona: companionPersonaStore?.snapshot?.(), intent: companionIntentBridge?.status?.(), intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
 }
@@ -1082,7 +1088,7 @@ async function startCompanionConversation(value = {}) {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
   }
   if (easyInputAudioManager?.status?.().micTest) return { ok: false, reason: "easyinput-mic-test-active", status: companionConversationStatus() };
-  if (!aiServiceStore?.status?.().realtime?.configured) return { ok: false, reason: "realtime-service-not-configured", status: companionConversationStatus() };
+  if (!threeStageServiceStatus().configured) return { ok: false, reason: "three-stage-service-not-configured", status: companionConversationStatus() };
   if (companionIsActive()) return { ok: false, reason: "companion-session-active", status: companionConversationStatus() };
   await wakeWordAdapter?.pause?.("companion-active");
   const sessionId = `companion-${randomUUID()}`;
@@ -1125,7 +1131,7 @@ async function startCompanionConversation(value = {}) {
 async function announceCodexTaskBrief(announcement = {}) {
   const text = normalizeTrustedAnnouncement(announcement.text);
   if (!text) return { ok: false, reason: "codex-task-brief-announcement-empty" };
-  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "doubao-realtime", listeningAfterPlayback: true });
+  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "three-stage-tts", listeningAfterPlayback: true });
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active" };
   }
@@ -1250,7 +1256,29 @@ app.whenReady().then(async () => {
     onError: (reason) => { if (companionIsActive()) void companionConversationController.fail(reason); },
   });
   companionConversationController = new CompanionConversationController({
-    providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext }) => new DoubaoRealtimeSession({ config: { ...aiServiceStore.loadRealtimeSecret(), ...sessionPreferences, persona: sessionPersona, memoryContext: sessionMemoryContext }, onEvent }),
+    providerLabel: "three-stage",
+    providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
+      onEvent,
+      asrFactory: ({ onEvent: onAsrEvent }) => new BailianStreamingAsrAdapter({
+        config: bailianStore.loadSecret(),
+        silenceDurationMs: sessionPreferences.endSmoothWindowMs,
+        onEvent: onAsrEvent,
+      }),
+      modelFactory: () => new OpenAiStreamingCompanionModelAdapter({
+        config: loadTextModelSecret(),
+        name: sessionPreferences.name,
+        persona: sessionPersona,
+        memoryContext: sessionMemoryContext,
+      }),
+      ttsFactory: () => new DoubaoStreamingTtsAdapter({
+        config: { ...aiServiceStore.loadRealtimeSecret(), ...sessionPreferences, persona: sessionPersona, memoryContext: sessionMemoryContext },
+      }),
+      shouldBypassModel: (text) => {
+        let normalized = String(text || "");
+        try { normalized = normalizeTranscript(normalized, sessionTranscriptContext)?.normalized || normalized; } catch { /* raw text remains usable */ }
+        return companionIntentBridge?.claimsTurn?.(normalized) === true;
+      },
+    }),
     audioSource: computerCompanionAudio.source,
     audioSink: computerCompanionAudio.sink,
     commitTurn: commitCompanionTurn,

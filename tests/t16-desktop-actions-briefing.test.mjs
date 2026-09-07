@@ -25,13 +25,13 @@ test("codex-task-brief-v1 accepts only the exact privacy-safe schema", () => {
   assert.equal(decodeCodexTaskBrief(JSON.stringify(withoutMilestone)).milestone, "");
 });
 
-test("automatic task briefs use the Doubao companion path and never browser speech synthesis", () => {
+test("automatic task briefs use the three-stage TTS path and never browser speech synthesis", () => {
   const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   assert.doesNotMatch(appSource, /speechSynthesis|SpeechSynthesisUtterance/);
   assert.match(mainSource, /announceCodexTaskBrief/);
   assert.match(mainSource, /initialAnnouncement/);
-  assert.match(mainSource, /voice: "doubao-realtime"/);
+  assert.match(mainSource, /voice: "three-stage-tts"/);
 });
 
 test("optional local reporter reaches the bounded receiver without exposing the opaque key", async (context) => {
@@ -229,12 +229,13 @@ test("a received Codex report gives the realtime Bridge a bounded conversational
   assert.equal(modelCalls, 0);
 });
 
-test("every realtime final turn is classified by the Bridge before Doubao may answer", () => {
+test("only deterministically claimed realtime turns use the trusted Bridge", () => {
   const mainSource = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const controllerSource = fs.readFileSync(new URL("../electron/companion-conversation.cjs", import.meta.url), "utf8");
   assert.match(mainSource, /resolveTrustedTurn:\s*async[\s\S]{0,240}companionIntentBridge\?\.analyze/);
   assert.match(mainSource, /claimsTrustedTurn:[\s\S]{0,160}companionIntentBridge\?\.claimsTurn/);
-  assert.match(mainSource, /!intentChecked\s*&&\s*!intentHandled/);
+  assert.match(controllerSource, /if \(trustedClaimed\) \{[\s\S]{0,180}resolveTrustedTurn/);
+  assert.doesNotMatch(mainSource, /memoryTurn\?\.role === "user"[\s\S]{0,240}companionIntentBridge\?\.analyze/);
   assert.match(controllerSource, /intentChecked:\s*trusted\?\.checked\s*===\s*true/);
 });
 
@@ -263,7 +264,8 @@ test("proactive Codex speech is user-switchable while task status remains availa
   assert.match(preloadSource, /setCodexTaskBriefAnnouncements/);
   assert.match(pagesSource, /主动语音播报/);
   assert.match(pagesSource, /关闭后仍保留状态，可随时询问/);
-  assert.match(pagesSource, /实时对话 Bridge/);
+  assert.match(pagesSource, /三段式陪伴链/);
+  assert.match(pagesSource, /可信动作与状态 Bridge/);
   assert.match(pagesSource, /Codex 真实任务监控/);
 });
 

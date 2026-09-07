@@ -34,12 +34,13 @@ function parseRealtimeMessage(value) {
 }
 
 class BailianRealtimeSession {
-  constructor({ apiKey, workspaceId = "", WebSocketImpl = WebSocket, onEvent = () => {}, timeoutMs = 10000 } = {}) {
+  constructor({ apiKey, workspaceId = "", WebSocketImpl = WebSocket, onEvent = () => {}, timeoutMs = 10000, silenceDurationMs = 500 } = {}) {
     this.apiKey = validateApiKey(apiKey);
     this.workspaceId = validateWorkspaceId(workspaceId);
     this.WebSocketImpl = WebSocketImpl;
     this.onEvent = onEvent;
     this.timeoutMs = timeoutMs;
+    this.silenceDurationMs = Math.max(500, Math.min(50000, Number(silenceDurationMs) || 500));
     this.socket = null;
     this.ready = false;
     this.closed = false;
@@ -73,7 +74,7 @@ class BailianRealtimeSession {
             input_audio_format: "pcm",
             sample_rate: 16000,
             input_audio_transcription: { language: "zh" },
-            turn_detection: { type: "server_vad", threshold: 0.0, silence_duration_ms: 500 },
+            turn_detection: { type: "server_vad", threshold: 0.0, silence_duration_ms: this.silenceDurationMs },
           },
         }));
       });

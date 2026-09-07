@@ -245,6 +245,7 @@ test("trusted Codex status owns the turn after ASR ended and suppresses the free
     audioSource: source,
     audioSink: sink,
     commitTurn: async (value) => { commits.push(value); },
+    claimsTrustedTurn: (text) => text.includes("Codex"),
     resolveTrustedTurn: (text) => text.includes("Codex") ? { text: "DeskMate 软件闭环 正在执行：修复确定性回答", result: { type: "query_codex_status", ok: true, answer: "DeskMate 软件闭环 正在执行：修复确定性回答" } } : null,
     onEvent: (value) => events.push(value),
     wait: async () => {},

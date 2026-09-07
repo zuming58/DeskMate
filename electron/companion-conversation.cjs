@@ -104,6 +104,7 @@ class CompanionConversationController {
     trustedAudioQuietMs = DEFAULT_TRUSTED_AUDIO_QUIET_MS,
     retryDelaysMs = [0, 250, 750],
     initialRetryDelaysMs = [0],
+    providerLabel = "doubao",
   } = {}) {
     if (typeof providerFactory !== "function") throw new Error("companion-provider-factory-required");
     this.providerFactory = providerFactory;
@@ -126,6 +127,7 @@ class CompanionConversationController {
     this.trustedAudioQuietMs = Number.isFinite(Number(trustedAudioQuietMs)) ? Math.max(10, Number(trustedAudioQuietMs)) : DEFAULT_TRUSTED_AUDIO_QUIET_MS;
     this.retryDelaysMs = retryDelaysMs.slice(0, 3);
     this.initialRetryDelaysMs = initialRetryDelaysMs.slice(0, 3);
+    this.providerLabel = boundedText(providerLabel, 40) || "unknown";
     this.state = "idle";
     this.active = null;
     this.provider = null;
@@ -279,7 +281,8 @@ class CompanionConversationController {
       state: this.state,
       sessionId: this.active?.sessionId || "",
       generation: this.active?.generation || 0,
-      provider: "doubao",
+      provider: this.providerLabel,
+      pipeline: this.provider?.diagnostics?.() || null,
       audioSource: sourceStatus,
       audioSink: availability(this.audioSink, "audio-sink-unavailable"),
       audioSelection: Object.freeze({
@@ -594,7 +597,7 @@ class CompanionConversationController {
 
   createProvider(token) {
     const providerEpoch = ++this.providerEpoch;
-    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, onEvent: (event) => {
+    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, sessionTranscriptContext: this.sessionTranscriptContext, onEvent: (event) => {
       const providerArrival = this.recordProviderArrival(event);
       const arrival = Object.freeze({
         ...providerArrival,
@@ -772,7 +775,9 @@ class CompanionConversationController {
         this.setHalfDuplexPhase("thinking");
       }
       let trusted = null;
-      try { trusted = await this.resolveTrustedTurn(finalText); } catch { trusted = null; this.turnLifecycle.bridgeFailures += 1; }
+      if (trustedClaimed) {
+        try { trusted = await this.resolveTrustedTurn(finalText); } catch { trusted = null; this.turnLifecycle.bridgeFailures += 1; }
+      }
       const trustedText = boundedText(trusted?.text || trusted?.answer, 240).trim();
       if (trusted?.checked === true) {
         this.turnLifecycle.bridgeChecks += 1;

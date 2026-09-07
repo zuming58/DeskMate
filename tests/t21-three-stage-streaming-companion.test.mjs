@@ -1,0 +1,242 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { createDiagnosticReport } from "../src/services/diagnostics.js";
+
+const require = createRequire(import.meta.url);
+const { CompanionSpeechSegmenter } = require("../electron/companion-speech-segmenter.cjs");
+const { OpenAiStreamingCompanionModelAdapter, visibleDelta } = require("../electron/companion-model-adapter.cjs");
+const { BailianStreamingAsrAdapter } = require("../electron/streaming-asr-adapter.cjs");
+const { DoubaoStreamingTtsAdapter } = require("../electron/streaming-tts-adapter.cjs");
+const { ThreeStageCompanionProvider } = require("../electron/three-stage-companion-provider.cjs");
+
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+function streamResponse(frames) {
+  return {
+    ok: true,
+    body: {
+      async *[Symbol.asyncIterator]() {
+        for (const frame of frames) yield Buffer.from(frame);
+      },
+    },
+  };
+}
+
+test("T21 speech segmenter emits stable sentences and fails closed on a mismatched final", () => {
+  const segmenter = new CompanionSpeechSegmenter();
+  assert.deepEqual(segmenter.push("祖名，早"), []);
+  assert.deepEqual(segmenter.push("安。今天继续工作。"), ["祖名，早安。", "今天继续工作。"]);
+  assert.deepEqual(segmenter.finish("祖名，早安。今天继续工作。"), []);
+
+  const mismatch = new CompanionSpeechSegmenter();
+  mismatch.push("真实答案。 ");
+  assert.throws(() => mismatch.finish("另一个答案。"), /three-stage-stream-invalid/);
+});
+
+test("T21 companion model streams only visible content and keeps bounded multi-turn context", async () => {
+  const requests = [];
+  const replies = [
+    ["data: {\"choices\":[{\"delta\":{\"content\":\"第一句。\"}}]}\n\n", "data: {\"choices\":[{\"delta\":{\"content\":\"第二句。\"}}]}\n\ndata: [DONE]\n\n"],
+    ["data: {\"choices\":[{\"delta\":{\"content\":\"记得上一轮。\"}}]}\n\n"],
+  ];
+  const adapter = new OpenAiStreamingCompanionModelAdapter({
+    config: { provider: "custom", endpoint: "https://model.example/v1/chat/completions", apiKey: "secret-value", model: "companion-model" },
+    name: "小言",
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return streamResponse(replies.shift());
+    },
+  });
+  const deltas = [];
+  const first = await adapter.streamTurn({ text: "你好", onDelta: (delta) => deltas.push(delta) });
+  assert.equal(first.text, "第一句。第二句。");
+  assert.deepEqual(deltas, ["第一句。", "第二句。"]);
+  await adapter.streamTurn({ text: "还记得吗", onDelta: () => {} });
+  assert.deepEqual(requests[1].messages.slice(-3).map(({ role, content }) => [role, content]), [
+    ["user", "你好"], ["assistant", "第一句。第二句。"], ["user", "还记得吗"],
+  ]);
+  assert.equal(requests[0].enable_thinking, undefined);
+});
+
+test("T21 companion model rejects tool-call drafts instead of speaking them", () => {
+  assert.throws(() => visibleDelta({ choices: [{ delta: { tool_calls: [{ function: { name: "shell" } }] } }] }), /three-stage-tool-call-rejected/);
+});
+
+test("T21 ASR adapter applies bounded endpointing and de-duplicates one provider item", async () => {
+  let sessionOptions;
+  const events = [];
+  const appended = [];
+  const adapter = new BailianStreamingAsrAdapter({
+    config: { apiKey: "sk-valid-test-key" },
+    silenceDurationMs: 4000,
+    onEvent: (event) => events.push(event),
+    sessionFactory: (options) => {
+      sessionOptions = options;
+      return { start: async () => ({ ok: true }), append: (audio) => { appended.push(audio); return true; }, cancel: () => {} };
+    },
+  });
+  await adapter.connect();
+  assert.equal(sessionOptions.silenceDurationMs, 4000);
+  sessionOptions.onEvent({ kind: "preview", preview: "正在识别" });
+  sessionOptions.onEvent({ kind: "completed", itemId: "item-one", text: "识别完成" });
+  sessionOptions.onEvent({ kind: "completed", itemId: "item-one", text: "识别完成" });
+  assert.equal(adapter.sendAudio(Buffer.from([1, 2])), true);
+  assert.equal(appended.length, 1);
+  assert.deepEqual(events, [{ type: "partial", text: "正在识别" }, { type: "final", text: "识别完成", itemId: "item-one" }]);
+});
+
+test("T21 TTS adapter sends confirmed text only and relays one PCM stream", async () => {
+  let sessionOptions;
+  const spoken = [];
+  const adapter = new DoubaoStreamingTtsAdapter({
+    config: { voice: "configured-voice" },
+    sessionFactory: (options) => {
+      sessionOptions = options;
+      return { connect: async () => ({ ok: true }), speakText: (text) => { spoken.push(text); return true; }, interrupt: () => {}, close: () => {} };
+    },
+  });
+  await adapter.connect();
+  const audio = [];
+  const synthesis = adapter.synthesize("只朗读这句话。", { onAudio: (chunk) => audio.push([...chunk]) });
+  await tick();
+  sessionOptions.onEvent({ type: "audio", audio: Buffer.from([7, 8]) });
+  sessionOptions.onEvent({ type: "tts.end" });
+  assert.equal((await synthesis).ok, true);
+  assert.deepEqual(spoken, ["只朗读这句话。"]);
+  assert.deepEqual(audio, [[7, 8]]);
+});
+
+test("T21 TTS adapter reconnects lazily after an idle transport close", async () => {
+  const sessions = [];
+  const adapter = new DoubaoStreamingTtsAdapter({
+    config: { voice: "configured-voice" },
+    sessionFactory: (options) => {
+      const session = { options, spoken: [], connect: async () => ({ ok: true }), speakText(text) { this.spoken.push(text); return true; }, close: () => {} };
+      sessions.push(session);
+      return session;
+    },
+  });
+  await adapter.connect();
+  sessions[0].options.onEvent({ type: "connection.closed" });
+  const synthesis = adapter.synthesize("重新连接后朗读。", { onAudio: () => {} });
+  await tick();
+  assert.equal(sessions.length, 2);
+  assert.deepEqual(sessions[1].spoken, ["重新连接后朗读。"]);
+  sessions[1].options.onEvent({ type: "tts.end" });
+  assert.equal((await synthesis).ok, true);
+});
+
+function fakePipeline({ bypass = false, modelRun } = {}) {
+  let asrEvent;
+  const events = [];
+  const spoken = [];
+  let modelCalls = 0;
+  const provider = new ThreeStageCompanionProvider({
+    onEvent: (event) => events.push(event),
+    shouldBypassModel: () => bypass,
+    asrFactory: ({ onEvent }) => {
+      asrEvent = onEvent;
+      return { connect: async () => ({ ok: true }), sendAudio: () => true, close: () => {} };
+    },
+    modelFactory: () => ({
+      streamTurn: async (options) => {
+        modelCalls += 1;
+        return modelRun ? modelRun(options) : (() => { options.onDelta("收到。", "收到。"); return { ok: true, text: "收到。" }; })();
+      },
+      close: () => {},
+    }),
+    ttsFactory: () => ({
+      connect: async () => ({ ok: true }),
+      synthesize: async (text, { onAudio }) => { spoken.push(text); onAudio(Buffer.from([1, 2])); return { ok: true }; },
+      interrupt: () => true,
+      close: () => {},
+    }),
+  });
+  return { provider, events, spoken, emitAsr: (event) => asrEvent(event), modelCalls: () => modelCalls };
+}
+
+test("T21 partial text never reaches the model and duplicate final submits once", async () => {
+  const fixture = fakePipeline();
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "partial", text: "你" });
+  assert.equal(fixture.modelCalls(), 0);
+  fixture.emitAsr({ type: "final", text: "你好", itemId: "one" });
+  fixture.emitAsr({ type: "final", text: "你好", itemId: "one" });
+  await tick();
+  await tick();
+  assert.equal(fixture.modelCalls(), 1);
+  assert.deepEqual(fixture.spoken, ["收到。"]);
+  assert.deepEqual(fixture.events.filter((event) => event.type === "tts.start").length, 1);
+  assert.deepEqual(fixture.events.filter((event) => event.type === "tts.end").length, 1);
+});
+
+test("T21 begins TTS on a stable sentence before the model final arrives", async () => {
+  let releaseModel;
+  const modelGate = new Promise((resolve) => { releaseModel = resolve; });
+  const fixture = fakePipeline({
+    modelRun: async ({ onDelta }) => {
+      onDelta("先告诉你结论。", "先告诉你结论。");
+      await modelGate;
+      onDelta("后面是补充。", "先告诉你结论。后面是补充。");
+      return { ok: true, text: "先告诉你结论。后面是补充。" };
+    },
+  });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请回答" });
+  await tick();
+  assert.deepEqual(fixture.spoken, ["先告诉你结论。"]);
+  assert.equal(fixture.events.some((event) => event.type === "chat.final"), false);
+  releaseModel();
+  await tick();
+  await tick();
+  assert.deepEqual(fixture.spoken, ["先告诉你结论。", "后面是补充。"]);
+  assert.equal(fixture.events.filter((event) => event.type === "tts.end").length, 1);
+});
+
+test("T21 trusted status/action text bypasses the conversational model", async () => {
+  const fixture = fakePipeline({ bypass: true });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "Codex 进行到哪一步" });
+  await tick();
+  assert.equal(fixture.modelCalls(), 0);
+  assert.equal(fixture.events.some((event) => event.type === "asr.final"), true);
+  assert.equal(fixture.provider.diagnostics().counters.trustedBypasses, 1);
+});
+
+test("T21 interrupt cancels queued response and diagnostics contain no user content", async () => {
+  let releaseModel;
+  const modelGate = new Promise((resolve) => { releaseModel = resolve; });
+  const fixture = fakePipeline({
+    modelRun: async ({ onDelta, signal }) => {
+      onDelta("不要泄露这句话。", "不要泄露这句话。");
+      await modelGate;
+      if (signal.aborted) throw new Error("three-stage-model-cancelled");
+      return { ok: true, text: "不要泄露这句话。" };
+    },
+  });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "我的私人问题" });
+  await tick();
+  fixture.provider.interrupt();
+  releaseModel();
+  await tick();
+  const serialized = JSON.stringify(fixture.provider.diagnostics());
+  assert.doesNotMatch(serialized, /私人|泄露/);
+  assert.equal(fixture.provider.diagnostics().counters.cancellations, 1);
+});
+
+test("T21 diagnostic export keeps pipeline metrics and strips all content fields", () => {
+  const report = createDiagnosticReport({ conversation: { pipeline: {
+    version: 1,
+    provider: "three-stage",
+    ready: true,
+    active: false,
+    counters: { asrFinals: 2, modelRequests: 1, ttsRequests: 2, turnsCompleted: 1, transcript: "私人问题", assistantText: "私人回答" },
+    lastTiming: { firstAssistantDeltaMs: 240, firstTtsAudioMs: 510, turnCompletedMs: 1400, text: "不要导出" },
+  } } });
+  assert.equal(report.conversation.pipeline.provider, "three-stage");
+  assert.equal(report.conversation.pipeline.counters.modelRequests, 1);
+  assert.equal(report.conversation.pipeline.timing.firstTtsAudioMs, 510);
+  assert.doesNotMatch(JSON.stringify(report), /私人|不要导出/);
+});
