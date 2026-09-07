@@ -1,5 +1,14 @@
 # Decisions
 
+## D096 - Companion dialogue has one semantic brain in a three-stage pipeline
+
+- Date: 2026-09-08
+- Architecture: the experimental companion path is `Bailian streaming ASR -> DeskMate CompanionModel -> streaming TTS`. ASR produces only partial/final text. The configured OpenAI-compatible text model, or the encrypted Bailian `qwen3.7-flash` fallback, is the only component allowed to maintain conversational context and author ordinary replies. TTS receives only confirmed visible reply segments.
+- Doubao boundary: the existing Doubao connection is wrapped only as the first TTS adapter. DeskMate sends no microphone audio to it in T21, ignores its ASR/chat output and does not allow it to decide actions or answers. A future standalone TTS provider may replace this adapter without changing the normalized controller events.
+- Streaming and cancellation: ASR partials are UI-only; one final starts one model turn; stable punctuation-bounded reply segments may be synthesized before the full answer. One logical answer owns one aggregate TTS start/end, bounded queues, generation cancellation and playback drain. Diagnostics expose only counters and durations, never transcript, answer, audio, prompt or provider payload.
+- Compatibility tools: Codex status, registered application launch, semantic motion and local media remain deterministic local routes in this first T21 slice. They may claim a turn before the conversational model and speak their trusted result through TTS. Native model-authored structured tool calls require a later frozen ToolPolicy slice; the former post-commit second-model inspection of every ordinary sentence is removed now.
+- Scope: this is a Windows-only experiment on `codex/t21-three-stage-streaming-companion`. T20 local wake, ordinary dictation, T15D motion and both installed firmware images remain unchanged. Real service latency, voice quality and two-turn context are `HIL_PENDING`.
+
 ## D095 - Background wake is silent in UI and foreground conversation is short
 
 - Date: 2026-09-04
