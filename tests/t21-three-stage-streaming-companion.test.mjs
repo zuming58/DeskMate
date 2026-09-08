@@ -86,14 +86,14 @@ test("T21 ASR adapter applies bounded endpointing and de-duplicates one provider
   assert.deepEqual(events, [{ type: "partial", text: "正在识别" }, { type: "final", text: "识别完成", itemId: "item-one" }]);
 });
 
-test("T21 TTS adapter sends confirmed text only and relays one PCM stream", async () => {
+test("T21 TTS adapter sends confirmed text through Doubao direct speech and relays one PCM stream", async () => {
   let sessionOptions;
   const spoken = [];
   const adapter = new DoubaoStreamingTtsAdapter({
     config: { voice: "configured-voice" },
     sessionFactory: (options) => {
       sessionOptions = options;
-      return { connect: async () => ({ ok: true }), speakText: (text) => { spoken.push(text); return true; }, interrupt: () => {}, close: () => {} };
+      return { connect: async () => ({ ok: true }), sayHello: (text) => { spoken.push(text); return true; }, interrupt: () => {}, close: () => {} };
     },
   });
   await adapter.connect();
@@ -112,7 +112,7 @@ test("T21 TTS adapter reconnects lazily after an idle transport close", async ()
   const adapter = new DoubaoStreamingTtsAdapter({
     config: { voice: "configured-voice" },
     sessionFactory: (options) => {
-      const session = { options, spoken: [], connect: async () => ({ ok: true }), speakText(text) { this.spoken.push(text); return true; }, close: () => {} };
+      const session = { options, spoken: [], connect: async () => ({ ok: true }), sayHello(text) { this.spoken.push(text); return true; }, close: () => {} };
       sessions.push(session);
       return session;
     },

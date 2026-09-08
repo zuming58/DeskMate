@@ -33,7 +33,9 @@ export async function processVoiceRecording({ blob, stt, organizer, organizerOpt
   }
   const failure = transcript.status === "success" ? null : describeTranscriptionFailure(transcript);
   const text = organized?.text || failure?.historyText || "录音已保存，语音识别请求失败";
-  const history = await saveHistory({ text, transcript, organized, failure });
+  // Persistence is not part of the user's output latency. Start it now, but
+  // allow the active-window/clipboard write to proceed in parallel.
+  const historyPromise = Promise.resolve().then(() => saveHistory({ text, transcript, organized, failure }));
   let outputResult = { ok: true, mode: "history" };
   if (transcript.status === "success" && organized?.status !== "cancelled" && (operation !== "edit" || organized?.status === "success")) {
     onPhase?.("outputting");
@@ -49,5 +51,6 @@ export async function processVoiceRecording({ blob, stt, organizer, organizerOpt
     }
   }
   if (organized?.status === "cancelled") outputResult = { ok: false, cancelled: true, reason: "organizer-cancelled" };
+  const history = await historyPromise;
   return { text, transcript, organized, failure, history, output: outputResult };
 }

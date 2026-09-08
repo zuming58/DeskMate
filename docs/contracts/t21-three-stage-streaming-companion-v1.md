@@ -14,7 +14,7 @@ The companion turn has exactly three semantic stages:
 
 Only `DeskMateCompanionModelAdapter` is allowed to decide the conversational answer. The ASR adapter must not answer questions. The TTS adapter must not rewrite, continue, summarize or classify the answer. The transport/controller must not submit every transcript to a second language model.
 
-The configured Doubao realtime service is retained only as the v1 `StreamingTtsAdapter`. DeskMate never uploads microphone audio to it in this path. Bailian `qwen3-asr-flash-realtime` is the v1 ASR adapter. The configured OpenAI-compatible text service, or the existing encrypted Bailian text fallback, is the v1 companion model.
+The configured Doubao realtime service is retained only as the v1 `StreamingTtsAdapter`. DeskMate never uploads microphone audio to it in this path. Confirmed DeskMate text is submitted through the provider's caller-text direct-speech event (`SayHello`); the provider's dialog-turn `ChatTTSText` event is not used because a fresh TTS-only session does not accept it. Bailian `qwen3-asr-flash-realtime` is the v1 ASR adapter. The configured OpenAI-compatible text service, or the existing encrypted Bailian text fallback, is the v1 companion model.
 
 ## Normalized events
 

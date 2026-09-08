@@ -870,6 +870,7 @@ export function VoicePage({ notify }) {
   const realtimeWantedRef = useRef(false);
   const pendingRealtimeAudioRef = useRef([]);
   const realtimeFinalRef = useRef({ attempt: 0, text: "", language: "", emotion: "" });
+  const realtimeCompletionRef = useRef({ attempt: 0, settled: true, promise: Promise.resolve(null), resolve: () => {} });
   const workflowRef = useRef("input");
   const hardwareVoiceSourceRef = useRef("voice-workflow");
   const lockedMicrophoneSourceRef = useRef(null);
@@ -878,16 +879,23 @@ export function VoicePage({ notify }) {
     lockedMicrophoneSourceRef.current = null;
     setActiveMicrophoneSource(null);
     const workflow = workflowRef.current === "edit" ? "edit" : "input";
-    dispatchSession({ type: "transition", state: "transcribing", detail: { message: "正在发送到千问语音识别" } });
+    dispatchSession({ type: "transition", state: "transcribing", detail: { message: "正在完成语音识别" } });
     const id = globalThis.crypto?.randomUUID?.() || `recording-${Date.now()}`;
     let audioId;
     const audioSavePromise = item.blob ? saveRecordingBlob(id, item.blob).then(() => id).catch((cause) => { notify(`录音已完成，但音频无法持久保存：${cause.message}`); return undefined; }) : Promise.resolve(undefined);
     const baseStt = state.settings.sttMode === "mock" ? new MockSttAdapter() : state.settings.sttMode === "bailian" ? new BailianSttAdapter() : state.settings.sttMode === "http" ? new HttpSttAdapter({ endpoint: state.settings.sttEndpoint }) : voiceAdapters.stt;
     const realtimeResult = item.microphoneSource === "computer" && state.settings.sttMode === "bailian" ? realtimeFinalRef.current : null;
+    const realtimeCompletion = realtimeResult && realtimeCompletionRef.current.attempt === realtimeResult.attempt ? realtimeCompletionRef.current : null;
     const stt = realtimeResult ? {
       transcribe: async (blob, options) => {
         const started = Date.now();
-        if (!realtimeResult.text) await new Promise((resolve) => window.setTimeout(resolve, 350));
+        if (!realtimeResult.text && realtimeCompletion) {
+          const completed = await Promise.race([
+            realtimeCompletion.promise,
+            new Promise((resolve) => window.setTimeout(() => resolve(null), 1200)),
+          ]);
+          if (completed?.text) Object.assign(realtimeResult, completed);
+        }
         if (realtimeResult.text.trim()) return { status: "success", text: realtimeResult.text.trim(), provider: "qwen3-asr-flash-realtime", durationMs: Date.now() - started, language: realtimeResult.language, emotion: realtimeResult.emotion };
         return baseStt.transcribe(blob, options);
       },
@@ -907,7 +915,7 @@ export function VoicePage({ notify }) {
         output: voiceAdapters.output,
         outputMode: mode,
         onPhase: (phase) => {
-          if (phase === "organizing") dispatchSession({ type: "transition", state: "organizing", detail: { message: "正在使用千问整理文字" } });
+          if (phase === "organizing") dispatchSession({ type: "transition", state: "organizing", detail: { message: "正在用 DeskMate 模型整理文字" } });
           if (phase === "outputting") dispatchSession({ type: "transition", state: "outputting", detail: { message: "正在写入目标窗口" } });
         },
         saveHistory: async ({ text, transcript: result, organized, failure }) => {
@@ -918,8 +926,8 @@ export function VoicePage({ notify }) {
           const entry = { id, audioId, microphoneSource: item.microphoneSource || "computer", operation: workflow === "edit" ? "voice-edit" : "voice-input", time: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }), date: "今天", duration: `${item.duration} 秒`, count: result.status === "success" ? `${text.length} 字` : "未转写", rawText: result.text || "", text, organizer, transcription };
           patch({ history: [entry, ...state.history], diagnostics: { ...(state.diagnostics || {}), stt: { provider: transcription.provider, status: transcription.status, durationMs: transcription.durationMs, errorType: transcription.errorType }, organizer } });
           if (workflow === "input" && result.status === "success" && state.settings.sttMode !== "mock" && item.microphoneSource !== "simulation") {
-            try { await voiceAdapters.desktop.commitDictationMemory({ eventId: `dictation:${id}`, sessionId: `dictation:${id}`, content: text, createdAt: new Date().toISOString() }); }
-            catch { /* dictation remains successful even if optional local memory ingestion is unavailable */ }
+            void voiceAdapters.desktop.commitDictationMemory({ eventId: `dictation:${id}`, sessionId: `dictation:${id}`, content: text, createdAt: new Date().toISOString() })
+              .catch(() => { /* optional local memory ingestion stays off the output critical path */ });
           }
           return entry;
         },
@@ -979,7 +987,13 @@ export function VoicePage({ notify }) {
   const processingRef = useRef(processing); processingRef.current = processing;
   const beginRealtimePreview = () => {
     const attempt = ++realtimeAttemptRef.current;
+    const previousSessionId = realtimeSessionRef.current;
+    realtimeSessionRef.current = "";
+    if (previousSessionId) globalThis.desktopBridge?.cancelBailianRealtime?.(previousSessionId).catch(() => {});
     realtimeFinalRef.current = { attempt, text: "", language: "", emotion: "" };
+    let resolveCompletion;
+    const promise = new Promise((resolve) => { resolveCompletion = resolve; });
+    realtimeCompletionRef.current = { attempt, settled: false, promise, resolve: resolveCompletion };
     realtimeWantedRef.current = true;
     pendingRealtimeAudioRef.current = [];
     setRealtimeStatus("connecting");
@@ -1064,6 +1078,8 @@ export function VoicePage({ notify }) {
     invalidateRealtimeStart();
     if (realtimeSessionRef.current) globalThis.desktopBridge?.cancelBailianRealtime?.(realtimeSessionRef.current).catch(() => {});
     realtimeSessionRef.current = "";
+    const completion = realtimeCompletionRef.current;
+    if (!completion.settled) { completion.settled = true; completion.resolve(null); }
     if (lockedMicrophoneSourceRef.current === "easyinput") void easyInputRecorder.cancel();
     else computerRecorder.cancel();
     lockedMicrophoneSourceRef.current = null;
@@ -1078,10 +1094,24 @@ export function VoicePage({ notify }) {
     if (["preview", "completed"].includes(event.kind)) {
       setLiveTranscript(String(event.preview || event.text || ""));
       setRealtimeStatus("receiving");
-      if (event.kind === "completed") Object.assign(realtimeFinalRef.current, { text: String(event.preview || event.text || ""), language: String(event.language || ""), emotion: String(event.emotion || "") });
-    } else if (event.kind === "error") setRealtimeStatus("unavailable");
+      if (event.kind === "completed") {
+        const result = { text: String(event.preview || event.text || ""), language: String(event.language || ""), emotion: String(event.emotion || "") };
+        Object.assign(realtimeFinalRef.current, result);
+        const completion = realtimeCompletionRef.current;
+        if (!completion.settled && completion.attempt === realtimeFinalRef.current.attempt) { completion.settled = true; completion.resolve(result); }
+      }
+    } else if (event.kind === "error") {
+      setRealtimeStatus("unavailable");
+      const completion = realtimeCompletionRef.current;
+      if (!completion.settled) { completion.settled = true; completion.resolve(null); }
+    }
     else if (event.kind === "ready") setRealtimeStatus("ready");
-    else if (["finished", "closed"].includes(event.kind)) setRealtimeStatus("finished");
+    else if (["finished", "closed"].includes(event.kind)) {
+      setRealtimeStatus("finished");
+      realtimeSessionRef.current = "";
+      const completion = realtimeCompletionRef.current;
+      if (!completion.settled) { completion.settled = true; completion.resolve(realtimeFinalRef.current.text ? { ...realtimeFinalRef.current } : null); }
+    }
   }), []);
   useEffect(() => deviceEventBus.subscribe((event) => { setLastDeviceEvent(event); if (event.type === "voice-toggle") toggleRef.current(event.payload.phase, event.payload.workflow, event.source === "simulator" ? "simulation" : "voice-workflow"); if (event.type === "voice-cancel") cancelRef.current(); if (event.type === "connection-change" && !event.payload.connected && recordingRef.current && lockedMicrophoneSourceRef.current === "easyinput") { void easyInputRecorder.stop(); notify("EasyInput 已断线，板载麦克风录音已停止；录音中不会切换到其他来源"); } }), [easyInputRecorder.stop, notify]);
   useEffect(() => { voiceAdapters.desktop.setVoiceRecording(recording).catch(() => {}); }, [recording]);

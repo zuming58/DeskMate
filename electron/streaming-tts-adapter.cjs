@@ -80,7 +80,11 @@ class DoubaoStreamingTtsAdapter {
       active.timer = this.setTimer(() => finish(stableTtsError()), timeoutMs);
       active.timer?.unref?.();
       this.active = active;
-      if (active.cancelled || this.session.speakText(content) !== true) finish(stableTtsError(active.cancelled ? "three-stage-tts-cancelled" : "three-stage-tts-unavailable"));
+      // Doubao's realtime-dialogue ChatTTSText event is part of the dialog
+      // turn flow and is silently ignored by a fresh TTS-only session. The
+      // SayHello event accepts caller-provided text and returns the configured
+      // voice without handing conversation semantics back to Doubao.
+      if (active.cancelled || this.session.sayHello(content) !== true) finish(stableTtsError(active.cancelled ? "three-stage-tts-cancelled" : "three-stage-tts-unavailable"));
     });
   }
 

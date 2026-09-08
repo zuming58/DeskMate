@@ -132,10 +132,30 @@ test("organizer exception safely falls back to raw transcription", async () => {
   assert.equal(response.text, "原始转写"); assert.equal(saved[0].text, "原始转写"); assert.equal(response.organized.fallback, true);
 });
 
-test("active-window output failure falls back to clipboard after history is saved", async () => {
+test("active-window output failure falls back to clipboard while history persists independently", async () => {
   const sequence = [];
   const response = await processVoiceRecording({ blob: new Blob(["audio"]), stt: new MockSttAdapter("回退文本"), organizer: new ConfigurableTextOrganizer(), organizerOptions: { mode: "raw" }, saveHistory: async (item) => { sequence.push("history"); return item; }, outputMode: "active-window", output: { output: async (_text, mode) => { sequence.push(mode); return mode === "active-window" ? { ok: false, reason: "target-window-changed" } : { ok: true, mode }; } } });
-  assert.deepEqual(sequence, ["history", "active-window", "clipboard"]);
+  assert.deepEqual(sequence, ["active-window", "history", "clipboard"]);
   assert.equal(response.output.ok, true);
   assert.equal(response.output.fallbackFrom, "active-window");
+});
+
+test("slow history persistence does not block active-window output", async () => {
+  const sequence = [];
+  let releaseHistory;
+  const historyGate = new Promise((resolve) => { releaseHistory = resolve; });
+  const processing = processVoiceRecording({
+    blob: new Blob(["audio"]),
+    stt: new MockSttAdapter("快速输出"),
+    organizer: new ConfigurableTextOrganizer(),
+    organizerOptions: { mode: "raw" },
+    saveHistory: async (item) => { sequence.push("history-start"); await historyGate; sequence.push("history-done"); return item; },
+    outputMode: "active-window",
+    output: { output: async () => { sequence.push("output"); return { ok: true, mode: "active-window" }; } },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(sequence, ["output", "history-start"]);
+  releaseHistory();
+  await processing;
+  assert.deepEqual(sequence, ["output", "history-start", "history-done"]);
 });
