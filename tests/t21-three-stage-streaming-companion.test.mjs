@@ -172,6 +172,10 @@ function fakePipeline({ bypass = false, modelRun, now = Date.now, providerOption
 test("T21 partial text never reaches the model and duplicate final submits once", async () => {
   const fixture = fakePipeline();
   await fixture.provider.connect();
+  fixture.emitAsr({ type: "speech.started", itemId: "one", audioStartMs: 100 });
+  const activity = fixture.events.find((event) => event.type === "asr.speech-started");
+  assert.deepEqual(activity, { type: "asr.speech-started", diagnostic: { providerEvent: "other" } });
+  assert.equal(Object.hasOwn(activity, "itemId"), false);
   fixture.emitAsr({ type: "partial", text: "你" });
   assert.equal(fixture.modelCalls(), 0);
   fixture.emitAsr({ type: "final", text: "你好", itemId: "one" });

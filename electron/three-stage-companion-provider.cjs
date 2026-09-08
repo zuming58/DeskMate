@@ -271,13 +271,15 @@ class ThreeStageCompanionProvider {
     if (this.closed || generation !== this.generation) return;
     if (event.type === "speech.started") {
       const nextItemId = String(event.itemId || "").slice(0, 160);
+      const bargeContext = this.bargeContext();
       if (this.pendingBargeInFinal?.itemId && nextItemId && this.pendingBargeInFinal.itemId !== nextItemId) this.clearPendingBargeInFinal();
       this.resetSpeechEvidence();
       this.speechEvidence.active = true;
       this.speechEvidence.itemId = nextItemId;
       this.speechEvidence.audioStartMs = Math.max(0, Number(event.audioStartMs) || 0);
       this.speechEvidence.receivedStartAt = this.now();
-      if (this.bargeContext()) this.counters.bargeSpeechStarts += 1;
+      if (bargeContext) this.counters.bargeSpeechStarts += 1;
+      else this.emit({ type: "asr.speech-started", diagnostic: { providerEvent: "other" } });
       return;
     }
     if (event.type === "speech.stopped") {

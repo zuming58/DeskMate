@@ -166,7 +166,7 @@ class CompanionConversationController {
       ttsTurnStarted: 0, ttsTurnCompleted: 0, ttsTurnAbandoned: 0,
       ttsImplicitStarts: 0, ttsStartsWhileOpen: 0, ttsEndsWithoutStart: 0,
       chatFinals: 0, chatFinalsSuppressed: 0, chatFinalTtsEndPairs: 0, chatFinalsWithoutTtsEnd: 0,
-      asrFinalsAccepted: 0, asrFinalsSuppressed: 0,
+      asrFinalsAccepted: 0, asrFinalsSuppressed: 0, listeningSpeechStarts: 0, listeningPartials: 0, idleTimerRefreshes: 0,
       bridgeChecks: 0, bridgeOwnedTurns: 0, bridgePassThroughTurns: 0, bridgeFailures: 0, trustedSpeechTimeouts: 0, trustedAudioQuietRecoveries: 0,
       transcriptNormalizations: 0, lastTranscriptNormalization: "none",
       lastAsrFinalArrivalPhase: "idle", lastTtsTurnOutcome: "none",
@@ -772,6 +772,13 @@ class CompanionConversationController {
       else await this.transition("listening", { reason: "recognized-speech-final-missing" });
       return { ok: true, recovered: true };
     }
+    if (event.type === "asr.speech-started") {
+      if (this.state === "listening") {
+        this.turnLifecycle.listeningSpeechStarts += 1;
+        if (this.resetListeningIdleTimer("recognized-speech-started")) this.turnLifecycle.idleTimerRefreshes += 1;
+      }
+      return { ok: true, speechStarted: true };
+    }
     if (event.type === "asr.final") {
       const phase = HALF_DUPLEX_PHASES.has(arrival.asrArrivalPhase) ? arrival.asrArrivalPhase : "idle";
       this.turnLifecycle.lastAsrFinalArrivalPhase = phase;
@@ -799,6 +806,10 @@ class CompanionConversationController {
     }
     if (event.type === "asr.partial") {
       this.lastPartialAt = this.now();
+      if (this.state === "listening") {
+        this.turnLifecycle.listeningPartials += 1;
+        if (this.resetListeningIdleTimer("recognized-speech-partial")) this.turnLifecycle.idleTimerRefreshes += 1;
+      }
       let partial = boundedText(event.text);
       try { partial = boundedText(this.normalizeTranscript(partial, this.sessionTranscriptContext)?.normalized || partial); } catch { /* original provider text remains visible */ }
       this.onEvent({ type: "transcript.partial", text: partial, sessionId: this.active.sessionId, generation: this.active.generation });

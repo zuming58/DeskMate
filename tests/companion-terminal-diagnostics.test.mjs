@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes the explicit T21J dialogue-memory continuity build identity", () => {
+test("current package exposes the explicit T21K owner-profile and speech-activity build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t21j-dialogue-memory-continuity/);
+  assert.match(main, /t21k-owner-profile-speech-activity/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
@@ -367,6 +367,9 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
       chatFinalsWithoutTtsEnd: 1,
       asrFinalsAccepted: 2,
       asrFinalsSuppressed: 5,
+      listeningSpeechStarts: 3,
+      listeningPartials: 8,
+      idleTimerRefreshes: 11,
       bridgeChecks: 7,
       bridgeOwnedTurns: 2,
       bridgePassThroughTurns: 5,
@@ -391,6 +394,7 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
   assert.equal(report.conversation.turnLifecycle.bridgeChecks, 7);
   assert.equal(report.conversation.turnLifecycle.bridgeOwnedTurns, 2);
   assert.equal(report.conversation.turnLifecycle.bridgePassThroughTurns, 5);
+  assert.deepEqual({ starts: report.conversation.turnLifecycle.listeningSpeechStarts, partials: report.conversation.turnLifecycle.listeningPartials, refreshes: report.conversation.turnLifecycle.idleTimerRefreshes }, { starts: 3, partials: 8, refreshes: 11 });
   assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1 });
   assert.deepEqual(report.codexTaskBrief, { receiver: "listening", taskCount: 1, announcementsEnabled: true });
   assert.equal(report.conversation.sinkCancellation.reasons.manual, 7);

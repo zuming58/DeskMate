@@ -253,7 +253,7 @@ export function createDiagnosticReport(input = {}) {
       counters: Object.fromEntries(["audioWindowCount", "signalWindowCount", "heardCount", "rejectedCount", "lowConfidenceCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
     },
     turnLifecycle: {
-      ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
+      ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "listeningSpeechStarts", "listeningPartials", "idleTimerRefreshes", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
       lastAsrFinalArrivalPhase: HALF_DUPLEX_PHASES.has(turnSource.lastAsrFinalArrivalPhase) ? turnSource.lastAsrFinalArrivalPhase : "idle",
       lastTtsTurnOutcome: TTS_TURN_OUTCOMES.has(turnSource.lastTtsTurnOutcome) ? turnSource.lastTtsTurnOutcome : "none",
       asrFinalArrivalPhases: Object.fromEntries([...HALF_DUPLEX_PHASES].map((phase) => [phase, Math.max(0, Number(asrPhaseSource[phase]) || 0)])),

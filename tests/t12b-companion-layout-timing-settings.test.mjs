@@ -135,6 +135,29 @@ test("partial to final timing is content free and idle timeout publishes complet
   assert.ok(events.some((event) => event.type === "stop.lifecycle" && event.stopLifecycle.completed === 1));
 });
 
+test("recognized speech activity refreshes the foreground idle deadline until the utterance can finish", async () => {
+  const clock = fakeClock(); let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: new SimulatedCompanionAudioSource(), audioSink: new SimulatedCompanionAudioSink(),
+    now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer, wait: async () => {},
+  });
+  controller.configureSession({ preferences: { revision: 1, name: "private", endSmoothWindowMs: 4000, idleTimeoutMs: 10000 } });
+  await controller.start({ sessionId: "speech-refresh", generation: 1 });
+  await clock.tick(9500);
+  provider.emit({ type: "asr.speech-started" });
+  await controller.eventChain;
+  await clock.tick(9000);
+  assert.equal(controller.snapshot().active, true);
+  provider.emit({ type: "asr.partial", text: "synthetic private utterance" });
+  await controller.eventChain;
+  await clock.tick(9999);
+  assert.equal(controller.snapshot().active, true);
+  await clock.tick(1);
+  assert.equal(controller.snapshot().active, false);
+  assert.deepEqual({ starts: controller.snapshot().turnLifecycle.listeningSpeechStarts, partials: controller.snapshot().turnLifecycle.listeningPartials, refreshes: controller.snapshot().turnLifecycle.idleTimerRefreshes }, { starts: 1, partials: 1, refreshes: 2 });
+});
+
 test("diagnostics separate saved and session-applied values and never export private identity", () => {
   const report = createDiagnosticReport({ conversation: {
     state: "listening", connected: true,
