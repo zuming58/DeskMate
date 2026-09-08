@@ -16,8 +16,16 @@ class BailianStreamingAsrAdapter {
   handle(event = {}) {
     if (this.closed) return;
     if (event.kind === "preview") {
-      const text = String(event.preview || event.text || "").trim().slice(0, 16384);
-      if (text) this.onEvent({ type: "partial", text });
+      const text = String(event.currentText || event.text || event.preview || "").trim().slice(0, 16384);
+      if (text) this.onEvent({ type: "partial", text, itemId: String(event.itemId || "").slice(0, 160) });
+      return;
+    }
+    if (event.kind === "speech-started") {
+      this.onEvent({ type: "speech.started", itemId: String(event.itemId || "").slice(0, 160), audioStartMs: Math.max(0, Number(event.audioStartMs) || 0) });
+      return;
+    }
+    if (event.kind === "speech-stopped") {
+      this.onEvent({ type: "speech.stopped", itemId: String(event.itemId || "").slice(0, 160), audioEndMs: Math.max(0, Number(event.audioEndMs) || 0) });
       return;
     }
     if (event.kind === "completed") {

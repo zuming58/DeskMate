@@ -16,18 +16,31 @@ DeskMate Link reports, motion behavior nor the physical audio wiring.
   Doubao has already finished sending PCM. The provider retains only the
   bounded current assistant text until the computer audio sink reports that
   playback drained, so the tail stays interruptible and echo-checkable.
-- Sound level, a VAD edge or one ASR partial alone never owns cancellation. A
-  partial must contain a bounded meaningful phrase and must not match the
-  assistant text currently being spoken. Fillers such as `嗯`, `啊`, `呃` and
-  one-character noise hypotheses are rejected.
+- The provider uses Qwen server VAD at the documented balanced threshold `0.2`,
+  rather than the low-latency/noise-sensitive `0.0` preset. A server
+  `speech_started` event opens one bounded evidence item and `speech_stopped`
+  supplies its duration; neither event alone may cancel playback.
+- Only the current provider item may be evaluated. Cumulative previews that
+  contain completed text from earlier user turns are forbidden as interruption
+  evidence. This prevents an audio twitch from inheriting an old meaningful
+  sentence and being misclassified as new speech.
+- Sound level, a VAD edge or one ordinary ASR partial alone never owns
+  cancellation. An explicit phrase such as `等一下` or `先停` may cancel after a
+  matching server speech start. Any other phrase requires two consistent,
+  progressively recognized meaningful partials, or a final with prior partial
+  evidence and at least 350 ms of provider-measured speech. The candidate must
+  not match the assistant text currently being spoken. Fillers such as `嗯`,
+  `啊`, `呃`, one-character hypotheses and close assistant-echo matches are
+  rejected.
 - A qualified partial immediately cancels the active model/TTS generation and
   the local playback queue. The later final transcript opens exactly one normal
   replacement turn through the existing deterministic intent and model gates;
   the user does not repeat the sentence.
-- A final that arrives before a usable partial applies the same meaningful-text
-  and assistant-echo checks, then performs the same cancellation and replacement.
+- A final that arrives before usable current-item evidence cannot cancel or open
+  a replacement turn while the assistant is speaking.
 - Diagnostics expose content-free candidate, accepted, weak-rejection and
-  echo-rejection counts. They never expose either side's text or PCM.
+  echo-rejection counts, plus server speech-start and unstable-evidence counts.
+  They never expose either side's text or PCM.
 
 ## Local wake repair
 
@@ -58,6 +71,10 @@ Automated:
 - T21 local playback drain keeps ASR uplink open and closes its echo context
   only after the audio sink reports completion;
 - weak/filler and assistant-echo hypotheses do not interrupt;
+- cumulative transcript history cannot turn a current noise fragment into a
+  qualified interruption;
+- one unstable ordinary partial does not interrupt, while progressive recognized
+  speech or an explicit interrupt phrase does;
 - recognized speech interrupts local playback synchronously and one final starts
   one replacement turn;
 - listener state cannot claim ready from microphone readiness alone;

@@ -2,6 +2,7 @@ const WebSocket = require("ws");
 const { validateApiKey, validateWorkspaceId } = require("./bailian.cjs");
 
 const DEFAULT_REALTIME_MODEL = "qwen3-asr-flash-realtime";
+const BALANCED_VAD_THRESHOLD = 0.2;
 const MAX_CHUNK_BYTES = 1024 * 1024;
 
 function realtimeEndpoint(workspaceId = "", model = DEFAULT_REALTIME_MODEL) {
@@ -24,6 +25,12 @@ function parseRealtimeMessage(value) {
   if (message.type === "conversation.item.input_audio_transcription.completed") {
     return { kind: "completed", text: String(message.transcript || ""), itemId: String(message.item_id || ""), language: String(message.language || ""), emotion: String(message.emotion || "") };
   }
+  if (message.type === "input_audio_buffer.speech_started") {
+    return { kind: "speech-started", itemId: String(message.item_id || ""), audioStartMs: Math.max(0, Number(message.audio_start_ms) || 0) };
+  }
+  if (message.type === "input_audio_buffer.speech_stopped") {
+    return { kind: "speech-stopped", itemId: String(message.item_id || ""), audioEndMs: Math.max(0, Number(message.audio_end_ms) || 0) };
+  }
   if (message.type === "conversation.item.input_audio_transcription.failed" || message.type === "error") {
     return { kind: "error", message: String(message.error?.message || "实时语音识别失败").slice(0, 240) };
   }
@@ -34,13 +41,14 @@ function parseRealtimeMessage(value) {
 }
 
 class BailianRealtimeSession {
-  constructor({ apiKey, workspaceId = "", WebSocketImpl = WebSocket, onEvent = () => {}, timeoutMs = 10000, silenceDurationMs = 500 } = {}) {
+  constructor({ apiKey, workspaceId = "", WebSocketImpl = WebSocket, onEvent = () => {}, timeoutMs = 10000, silenceDurationMs = 500, vadThreshold = BALANCED_VAD_THRESHOLD } = {}) {
     this.apiKey = validateApiKey(apiKey);
     this.workspaceId = validateWorkspaceId(workspaceId);
     this.WebSocketImpl = WebSocketImpl;
     this.onEvent = onEvent;
     this.timeoutMs = timeoutMs;
     this.silenceDurationMs = Math.max(500, Math.min(50000, Number(silenceDurationMs) || 500));
+    this.vadThreshold = Math.max(-1, Math.min(1, Number.isFinite(Number(vadThreshold)) ? Number(vadThreshold) : BALANCED_VAD_THRESHOLD));
     this.socket = null;
     this.ready = false;
     this.closed = false;
@@ -74,7 +82,7 @@ class BailianRealtimeSession {
             input_audio_format: "pcm",
             sample_rate: 16000,
             input_audio_transcription: { language: "zh" },
-            turn_detection: { type: "server_vad", threshold: 0.0, silence_duration_ms: this.silenceDurationMs },
+            turn_detection: { type: "server_vad", threshold: this.vadThreshold, silence_duration_ms: this.silenceDurationMs },
           },
         }));
       });
@@ -92,11 +100,11 @@ class BailianRealtimeSession {
         if (event.kind === "preview") {
           const current = `${event.text}${event.stash}`.trim();
           this.liveItems.set(event.itemId, current);
-          this.emit({ ...event, preview: this.combinedPreview(event.itemId) });
+          this.emit({ ...event, currentText: current, preview: this.combinedPreview(event.itemId) });
         } else if (event.kind === "completed") {
           this.liveItems.delete(event.itemId);
           if (event.text.trim()) this.completedItems.set(event.itemId, event.text.trim());
-          this.emit({ ...event, preview: this.combinedPreview() });
+          this.emit({ ...event, currentText: event.text.trim(), preview: this.combinedPreview() });
         } else {
           this.emit(event);
           if (event.kind === "finished") this.cancel();
@@ -143,4 +151,4 @@ class BailianRealtimeSession {
   }
 }
 
-module.exports = { BailianRealtimeSession, DEFAULT_REALTIME_MODEL, MAX_CHUNK_BYTES, parseRealtimeMessage, realtimeEndpoint };
+module.exports = { BALANCED_VAD_THRESHOLD, BailianRealtimeSession, DEFAULT_REALTIME_MODEL, MAX_CHUNK_BYTES, parseRealtimeMessage, realtimeEndpoint };

@@ -78,12 +78,19 @@ test("T21 ASR adapter applies bounded endpointing and de-duplicates one provider
   });
   await adapter.connect();
   assert.equal(sessionOptions.silenceDurationMs, 4000);
-  sessionOptions.onEvent({ kind: "preview", preview: "正在识别" });
+  sessionOptions.onEvent({ kind: "speech-started", itemId: "item-one", audioStartMs: 100 });
+  sessionOptions.onEvent({ kind: "preview", itemId: "item-one", currentText: "正在识别", preview: "上一轮历史文字，正在识别" });
+  sessionOptions.onEvent({ kind: "speech-stopped", itemId: "item-one", audioEndMs: 900 });
   sessionOptions.onEvent({ kind: "completed", itemId: "item-one", text: "识别完成" });
   sessionOptions.onEvent({ kind: "completed", itemId: "item-one", text: "识别完成" });
   assert.equal(adapter.sendAudio(Buffer.from([1, 2])), true);
   assert.equal(appended.length, 1);
-  assert.deepEqual(events, [{ type: "partial", text: "正在识别" }, { type: "final", text: "识别完成", itemId: "item-one" }]);
+  assert.deepEqual(events, [
+    { type: "speech.started", itemId: "item-one", audioStartMs: 100 },
+    { type: "partial", text: "正在识别", itemId: "item-one" },
+    { type: "speech.stopped", itemId: "item-one", audioEndMs: 900 },
+    { type: "final", text: "识别完成", itemId: "item-one" },
+  ]);
 });
 
 test("T21 TTS adapter sends confirmed text through Doubao direct speech and relays one PCM stream", async () => {
@@ -216,8 +223,9 @@ test("T21 recognized partial interrupts current speech and its final opens exact
   const beforeBarge = events.length;
   asrEvent({ type: "partial", text: "这是正在播报" });
   assert.equal(events.slice(beforeBarge).some((event) => event.type === "barge.start"), false);
-  asrEvent({ type: "partial", text: "等一下我想换个问题" });
-  asrEvent({ type: "final", text: "等一下我想换个问题" });
+  asrEvent({ type: "speech.started", itemId: "barge-one", audioStartMs: 1000 });
+  asrEvent({ type: "partial", text: "等一下我想换个问题", itemId: "barge-one" });
+  asrEvent({ type: "final", text: "等一下我想换个问题", itemId: "barge-one" });
   await tick();
   await tick();
   const after = events.slice(beforeBarge).map((event) => event.type);
@@ -240,8 +248,9 @@ test("T21 recognized speech can interrupt after cloud TTS ended while local play
   const beforeBarge = fixture.events.length;
   fixture.emitAsr({ type: "partial", text: "收到" });
   assert.equal(fixture.events.slice(beforeBarge).some((event) => event.type === "barge.start"), false);
-  fixture.emitAsr({ type: "partial", text: "等一下我换个问题" });
-  fixture.emitAsr({ type: "final", text: "等一下我换个问题" });
+  fixture.emitAsr({ type: "speech.started", itemId: "tail-barge", audioStartMs: 1000 });
+  fixture.emitAsr({ type: "partial", text: "等一下我换个问题", itemId: "tail-barge" });
+  fixture.emitAsr({ type: "final", text: "等一下我换个问题", itemId: "tail-barge" });
   await tick();
   await tick();
   assert.equal(fixture.events.slice(beforeBarge).some((event) => event.type === "barge.start"), true);
@@ -249,6 +258,34 @@ test("T21 recognized speech can interrupt after cloud TTS ended while local play
   assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
   assert.equal(fixture.provider.playbackDrained(), true);
   assert.equal(fixture.provider.diagnostics().playbackTailActive, false);
+});
+
+test("T21 ignores one unstable noise hypothesis but accepts stable progressive human speech", async () => {
+  const fixture = fakePipeline();
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
+  await tick();
+  await tick();
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
+
+  const beforeNoise = fixture.events.length;
+  fixture.emitAsr({ type: "speech.started", itemId: "noise", audioStartMs: 1000 });
+  fixture.emitAsr({ type: "partial", text: "刚才的问题", itemId: "noise" });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "noise", audioEndMs: 1180 });
+  fixture.emitAsr({ type: "final", text: "刚才的问题", itemId: "noise" });
+  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.modelCalls(), 1);
+
+  fixture.emitAsr({ type: "speech.started", itemId: "human", audioStartMs: 2000 });
+  fixture.emitAsr({ type: "partial", text: "我想问另外", itemId: "human" });
+  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
+  fixture.emitAsr({ type: "partial", text: "我想问另外一个问题", itemId: "human" });
+  fixture.emitAsr({ type: "final", text: "我想问另外一个问题", itemId: "human" });
+  await tick();
+  await tick();
+  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), true);
+  assert.equal(fixture.modelCalls(), 2);
+  assert.ok(fixture.provider.diagnostics().counters.bargeInsRejectedUnstable >= 2);
 });
 
 test("T21 begins TTS on a stable sentence before the model final arrives", async () => {

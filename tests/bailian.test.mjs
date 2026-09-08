@@ -8,7 +8,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const { buildRequest, endpointForWorkspace, parseResponse, transcribe, validateApiKey } = require("../electron/bailian.cjs");
 const { DEFAULT_ORGANIZER_MODEL, buildOrganizerRequest, organize, parseOrganizerResponse, validateInput } = require("../electron/bailian-organizer.cjs");
-const { parseRealtimeMessage, realtimeEndpoint } = require("../electron/bailian-realtime.cjs");
+const { BALANCED_VAD_THRESHOLD, BailianRealtimeSession, parseRealtimeMessage, realtimeEndpoint } = require("../electron/bailian-realtime.cjs");
 const { createSecureBailianStore } = require("../electron/secure-bailian.cjs");
 
 test("Bailian request uses base64 audio without exposing key in the body", () => {
@@ -54,8 +54,12 @@ test("Bailian request can be cancelled by the voice session", async () => {
 test("Bailian realtime events expose only live transcript fields", () => {
   assert.match(realtimeEndpoint(""), /wss:\/\/dashscope\.aliyuncs\.com\/api-ws\/v1\/realtime/);
   assert.match(realtimeEndpoint("workspace-123"), /workspace-123\.cn-beijing\.maas\.aliyuncs\.com/);
+  assert.equal(BALANCED_VAD_THRESHOLD, 0.2);
+  assert.equal(new BailianRealtimeSession({ apiKey: "sk-12345678" }).vadThreshold, 0.2);
   assert.deepEqual(parseRealtimeMessage(JSON.stringify({ type: "conversation.item.input_audio_transcription.text", item_id: "item-1", text: "今天", stash: "天气" })), { kind: "preview", itemId: "item-1", text: "今天", stash: "天气" });
   assert.equal(parseRealtimeMessage(JSON.stringify({ type: "conversation.item.input_audio_transcription.completed", item_id: "item-1", transcript: "今天天气很好", language: "zh", emotion: "neutral" })).text, "今天天气很好");
+  assert.deepEqual(parseRealtimeMessage(JSON.stringify({ type: "input_audio_buffer.speech_started", item_id: "item-2", audio_start_ms: 120 })), { kind: "speech-started", itemId: "item-2", audioStartMs: 120 });
+  assert.deepEqual(parseRealtimeMessage(JSON.stringify({ type: "input_audio_buffer.speech_stopped", item_id: "item-2", audio_end_ms: 780 })), { kind: "speech-stopped", itemId: "item-2", audioEndMs: 780 });
   assert.equal(parseRealtimeMessage("not-json"), null);
 });
 

@@ -131,6 +131,7 @@ class CompanionConversationController {
     this.state = "idle";
     this.active = null;
     this.provider = null;
+    this.lastPipelineDiagnostics = null;
     this.providerEpoch = 0;
     this.turnSequence = 0;
     this.eventChain = Promise.resolve();
@@ -278,13 +279,14 @@ class CompanionConversationController {
 
   snapshot() {
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
+    const livePipeline = this.capturePipelineDiagnostics(this.provider);
     return Object.freeze({
       active: Boolean(this.active),
       state: this.state,
       sessionId: this.active?.sessionId || "",
       generation: this.active?.generation || 0,
       provider: this.providerLabel,
-      pipeline: this.provider?.diagnostics?.() || null,
+      pipeline: livePipeline || this.lastPipelineDiagnostics,
       audioSource: sourceStatus,
       audioSink: availability(this.audioSink, "audio-sink-unavailable"),
       audioSelection: Object.freeze({
@@ -300,6 +302,16 @@ class CompanionConversationController {
       asrTiming: Object.freeze({ ...this.asrTiming }),
       error: this.lastError,
     });
+  }
+
+  capturePipelineDiagnostics(provider = this.provider) {
+    try {
+      const value = provider?.diagnostics?.();
+      if (value && typeof value === "object") this.lastPipelineDiagnostics = value;
+      return value || null;
+    } catch {
+      return null;
+    }
   }
 
   configureAudio({ audioSource, audioSink, selection = {} } = {}) {
@@ -457,6 +469,7 @@ class CompanionConversationController {
     if (!sourceStatus.available) return { ok: false, reason: sourceStatus.reason || "audio-source-unavailable", status: this.snapshot() };
     if (!sinkStatus.available) return { ok: false, reason: sinkStatus.reason || "audio-sink-unavailable", status: this.snapshot() };
     this.active = Object.freeze({ sessionId: boundedText(sessionId, 128), generation: Math.max(1, Number(generation) || 1), token: Symbol("companion-session") });
+    this.lastPipelineDiagnostics = null;
     this.turnSequence = 0;
     this.lastError = "";
     this.lastStopReason = "never";
@@ -899,6 +912,7 @@ class CompanionConversationController {
   }
 
   async cleanup(provider = this.provider, cancellationReason = "stop") {
+    this.capturePipelineDiagnostics(provider);
     const bounded = async (operation, reason) => {
       const result = await this.boundedOperation(operation, this.teardownStepTimeoutMs, reason);
       if (result.timedOut) this.echoGuardCounters.teardownTimeouts += 1;

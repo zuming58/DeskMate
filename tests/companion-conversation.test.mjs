@@ -187,8 +187,9 @@ test("Doubao settings identify the protocol App Key as fixed and expose redacted
 });
 
 class FakeProvider {
-  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; this.playbackDrains = 0; this.hellos = []; this.spokenTexts = []; }
+  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; this.playbackDrains = 0; this.hellos = []; this.spokenTexts = []; this.diagnosticCounters = { bargeInsAccepted: 0 }; }
   async connect() { if (this.connectResult instanceof Error) throw this.connectResult; return this.connectResult; }
+  diagnostics() { return { version: 1, provider: "three-stage", ready: !this.closed, active: false, counters: { ...this.diagnosticCounters }, lastTiming: {} }; }
   sendAudio(value) { this.audio.push(Buffer.from(value)); return true; }
   sayHello(value) { this.hellos.push(value); return true; }
   speakText(value) { this.spokenTexts.push(value); return true; }
@@ -197,6 +198,23 @@ class FakeProvider {
   close() { this.closed = true; }
   emit(value) { this.onEvent(value); }
 }
+
+test("stopped companion retains the last content-free pipeline counters for diagnostics", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  assert.equal((await controller.start({ sessionId: "diagnostic-retention", generation: 1 })).ok, true);
+  provider.diagnosticCounters.bargeInsAccepted = 2;
+  assert.equal((await controller.stop("test")).ok, true);
+  assert.equal(controller.snapshot().pipeline.counters.bargeInsAccepted, 2);
+  assert.equal(controller.snapshot().active, false);
+});
 
 test("trusted task brief uses provider voice, then returns to continuous listening without a wake word", async () => {
   const source = new SimulatedCompanionAudioSource();
