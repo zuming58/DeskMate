@@ -334,7 +334,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
   const [section, setSection] = useState("overview");
   const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
-  const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", ownerProfile: { occupation: "", currentFocus: "", ageStage: "", background: "" }, role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
+  const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", ownerProfile: { occupation: "", currentFocus: "", ageStage: "", background: "" }, companionProfile: { ageStage: "" }, role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
   const [personaStatus, setPersonaStatus] = useState({ state: "idle", message: "", scope: "" });
   const [overviewMotionAutomation, setOverviewMotionAutomation] = useState({ policy: { version: 1, enabled: false, idleEnabled: false }, running: false, idleDelaySeconds: 90, thinkingDelaySeconds: 4, last: { state: "disabled", trigger: "", reason: "" } });
   const conversation = state.runtime?.companion || { active: false, state: "idle", audioSource: {}, audioSink: {}, service: {} };
@@ -456,8 +456,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
       setCompanionSettingsStatus({ state: "error", message: "设置保存或回读失败，原有配置保持不变" });
     }
   };
-  const savePersona = async (scope = "persona") => {
-    const label = scope === "owner" ? "关于我" : "陪伴人设";
+  const savePersona = async (scope = "identity") => {
+    const label = "我与小岚";
     setPersonaStatus({ state: "saving", message: `正在保存并回读${label}…`, scope });
     try {
       const result = await globalThis.desktopBridge?.setCompanionPersona?.(personaDraft);
@@ -526,6 +526,33 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
           </div>
           </Card>
           <AgentStateTestPanel notify={notify} navigate={navigate} index="04" />
+          <Card className="companion-identity-card">
+            <SectionTitle index="05" title="我与小岚" description="左边是你明确提供的资料，右边是小岚的人格设定；保存后从下一次陪伴会话生效。" />
+            <div className="companion-identity-grid">
+              <section className="companion-identity-pane" aria-labelledby="owner-profile-heading">
+                <div className="companion-identity-pane__heading"><div><span>OWNER PROFILE</span><strong id="owner-profile-heading">关于我</strong></div><small>只使用你主动填写的稳定资料</small></div>
+                <div className="companion-settings-form companion-persona-form">
+                  <label className="field-label">如何称呼你<input maxLength={32} value={personaDraft.ownerName || ""} onChange={(event) => setPersonaDraft({ ...personaDraft, ownerName: event.target.value })} /></label>
+                  <label className="field-label">年龄 / 人生阶段（可选）<input maxLength={80} value={personaDraft.ownerProfile?.ageStage || ""} placeholder="例如：成年，或正在创业阶段" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, ageStage: event.target.value } })} /></label>
+                  <label className="field-label">职业 / 身份（可选）<input maxLength={160} value={personaDraft.ownerProfile?.occupation || ""} placeholder="例如：产品设计、独立创作者" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, occupation: event.target.value } })} /></label>
+                  <label className="field-label">最近在忙什么（可选）<textarea maxLength={300} value={personaDraft.ownerProfile?.currentFocus || ""} placeholder="例如：正在推进 DeskMate 内测和知识库整理" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, currentFocus: event.target.value } })} /></label>
+                  <label className="field-label">其他背景（可选）<textarea maxLength={600} value={personaDraft.ownerProfile?.background || ""} placeholder="只填写你希望在对话中长期参考的背景" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, background: event.target.value } })} /></label>
+                </div>
+              </section>
+              <section className="companion-identity-pane" aria-labelledby="companion-persona-heading">
+                <div className="companion-identity-pane__heading"><div><span>COMPANION PERSONA</span><strong id="companion-persona-heading">小岚人设</strong></div><small>设定她是谁、怎么说话和哪些事不能做</small></div>
+                <div className="companion-settings-form companion-persona-form">
+                  <label className="field-label">小岚的年龄 / 人格阶段（可选）<input maxLength={80} value={personaDraft.companionProfile?.ageStage || ""} placeholder="例如：25 岁，或年轻的桌面伙伴" onChange={(event) => setPersonaDraft({ ...personaDraft, companionProfile: { ...personaDraft.companionProfile, ageStage: event.target.value } })} /></label>
+                  <label className="field-label">角色定位<input maxLength={160} value={personaDraft.role} onChange={(event) => setPersonaDraft({ ...personaDraft, role: event.target.value })} /></label>
+                  <label className="field-label">性格特征<textarea maxLength={240} value={personaDraft.traits} onChange={(event) => setPersonaDraft({ ...personaDraft, traits: event.target.value })} /></label>
+                  <label className="field-label">表达风格<textarea maxLength={240} value={personaDraft.speakingStyle} onChange={(event) => setPersonaDraft({ ...personaDraft, speakingStyle: event.target.value })} /></label>
+                  <label className="field-label">行为边界<textarea maxLength={500} value={personaDraft.boundaries} onChange={(event) => setPersonaDraft({ ...personaDraft, boundaries: event.target.value })} /></label>
+                </div>
+              </section>
+            </div>
+            {personaStatus.message && <Notice tone={personaStatus.state === "error" ? "warning" : "info"} title={personaStatus.state === "error" ? "我与小岚未保存" : "我与小岚已保存"}>{personaStatus.message}</Notice>}
+            <div className="companion-identity-footer"><p>明确资料优先于旧对话中的猜测；摘要和待审核记忆不会反向改写这里。自定义人设也不能越过白名单、密钥和硬件安全边界。</p><Button icon={DeviceFloppy} variant="primary" disabled={personaStatus.state === "saving" || sessionActive} onClick={() => { void savePersona(); }}>{personaStatus.state === "saving" ? "正在保存…" : "保存我与小岚"}</Button></div>
+          </Card>
         </div>
         <div className="companion-side-stack">
           <Card className="companion-automation-card">
@@ -557,31 +584,6 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
               <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.signalWindowCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由专用离线关键词模型通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已分析 ${conversation.wakeWord.audioWindowCount || 0} 个音频片段，检测到有效声音 ${conversation.wakeWord.signalWindowCount || 0} 次，关键词候选 ${conversation.wakeWord.heardCount || 0} 次，成功唤醒 ${conversation.wakeWord.wakeCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入三段式陪伴。前台显示“聆听中”时可直接继续说话，不必再叫名字；播报期间说出有效句子可以打断，杂音和播报回声不会触发。</Notice>
-          </Card>
-          <Card>
-            <SectionTitle index="04" title="关于我" description="你主动提供的稳定资料；小岚不会从闲聊猜测空白信息。" />
-            <div className="companion-settings-form companion-persona-form">
-              <label className="field-label">如何称呼你<input maxLength={32} value={personaDraft.ownerName || ""} onChange={(event) => setPersonaDraft({ ...personaDraft, ownerName: event.target.value })} /></label>
-              <label className="field-label">职业 / 身份（可选）<input maxLength={160} value={personaDraft.ownerProfile?.occupation || ""} placeholder="例如：产品经理、创业者、设计师" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, occupation: event.target.value } })} /></label>
-              <label className="field-label">最近在忙什么（可选）<textarea maxLength={300} value={personaDraft.ownerProfile?.currentFocus || ""} placeholder="例如：正在推进 DeskMate 内测和知识库整理" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, currentFocus: event.target.value } })} /></label>
-              <label className="field-label">年龄 / 人生阶段（可选）<input maxLength={80} value={personaDraft.ownerProfile?.ageStage || ""} placeholder="不填就是未知，也可以只写人生阶段" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, ageStage: event.target.value } })} /></label>
-              <label className="field-label">希望小岚了解的其他背景（可选）<textarea maxLength={600} value={personaDraft.ownerProfile?.background || ""} placeholder="只填写你希望在对话中长期参考的背景" onChange={(event) => setPersonaDraft({ ...personaDraft, ownerProfile: { ...personaDraft.ownerProfile, background: event.target.value } })} /></label>
-              {personaStatus.message && personaStatus.scope === "owner" && <Notice tone={personaStatus.state === "error" ? "warning" : "info"} title={personaStatus.state === "error" ? "关于我未保存" : "关于我已保存"}>{personaStatus.message}</Notice>}
-              <Button icon={DeviceFloppy} variant="primary" disabled={personaStatus.state === "saving" || sessionActive} onClick={() => { void savePersona("owner"); }}>{personaStatus.state === "saving" && personaStatus.scope === "owner" ? "正在保存…" : "保存关于我"}</Button>
-            </div>
-            <Notice tone="info" title="资料与记忆分开">这里的内容由你明确填写，每轮都可稳定参考；自动对话摘要和长期记忆仍要经过审核，不会反过来悄悄改写你的资料。</Notice>
-          </Card>
-          <Card>
-            <SectionTitle index="05" title="陪伴人设" description="小岚的人格、表达和行为边界；每次新会话冻结一个版本。" />
-            <div className="companion-settings-form companion-persona-form">
-              <label className="field-label">角色定位<input maxLength={160} value={personaDraft.role} onChange={(event) => setPersonaDraft({ ...personaDraft, role: event.target.value })} /></label>
-              <label className="field-label">性格特征<textarea maxLength={240} value={personaDraft.traits} onChange={(event) => setPersonaDraft({ ...personaDraft, traits: event.target.value })} /></label>
-              <label className="field-label">表达风格<textarea maxLength={240} value={personaDraft.speakingStyle} onChange={(event) => setPersonaDraft({ ...personaDraft, speakingStyle: event.target.value })} /></label>
-              <label className="field-label">行为边界<textarea maxLength={500} value={personaDraft.boundaries} onChange={(event) => setPersonaDraft({ ...personaDraft, boundaries: event.target.value })} /></label>
-              {personaStatus.message && personaStatus.scope === "persona" && <Notice tone={personaStatus.state === "error" ? "warning" : "info"} title={personaStatus.state === "error" ? "人设未保存" : "人设已保存"}>{personaStatus.message}</Notice>}
-              <Button icon={DeviceFloppy} variant="primary" disabled={personaStatus.state === "saving" || sessionActive} onClick={() => { void savePersona("persona"); }}>{personaStatus.state === "saving" && personaStatus.scope === "persona" ? "正在保存…" : "保存人设"}</Button>
-            </div>
-            <Notice tone="info" title="不可覆盖的安全边界">自定义人设不会获得执行命令、读取密钥或操控未接入硬件的权限；桌面动作仍必须通过白名单确认桥。</Notice>
           </Card>
           <Card>
             <SectionTitle index="06" title="设备与服务" description="真实状态与待接入状态分开显示。" />

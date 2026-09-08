@@ -278,8 +278,10 @@ test("T21J main wires shared context, per-question retrieval and wake greeting w
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   assert.match(main, /dialogueContext: companionDialogueContext/);
   assert.match(main, /readMemoryContext: \(text\) => companionMemoryStore.reviewedContextForQuery\(text\)/);
+  assert.match(main, /readPersona: \(\) => \(\{ name: companionPreferenceStore\.get\(\)\.name, persona: companionPersonaStore\.snapshot\(\)\.persona \}\)/);
   assert.match(main, /wakeGreeting: reason === "wake-word"/);
   assert.match(main, /companionDialogueContext.clear\(\)/);
-  const report = createDiagnosticReport({ conversation: { pipeline: { version: 1, provider: "three-stage", context: { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, content: "私密对话" } } } });
+  const report = createDiagnosticReport({ conversation: { pipeline: { version: 1, provider: "three-stage", context: { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, content: "私密对话" } } } });
+  assert.deepEqual(report.conversation.pipeline.context, { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true });
   assert.doesNotMatch(JSON.stringify(report), /私密对话/);
 });

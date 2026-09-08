@@ -52,3 +52,13 @@ final result: passed
 - Existing DeskMate type, spacing, border, blue emphasis, Tabler icons and card language are reused. No new visual asset or competing design system was introduced.
 
 final result: passed
+
+# Design QA
+
+## T21L companion identity layout
+
+- Reference: `C:\Users\ADMINI~1\AppData\Local\Temp\codex-clipboard-2cf084d4-dfbb-4c5b-a45c-76a674ad4c0f.png`
+- Target viewport: existing DeskMate desktop layout at the user's current Windows scaling.
+- Implemented: the previously empty wide area beneath the working-state test now contains one two-column identity card. “关于我” and “小岚人设” share one save action, use the existing light-card/blue-accent system and collapse to one column below 900 px.
+- Functional checks: DOM/layout contract tests, responsive CSS assertions, production Vite build and Electron packaging passed.
+- Visual comparison status: **BLOCKED**. This Codex session has no supported browser/computer screenshot connector for capturing the live Electron window, and the Product Design workflow does not permit introducing Playwright without the user's browser approval. The supplied reference screenshot was inspected at original resolution; final pixel/layout inspection remains a user-visible desktop acceptance step after launch.

@@ -8,13 +8,13 @@
 
 > **主 Agent 总控快照（2026-09-08，以下内容优先于本节后面的历史分支记录）**
 >
-> T10D-D、T15/T15D V2 和本地关键词唤醒继续保持用户真机验收基线。当前 T21K 保留 T21J 最近 24 小时上下文和审核后长期记忆检索，并修正前台十秒空闲计时：检测到服务端 speech-start 或有效 partial 后从最后语音活动重新计时，避免用户已开口而最终句尚未形成时被收起。陪伴页新增与“小岚人设”分离的“关于我”，明确保存称呼、职业/身份、当前重点、可选年龄/人生阶段和补充背景；空白不推测，自动摘要不能改写。完整自动回归 474/474 和 Windows 包已通过；自然停顿后的迟开口、资料感知回答以及 T21H/T21I 公放插话仍待用户观察。现有两板固件冻结，不增加硬件、人物识别、其他 Agent 或音频下行。
+> T10D-D、T15/T15D V2 和本地关键词唤醒继续保持用户真机验收基线。当前 T21L 保留 T21J 最近 24 小时上下文、审核后长期记忆检索和 T21K 的语音活动计时。诊断证明“关于我”已真实落盘，但旧实现只把英文键 JSON 交给模型，缺少当前资料优先级。T21L 将称呼、年龄/人生阶段、职业和近期事项变为本地可信问答，并以中文字段和 current 优先级继续供普通对话使用；小岚新增可选年龄/人格阶段。“关于我”与“小岚人设”并排移入主内容区并合并保存，减少窄侧栏滚动。完整自动回归 475/475 和 Windows 包已通过；资料问答、视觉排版与持续公放对话仍待用户观察。现有两板固件冻结，不增加硬件、人物识别、其他 Agent 或音频下行。
 
 #### Current source-of-truth map
 
 | Track | Exact branch / HEAD | Accepted evidence | Current classification |
 | --- | --- | --- | --- |
-| T21/T21K three-stage dialogue continuity, speech activity and owner profile | `codex/t21-three-stage-streaming-companion@525cc6da2d3965f9d7cf7466af2b1f813bf7fe19` | T21J main-owned 24h/reviewed retrieval plus activity-refreshed ten-second idle deadline and user-explicit profile separate from assistant persona; Desktop `474/474`, Windows package and native self-test passed, exact package activated | `T21K_CODE_BUILD_CONFIRMED / EXACT_PACKAGE_RUNNING / OWNER_PROFILE_AND_LATE_SPEECH_HIL_PENDING / T21G_WAKE_HIL_ACCEPTED / FIRMWARE_UNCHANGED` |
+| T21/T21L three-stage dialogue continuity and explicit identity | `codex/t21-three-stage-streaming-companion` (exact delivery HEAD recorded in latest progress) | T21J main-owned 24h/reviewed retrieval, T21K activity-refreshed idle deadline, current owner-profile deterministic answers and paired owner/companion identity layout; Desktop `475/475`, Windows package and native self-test passed | `T21L_CODE_BUILD_CONFIRMED / EXACT_PACKAGE_READY / PROFILE_AND_LAYOUT_HIL_PENDING / T21G_WAKE_HIL_ACCEPTED / FIRMWARE_UNCHANGED` |
 | T20 current software closure | `codex/t18-software-closure@fef3ebdaaa8b8ef937d531fbc7a2aa08d15d0bcf` | Hidden local background wake; 4-second utterance endpoint; 10-second foreground idle exit; debounced wake; generated action cues and dance beat; Desktop `419/419`, package and local listener smoke passed | `WINDOWS_CODE_BUILD_CONFIRMED / EXACT_RUNTIME_READY / USER_WAKE_AND_TIMING_HIL_PENDING / FIRMWARE_UNCHANGED` |
 | T15/T16 current integration | `codex/t15-t16-integration@42138d7aab8180941efc5ec387edeb78608a8635` | Fixed and adjustable actions, active custom dance and native V2 path physically accepted; both exact T15D V2 apps flashed/read back; Desktop `378/378`, package and native self-test passed | `T15D_HIL_ACCEPTED / DUAL_V2_FIRMWARE_FLASH_VERIFIED / FROZEN_BASELINE` |
 | T15D physical choreography | implementation `d6ffb595dd4ea20decdfe6f114c5ffe56838e83c`, activation UX merged at `563c58b`, native repair `0bf131dacb73c0dd6c8d420b4620de1ae3ffe110` | Frozen Host `0x1A/0x1B` V2 and Link `0x26/0x27`; maximum Pitch, independent speed/angle settings and custom choreography all passed user observation | `V2_WIRE_FROZEN / DUAL_FIRMWARE_FLASH_VERIFIED / PHYSICAL_HIL_ACCEPTED / NO_REFLASH_REQUIRED` |

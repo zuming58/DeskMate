@@ -194,8 +194,10 @@ test("Companion DOM and CSS keep independent columns, explicit save, and bounded
   const app = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
   const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
-  assert.match(companion, /className="companion-primary-column"[\s\S]*className="companion-stage"[\s\S]*<AgentStateTestPanel/);
+  assert.match(companion, /className="companion-primary-column"[\s\S]*className="companion-stage"[\s\S]*<AgentStateTestPanel[\s\S]*title="我与小岚"/);
   assert.match(companion, /className="companion-side-stack"[\s\S]*陪伴提醒[\s\S]*陪伴对话设置[\s\S]*设备与服务[\s\S]*语音互斥边界/);
+  assert.match(companion, /className="companion-identity-grid"[\s\S]*关于我[\s\S]*小岚人设[\s\S]*小岚的年龄 \/ 人格阶段/);
+  assert.ok(companion.indexOf("title=\"我与小岚\"") < companion.indexOf("className=\"companion-side-stack\""));
   assert.match(companion, /保存陪伴设置/);
   assert.match(companion, /下一次新建陪伴会话生效/);
   assert.match(companion, /sessionActive \? conversation\.sessionPolicy\?\.sessionApplied\?\.name/);
@@ -205,6 +207,7 @@ test("Companion DOM and CSS keep independent columns, explicit save, and bounded
   assert.match(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /aspect-ratio:/);
   assert.match(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /max-height:/);
   assert.doesNotMatch(styles.match(/\.companion-stage__face \{[^}]*\}/)?.[0] || "", /flex:\s*1/);
+  assert.match(styles.match(/\.companion-identity-grid \{[^}]*\}/)?.[0] || "", /repeat\(2/);
 });
 
 test("renderer shell declares the store patch action used while hydrating companion preferences", () => {

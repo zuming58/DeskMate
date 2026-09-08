@@ -1,5 +1,5 @@
 const { endpointForWorkspace } = require("./bailian.cjs");
-const { buildPersonaInstructions } = require("./companion-persona.cjs");
+const { buildPersonaInstructions, normalizePersona } = require("./companion-persona.cjs");
 const { cleanVisibleText } = require("./companion-speech-segmenter.cjs");
 const { CompanionDialogueContext, MAX_CONTEXT_MESSAGES } = require("./companion-dialogue-context.cjs");
 
@@ -78,7 +78,17 @@ class OpenAiStreamingCompanionModelAdapter {
   }
 
   interruptResponse() { this.dialogueContext.markInterrupted(this.currentEntry); }
-  diagnostics() { return this.dialogueContext.status(); }
+  diagnostics() {
+    const status = this.dialogueContext.status();
+    const persona = normalizePersona(this.personaOptions.persona);
+    const ownerProfileConfiguredFields = Object.values(persona.ownerProfile).filter(Boolean).length;
+    return Object.freeze({
+      ...status,
+      personaSchemaVersion: persona.version,
+      ownerProfileConfiguredFields,
+      companionAgeConfigured: Boolean(persona.companionProfile.ageStage),
+    });
+  }
 
   async streamTurn({ text, signal, onDelta = () => {} } = {}) {
     const userText = cleanVisibleText(text).trim();

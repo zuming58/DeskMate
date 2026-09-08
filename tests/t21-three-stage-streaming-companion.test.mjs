@@ -43,6 +43,7 @@ test("T21 companion model streams only visible content and keeps bounded multi-t
   const adapter = new OpenAiStreamingCompanionModelAdapter({
     config: { provider: "custom", endpoint: "https://model.example/v1/chat/completions", apiKey: "secret-value", model: "companion-model" },
     name: "小言",
+    persona: { ownerName: "测试用户", ownerProfile: { occupation: "独立创作者", currentFocus: "整理资料", ageStage: "成年", background: "" }, companionProfile: { ageStage: "年轻伙伴" } },
     fetchImpl: async (_url, options) => {
       requests.push(JSON.parse(options.body));
       return streamResponse(replies.shift());
@@ -61,6 +62,8 @@ test("T21 companion model streams only visible content and keeps bounded multi-t
   assert.match(requests[0].messages[0].content, /不超过 6 句或 300 个汉字/);
   assert.match(requests[0].messages[0].content, /用户的话已经通过麦克风成功送达/);
   assert.match(requests[0].messages[0].content, /不得声称没有麦克风、只能文字聊天/);
+  assert.match(requests[0].messages[0].content, /年龄 \/ 人生阶段":"成年/);
+  assert.deepEqual({ personaSchemaVersion: adapter.diagnostics().personaSchemaVersion, ownerProfileConfiguredFields: adapter.diagnostics().ownerProfileConfiguredFields, companionAgeConfigured: adapter.diagnostics().companionAgeConfigured }, { personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true });
 });
 
 test("T21 companion model rejects tool-call drafts instead of speaking them", () => {

@@ -1,5 +1,14 @@
 # Decisions
 
+## D110 - Current explicit identity wins over stale dialogue inference
+
+- Date: 2026-09-08
+- Decision: saved owner name, age/life stage, occupation and current focus have a local deterministic answer path for direct questions. Ordinary conversation still receives the complete bounded profile, now with Chinese field labels and explicit current priority. A previous conversational answer such as “不知道” cannot override a newly saved explicit field. Blank fields still fail truthfully instead of being invented.
+- Companion identity: companion age/personality stage is a separate optional field alongside role, traits, speaking style and boundaries. Owner profile and companion persona share one visible identity card and one atomic save/readback action, while retaining separate data namespaces.
+- Privacy and authority: diagnostics expose only schema version and configured-field counts, never profile values. Identity fields do not expand application, command, network or hardware authority.
+- Reason: the T21K diagnostic and local store proved that the owner age was saved, while the model-only English-key JSON path gave no reliable evidence it was applied and could be weakened by stale conversation context. The deterministic path makes explicit facts observable without bypassing safety or long-term-memory review.
+- Boundary: Windows software only; no firmware, HID, Link, motion or device write.
+
 ## D109 - Explicit owner profile is not inferred memory, and idle means no speech activity
 
 - Date: 2026-09-08

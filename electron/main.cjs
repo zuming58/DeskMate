@@ -67,7 +67,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21k-owner-profile-speech-activity";
+const DESKMATE_BUILD_ID = "t21l-profile-activation-layout";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -1313,6 +1313,7 @@ app.whenReady().then(async () => {
       return runMotionPreset({ preset, repeat, source: "voice" });
     },
     mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
+    readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona }),
   });
   hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });

@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes the explicit T21K owner-profile and speech-activity build identity", () => {
+test("current package exposes the explicit T21L profile-activation and layout build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t21k-owner-profile-speech-activity/);
+  assert.match(main, /t21l-profile-activation-layout/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

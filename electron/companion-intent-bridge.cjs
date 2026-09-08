@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { requestTextModelJson } = require("./text-model-json.cjs");
 const { summarizeCodexWork } = require("./codex-work-summary.cjs");
+const { explicitProfileAnswer } = require("./companion-persona.cjs");
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TOKEN_TTL_MS = 60_000;
@@ -80,13 +81,14 @@ function shouldClassifyWithModel(value, apps = []) {
 }
 
 class CompanionIntentBridge {
-  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
+  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, readPersona = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
     this.loadSecret = loadSecret;
     this.appActions = appActions;
     this.codexStatus = codexStatus;
     this.codexTasks = codexTasks;
     this.motionAction = motionAction;
     this.mediaAction = mediaAction;
+    this.readPersona = readPersona;
     this.requestJson = requestJson;
     this.now = now;
     this.createToken = createToken;
@@ -105,6 +107,16 @@ class CompanionIntentBridge {
     if ((this.codexTasks?.list?.().length || 0) > 0) this.codexContextExpiresAt = this.now() + TOKEN_TTL_MS;
   }
 
+  profileAnswer(source) {
+    if (typeof this.readPersona !== "function") return null;
+    try {
+      const current = this.readPersona() || {};
+      return explicitProfileAnswer(source, current.persona || current, current.name);
+    } catch {
+      return null;
+    }
+  }
+
   claimsTurn(text) {
     const source = String(text || "").trim().slice(0, 4000);
     if (!source) return false;
@@ -113,7 +125,8 @@ class CompanionIntentBridge {
     const contextualFollowUp = hasKnownTasks && this.codexContextExpiresAt > this.now() && isContextualCodexStatusFollowUp(source);
     const applicationMatch = matchRegisteredApplication(source, this.appActions?.listRegistered?.({ limit: 100 }) || []);
     return Boolean(
-      isCodexStatusQuery(source, { hasKnownTasks })
+      this.profileAnswer(source)
+      || isCodexStatusQuery(source, { hasKnownTasks })
       || namedFollowUp
       || contextualFollowUp
       || (!isMotionNegation(source) && motionPresetFromUtterance(source))
@@ -154,6 +167,11 @@ class CompanionIntentBridge {
   async analyze(text) {
     const source = String(text || "").trim().slice(0, 4000);
     if (!source) return { ok: true, proposal: null };
+    const profile = this.profileAnswer(source);
+    if (profile) {
+      this.last = { status: "completed", type: "query_companion_profile", label: "已按明确保存的资料回答", reason: "", expiresAt: 0 };
+      return { ok: true, proposal: null, result: { type: "query_companion_profile", ok: true, field: profile.type, answer: profile.answer } };
+    }
     const deterministic = this.resolveDeterministic(source);
     if (deterministic) return deterministic;
     if (isMotionNegation(source)) {
