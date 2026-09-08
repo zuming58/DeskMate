@@ -11,7 +11,7 @@ const DEFAULT_TRUSTED_SPEECH_TIMEOUT_MS = 12000;
 const DEFAULT_TRUSTED_AUDIO_QUIET_MS = 1800;
 const DEFAULT_IDLE_TIMEOUT_MS = COMPANION_PREFERENCES_DEFAULT.idleTimeoutMs;
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
-const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout", "trusted-timeout"]);
+const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "recognized-speech", "stop", "provider", "drain-timeout", "trusted-timeout"]);
 const PROVIDER_EVENT_NAMES = new Set([
   "none", "audio", "tts-start", "tts-end", "session-ready", "session-finished",
   "session-failed", "connection-started", "connection-failed", "connection-finished",
@@ -190,7 +190,8 @@ class CompanionConversationController {
   }
 
   microphoneUplinkAllowed() {
-    return Boolean(this.active) && this.halfDuplexPhase === "listening" && !this.playbackDraining && !this.stopPromise;
+    const recognizedSpeechBargeIn = this.providerLabel === "three-stage" && this.halfDuplexPhase === "speaking";
+    return Boolean(this.active) && (this.halfDuplexPhase === "listening" || recognizedSpeechBargeIn) && !this.playbackDraining && !this.stopPromise;
   }
 
   setHalfDuplexPhase(phase) {
@@ -584,7 +585,7 @@ class CompanionConversationController {
       this.turnLifecycle.chatFinalTtsEndPairs += 1;
     }
     const isAsr = ["asr.partial", "asr.final"].includes(event?.type);
-    const suppressAsr = isAsr && asrArrivalPhase !== "listening";
+    const suppressAsr = isAsr && asrArrivalPhase !== "listening" && event?.bargeIn !== true;
     if (["transport-error", "transport-close"].includes(providerEvent)) this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "reconnecting");
     else if (event?.type === "error") this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "error");
     else if (event?.type === "asr.final" && !suppressAsr) this.setHalfDuplexPhase("thinking");
@@ -595,13 +596,31 @@ class CompanionConversationController {
     return Object.freeze({ sequence, phase, providerEvent, terminalEvent, asrArrivalPhase, suppressAsr });
   }
 
+  prepareRecognizedBargeIn(event = {}, token) {
+    if (event.type !== "barge.start" || !this.isCurrent(token)) return null;
+    this.pendingTrustedResponse = null;
+    this.trustedResponseActive = false;
+    this.clearTrustedSpeechTimer();
+    this.markTtsTurnInterrupted("recognized-speech");
+    if (event.hadTts) {
+      this.discardResponseUntilTtsEnd = true;
+      this.postInterruptState = "listening";
+    } else {
+      this.discardResponseUntilTtsEnd = false;
+      this.postInterruptState = "";
+    }
+    return Promise.resolve(this.audioSink.interrupt("asr-final")).catch(() => ({ ok: false, reason: "companion-audio-interrupt-failed" }));
+  }
+
   createProvider(token) {
     const providerEpoch = ++this.providerEpoch;
     return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, sessionTranscriptContext: this.sessionTranscriptContext, onEvent: (event) => {
+      const bargeSinkInterrupt = this.prepareRecognizedBargeIn(event, token);
       const providerArrival = this.recordProviderArrival(event);
       const arrival = Object.freeze({
         ...providerArrival,
         providerEpoch,
+        bargeSinkInterrupt,
       });
       this.eventChain = this.eventChain.then(() => this.handleProviderEvent(event, token, arrival)).catch((error) => this.fail(error?.message || "companion-event-failed", token));
     } });
@@ -719,6 +738,13 @@ class CompanionConversationController {
       if (["doubao-connection-error", "doubao-connection-closed"].includes(event.message)) { void this.reconnect(token); return { ok: true, reconnecting: true }; }
       await this.fail(event.message || "companion-provider-error", token);
       return { ok: false };
+    }
+    if (event.type === "barge.start") {
+      if (arrival.bargeSinkInterrupt) await arrival.bargeSinkInterrupt;
+      else await this.prepareRecognizedBargeIn(event, token);
+      if (!event.hadTts && this.state !== "listening") await this.transition("listening", { reason: "recognized-speech-barge-in" });
+      this.onEvent({ type: "response.interrupted", reason: "recognized-speech", sessionId: this.active.sessionId, generation: this.active.generation });
+      return { ok: true, interrupted: true };
     }
     if (event.type === "asr.final") {
       const phase = HALF_DUPLEX_PHASES.has(arrival.asrArrivalPhase) ? arrival.asrArrivalPhase : "idle";

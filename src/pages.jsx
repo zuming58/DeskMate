@@ -347,6 +347,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     "wake-word-listener-stopped": "本地监听器连续恢复失败，请重新保存设置或重启 DeskMate",
     "wake-word-engine-unavailable": "Windows 本地语音识别器暂时不可用",
     "wake-word-microphone-starting": "正在连接 DeskMate 当前选择的电脑麦克风",
+    "wake-word-engine-starting": "Windows 本地中文识别器正在启动",
     "wake-word-audio-renderer-unavailable": "DeskMate 电脑麦克风桥尚未就绪",
     "wake-word-microphone-changed": "正在切换到新选择的电脑麦克风",
   })[conversation.wakeWord?.reason] || "后台监听会在前台语音空闲后自动恢复";
@@ -551,7 +552,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <Notice tone="info" title="唤醒词空闲时立即生效">名称和判停参数从下一次新建陪伴会话生效；本地唤醒短语保存后会立即重启后台监听器。{sessionActive ? "当前正在对话，结束后自动使用新唤醒短语。" : "当前空闲，可直接用新短语测试。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.heardCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由 Windows 本机中文识别器通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已检测到声音 ${conversation.wakeWord.heardCount || 0} 次，未命中 ${conversation.wakeWord.rejectedCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入三段式陪伴。前台显示“聆听中”时可直接继续说话，不必再叫名字。</Notice>
+            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.heardCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由 Windows 本机中文识别器通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已分析 ${conversation.wakeWord.audioWindowCount || 0} 个音频窗口，检测到声音 ${conversation.wakeWord.heardCount || 0} 次，未命中 ${conversation.wakeWord.rejectedCount || 0} 次，成功唤醒 ${conversation.wakeWord.wakeCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入三段式陪伴。前台显示“聆听中”时可直接继续说话，不必再叫名字；播报期间说出有效句子可以打断，杂音和播报回声不会触发。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />

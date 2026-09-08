@@ -8,7 +8,7 @@ const { CompanionSpeechSegmenter } = require("../electron/companion-speech-segme
 const { OpenAiStreamingCompanionModelAdapter, visibleDelta } = require("../electron/companion-model-adapter.cjs");
 const { BailianStreamingAsrAdapter } = require("../electron/streaming-asr-adapter.cjs");
 const { DoubaoStreamingTtsAdapter } = require("../electron/streaming-tts-adapter.cjs");
-const { ThreeStageCompanionProvider } = require("../electron/three-stage-companion-provider.cjs");
+const { ThreeStageCompanionProvider, classifyRecognizedBargeIn } = require("../electron/three-stage-companion-provider.cjs");
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -169,6 +169,64 @@ test("T21 partial text never reaches the model and duplicate final submits once"
   assert.deepEqual(fixture.spoken, ["收到。"]);
   assert.deepEqual(fixture.events.filter((event) => event.type === "tts.start").length, 1);
   assert.deepEqual(fixture.events.filter((event) => event.type === "tts.end").length, 1);
+});
+
+test("T21 recognized-speech barge-in rejects weak noise and spoken-answer echo", () => {
+  assert.deepEqual(classifyRecognizedBargeIn("嗯", "这里是回答"), { accepted: false, reason: "weak" });
+  assert.deepEqual(classifyRecognizedBargeIn("这里是回答", "祖名，这里是回答。后面还有一句。"), { accepted: false, reason: "echo" });
+  assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "祖名，这里是回答。"), { accepted: true, reason: "recognized-speech" });
+});
+
+test("T21 recognized partial interrupts current speech and its final opens exactly one replacement turn", async () => {
+  let asrEvent;
+  let modelCalls = 0;
+  let synthesisCalls = 0;
+  const events = [];
+  const provider = new ThreeStageCompanionProvider({
+    onEvent: (event) => events.push(event),
+    asrFactory: ({ onEvent }) => {
+      asrEvent = onEvent;
+      return { connect: async () => ({ ok: true }), sendAudio: () => true, close: () => {} };
+    },
+    modelFactory: () => ({
+      streamTurn: async ({ onDelta }) => {
+        modelCalls += 1;
+        const text = modelCalls === 1 ? "这是正在播报的原回答。" : "这是打断后的新回答。";
+        onDelta(text, text);
+        return { ok: true, text };
+      },
+      close: () => {},
+    }),
+    ttsFactory: () => ({
+      connect: async () => ({ ok: true }),
+      synthesize: async (_text, { onAudio, signal }) => {
+        synthesisCalls += 1;
+        onAudio(Buffer.from([1, 2]));
+        if (synthesisCalls !== 1) return { ok: true };
+        return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("three-stage-tts-cancelled")), { once: true }));
+      },
+      interrupt: () => true,
+      close: () => {},
+    }),
+  });
+  await provider.connect();
+  asrEvent({ type: "final", text: "请给我一个很长的回答" });
+  await tick();
+  await tick();
+  const beforeBarge = events.length;
+  asrEvent({ type: "partial", text: "这是正在播报" });
+  assert.equal(events.slice(beforeBarge).some((event) => event.type === "barge.start"), false);
+  asrEvent({ type: "partial", text: "等一下我想换个问题" });
+  asrEvent({ type: "final", text: "等一下我想换个问题" });
+  await tick();
+  await tick();
+  const after = events.slice(beforeBarge).map((event) => event.type);
+  assert.ok(after.indexOf("barge.start") >= 0);
+  assert.ok(after.indexOf("tts.end") > after.indexOf("barge.start"));
+  assert.ok(after.indexOf("asr.final") > after.indexOf("tts.end"));
+  assert.equal(modelCalls, 2);
+  assert.equal(provider.diagnostics().counters.bargeInsAccepted, 1);
+  assert.ok(provider.diagnostics().counters.bargeInsRejectedEcho >= 1);
 });
 
 test("T21 begins TTS on a stable sentence before the model final arrives", async () => {

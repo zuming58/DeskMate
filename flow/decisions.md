@@ -1,5 +1,12 @@
 # Decisions
 
+## D098 - Speech barge-in requires recognized text and local wake consumes finite memory windows
+
+- Date: 2026-09-08
+- Decision: only the T21 three-stage provider may keep its ASR uplink open while DeskMate is speaking. A meaningful ASR hypothesis that is neither a filler nor contained in the assistant text may cancel playback; raw amplitude and VAD cannot. A qualified partial stops playback promptly, while its later final remains the only text that opens the replacement turn. The Windows background wake child no longer passes a never-ending custom stream into `System.Speech`; it reads DeskMate-selected PCM into bounded rolling memory windows, recognizes each finite window locally and emits only content-free lifecycle/count events.
+- Reason: user HIL requires natural spoken interruption but explicitly rejects noise-triggered cancellation. A generated 16 kHz Chinese wake fixture proved the previous listener could report `listening` while consuming zero speech (`heard=0`, `wake=0`); the repaired finite-window path consumed the same PCM and produced one debounced wake. Separate microphone/engine readiness prevents the old false-ready display.
+- Boundary: no firmware, HID, Link or motion change; wake audio is neither saved nor uploaded. Legacy providers retain strict half duplex. Real room-noise, speaker-echo and human-voice behavior remains a user-present gate before acceptance.
+
 ## D097 - Doubao supplies voice only through caller-text direct speech
 
 - Date: 2026-09-08

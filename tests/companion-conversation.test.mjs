@@ -737,6 +737,40 @@ test("computer-speaker playback ignores reflected ASR and resumes uplink after t
   await controller.stop();
 });
 
+test("three-stage playback keeps ASR uplink open and recognized speech interrupts the local sink", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const commits = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    providerLabel: "three-stage",
+    audioSource: source,
+    audioSink: sink,
+    commitTurn: async (turn) => { commits.push(turn); },
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "recognized-barge-in", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  await controller.eventChain;
+  assert.equal(source.push(Buffer.from([7, 8])), true);
+  assert.equal(provider.audio.length, 1);
+  provider.emit({ type: "barge.start", hadTts: true });
+  assert.equal(sink.interruptions, 1);
+  provider.emit({ type: "tts.end" });
+  provider.emit({ type: "asr.final", text: "等一下我换个问题", bargeIn: true });
+  await controller.eventChain;
+  assert.equal(sink.interruptions, 1);
+  assert.equal(sink.chunks.length, 0);
+  assert.equal(commits.length, 1);
+  assert.equal(commits[0].role, "user");
+  assert.equal(controller.snapshot().state, "thinking");
+  assert.equal(controller.snapshot().turnLifecycle.lastTtsTurnOutcome, "recognized-speech");
+  await controller.stop();
+});
+
 test("tts end keeps working and suppresses uplink until the computer speaker has drained", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();

@@ -1,29 +1,6 @@
 const { spawn } = require("child_process");
 
-const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v1";
-const SEEKABLE_STDIN_STREAM_CSHARP = [
-  "using System;",
-  "using System.IO;",
-  "public sealed class DeskMateWakeInputStream : Stream {",
-  "  private readonly Stream inner;",
-  "  private long position;",
-  "  public DeskMateWakeInputStream(Stream input) { if (input == null) throw new ArgumentNullException(\"input\"); inner = input; }",
-  "  public override bool CanRead { get { return true; } }",
-  "  public override bool CanSeek { get { return true; } }",
-  "  public override bool CanWrite { get { return false; } }",
-  "  public override long Length { get { return long.MaxValue; } }",
-  "  public override long Position { get { return position; } set { if (value != position) throw new NotSupportedException(); } }",
-  "  public override void Flush() { }",
-  "  public override int Read(byte[] buffer, int offset, int count) { int read = inner.Read(buffer, offset, count); position += read; return read; }",
-  "  public override long Seek(long offset, SeekOrigin origin) {",
-  "    long target = origin == SeekOrigin.Begin ? offset : origin == SeekOrigin.Current ? position + offset : long.MaxValue + offset;",
-  "    if (target != position) throw new NotSupportedException();",
-  "    return position;",
-  "  }",
-  "  public override void SetLength(long value) { throw new NotSupportedException(); }",
-  "  public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }",
-  "}",
-].join("\n");
+const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v2";
 const PROBE_SCRIPT = [
   "$ErrorActionPreference='Stop'",
   "Add-Type -AssemblyName System.Speech",
@@ -41,6 +18,7 @@ const LISTENER_SCRIPT = [
   "$phrasesJson = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DESKMATE_WAKE_PHRASES))",
   "$phrases = @((ConvertFrom-Json $phrasesJson))",
   "if ($phrases.Count -lt 1) { exit 4 }",
+  "$normalizedPhrases = @($phrases | ForEach-Object { ([string]$_ -replace '[^\\p{L}\\p{Nd}]', '').ToLowerInvariant() } | Where-Object { $_ })",
   "$choices = New-Object System.Speech.Recognition.Choices",
   "$choices.Add([string[]]$phrases)",
   "$builder = New-Object System.Speech.Recognition.GrammarBuilder",
@@ -48,15 +26,41 @@ const LISTENER_SCRIPT = [
   "$builder.Append($choices)",
   "$grammar = New-Object System.Speech.Recognition.Grammar($builder)",
   "$engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine($recognizer)",
+  "$grammar.Name = 'bounded-exact'",
   "$engine.LoadGrammar($grammar)",
+  "try { $dictation = New-Object System.Speech.Recognition.DictationGrammar; $dictation.Name = 'local-fallback'; $engine.LoadGrammar($dictation) } catch { $dictation = $null }",
   "$threshold = [Double]::Parse($env:DESKMATE_WAKE_CONFIDENCE, [Globalization.CultureInfo]::InvariantCulture)",
-  "$engine.add_SpeechDetected({ [Console]::Out.WriteLine('{\"type\":\"heard\"}') })",
-  "$engine.add_SpeechRecognitionRejected({ [Console]::Out.WriteLine('{\"type\":\"rejected\"}') })",
-  "$engine.add_SpeechRecognized({ param($sender, $args); if ($args.Result.Confidence -ge $threshold) { [Console]::Out.WriteLine('{\"type\":\"wake\"}') } else { [Console]::Out.WriteLine('{\"type\":\"rejected\"}') } })",
-  "if ($env:DESKMATE_WAKE_AUDIO_MODE -eq 'stdin-pcm16') { $streamSource = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DESKMATE_WAKE_STREAM_TYPE)); Add-Type -TypeDefinition $streamSource; $format = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono); $wakeInput = [DeskMateWakeInputStream]::new([Console]::OpenStandardInput()); $engine.SetInputToAudioStream($wakeInput, $format) } else { $engine.SetInputToDefaultAudioDevice() }",
-  "$engine.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
-  "[Console]::Out.WriteLine('{\"type\":\"ready\"}')",
-  "while ($true) { Start-Sleep -Milliseconds 250 }",
+  "function Publish-WakeResult($result) { $heard = ([string]$result.Text -replace '[^\\p{L}\\p{Nd}]', '').ToLowerInvariant(); $matched = $false; foreach ($phrase in $normalizedPhrases) { if ($phrase -and $heard.Contains($phrase)) { $matched = $true; break } }; if ($matched -and $result.Confidence -ge $threshold) { [Console]::Out.WriteLine('{\"type\":\"wake\"}') } else { [Console]::Out.WriteLine('{\"type\":\"rejected\"}') } }",
+  "if ($env:DESKMATE_WAKE_AUDIO_MODE -eq 'stdin-pcm16') {",
+  "  $format = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)",
+  "  $input = [Console]::OpenStandardInput()",
+  "  $hopBytes = 32000",
+  "  $chunks = @()",
+  "  [Console]::Out.WriteLine('{\"type\":\"ready\"}')",
+  "  while ($true) {",
+  "    $hop = New-Object byte[] $hopBytes",
+  "    $offset = 0",
+  "    while ($offset -lt $hopBytes) { $read = $input.Read($hop, $offset, $hopBytes - $offset); if ($read -le 0) { exit 0 }; $offset += $read }",
+  "    [Console]::Out.WriteLine('{\"type\":\"audio-window\"}')",
+  "    $chunks += ,$hop",
+  "    if ($chunks.Count -gt 3) { $chunks = @($chunks[($chunks.Count - 3)..($chunks.Count - 1)]) }",
+  "    if ($chunks.Count -lt 2) { continue }",
+  "    $total = ($chunks | ForEach-Object { $_.Length } | Measure-Object -Sum).Sum",
+  "    $window = New-Object byte[] $total",
+  "    $cursor = 0",
+  "    foreach ($part in $chunks) { [Buffer]::BlockCopy($part, 0, $window, $cursor, $part.Length); $cursor += $part.Length }",
+  "    $memory = [System.IO.MemoryStream]::new($window, $false)",
+  "    try { $engine.SetInputToAudioStream($memory, $format); $result = $engine.Recognize(); if ($null -ne $result) { [Console]::Out.WriteLine('{\"type\":\"heard\"}'); Publish-WakeResult $result } } finally { $engine.SetInputToNull(); $memory.Dispose() }",
+  "  }",
+  "} else {",
+  "  $engine.add_SpeechDetected({ [Console]::Out.WriteLine('{\"type\":\"heard\"}') })",
+  "  $engine.add_SpeechRecognitionRejected({ [Console]::Out.WriteLine('{\"type\":\"rejected\"}') })",
+  "  $engine.add_SpeechRecognized({ param($sender, $args); Publish-WakeResult $args.Result })",
+  "  $engine.SetInputToDefaultAudioDevice()",
+  "  $engine.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
+  "  [Console]::Out.WriteLine('{\"type\":\"ready\"}')",
+  "  while ($true) { Start-Sleep -Milliseconds 250 }",
+  "}",
 ].join("; ");
 
 function encodedCommand(script) {
@@ -77,7 +81,7 @@ function cleanPhrases(value) {
 }
 
 class WindowsSpeechWakeWordAdapter {
-  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, onInputStart = () => {}, onInputStop = () => {}, externalAudio = false, confidence = 0.5, now = () => Date.now(), wakeDebounceMs = 3000, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
+  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, onInputStart = () => {}, onInputStop = () => {}, externalAudio = false, confidence = 0.45, now = () => Date.now(), wakeDebounceMs = 3000, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     this.platform = platform;
     this.spawnImpl = spawnImpl;
     this.onWake = onWake;
@@ -85,7 +89,7 @@ class WindowsSpeechWakeWordAdapter {
     this.onInputStart = onInputStart;
     this.onInputStop = onInputStop;
     this.externalAudio = externalAudio === true;
-    this.confidence = Math.max(0.5, Math.min(0.95, Number(confidence) || 0.5));
+    this.confidence = Math.max(0.42, Math.min(0.95, Number(confidence) || 0.45));
     this.now = now;
     this.schedule = schedule;
     this.cancelSchedule = cancelSchedule;
@@ -100,16 +104,20 @@ class WindowsSpeechWakeWordAdapter {
     this.restartTimer = null;
     this.restartAttempts = 0;
     this.inputReady = !this.externalAudio;
+    this.engineReady = false;
     this.heardCount = 0;
     this.rejectedCount = 0;
     this.wakeCount = 0;
+    this.audioWindowCount = 0;
     this.lastHeardAt = null;
     this.lastStatusEmitAt = 0;
     this.reason = this.available ? "wake-word-engine-not-probed" : "wake-word-windows-only";
   }
 
   status() {
-    return Object.freeze({ version: WAKE_WORD_ADAPTER_VERSION, available: this.available && this.probed, enabled: Boolean(this.process) && this.inputReady, desiredEnabled: this.desiredEnabled, reason: this.process ? this.inputReady ? "listening" : this.reason : this.reason, mode: "background-local", inputMode: this.externalAudio ? "deskmate-selected-microphone" : "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, heardCount: this.heardCount, rejectedCount: this.rejectedCount, wakeCount: this.wakeCount, lastHeardAt: this.lastHeardAt });
+    const enabled = Boolean(this.process) && this.inputReady && this.engineReady;
+    const reason = this.process ? !this.inputReady ? this.reason : this.engineReady ? "listening" : "wake-word-engine-starting" : this.reason;
+    return Object.freeze({ version: WAKE_WORD_ADAPTER_VERSION, available: this.available && this.probed, enabled, desiredEnabled: this.desiredEnabled, reason, mode: "background-local", inputMode: this.externalAudio ? "deskmate-selected-microphone" : "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: this.audioWindowCount, heardCount: this.heardCount, rejectedCount: this.rejectedCount, wakeCount: this.wakeCount, lastHeardAt: this.lastHeardAt });
   }
 
   emitStatus() { this.onStatus(this.status()); }
@@ -163,7 +171,8 @@ class WindowsSpeechWakeWordAdapter {
     this.configurationDirty = false;
     this.lastWakeAt = null;
     this.inputReady = !this.externalAudio;
-    const environment = { DESKMATE_WAKE_PHRASES: Buffer.from(JSON.stringify(this.phrases), "utf8").toString("base64"), DESKMATE_WAKE_CONFIDENCE: this.confidence.toFixed(2), DESKMATE_WAKE_AUDIO_MODE: this.externalAudio ? "stdin-pcm16" : "default-device", DESKMATE_WAKE_STREAM_TYPE: this.externalAudio ? Buffer.from(SEEKABLE_STDIN_STREAM_CSHARP, "utf8").toString("base64") : "" };
+    this.engineReady = false;
+    const environment = { DESKMATE_WAKE_PHRASES: Buffer.from(JSON.stringify(this.phrases), "utf8").toString("base64"), DESKMATE_WAKE_CONFIDENCE: this.confidence.toFixed(2), DESKMATE_WAKE_AUDIO_MODE: this.externalAudio ? "stdin-pcm16" : "default-device" };
     const child = this.spawnImpl("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand(LISTENER_SCRIPT)], { windowsHide: true, env: { ...process.env, ...environment } });
     this.process = child;
     this.reason = this.externalAudio ? "wake-word-microphone-starting" : "starting";
@@ -173,7 +182,11 @@ class WindowsSpeechWakeWordAdapter {
       const lines = buffer.split(/\r?\n/); buffer = lines.pop() || "";
       for (const line of lines) {
         let event; try { event = JSON.parse(line); } catch { continue; }
-        if (event.type === "ready") { this.reason = "listening"; this.emitStatus(); }
+        if (event.type === "ready") { this.engineReady = true; this.reason = this.inputReady ? "listening" : "wake-word-microphone-starting"; this.emitStatus(); }
+        if (event.type === "audio-window") {
+          this.audioWindowCount += 1;
+          if (this.audioWindowCount % 5 === 0) this.emitStatus();
+        }
         if (event.type === "heard") {
           this.heardCount += 1;
           this.lastHeardAt = new Date(this.now()).toISOString();
@@ -191,6 +204,7 @@ class WindowsSpeechWakeWordAdapter {
       if (this.process !== child) return;
       this.process = null;
       this.inputReady = !this.externalAudio;
+      this.engineReady = false;
       this.reason = reason;
       if (this.externalAudio) this.onInputStop();
       this.emitStatus();
@@ -210,7 +224,7 @@ class WindowsSpeechWakeWordAdapter {
   markInputReady() {
     if (!this.process || !this.externalAudio) return false;
     this.inputReady = true;
-    this.reason = "listening";
+    this.reason = this.engineReady ? "listening" : "wake-word-engine-starting";
     this.emitStatus();
     return true;
   }
@@ -252,6 +266,7 @@ class WindowsSpeechWakeWordAdapter {
     const child = this.process;
     this.process = null;
     this.inputReady = !this.externalAudio;
+    this.engineReady = false;
     this.configurationDirty = false;
     this.reason = String(reason || "foreground-audio-active").slice(0, 80);
     if (this.externalAudio) this.onInputStop();

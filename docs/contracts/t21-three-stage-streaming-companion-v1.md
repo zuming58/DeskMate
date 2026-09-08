@@ -2,6 +2,11 @@
 
 Status: `T21_THREE_STAGE_STREAMING_COMPANION_V1_FROZEN`
 
+The v1 no-automatic-barge-in boundary below is superseded only for this
+three-stage provider by
+[`T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`](./t21b-recognized-barge-in-and-local-wake-repair-v1.md).
+All other T21 rules remain frozen.
+
 This contract replaces the end-to-end realtime-dialogue provider inside the Windows companion path. It does not change Voice Input, HID, DeskMate Link, either firmware image, servo behavior, or hardware audio wiring.
 
 ## Product boundary

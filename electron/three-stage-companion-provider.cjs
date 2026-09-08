@@ -1,6 +1,24 @@
 const { CompanionSpeechSegmenter, cleanVisibleText } = require("./companion-speech-segmenter.cjs");
 
 const MAX_SPEECH_SEGMENTS = 16;
+const BARGE_IN_FILLERS = new Set(["嗯", "啊", "呃", "哦", "诶", "哎", "喂", "嗯嗯", "啊啊", "哦哦"]);
+
+function comparisonText(value) {
+  return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function classifyRecognizedBargeIn(candidate, assistantText = "") {
+  const normalized = comparisonText(candidate);
+  if (!normalized || BARGE_IN_FILLERS.has(normalized)) return Object.freeze({ accepted: false, reason: "weak" });
+  const meaningfulLength = [...normalized].length;
+  const explicitShortInterrupt = /^(停|等等|等一下|先停|别说|不是)$/.test(normalized);
+  if (meaningfulLength < 3 && !explicitShortInterrupt) return Object.freeze({ accepted: false, reason: "weak" });
+  const assistant = comparisonText(assistantText);
+  if (assistant && (assistant.includes(normalized) || (normalized.length >= 6 && normalized.includes(assistant)))) {
+    return Object.freeze({ accepted: false, reason: "echo" });
+  }
+  return Object.freeze({ accepted: true, reason: "recognized-speech" });
+}
 
 function stablePipelineReason(value) {
   const reason = String(value?.message || value || "");
@@ -24,12 +42,14 @@ class ThreeStageCompanionProvider {
     this.generation = 1;
     this.turnSequence = 0;
     this.activeTurn = null;
+    this.pendingBargeInFinal = false;
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
     this.counters = {
       asrPartials: 0, asrFinals: 0, duplicateFinals: 0, trustedBypasses: 0,
       modelRequests: 0, assistantDeltas: 0, ttsRequests: 0, ttsAudioChunks: 0,
       turnsCompleted: 0, cancellations: 0, errors: 0,
+      bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
     };
     this.lastTiming = {
       speechStarted: null, firstAsrPartialMs: null, asrFinalMs: null,
@@ -91,14 +111,45 @@ class ThreeStageCompanionProvider {
           firstTtsAudioMs: null, playbackStartedMs: null, turnCompletedMs: null,
         };
       }
-      this.emit({ type: "asr.partial", text: cleanVisibleText(event.text) });
+      const text = cleanVisibleText(event.text);
+      if (this.activeTurn) {
+        this.counters.bargeInCandidates += 1;
+        const classification = classifyRecognizedBargeIn(text, this.activeTurn.assistantText);
+        if (classification.accepted) {
+          this.counters.bargeInsAccepted += 1;
+          const turn = this.activeTurn;
+          const hadTts = Boolean(turn.ttsStarted && !turn.ttsEnded);
+          this.emit({ type: "barge.start", hadTts, diagnostic: { providerEvent: "other" } });
+          this.pendingBargeInFinal = true;
+          this.interrupt();
+        } else if (classification.reason === "echo") this.counters.bargeInsRejectedEcho += 1;
+        else this.counters.bargeInsRejectedWeak += 1;
+      }
+      this.emit({ type: "asr.partial", text });
       return;
     }
     if (event.type === "final") {
       const text = cleanVisibleText(event.text).trim();
       if (!text) return;
       const at = this.now();
-      if (this.activeTurn || (this.lastFinal.text === text && at - this.lastFinal.at < 3000)) {
+      let bargeIn = this.pendingBargeInFinal;
+      this.pendingBargeInFinal = false;
+      if (this.activeTurn) {
+        this.counters.bargeInCandidates += 1;
+        const classification = classifyRecognizedBargeIn(text, this.activeTurn.assistantText);
+        if (!classification.accepted) {
+          if (classification.reason === "echo") this.counters.bargeInsRejectedEcho += 1;
+          else this.counters.bargeInsRejectedWeak += 1;
+          return;
+        }
+        this.counters.bargeInsAccepted += 1;
+        bargeIn = true;
+        const turn = this.activeTurn;
+        const hadTts = Boolean(turn.ttsStarted && !turn.ttsEnded);
+        this.emit({ type: "barge.start", hadTts, diagnostic: { providerEvent: "other" } });
+        this.interrupt();
+      }
+      if (this.lastFinal.text === text && at - this.lastFinal.at < 3000) {
         this.counters.duplicateFinals += 1;
         return;
       }
@@ -118,7 +169,7 @@ class ThreeStageCompanionProvider {
         playbackStartedMs: null,
         turnCompletedMs: null,
       };
-      this.emit({ type: "asr.final", text });
+      this.emit({ type: "asr.final", text, bargeIn });
       let bypass = false;
       try { bypass = this.shouldBypassModel(text) === true; } catch { bypass = false; }
       if (bypass) {
@@ -219,6 +270,7 @@ class ThreeStageCompanionProvider {
     const content = cleanVisibleText(text, 240).trim();
     if (!content) return;
     const turn = this.newTurn("direct");
+    turn.assistantText = content;
     try {
       for (const segment of turn.segmenter.push(content)) this.queueSpeech(turn, segment);
       for (const segment of turn.segmenter.finish(content)) this.queueSpeech(turn, segment);
@@ -237,6 +289,7 @@ class ThreeStageCompanionProvider {
     this.lastTiming.turnCompletedMs = Math.max(0, this.now() - turn.startedAt);
     this.counters.turnsCompleted += 1;
     this.activeTurn = null;
+    this.pendingBargeInFinal = false;
     this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
   }
 
@@ -274,6 +327,7 @@ class ThreeStageCompanionProvider {
     const turn = this.activeTurn;
     if (turn) turn.abortController.abort("closed");
     this.activeTurn = null;
+    this.pendingBargeInFinal = false;
     this.ready = false;
     this.closed = true;
     this.generation += 1;
@@ -286,4 +340,4 @@ class ThreeStageCompanionProvider {
   }
 }
 
-module.exports = { MAX_SPEECH_SEGMENTS, ThreeStageCompanionProvider, stablePipelineReason };
+module.exports = { MAX_SPEECH_SEGMENTS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, stablePipelineReason };

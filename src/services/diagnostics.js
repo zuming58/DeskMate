@@ -11,7 +11,7 @@ const FAILURE_BUCKETS = new Set(["none", "request-invalid", "empty-audio", "audi
 const DIALOG_ERROR_STATUS_CLASSES = new Set(["none", "missing", "invalid", "request-invalid", "empty-audio", "audio-format-invalid", "audio-idle-timeout", "server-busy", "server-internal", "unknown-provider-error"]);
 const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacent"]);
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
-const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "stop", "provider", "drain-timeout"]);
+const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "recognized-speech", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
 const MANUAL_CALIBRATION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "unavailable"]);
 const MANUAL_CALIBRATION_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
@@ -179,6 +179,7 @@ export function createDiagnosticReport(input = {}) {
   const pipelineCountersSource = pipelineSource.counters || {};
   const pipelineTimingSource = pipelineSource.lastTiming || {};
   const turnSource = conversationSource.turnLifecycle || {};
+  const wakeSource = conversationSource.wakeWord || {};
   const intentBridgeSource = conversationSource.intentBridge || {};
   const asrPhaseSource = turnSource.asrFinalArrivalPhases || {};
   const sinkCancelSource = conversationSource.sinkCancelReasons || {};
@@ -238,8 +239,17 @@ export function createDiagnosticReport(input = {}) {
       provider: pipelineSource.provider === "three-stage" ? "three-stage" : "unavailable",
       ready: pipelineSource.ready === true,
       active: pipelineSource.active === true,
-      counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
+      counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsRejectedEcho", "bargeInsRejectedWeak"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
       timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
+    },
+    wakeWord: {
+      version: wakeSource.version === "windows-speech-wake-v2" ? wakeSource.version : "unavailable",
+      available: wakeSource.available === true,
+      enabled: wakeSource.enabled === true,
+      desiredEnabled: wakeSource.desiredEnabled === true,
+      reason: /^[a-z0-9-]{1,120}$/.test(String(wakeSource.reason || "")) ? String(wakeSource.reason) : "unavailable",
+      inputMode: ["deskmate-selected-microphone", "windows-system-default"].includes(wakeSource.inputMode) ? wakeSource.inputMode : "unavailable",
+      counters: Object.fromEntries(["audioWindowCount", "heardCount", "rejectedCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
     },
     turnLifecycle: {
       ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),

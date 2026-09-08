@@ -2,6 +2,11 @@
 
 Status: `T18_LOCAL_WAKE_AND_TRANSCRIPT_V1_FROZEN`
 
+The exact live-stream wake implementation below is superseded by the repaired,
+still-local in-memory window path in
+[`T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`](./t21b-recognized-barge-in-and-local-wake-repair-v1.md).
+Transcript normalization and all other T18 boundaries remain frozen.
+
 ## Scope
 
 This is a Windows-software-only addition. It changes no EasyInput or Xiaozhi
