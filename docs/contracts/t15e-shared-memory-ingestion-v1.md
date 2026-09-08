@@ -2,6 +2,10 @@
 
 ## Scope
 
+T21J extends manual multi-day catch-up, the default internal Markdown directory
+and per-question companion retrieval; see
+[`t21j-dialogue-memory-continuity-v1.md`](./t21j-dialogue-memory-continuity-v1.md).
+
 This contract applies to the DeskMate Windows application only. It does not change EasyInput firmware, Xiaozhi firmware, HID reports, DeskMate Link, OLED, servo, or audio wire protocols.
 
 ## Sources

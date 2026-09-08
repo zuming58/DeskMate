@@ -59,16 +59,17 @@ class KnowledgeBaseProjection {
       const previousHash = previous.files[relative];
       let currentHash = "";
       try { currentHash = hash(fs.readFileSync(target)); } catch { /* new file */ }
-      if (currentHash && previousHash && currentHash !== previousHash) {
+      const contentHash = hash(content);
+      if (currentHash && currentHash !== contentHash && (!previousHash || currentHash !== previousHash)) {
         conflicts += 1;
-        nextFiles[relative] = previousHash;
+        if (previousHash) nextFiles[relative] = previousHash;
         continue;
       }
-      const contentHash = hash(content);
       if (currentHash !== contentHash) { writeAtomic(target, content); written += 1; }
       nextFiles[relative] = contentHash;
     }
     for (const [relative, previousHash] of Object.entries(previous.files)) {
+      if (!/^(daily\/(companion|dictation)\/\d{4}-\d{2}-\d{2}\.md|memories\/[a-f0-9-]{16,64}\.md)$/.test(relative)) { conflicts += 1; continue; }
       if (desired.has(relative)) continue;
       const target = path.join(this.base, ...relative.split("/"));
       try {

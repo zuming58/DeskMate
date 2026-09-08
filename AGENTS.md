@@ -41,6 +41,7 @@
 - React 渲染进程不能直接读取密钥、Node API 或原始设备路径。
 - Electron 保持 `nodeIntegration: false`、`contextIsolation: true` 和最小化 preload/IPC。
 - 语音入口共用一个版本化状态机，不得复制第二套 VoiceWorkflow。
+- T21J 陪伴上下文由 Electron 主进程持有，不随音频连接关闭而清空；近期上下文和已审核长期检索必须分层，普通听写不接入陪伴回答模型。内部 Markdown 默认库、手动按日期补整理与后续用户指定目录遵循 `docs/contracts/t21j-dialogue-memory-continuity-v1.md`，不扫描任意资料。
 - 电脑麦克风、板载麦克风、STT、设备和 Agent 均通过适配器隔离。
 - 每次录音开始时必须锁定麦克风来源，录音期间不得切换；EasyInput 在开始前不可用时可明确提示并回退电脑麦克风，开始后断线只能安全结束当前录音，不能静默换源。
 - 实时陪伴使用电脑扬声器时默认严格轮流说话：播放期间停止麦克风上行并忽略回灌 ASR，手动打断或 `tts.end` 后才恢复聆听。自动免提插话必须另行完成 AEC/声学门验收。

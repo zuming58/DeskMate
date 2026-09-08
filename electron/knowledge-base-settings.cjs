@@ -7,6 +7,7 @@ function requireEncryption(safeStorage) {
 
 function createKnowledgeBaseSettings({ safeStorage, userDataPath } = {}) {
   const filePath = path.join(userDataPath, "knowledge-base-settings.json");
+  const internalRoot = path.join(userDataPath, "knowledge-base");
   const read = () => {
     try { return JSON.parse(fs.readFileSync(filePath, "utf8")); }
     catch { return { version: 1 }; }
@@ -21,7 +22,7 @@ function createKnowledgeBaseSettings({ safeStorage, userDataPath } = {}) {
   };
   const status = () => {
     const value = read();
-    if (!value.root) return { configured: false, storage: safeStorage?.isEncryptionAvailable?.() ? "windows-encrypted" : "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" };
+    if (!value.root) return { configured: true, storage: "application-local", label: "软件内置知识库", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" };
     try {
       const root = decryptRoot(value.root);
       const valid = path.isAbsolute(root) && fs.statSync(root).isDirectory();
@@ -42,7 +43,7 @@ function createKnowledgeBaseSettings({ safeStorage, userDataPath } = {}) {
   };
   const loadRoot = () => {
     const value = read();
-    if (!value.root) throw new Error("knowledge-base-location-not-configured");
+    if (!value.root) { fs.mkdirSync(internalRoot, { recursive: true }); return internalRoot; }
     const root = decryptRoot(value.root);
     if (!path.isAbsolute(root) || !fs.statSync(root).isDirectory()) throw new Error("knowledge-base-location-unavailable");
     return root;

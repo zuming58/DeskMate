@@ -735,7 +735,7 @@ class CompanionConversationController {
       return { ok: false, reason: "companion-trusted-response-unavailable" };
     }
     this.armTrustedSpeechTimer(response.text, token);
-    if (await this.commitFinalTurn("assistant", response.text, token)) {
+    if (await this.commitFinalTurn("assistant", response.text, token, { trusted: true })) {
       if (!this.isCurrent(token)) return { ignored: true };
       this.onEvent({ type: "turn.assistant-final", text: response.text, trusted: true, sessionId: this.active.sessionId, generation: this.active.generation });
     }

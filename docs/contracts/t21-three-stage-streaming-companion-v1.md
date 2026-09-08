@@ -7,6 +7,11 @@ three-stage provider by
 [`T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`](./t21b-recognized-barge-in-and-local-wake-repair-v1.md).
 All other T21 rules remain frozen.
 
+The context lifetime/size and wake greeting are amended by
+[`T21J_DIALOGUE_MEMORY_CONTINUITY_V1_FROZEN`](./t21j-dialogue-memory-continuity-v1.md):
+audio/provider closure no longer clears dialogue, and reviewed memory is retrieved
+for every ordinary companion question.
+
 This contract replaces the end-to-end realtime-dialogue provider inside the Windows companion path. It does not change Voice Input, HID, DeskMate Link, either firmware image, servo behavior, or hardware audio wiring.
 
 ## Product boundary

@@ -14,6 +14,7 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
+const { CompanionDialogueContext } = require("./companion-dialogue-context.cjs");
 const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
 const { CompanionMemoryPipeline } = require("./companion-memory-pipeline.cjs");
@@ -34,7 +35,7 @@ const { DoubaoStreamingTtsAdapter } = require("./streaming-tts-adapter.cjs");
 const { ThreeStageCompanionProvider } = require("./three-stage-companion-provider.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
-const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
+const { COMPANION_CALL_ACTION, wakeGreeting } = require("./companion-call.cjs");
 const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
 const { SherpaKeywordWakeWordAdapter } = require("./sherpa-keyword-wake-adapter.cjs");
 const { shouldUpdateCompanionOverlay } = require("./companion-overlay-policy.cjs");
@@ -66,7 +67,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21i-barge-final-recovery";
+const DESKMATE_BUILD_ID = "t21j-dialogue-memory-continuity";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -106,6 +107,7 @@ let companionPreferenceStore;
 let companionPersonaStore;
 let companionIntentBridge;
 let wakeWordAdapter;
+let companionDialogueContext;
 let wakeWordTransitioning = false;
 let wakeCaptureContext = null;
 let wakeCaptureGeneration = 0;
@@ -320,31 +322,16 @@ function handleCompanionConversationEvent(event = {}) {
 }
 
 async function commitCompanionTurn(turn) {
-  const { intentChecked = false, intentHandled = false, ...memoryTurn } = turn || {};
-  return companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
+  const { intentChecked = false, intentHandled = false, trusted = false, ...memoryTurn } = turn || {};
+  const result = companionMemoryStore.commitConversationTurn({ ...memoryTurn, source: "companion" });
+  if (result.inserted && (intentHandled || trusted)) companionDialogueContext.append(memoryTurn.role, memoryTurn.content);
+  return result;
 }
 
 async function generateConfiguredMemories() {
   const sources = companionMemoryPolicyStore.snapshot().enabledSources;
   if (!sources.length) return { ok: true, skipped: true, reason: "memory-no-enabled-sources", turns: 0, candidates: 0, sources: {}, projection: skippedProjection() };
-  const results = {};
-  let turns = 0;
-  let candidates = 0;
-  for (const source of sources) {
-    const days = companionMemoryStore.unprocessedDays({ source }).slice(0, 14);
-    if (!days.length) { results[source] = { ok: true, skipped: true, reason: "memory-no-unprocessed-turns", turns: 0, candidates: 0 }; continue; }
-    let last = null;
-    for (const day of days) {
-      last = await companionMemoryPipeline.processPending({ sources: [source], day });
-      if (!last?.ok) break;
-      turns += Number(last.turns) || 0;
-      candidates += Number(last.candidates) || 0;
-    }
-    results[source] = last;
-  }
-  const ok = Object.values(results).every((result) => result?.ok);
-  const projection = ok && turns > 0 ? companionMemoryGenerationCoordinator.projectIfConfigured() : skippedProjection();
-  return { ok, skipped: turns === 0, reason: turns === 0 ? "memory-no-unprocessed-turns" : "", warning: projection.warning, warningReason: projection.warning ? projection.reason : "", turns, candidates, sources: results, projection };
+  return companionMemoryGenerationCoordinator.processBacklog({ sources });
 }
 
 function loadTextModelSecret() {
@@ -1123,9 +1110,10 @@ async function startCompanionConversation(value = {}) {
   });
   if (!configured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: configured.reason, status: companionConversationStatus() }; }
   const savedPersona = companionPersonaStore.snapshot();
+  const greeting = value.wakeGreeting === true ? wakeGreeting(savedPersona.persona) : "";
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext(), hotwords: options.hotwords, rules: options.rules } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start({ ...lease, initialAnnouncement, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false });
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement: initialAnnouncement || greeting, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false });
   if (!result.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); }
   else void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
@@ -1162,7 +1150,7 @@ async function callCompanionConversation(reason = "companion-call") {
   if (["connecting", "stopping"].includes(snapshot.state)) return { ok: false, reason: "companion-call-busy", action: "busy", label: COMPANION_CALL_ACTION.label, status: companionConversationStatus() };
   if (["completed", "error"].includes(snapshot.state) && snapshot.active) await stopCompanionConversation("companion-call-restart");
   if (!companionIsActive()) {
-    const result = await startCompanionConversation(companionStartOptions);
+    const result = await startCompanionConversation({ ...companionStartOptions, wakeGreeting: reason === "wake-word" });
     return { ...result, action: result.ok ? "start-listening" : "start-failed", label: COMPANION_CALL_ACTION.label };
   }
   const result = await companionConversationController.call(reason);
@@ -1174,6 +1162,7 @@ app.whenReady().then(async () => {
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
+  companionDialogueContext = new CompanionDialogueContext({ seed: companionMemoryStore.recentCompanionContext() });
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
   companionMemoryPolicyStore = new CompanionMemoryPolicyStore({ userDataPath: app.getPath("userData") });
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
@@ -1226,6 +1215,8 @@ app.whenReady().then(async () => {
   motionAutomationCoordinator.on("status", (value) => sendToMain("motion-automation-status", value));
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
+  // Project already-summarized days too; no cloud call or raw-turn export.
+  companionMemoryGenerationCoordinator.projectIfConfigured();
   companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
     policyStore: companionMemoryPolicyStore,
     pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }),
@@ -1274,6 +1265,9 @@ app.whenReady().then(async () => {
         name: sessionPreferences.name,
         persona: sessionPersona,
         memoryContext: sessionMemoryContext,
+        dialogueContext: companionDialogueContext,
+        readMemoryContext: (text) => companionMemoryStore.reviewedContextForQuery(text),
+        readEarlierContext: (text, before) => companionMemoryStore.earlierCompanionContextForQuery(text, { before }),
       }),
       ttsFactory: () => new DoubaoStreamingTtsAdapter({
         config: { ...aiServiceStore.loadRealtimeSecret(), ...sessionPreferences, persona: sessionPersona, memoryContext: sessionMemoryContext },
@@ -1562,7 +1556,18 @@ app.whenReady().then(async () => {
     return result;
   });
   handleTrusted("memory:prepare-forget", (value = {}) => companionMemoryControl.prepareForget(value));
-  handleTrusted("memory:confirm-forget", (value = {}) => companionMemoryControl.confirmForget(value));
+  handleTrusted("memory:confirm-forget", async (value = {}) => {
+    const result = companionMemoryControl.confirmForget(value);
+    if (result.ok) {
+      // Cancel in-flight answers before a deleted fact can keep speaking or be
+      // reintroduced by stale stream callbacks. Forget never reloads raw turns.
+      companionDialogueContext.clear();
+      if (companionIsActive()) await stopCompanionConversation("memory-forgotten");
+      const projection = companionMemoryGenerationCoordinator.projectIfConfigured();
+      return { ...result, projection };
+    }
+    return result;
+  });
   handleTrusted("memory:export-reviewed", async () => {
     const payload = companionMemoryStore.exportReviewed();
     const selection = await dialog.showSaveDialog(mainWindow, { title: "导出 DeskMate 已审核记忆", defaultPath: "deskmate-reviewed-memory.json", filters: [{ name: "JSON", extensions: ["json"] }] });
@@ -1573,6 +1578,13 @@ app.whenReady().then(async () => {
     return { ok: true, dailySummaries: payload.dailySummaries.length, longTermMemories: payload.longTermMemories.length };
   });
   handleTrusted("memory:get-knowledge-base-status", () => knowledgeBaseSettings.status());
+  handleTrusted("memory:open-knowledge-base", async () => {
+    try {
+      const root = knowledgeBaseSettings.loadRoot();
+      const error = await shell.openPath(root);
+      return error ? { ok: false, reason: "knowledge-base-location-unavailable" } : { ok: true };
+    } catch { return { ok: false, reason: "knowledge-base-location-unavailable" }; }
+  });
   handleTrusted("memory:choose-knowledge-base", async () => {
     const selection = await dialog.showOpenDialog(mainWindow, { title: "选择 DeskMate 知识库目录", properties: ["openDirectory", "createDirectory"] });
     if (selection.canceled || selection.filePaths.length !== 1) return { ok: false, cancelled: true, status: knowledgeBaseSettings.status() };

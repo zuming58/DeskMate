@@ -239,6 +239,7 @@ export function createDiagnosticReport(input = {}) {
       provider: pipelineSource.provider === "three-stage" ? "three-stage" : "unavailable",
       ready: pipelineSource.ready === true,
       active: pipelineSource.active === true,
+      context: Object.fromEntries(["retainedMessages", "appliedMessages", "appliedReviewedMemories"].map((key) => [key, Math.max(0, Math.min(80, Number(pipelineSource.context?.[key]) || 0))])),
       counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsRejectedEcho", "bargeInsRejectedWeak", "bargeSpeechStarts", "bargeInsRejectedUnstable", "postPlaybackEchoDrops", "bargeFinalTimeouts", "bargeFinalRecoveries", "lateBargeFinalDrops"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
       timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
     },

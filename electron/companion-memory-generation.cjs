@@ -35,6 +35,41 @@ class CompanionMemoryGenerationCoordinator {
     this.store = store;
     this.knowledgeBaseSettings = knowledgeBaseSettings;
     this.projectionFactory = projectionFactory;
+    this.backlogActive = false;
+  }
+
+  async processBacklog({ sources = ["companion", "dictation"], maxBatches = 64 } = {}) {
+    if (this.backlogActive || this.pipeline.active) return { ok: false, reason: "memory-generation-active" };
+    this.backlogActive = true;
+    let turns = 0;
+    let candidates = 0;
+    let batches = 0;
+    let failed = false;
+    const days = new Set();
+    const results = {};
+    try {
+      const selected = [...new Set(sources)].filter((source) => ["companion", "dictation"].includes(source));
+      const jobs = selected.flatMap((source) => this.store.unprocessedDays({ source }).map((day) => ({ source, day })));
+      for (const job of jobs) {
+        while (batches < Math.max(1, Math.min(64, Number(maxBatches) || 64)) && this.store.listUnprocessedTurns({ sources: [job.source], day: job.day, limit: 1 }).length) {
+          batches += 1;
+          let result;
+          try { result = await this.pipeline.processPending({ sources: [job.source], day: job.day }); }
+          catch { result = { ok: false, reason: "memory-generation-failed" }; }
+          if (results[job.source]?.ok !== false) results[job.source] = result;
+          if (!result?.ok) { failed = true; break; }
+          if (!result.turns) break;
+          turns += result.turns;
+          candidates += Number(result.candidates) || 0;
+          days.add(job.day);
+        }
+      }
+      const remainingDays = new Set(selected.flatMap((source) => this.store.unprocessedDays({ source }))).size;
+      const ok = !failed;
+      // Existing successful days still get projected if a later request fails.
+      const projection = this.projectIfConfigured();
+      return { ok, skipped: !turns, turns, candidates, days: days.size, remainingDays, sources: results, projection, warning: projection.warning, warningReason: projection.warning ? projection.reason : "" };
+    } finally { this.backlogActive = false; }
   }
 
   projectIfConfigured() {

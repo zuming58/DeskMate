@@ -1,5 +1,13 @@
 # Decisions
 
+## D108 - Audio lifetime does not define companion memory lifetime
+
+- Date: 2026-09-08
+- Decision: Main owns bounded recent companion context across wake, trusted-provider replacement and reconnect; persisted recent finals seed a cold restart. Interrupted generated prefixes remain short-term and labelled possibly unheard. Each ordinary companion question locally retrieves approved memories using the existing vector/keyword index. Dictation output stays independent.
+- User extension: support manual multi-day semantic digest into date-named Markdown without requiring 24-hour uptime. Default projection is application-local; selecting an external folder changes future projection only and does not authorize arbitrary document scanning or overwriting.
+- Privacy: do not promote pending summaries to durable facts, do not persist ASR drafts/PCM, and do not put retrieved text, user data, keys or paths in diagnostics. Forget clears runtime context and stops the current answer.
+- Contract: [`T21J`](../docs/contracts/t21j-dialogue-memory-continuity-v1.md). No firmware or hardware changes.
+
 ## D107 - An accepted barge-in partial has a bounded final-recovery path
 
 - Date: 2026-09-08

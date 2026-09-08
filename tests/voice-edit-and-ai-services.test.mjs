@@ -94,17 +94,17 @@ test("voice editing reuses the voice pipeline and never outputs when the model f
 test("companion memory commits every turn before summaries and keeps candidates reviewable", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-memory-"));
   let now = 1000;
+  let store;
   try {
-    const store = new CompanionMemoryStore({ userDataPath: directory, now: () => now++ });
+    store = new CompanionMemoryStore({ userDataPath: directory, now: () => now++ });
     const first = store.appendTurn({ sessionId: "session-1", role: "user", content: "我喜欢深色主题" });
     store.appendTurn({ sessionId: "session-1", role: "assistant", content: "记住啦" });
     store.upsertDailySummary({ day: "2026-08-29", summary: "用户明确偏好深色主题。", sourceTurnCount: 2 });
     const candidate = store.addCandidate({ day: "2026-08-29", kind: "preference", summary: "用户偏好深色主题", sourceTurnIds: [first.id] });
-    assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 2, dailySummaries: 1, pendingCandidates: 1, longTermMemories: 0, embeddings: 0, unprocessedTurns: 2, indexedChunks: 0, sourceCounts: { companion: { turns: 2, unprocessed: 2 }, dictation: { turns: 0, unprocessed: 0 } } });
+    assert.deepEqual(store.status(), { ready: true, storage: "sqlite-wal", turns: 2, dailySummaries: 1, pendingCandidates: 1, longTermMemories: 0, embeddings: 0, unprocessedTurns: 2, unprocessedDays: 1, indexedChunks: 0, sourceCounts: { companion: { turns: 2, unprocessed: 2 }, dictation: { turns: 0, unprocessed: 0 } } });
     assert.equal(store.list({ filter: "candidates" })[0].content, "用户偏好深色主题");
     assert.equal(store.setCandidateState(candidate.id, "accepted").ok, true);
     assert.equal(store.status().longTermMemories, 1);
     assert.equal(store.list({ filter: "long-term", query: "深色" }).length, 1);
-    store.close();
-  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+  } finally { store?.close(); fs.rmSync(directory, { recursive: true, force: true }); }
 });

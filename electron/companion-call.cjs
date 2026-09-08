@@ -4,4 +4,9 @@ const COMPANION_CALL_ACTION = Object.freeze({
   label: "AI 陪伴呼唤",
 });
 
-module.exports = { COMPANION_CALL_ACTION };
+function wakeGreeting(persona = {}) {
+  const owner = String(persona.ownerName || "祖名").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 32);
+  return `在呢，${owner}。`;
+}
+
+module.exports = { COMPANION_CALL_ACTION, wakeGreeting };

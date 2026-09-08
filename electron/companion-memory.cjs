@@ -232,8 +232,15 @@ class CompanionMemoryStore {
     const normalizedSources = [...new Set((Array.isArray(sources) ? sources : []).map((source) => boundedSource(source)))];
     if (!normalizedSources.length) return [];
     const placeholders = normalizedSources.map(() => "?").join(",");
-    return this.db.prepare(`SELECT id, session_id AS sessionId, role, content, source, created_at AS createdAt FROM conversation_turns WHERE summary_day IS NULL AND source IN (${placeholders}) ORDER BY created_at ASC LIMIT ?`).all(...normalizedSources, boundedLimit)
-      .filter((turn) => !day || localDayAt(turn.createdAt) === day);
+    let start = 0;
+    let end = Number.MAX_SAFE_INTEGER;
+    if (day) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("memory-day-invalid");
+      const [year, month, date] = day.split("-").map(Number);
+      start = new Date(year, month - 1, date).getTime();
+      end = new Date(year, month - 1, date + 1).getTime();
+    }
+    return this.db.prepare(`SELECT id, session_id AS sessionId, role, content, source, created_at AS createdAt FROM conversation_turns WHERE summary_day IS NULL AND source IN (${placeholders}) AND created_at>=? AND created_at<? ORDER BY created_at ASC, rowid ASC LIMIT ?`).all(...normalizedSources, start, end, boundedLimit);
   }
 
   unprocessedDays({ source } = {}) {
@@ -249,7 +256,7 @@ class CompanionMemoryStore {
     return Boolean(this.db.prepare("SELECT 1 AS value FROM memory_digest_runs WHERE source=? AND day=? AND input_digest=?").get(normalizedSource, normalizedDay, digest)?.value);
   }
 
-  applyGeneratedMemory({ day, summary, candidates = [], turnIds = [], source = "companion", inputDigest, idempotencyKey } = {}) {
+  applyGeneratedMemory({ day, summary, candidates = [], turnIds = [], source = "companion", inputDigest, idempotencyKey, replacesSummary = false } = {}) {
     const normalizedDay = boundedText(day, "摘要日期", 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDay)) throw new Error("摘要日期格式无效");
     const normalizedSource = boundedSource(source);
@@ -276,7 +283,7 @@ class CompanionMemoryStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const existing = this.db.prepare("SELECT summary FROM daily_summaries WHERE day=? AND source=?").get(normalizedDay, normalizedSource);
-      const combinedSummary = existing?.summary ? `${existing.summary}\n\n${normalizedSummary}` : normalizedSummary;
+      const combinedSummary = existing?.summary && !replacesSummary ? `${existing.summary}\n\n${normalizedSummary}` : normalizedSummary;
       this.db.prepare("INSERT INTO daily_summaries (day, source, summary, source_turn_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(day, source) DO UPDATE SET summary=excluded.summary, source_turn_count=daily_summaries.source_turn_count+excluded.source_turn_count, updated_at=excluded.updated_at").run(normalizedDay, normalizedSource, combinedSummary, ids.length, at, at);
       const insert = this.db.prepare("INSERT OR IGNORE INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)");
       for (const item of normalizedCandidates) insert.run(item.id, normalizedDay, item.kind, item.summary, JSON.stringify(ids), at, at, scope);
@@ -297,6 +304,10 @@ class CompanionMemoryStore {
     return { dailySummaries, memories };
   }
 
+  dailySummaryFor({ source, day }) {
+    return this.db.prepare("SELECT summary FROM daily_summaries WHERE source=? AND day=?").get(boundedSource(source), String(day))?.summary || "";
+  }
+
   recentAcceptedContext({ limit = 12, maxCharacters = 4000 } = {}) {
     const rows = this.db.prepare("SELECT id, day, kind, summary, source FROM memory_candidates WHERE state='accepted' ORDER BY updated_at DESC LIMIT ?").all(Math.max(1, Math.min(30, Number(limit) || 12)));
     let used = 0;
@@ -308,6 +319,49 @@ class CompanionMemoryStore {
       used += summary.length;
     }
     return result;
+  }
+
+  recentCompanionContext({ since = this.now() - 86400000, limit = 80 } = {}) {
+    return this.db.prepare("SELECT role, content, created_at AS createdAt FROM conversation_turns WHERE source='companion' AND created_at>=? AND created_at<=? ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(Math.max(0, Number(since) || 0), this.now(), Math.max(1, Math.min(80, Number(limit) || 80))).reverse();
+  }
+
+  // Main-only retrieval: vectors are refreshed from accepted SQLite content,
+  // so corrections/deletions apply on the very next conversational question.
+  reviewedContextForQuery(query) {
+    const accepted = this.db.prepare("SELECT id, summary, updated_at FROM memory_candidates WHERE state='accepted' ORDER BY id").all();
+    const signature = createHash("sha256").update(JSON.stringify(accepted)).digest("hex");
+    if (this.contextIndexSignature !== signature) {
+      this.rebuildLocalIndex();
+      this.contextIndexSignature = signature;
+    }
+    const relevant = this.searchLongTermMemory({ query, limit: 8 }).filter((row) => row.score >= 0.12).map((row) => ({ ...row, summary: row.content }));
+    const selected = new Map();
+    let remaining = 4000;
+    for (const row of [...relevant, ...this.recentAcceptedContext({ limit: 4 })]) {
+      if (selected.has(row.id)) continue;
+      const summary = String(row.summary).slice(0, Math.min(500, remaining));
+      if (!summary) break;
+      selected.set(row.id, { day: row.day, kind: row.kind, source: row.source, summary });
+      remaining -= summary.length;
+    }
+    return [...selected.values()];
+  }
+
+  earlierCompanionContextForQuery(query, { before = this.now() + 1, limit = 6 } = {}) {
+    // Query only today's/recent 24h own companion text, never dictation, files,
+    // or other applications. Long conversations stay stored even off-prompt.
+    const rows = this.db.prepare("SELECT role, content, created_at AS createdAt FROM conversation_turns WHERE source='companion' AND created_at>=? AND created_at<? ORDER BY created_at ASC, rowid ASC")
+      .all(this.now() - 86400000, Math.min(before, this.now() + 1));
+    const target = embed(String(query || "").slice(0, 500));
+    const hits = rows.map((row, index) => ({ index, score: cosine(target, embed(row.content)) })).filter((hit) => hit.score >= 0.18).sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(6, Number(limit) || 6)));
+    const indexes = new Set();
+    for (const hit of hits) {
+      if (hit.index > 0 && rows[hit.index].role === "assistant") indexes.add(hit.index - 1);
+      indexes.add(hit.index);
+      if (rows[hit.index].role === "user" && rows[hit.index + 1]?.role === "assistant") indexes.add(hit.index + 1);
+    }
+    return [...indexes].sort((a, b) => a - b).map((index) => ({ ...rows[index], content: rows[index].content.slice(0, 700) })).slice(0, 12);
   }
 
   rebuildLocalIndex({ chunkLength = 480 } = {}) {
@@ -331,7 +385,12 @@ class CompanionMemoryStore {
       const upsertVector = this.db.prepare("INSERT INTO memory_chunk_embeddings (chunk_id, model, dimensions, vector, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(chunk_id) DO UPDATE SET model=excluded.model, dimensions=excluded.dimensions, vector=excluded.vector, created_at=excluded.created_at");
       let indexed = 0;
       let reused = 0;
-      const desiredIds = new Set();
+      const desiredIds = new Set(desired.map((item) => item.id));
+      let removed = 0;
+      const remove = this.db.prepare("DELETE FROM memory_chunks WHERE id=?");
+      // A content correction changes the chunk ID but retains candidate/ordinal.
+      // Remove replaced rows first to avoid the unique candidate/ordinal clash.
+      for (const id of existing.keys()) if (!desiredIds.has(id)) { remove.run(id); removed += 1; }
       for (const item of desired) {
         desiredIds.add(item.id);
         const current = existing.get(item.id);
@@ -340,9 +399,6 @@ class CompanionMemoryStore {
         upsertVector.run(item.id, LOCAL_EMBEDDING_MODEL, LOCAL_EMBEDDING_DIMENSIONS, encode(embed(item.content)), at);
         indexed += 1;
       }
-      let removed = 0;
-      const remove = this.db.prepare("DELETE FROM memory_chunks WHERE id=?");
-      for (const id of existing.keys()) if (!desiredIds.has(id)) { remove.run(id); removed += 1; }
       this.bumpRevision();
       this.db.exec("COMMIT");
       return { ok: true, model: LOCAL_EMBEDDING_MODEL, memories: memories.length, chunks: desired.length, indexed, reused, removed };
@@ -457,6 +513,7 @@ class CompanionMemoryStore {
       longTermMemories: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='accepted'"),
       embeddings: scalar("SELECT COUNT(*) AS value FROM memory_chunk_embeddings") + scalar("SELECT COUNT(*) AS value FROM memory_embeddings"),
       unprocessedTurns: scalar("SELECT COUNT(*) AS value FROM conversation_turns WHERE summary_day IS NULL"),
+      unprocessedDays: new Set([...TURN_SOURCES].flatMap((source) => this.unprocessedDays({ source }))).size,
       indexedChunks: scalar("SELECT COUNT(*) AS value FROM memory_chunk_embeddings"),
       sourceCounts,
     };

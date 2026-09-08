@@ -106,6 +106,7 @@ class ThreeStageCompanionProvider {
       playbackTailActive: Boolean(this.playbackTail),
       postPlaybackEchoTailActive: Boolean(this.postPlaybackEchoTail),
       awaitingBargeFinal: Boolean(this.pendingBargeInFinal),
+      context: this.model?.diagnostics?.() || {},
       counters: Object.freeze({ ...this.counters }),
       lastTiming: Object.freeze({ ...this.lastTiming }),
     });
@@ -493,7 +494,7 @@ class ThreeStageCompanionProvider {
     turn.ttsEnded = true;
     this.lastTiming.turnCompletedMs = Math.max(0, this.now() - turn.startedAt);
     this.counters.turnsCompleted += 1;
-    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText }) : null;
+    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText, kind: turn.kind }) : null;
     this.activeTurn = null;
     this.clearPendingBargeInFinal();
     this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
@@ -525,6 +526,7 @@ class ThreeStageCompanionProvider {
       return false;
     }
     this.counters.cancellations += 1;
+    if (turn?.kind === "model" || this.playbackTail?.kind === "model") this.model?.interruptResponse?.();
     if (turn) {
       turn.abortController.abort("interrupted");
       this.tts?.interrupt?.();

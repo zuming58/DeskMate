@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   confirmMemoryForget: (value) => ipcRenderer.invoke("memory:confirm-forget", value),
   exportReviewedMemories: () => ipcRenderer.invoke("memory:export-reviewed"),
   getKnowledgeBaseStatus: () => ipcRenderer.invoke("memory:get-knowledge-base-status"),
+  openKnowledgeBaseFolder: () => ipcRenderer.invoke("memory:open-knowledge-base"),
   chooseKnowledgeBaseLocation: () => ipcRenderer.invoke("memory:choose-knowledge-base"),
   generatePendingMemories: () => ipcRenderer.invoke("memory:generate-pending"),
   rebuildMemoryIndex: () => ipcRenderer.invoke("memory:rebuild-index"),

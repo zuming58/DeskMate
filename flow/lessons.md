@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A working memory page does not prove memory reaches the answering model
+
+- An adapter-local 12-message array lost history whenever the audio provider was replaced, while reviewed SQLite content was attached only at session creation. Test the actual controller's reconnect/tool/rewake routes and inspect the assembled synthetic model request, not just same-adapter two-turn tests.
+- Keep short-term dialogue outside transport adapters and retrieve reviewed memory per question. Validate correction as well as first indexing: content-derived chunk IDs can collide on the still-existing candidate/ordinal unique key unless superseded rows are removed first in the same transaction.
+- Filter source/date before SQL LIMIT. A manual catch-up button must drain bounded batches and report remainder; one batch per day silently leaves a long day's later records pending. Project completed dates even when later model calls fail, preserving raw source text.
+
 ## Streaming ASR drafts are not the same evidence as provider-confirmed text
 
 - Symptom: room noise no longer interrupts speech, yet a real user sentence is also ignored even though diagnostics count several ASR arrivals; a later verbose answer can then leave the whole conversation in an error state.

@@ -693,8 +693,10 @@ export function MemoryManagementPage({ notify }) {
     setBusy(true);
     try {
       const result = await globalThis.desktopBridge?.generatePendingMemories?.();
-      if (!result?.ok) throw new Error(result?.reason || "memory-generation-failed");
-      notify(result.skipped ? "当前没有待整理的真实对话回合" : result.warning ? `已生成每日摘要和 ${result.candidates} 条候选；双链同步未完成，可在知识库区域重试` : `已生成每日摘要和 ${result.candidates} 条待审核候选`);
+      if (!result) throw new Error("memory-generation-failed");
+      if (result.reason === "memory-no-enabled-sources") notify("请先开启至少一个整理来源并保存");
+      else if (!result.ok) notify(`本轮已整理 ${result.turns || 0} 条记录；其余尚未完成，可稍后再次点击继续。已完成的日期不会丢失。`);
+      else notify(result.warning ? "摘要已保存；笔记同步未完成，可在知识库区域重试" : result.skipped ? "当前没有待整理记录；已有摘要已同步到笔记目录" : `已整理 ${result.days || 1} 天、${result.turns} 条记录，生成日期命名的 Markdown 和 ${result.candidates} 条待审核候选${result.remainingDays ? `；还有 ${result.remainingDays} 天，可继续整理` : ""}`);
       await refreshMemory();
     } catch (error) { notify(`记忆整理失败：${error.message}`); }
     finally { setBusy(false); }
@@ -743,10 +745,11 @@ export function MemoryManagementPage({ notify }) {
     <div className="companion-embedded memory-management">
       <div className="embedded-heading">
         <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话和成功的语音输入共用这条流水线。</p></div>
-        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理待处理对话</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
+        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>{busy ? "正在按日期整理…" : "整理待处理记录"}</Button><Button icon={FolderOpen} variant="soft" disabled={!memoryStatus.ready} onClick={async () => { const result = await globalThis.desktopBridge?.openKnowledgeBaseFolder?.(); if (!result?.ok) notify("笔记文件夹暂时无法打开"); }}>打开笔记文件夹</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
-      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedTurns || 0} 条待整理。模型只生成候选；必须由你审核后才能进入长期记忆。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedDays || 0} 天、${memoryStatus.unprocessedTurns || 0} 条待整理。每日摘要可以直接查看；长期记忆候选须由你审核后，才供 AI 陪伴长期检索。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       <Card className="memory-policy-card">
+        <Notice tone="info" title="当天接着聊 · 旧记录手动整理">陪伴会接续最近 24 小时的对话；换话题、结束监听、重新唤醒不等于清空上下文。更早的长期信息按当前问题检索已审核记忆。普通听写只输入文字，不用记忆生成回答。原始记录即时存本地，即使关机也保留；点击“整理待处理记录”可按日期补整理多天内容，无需软件全天开着。</Notice>
         <SectionTitle index="01" title="来源与自动整理" description="两个来源默认开启且可独立关闭；每天 23:30 按本地时间整理，失败来源会单独重试。" />
         <div className="memory-policy-grid">
           <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
@@ -756,7 +759,7 @@ export function MemoryManagementPage({ notify }) {
         </div>
         <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
         <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
-        <Notice tone="info" title="内置整理规则 · 无需填写提示词">成功的原始文本原样保存在本地 SQLite；系统每天按来源生成摘要和待审核候选。只有你确认保留的候选才会成为长期记忆，并可分块建立本地 embedding、参与混合检索及同步到所选知识库。密钥、完整路径、设备标识、语音编辑指令、模拟和失败记录会被排除。</Notice>
+        <Notice tone="info" title="内置整理规则 · 无需填写提示词">原始文本原样保存在本地 SQLite。每日笔记按主要话题、做了什么、决定与待办整理，过滤口误、重复、寒暄和无关闲聊，不修改原文，也不把助手的故事或猜测当成你的事实。未选择外部目录时，日期命名的 Markdown 存在软件内置知识库的 DeskMate/daily/companion/ 与 DeskMate/daily/dictation/ 下。只有你确认保留的候选才进入长期记忆；AI 陪伴每轮按问题做本地向量＋关键词检索，修正和删除从下一轮生效。当前是本地哈希向量索引，不是神经语义 embedding。可以稍后更换知识库目录，不会扫描其他资料。</Notice>
       </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>
       <div className="memory-metrics">
