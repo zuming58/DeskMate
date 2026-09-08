@@ -1,5 +1,15 @@
 # Decisions
 
+## D107 - An accepted barge-in partial has a bounded final-recovery path
+
+- Date: 2026-09-08
+- Decision: T21 keeps the provider's normal final transcription as the authoritative turn boundary, but an already accepted recognized-speech interruption may not depend on that final forever. DeskMate retains the bounded recognized partial and provider item identity for the configured utterance endpoint plus one second (2–6 second clamp). If the final is absent, a meaningful partial of at least five normalized characters is promoted exactly once; a short stop-only fragment merely restores listening and resets the ordinary idle timer.
+- Duplicate boundary: a late partial/final carrying the recovered item identity is discarded, while a distinct new provider item remains valid. Manual interruption, provider failure, close and a completed normal turn clear recovery state. Audio and turns are never replayed.
+- Reason: the T21H user run accepted one human interruption and cancelled the audible answer, but recorded no fourth ASR final and then stopped only through `listening-idle-timeout`; provider, transport, model and TTS errors remained zero. The official Qwen ASR event flow defines `speech_stopped` and `conversation.item.input_audio_transcription.completed` as the normal VAD final boundary, but the product still needs a local liveness guarantee when an accepted partial is not followed by that terminal event.
+- Privacy: pending partial and item identity are in-memory only. Diagnostics expose only bounded timeout, recovery and late-drop counters.
+- Contract: [`t21i-barge-final-recovery-v1.md`](../docs/contracts/t21i-barge-final-recovery-v1.md).
+- Boundary: Windows software only; no firmware, HID, Link, motion, hardware or device write.
+
 ## D106 - Full-duplex loudspeaker use has an item-bound echo-tail quarantine
 
 - Date: 2026-09-08

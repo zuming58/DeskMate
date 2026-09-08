@@ -8,6 +8,7 @@ const NON_SPEECH_LABEL = /^(?:掌声|拍手|拍手声|咳嗽|咳嗽声|噪音|�
 const MIN_PARTIAL_SPEECH_MS = 500;
 const MIN_FINAL_SPEECH_MS = 650;
 const DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS = 6500;
+const DEFAULT_BARGE_FINAL_RECOVERY_MS = 5000;
 
 function comparisonText(value) {
   return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -49,7 +50,7 @@ function stablePipelineReason(value) {
 }
 
 class ThreeStageCompanionProvider {
-  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
+  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, bargeFinalRecoveryMs = DEFAULT_BARGE_FINAL_RECOVERY_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     if (![asrFactory, modelFactory, ttsFactory].every((value) => typeof value === "function")) throw new Error("three-stage-provider-factory-required");
     this.asrFactory = asrFactory;
     this.modelFactory = modelFactory;
@@ -58,6 +59,7 @@ class ThreeStageCompanionProvider {
     this.onEvent = onEvent;
     this.now = now;
     this.postPlaybackEchoGraceMs = Math.max(1500, Math.min(12000, Number(postPlaybackEchoGraceMs) || DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS));
+    this.bargeFinalRecoveryMs = Math.max(2000, Math.min(6000, Number(bargeFinalRecoveryMs) || DEFAULT_BARGE_FINAL_RECOVERY_MS));
     this.schedule = schedule;
     this.cancelSchedule = cancelSchedule;
     this.asr = null;
@@ -71,7 +73,10 @@ class ThreeStageCompanionProvider {
     this.playbackTail = null;
     this.postPlaybackEchoTail = null;
     this.postPlaybackEchoTimer = null;
-    this.pendingBargeInFinal = false;
+    this.pendingBargeInFinal = null;
+    this.pendingBargeInTimer = null;
+    this.settledBargeInItemId = "";
+    this.settledBargeInTimer = null;
     this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
@@ -81,6 +86,7 @@ class ThreeStageCompanionProvider {
       turnsCompleted: 0, cancellations: 0, errors: 0,
       bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
       bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0, postPlaybackEchoDrops: 0,
+      bargeFinalTimeouts: 0, bargeFinalRecoveries: 0, lateBargeFinalDrops: 0,
     };
     this.lastTiming = {
       speechStarted: null, firstAsrPartialMs: null, asrFinalMs: null,
@@ -99,6 +105,7 @@ class ThreeStageCompanionProvider {
       active: Boolean(this.activeTurn),
       playbackTailActive: Boolean(this.playbackTail),
       postPlaybackEchoTailActive: Boolean(this.postPlaybackEchoTail),
+      awaitingBargeFinal: Boolean(this.pendingBargeInFinal),
       counters: Object.freeze({ ...this.counters }),
       lastTiming: Object.freeze({ ...this.lastTiming }),
     });
@@ -140,6 +147,62 @@ class ThreeStageCompanionProvider {
 
   resetSpeechEvidence() {
     this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+  }
+
+  clearPendingBargeInFinal() {
+    if (this.pendingBargeInTimer) this.cancelSchedule(this.pendingBargeInTimer);
+    this.pendingBargeInTimer = null;
+    const pending = this.pendingBargeInFinal;
+    this.pendingBargeInFinal = null;
+    return pending;
+  }
+
+  clearSettledBargeInItem() {
+    if (this.settledBargeInTimer) this.cancelSchedule(this.settledBargeInTimer);
+    this.settledBargeInTimer = null;
+    this.settledBargeInItemId = "";
+  }
+
+  rememberSettledBargeInItem(itemId = "") {
+    this.clearSettledBargeInItem();
+    const value = String(itemId || "").slice(0, 160);
+    if (!value) return;
+    this.settledBargeInItemId = value;
+    this.settledBargeInTimer = this.schedule(() => this.clearSettledBargeInItem(), this.bargeFinalRecoveryMs);
+    this.settledBargeInTimer?.unref?.();
+  }
+
+  dropSettledBargeInEvent(event = {}) {
+    if (!this.settledBargeInItemId || !["partial", "final"].includes(event.type)) return false;
+    const itemId = String(event.itemId || "").slice(0, 160);
+    if (!itemId || itemId !== this.settledBargeInItemId) return false;
+    this.counters.lateBargeFinalDrops += 1;
+    if (event.type === "final") this.clearSettledBargeInItem();
+    return true;
+  }
+
+  armPendingBargeInFinal({ text = "", confirmedText = "", itemId = "" } = {}, generation = this.generation) {
+    this.clearPendingBargeInFinal();
+    const confirmed = cleanVisibleText(confirmedText).trim();
+    const current = cleanVisibleText(text).trim();
+    const recoveryText = comparisonText(confirmed).length >= 5 ? confirmed : comparisonText(current).length >= 5 ? current : "";
+    const pending = Object.freeze({ generation, itemId: String(itemId || "").slice(0, 160), recoveryText });
+    this.pendingBargeInFinal = pending;
+    this.pendingBargeInTimer = this.schedule(() => {
+      if (this.pendingBargeInFinal !== pending) return;
+      this.pendingBargeInFinal = null;
+      this.pendingBargeInTimer = null;
+      if (this.closed || generation !== this.generation) return;
+      this.counters.bargeFinalTimeouts += 1;
+      if (!pending.recoveryText) {
+        this.emit({ type: "barge.final-missing", diagnostic: { providerEvent: "other" } });
+        return;
+      }
+      this.counters.bargeFinalRecoveries += 1;
+      this.handleAsrEvent({ type: "final", text: pending.recoveryText, itemId: pending.itemId, bargeInRecovery: true }, generation);
+      this.rememberSettledBargeInItem(pending.itemId);
+    }, this.bargeFinalRecoveryMs);
+    this.pendingBargeInTimer?.unref?.();
   }
 
   clearPostPlaybackEchoTail() {
@@ -206,9 +269,11 @@ class ThreeStageCompanionProvider {
   handleAsrEvent(event = {}, generation = this.generation) {
     if (this.closed || generation !== this.generation) return;
     if (event.type === "speech.started") {
+      const nextItemId = String(event.itemId || "").slice(0, 160);
+      if (this.pendingBargeInFinal?.itemId && nextItemId && this.pendingBargeInFinal.itemId !== nextItemId) this.clearPendingBargeInFinal();
       this.resetSpeechEvidence();
       this.speechEvidence.active = true;
-      this.speechEvidence.itemId = String(event.itemId || "").slice(0, 160);
+      this.speechEvidence.itemId = nextItemId;
       this.speechEvidence.audioStartMs = Math.max(0, Number(event.audioStartMs) || 0);
       this.speechEvidence.receivedStartAt = this.now();
       if (this.bargeContext()) this.counters.bargeSpeechStarts += 1;
@@ -218,6 +283,7 @@ class ThreeStageCompanionProvider {
       if (this.matchingSpeechEvidence(event.itemId)) this.speechEvidence.audioEndMs = Math.max(0, Number(event.audioEndMs) || 0);
       return;
     }
+    if (this.dropSettledBargeInEvent(event)) return;
     if (this.dropPostPlaybackEcho(event)) return;
     if (event.type === "partial") {
       this.counters.asrPartials += 1;
@@ -241,8 +307,8 @@ class ThreeStageCompanionProvider {
           if (confirmed) {
             this.counters.bargeInsAccepted += 1;
             this.emit({ type: "barge.start", hadTts: bargeContext.hadTts, diagnostic: { providerEvent: "other" } });
-            this.pendingBargeInFinal = true;
-            this.interrupt();
+            this.armPendingBargeInFinal({ text, confirmedText: event.confirmedText, itemId: event.itemId }, generation);
+            this.interrupt({ preservePendingBargeIn: true });
           } else this.counters.bargeInsRejectedUnstable += 1;
         } else if (classification.reason === "echo") this.counters.bargeInsRejectedEcho += 1;
         else this.counters.bargeInsRejectedWeak += 1;
@@ -254,8 +320,11 @@ class ThreeStageCompanionProvider {
       const text = cleanVisibleText(event.text).trim();
       if (!text) return;
       const at = this.now();
-      let bargeIn = this.pendingBargeInFinal;
-      this.pendingBargeInFinal = false;
+      const pendingBarge = this.pendingBargeInFinal;
+      const itemId = String(event.itemId || "").slice(0, 160);
+      const matchesPendingBarge = Boolean(pendingBarge && (!pendingBarge.itemId || !itemId || pendingBarge.itemId === itemId));
+      let bargeIn = event.bargeInRecovery === true || matchesPendingBarge;
+      if (matchesPendingBarge) this.clearPendingBargeInFinal();
       const bargeContext = this.bargeContext();
       if (bargeContext) {
         this.counters.bargeInCandidates += 1;
@@ -426,7 +495,7 @@ class ThreeStageCompanionProvider {
     this.counters.turnsCompleted += 1;
     this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText }) : null;
     this.activeTurn = null;
-    this.pendingBargeInFinal = false;
+    this.clearPendingBargeInFinal();
     this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
   }
 
@@ -448,10 +517,13 @@ class ThreeStageCompanionProvider {
 
   sayHello(value) { return this.speakText(value); }
 
-  interrupt() {
+  interrupt({ preservePendingBargeIn = false } = {}) {
     const turn = this.activeTurn;
     const hadPlaybackTail = Boolean(this.playbackTail);
-    if (!turn && !hadPlaybackTail) return false;
+    if (!turn && !hadPlaybackTail) {
+      if (!preservePendingBargeIn) this.clearPendingBargeInFinal();
+      return false;
+    }
     this.counters.cancellations += 1;
     if (turn) {
       turn.abortController.abort("interrupted");
@@ -460,6 +532,7 @@ class ThreeStageCompanionProvider {
     this.activeTurn = null;
     this.playbackTail = null;
     this.clearPostPlaybackEchoTail();
+    if (!preservePendingBargeIn) this.clearPendingBargeInFinal();
     this.resetSpeechEvidence();
     if (turn?.ttsStarted && !turn.ttsEnded) this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
     return true;
@@ -473,6 +546,8 @@ class ThreeStageCompanionProvider {
     this.activeTurn = null;
     this.playbackTail = null;
     this.clearPostPlaybackEchoTail();
+    this.clearPendingBargeInFinal();
+    this.clearSettledBargeInItem();
     this.resetSpeechEvidence();
     this.emit({ type: "error", message: stablePipelineReason(reason), diagnostic: { providerEvent: "provider-error", terminalEvent: "provider-error", failureBucket: "unknown-provider-error" } });
   }
@@ -484,8 +559,10 @@ class ThreeStageCompanionProvider {
     this.activeTurn = null;
     this.playbackTail = null;
     this.clearPostPlaybackEchoTail();
+    this.clearPendingBargeInFinal();
+    this.clearSettledBargeInItem();
     this.resetSpeechEvidence();
-    this.pendingBargeInFinal = false;
+    this.pendingBargeInFinal = null;
     this.ready = false;
     this.closed = true;
     this.generation += 1;
@@ -498,4 +575,4 @@ class ThreeStageCompanionProvider {
   }
 }
 
-module.exports = { DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };
+module.exports = { DEFAULT_BARGE_FINAL_RECOVERY_MS, DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };

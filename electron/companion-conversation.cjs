@@ -767,6 +767,11 @@ class CompanionConversationController {
       this.onEvent({ type: "response.interrupted", reason: "recognized-speech", sessionId: this.active.sessionId, generation: this.active.generation });
       return { ok: true, interrupted: true };
     }
+    if (event.type === "barge.final-missing") {
+      if (this.state === "listening") this.resetListeningIdleTimer("recognized-speech-final-missing");
+      else await this.transition("listening", { reason: "recognized-speech-final-missing" });
+      return { ok: true, recovered: true };
+    }
     if (event.type === "asr.final") {
       const phase = HALF_DUPLEX_PHASES.has(arrival.asrArrivalPhase) ? arrival.asrArrivalPhase : "idle";
       this.turnLifecycle.lastAsrFinalArrivalPhase = phase;

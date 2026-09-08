@@ -138,12 +138,13 @@ test("T21 TTS adapter reconnects lazily after an idle transport close", async ()
   assert.equal((await synthesis).ok, true);
 });
 
-function fakePipeline({ bypass = false, modelRun, now = Date.now } = {}) {
+function fakePipeline({ bypass = false, modelRun, now = Date.now, providerOptions = {} } = {}) {
   let asrEvent;
   const events = [];
   const spoken = [];
   let modelCalls = 0;
   const provider = new ThreeStageCompanionProvider({
+    ...providerOptions,
     onEvent: (event) => events.push(event),
     now,
     shouldBypassModel: () => bypass,
@@ -264,6 +265,49 @@ test("T21 recognized speech can interrupt after cloud TTS ended while local play
   assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
   assert.equal(fixture.provider.playbackDrained(), true);
   assert.equal(fixture.provider.diagnostics().playbackTailActive, false);
+});
+
+test("T21I promotes one accepted barge partial when the provider never returns its final", async () => {
+  let now = 0;
+  const scheduled = [];
+  const fixture = fakePipeline({
+    now: () => now,
+    providerOptions: {
+      bargeFinalRecoveryMs: 2200,
+      schedule: (callback, milliseconds) => {
+        const handle = { callback, milliseconds, cancelled: false, unref() {} };
+        scheduled.push(handle);
+        return handle;
+      },
+      cancelSchedule: (handle) => { if (handle) handle.cancelled = true; },
+    },
+  });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请先给我一个回答", itemId: "original" });
+  await tick();
+  await tick();
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
+
+  fixture.emitAsr({ type: "speech.started", itemId: "barge-without-final", audioStartMs: 1000 });
+  now = 600;
+  fixture.emitAsr({ type: "partial", text: "我想继续问另外一个问题", confirmedText: "我想继续问另外一个问题", itemId: "barge-without-final" });
+  assert.equal(fixture.provider.diagnostics().awaitingBargeFinal, true);
+  const recovery = scheduled.find((item) => item.milliseconds === 2200 && !item.cancelled);
+  assert.ok(recovery);
+  recovery.callback();
+  await tick();
+  await tick();
+
+  assert.equal(fixture.modelCalls(), 2);
+  assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "我想继续问另外一个问题" && event.bargeIn === true));
+  assert.equal(fixture.provider.diagnostics().counters.bargeFinalTimeouts, 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeFinalRecoveries, 1);
+  assert.equal(fixture.provider.diagnostics().awaitingBargeFinal, false);
+
+  fixture.emitAsr({ type: "final", text: "我想继续问另外一个问题", itemId: "barge-without-final" });
+  await tick();
+  assert.equal(fixture.modelCalls(), 2);
+  assert.equal(fixture.provider.diagnostics().counters.lateBargeFinalDrops, 1);
 });
 
 test("T21 drops a delayed ASR item that began in loudspeaker playback after the sink has drained", async () => {
