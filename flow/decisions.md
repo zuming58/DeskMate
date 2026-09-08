@@ -1,5 +1,12 @@
 # Decisions
 
+## D097 - Doubao supplies voice only through caller-text direct speech
+
+- Date: 2026-09-08
+- Decision: T21 keeps the user's configured Doubao voice, but DeskMate remains the only conversational brain. Confirmed visible segments authored by `DeskMate CompanionModel` are sent through the realtime provider's caller-text direct-speech event. The dialog-turn `ChatTTSText` event is forbidden for this adapter because a live fresh TTS-only session accepted the connection but silently returned no audio for that event.
+- Evidence: with the same encrypted installed configuration, direct speech returned two sequential PCM utterances and two terminals on one session. This proves provider synthesis, not speaker playback or conversation acceptance. The Windows package still needs user-heard HIL.
+- Boundary: Windows/local TTS is not a fallback, Doubao receives no microphone audio and its ASR/chat output cannot author replies. Ordinary dictation remains an explicit two-press workflow; its streaming-final wait and persistence parallelism are latency optimizations, not a change to capture semantics or cloud-provider ownership.
+
 ## D096 - Companion dialogue has one semantic brain in a three-stage pipeline
 
 - Date: 2026-09-08
