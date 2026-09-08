@@ -187,12 +187,13 @@ test("Doubao settings identify the protocol App Key as fixed and expose redacted
 });
 
 class FakeProvider {
-  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; this.hellos = []; this.spokenTexts = []; }
+  constructor(onEvent, connectResult = { ok: true }) { this.onEvent = onEvent; this.connectResult = connectResult; this.audio = []; this.closed = false; this.interruptions = 0; this.playbackDrains = 0; this.hellos = []; this.spokenTexts = []; }
   async connect() { if (this.connectResult instanceof Error) throw this.connectResult; return this.connectResult; }
   sendAudio(value) { this.audio.push(Buffer.from(value)); return true; }
   sayHello(value) { this.hellos.push(value); return true; }
   speakText(value) { this.spokenTexts.push(value); return true; }
   interrupt() { this.interruptions += 1; }
+  playbackDrained() { this.playbackDrains += 1; }
   close() { this.closed = true; }
   emit(value) { this.onEvent(value); }
 }
@@ -802,6 +803,36 @@ test("tts end keeps working and suppresses uplink until the computer speaker has
   assert.equal(controller.snapshot().echoGuard.counters.ignoredAsrDuringPlayback, 1);
   assert.equal(source.push(Buffer.from([5, 6])), true);
   assert.equal(provider.audio.length, 1);
+  await controller.stop();
+});
+
+test("three-stage keeps ASR uplink open through the local playback tail and closes the provider tail after drain", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  let releaseDrain;
+  sink.drain = () => new Promise((resolve) => { releaseDrain = resolve; });
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    providerLabel: "three-stage",
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  controller.configureAudio({ audioSource: source, audioSink: sink, selection: { requestedSource: "computer", activeSource: "computer" } });
+  await controller.start({ sessionId: "three-stage-playback-tail", generation: 1 });
+  provider.emit({ type: "tts.start" });
+  provider.emit({ type: "audio", audio: Buffer.from([1, 2]) });
+  provider.emit({ type: "tts.end" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controller.snapshot().echoGuard.phase, "draining");
+  assert.equal(controller.snapshot().echoGuard.uplinkAllowed, true);
+  assert.equal(source.push(Buffer.from([3, 4])), true);
+  assert.equal(provider.audio.length, 1);
+  releaseDrain({ ok: true });
+  await controller.eventChain;
+  assert.equal(provider.playbackDrains, 1);
+  assert.equal(controller.snapshot().state, "listening");
   await controller.stop();
 });
 

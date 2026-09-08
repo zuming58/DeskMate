@@ -1,5 +1,12 @@
 # Decisions
 
+## D099 - Spoken interruption owns the entire audible local playback window
+
+- Date: 2026-09-08
+- Decision: in the T21 three-stage companion, the barge-in window ends only when the computer audio sink confirms that queued playback drained, not when Doubao finishes delivering PCM. The ASR uplink remains open during both provider speech generation and the local playback tail. The provider retains only the bounded current assistant text for echo comparison until drain, then clears it explicitly.
+- Reason: user HIL rejected the first T21B candidate because Doubao could finish sending audio several seconds before the computer speaker finished playing it. The controller changed to drain phase and dropped microphone PCM during that interval, while the provider had already discarded its assistant-text context. Recognized user speech therefore appeared only after the answer ended and could not interrupt it.
+- Boundary: this exception remains exclusive to the T21 three-stage provider. Legacy providers keep strict half duplex; fillers, weak hypotheses and recognized assistant echo still cannot cancel playback. No firmware, HID, Link, motion or physical audio contract changes.
+
 ## D098 - Speech barge-in requires recognized text and local wake consumes finite memory windows
 
 - Date: 2026-09-08

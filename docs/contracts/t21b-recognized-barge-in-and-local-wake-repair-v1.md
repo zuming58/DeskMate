@@ -12,6 +12,10 @@ DeskMate Link reports, motion behavior nor the physical audio wiring.
 - While DeskMate is audibly speaking, microphone PCM continues only to the
   existing Bailian streaming ASR adapter. It is not sent to Doubao TTS or a
   second recognizer.
+- "Audibly speaking" includes the local speaker's queued playback tail after
+  Doubao has already finished sending PCM. The provider retains only the
+  bounded current assistant text until the computer audio sink reports that
+  playback drained, so the tail stays interruptible and echo-checkable.
 - Sound level, a VAD edge or one ASR partial alone never owns cancellation. A
   partial must contain a bounded meaningful phrase and must not match the
   assistant text currently being spoken. Fillers such as `嗯`, `啊`, `呃` and
@@ -51,6 +55,8 @@ Automated:
 
 - legacy half-duplex still rejects playback ASR;
 - T21 speaking keeps ASR uplink open;
+- T21 local playback drain keeps ASR uplink open and closes its echo context
+  only after the audio sink reports completion;
 - weak/filler and assistant-echo hypotheses do not interrupt;
 - recognized speech interrupts local playback synchronously and one final starts
   one replacement turn;

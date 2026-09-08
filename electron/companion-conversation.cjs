@@ -190,8 +190,9 @@ class CompanionConversationController {
   }
 
   microphoneUplinkAllowed() {
-    const recognizedSpeechBargeIn = this.providerLabel === "three-stage" && this.halfDuplexPhase === "speaking";
-    return Boolean(this.active) && (this.halfDuplexPhase === "listening" || recognizedSpeechBargeIn) && !this.playbackDraining && !this.stopPromise;
+    if (!this.active || this.stopPromise) return false;
+    if (this.halfDuplexPhase === "listening" && !this.playbackDraining) return true;
+    return this.providerLabel === "three-stage" && ["speaking", "draining"].includes(this.halfDuplexPhase);
   }
 
   setHalfDuplexPhase(phase) {
@@ -865,6 +866,7 @@ class CompanionConversationController {
         if (this.isCurrent(token) && this.state !== nextState) await this.transition(nextState, { reason: "response-interrupted" });
         return { ok: true, interrupted: true };
       }
+      this.setHalfDuplexPhase("draining");
       this.playbackDraining = true;
       const drained = await this.boundedOperation(() => this.audioSink.drain(), this.drainTimeoutMs, "companion-audio-drain-timeout");
       if (!this.isCurrent(token)) return { ignored: true, reason: "companion-event-stale" };
@@ -885,6 +887,7 @@ class CompanionConversationController {
         this.markTtsTurnInterrupted("drain-timeout");
         await this.boundedOperation(() => this.audioSink.interrupt("drain-timeout"), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
       }
+      this.provider?.playbackDrained?.();
       this.finishTtsTurn();
       this.playbackDraining = false;
       this.trustedResponseActive = false;

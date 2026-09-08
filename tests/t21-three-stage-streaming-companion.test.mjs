@@ -229,6 +229,28 @@ test("T21 recognized partial interrupts current speech and its final opens exact
   assert.ok(provider.diagnostics().counters.bargeInsRejectedEcho >= 1);
 });
 
+test("T21 recognized speech can interrupt after cloud TTS ended while local playback is still draining", async () => {
+  const fixture = fakePipeline();
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
+  await tick();
+  await tick();
+  assert.equal(fixture.provider.diagnostics().active, false);
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
+  const beforeBarge = fixture.events.length;
+  fixture.emitAsr({ type: "partial", text: "收到" });
+  assert.equal(fixture.events.slice(beforeBarge).some((event) => event.type === "barge.start"), false);
+  fixture.emitAsr({ type: "partial", text: "等一下我换个问题" });
+  fixture.emitAsr({ type: "final", text: "等一下我换个问题" });
+  await tick();
+  await tick();
+  assert.equal(fixture.events.slice(beforeBarge).some((event) => event.type === "barge.start"), true);
+  assert.equal(fixture.modelCalls(), 2);
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
+  assert.equal(fixture.provider.playbackDrained(), true);
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, false);
+});
+
 test("T21 begins TTS on a stable sentence before the model final arrives", async () => {
   let releaseModel;
   const modelGate = new Promise((resolve) => { releaseModel = resolve; });
