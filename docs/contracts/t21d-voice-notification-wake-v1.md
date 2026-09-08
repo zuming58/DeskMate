@@ -2,6 +2,11 @@
 
 Status: `T21D_VOICE_NOTIFICATION_WAKE_V1_FROZEN`
 
+T21E supersedes only the selected-microphone exact-grammar confidence rule and
+the use of generated Codex thread titles. See
+[`t21e-stable-project-wake-v1.md`](./t21e-stable-project-wake-v1.md). All other
+T21D notification, presentation, interruption and privacy rules remain frozen.
+
 This is a Windows-software-only repair. It changes no firmware, HID report,
 DeskMate Link frame, motion trajectory or physical audio wiring.
 
@@ -89,4 +94,3 @@ User-present:
 3. Trigger one real Codex waiting/completed event. Verify one short sentence is
    spoken, no reply text is displayed, the capsule closes and background wake
    resumes. A repeated terminal event must remain silent.
-
