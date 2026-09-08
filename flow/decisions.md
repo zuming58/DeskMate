@@ -1,5 +1,16 @@
 # Decisions
 
+## D105 - Dedicated local keyword spotting replaces generic System.Speech wake
+
+- Date: 2026-09-08
+- Decision: idle background wake uses the bundled Sherpa-ONNX open-vocabulary Chinese keyword model and consumes the exact 16 kHz PCM stream from DeskMate's selected Windows microphone. A decoded keyword is the only wake authority; raw level, generic speech detection and noise can never open a session.
+- Reason: user HIL on the exact T21F package still failed. Fresh diagnostics showed the microphone path raised one speech-detected event but produced neither recognition nor rejection. This repeated the earlier generic `System.Speech` failures across both finite custom-stream and continuous default-device modes, while button-started conversation continued to prove that the foreground microphone and cloud ASR path were healthy. A dedicated streaming keyword engine removes the unreliable generic dictation dependency instead of adding another heuristic around it.
+- Phrase and privacy boundary: configurable Chinese phrases are converted locally to the model's pinyin token vocabulary. The native constructor's temporary keyword file is deleted immediately. PCM, phrase, tokens and decoded text are not retained or exported; only content-free input, signal, candidate and wake counts are available. Unsupported phrases and missing models fail closed.
+- Supply-chain boundary: `sherpa-onnx-node@1.13.7`, `pinyin-pro@3.29.3` and the int8 `sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01` files are pinned with source, license and SHA-256 provenance. The model is an application resource, not firmware.
+- Supersedes: D104 and all earlier `System.Speech` wake implementations. Foreground audio arbitration, explicit opt-in, hidden capsule, debounce and bounded recovery remain in force.
+- Contract: [`t21g-dedicated-local-keyword-wake-v1.md`](../docs/contracts/t21g-dedicated-local-keyword-wake-v1.md).
+- Boundary: Windows software only; no firmware, HID, Link, motion, device or Flash operation.
+
 ## D104 - System-default wake uses one continuous Windows recognizer
 
 - Date: 2026-09-08

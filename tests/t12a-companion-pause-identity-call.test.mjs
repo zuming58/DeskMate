@@ -142,7 +142,7 @@ test("wake boundary stays local and unavailable on unsupported systems while dia
     sessionApplied: { revision: 3, endSmoothWindowMs: 5000, idleTimeoutMs: 60000 },
   });
   assert.doesNotMatch(JSON.stringify(report), /private-name|private-phrase/);
-  assert.deepEqual(report.conversation.wakeWord, { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", counters: { audioWindowCount: 9, heardCount: 2, rejectedCount: 1, lowConfidenceCount: 1, wakeCount: 1 } });
+  assert.deepEqual(report.conversation.wakeWord, { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", counters: { audioWindowCount: 9, signalWindowCount: 0, heardCount: 2, rejectedCount: 1, lowConfidenceCount: 1, wakeCount: 1 } });
 });
 
 test("Windows local wake listener emits only a wake event and can yield the microphone", async () => {
@@ -349,7 +349,7 @@ test("T12A UI exposes the key test and the opt-in local wake-word control", () =
   const pages = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(pages, /测试此动作/);
   assert.match(pages, /启用后台本地唤醒/);
-  assert.match(pages, /Windows 本机中文识别器/);
+  assert.match(pages, /专用离线关键词模型/);
   assert.match(pages, /唤醒词空闲时立即生效/);
   assert.match(pages, /DeskMate 当前选择的电脑麦克风匹配/);
   assert.match(pages, /本地监听器正在自动恢复/);

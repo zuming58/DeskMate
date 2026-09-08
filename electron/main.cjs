@@ -36,7 +36,7 @@ const { finishForegroundSession, initialForegroundSession, startForegroundSessio
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
 const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
 const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
-const { WindowsSpeechWakeWordAdapter } = require("./wake-word-adapter.cjs");
+const { SherpaKeywordWakeWordAdapter } = require("./sherpa-keyword-wake-adapter.cjs");
 const { shouldUpdateCompanionOverlay } = require("./companion-overlay-policy.cjs");
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
@@ -66,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21f-continuous-background-wake";
+const DESKMATE_BUILD_ID = "t21g-dedicated-local-keyword-wake";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -264,10 +264,8 @@ function handleWakeCaptureEvent(value = {}) {
 async function syncWakeWordListener(reason = "configuration") {
   if (!wakeWordAdapter || !companionPreferenceStore) return { ok: false, reason: "wake-word-unavailable" };
   const preferences = companionPreferenceStore.get();
-  // System.Speech performs much more reliably as one continuous recognizer on
-  // the Windows default endpoint. Keep renderer-fed PCM only when the user has
-  // explicitly selected a non-default microphone in DeskMate.
-  wakeWordAdapter.setExternalAudio?.(Boolean(companionStartOptions.microphoneId));
+  // The dedicated local keyword spotter consumes one continuous PCM stream
+  // from the exact Windows microphone selected by DeskMate.
   wakeWordAdapter.configure({ enabled: preferences.wakeEnabled === true, phrases: configuredWakePhrases(preferences) });
   if (!preferences.wakeEnabled) return wakeWordAdapter.stop();
   const audioBusy = wakeWordTransitioning || companionIsActive() || Boolean(activeDictationSession) || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || easyInputAudioManager?.status?.().micTest;
@@ -1236,12 +1234,11 @@ app.whenReady().then(async () => {
   memoryDigestTimer = setInterval(() => { void companionMemoryDigestScheduler.tick(); }, 60_000);
   memoryDigestTimer.unref?.();
   setTimeout(() => { void companionMemoryDigestScheduler.tick(); }, 0);
-  wakeWordAdapter = new WindowsSpeechWakeWordAdapter({
+  wakeWordAdapter = new SherpaKeywordWakeWordAdapter({
     onWake: () => { if (!companionIsActive() && !activeDictationSession) void callCompanionConversation("wake-word"); },
     onStatus: (status) => { if (companionConversationController) handleCompanionConversationEvent({ type: "wake-word.status", wakeWord: status }); },
     onInputStart: startWakeCapture,
     onInputStop: stopWakeCapture,
-    externalAudio: false,
   });
   await wakeWordAdapter.probe();
   easyInputAudioSource = new EasyInputLanAudioSource();

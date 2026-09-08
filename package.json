@@ -30,8 +30,10 @@
   "dependencies": {
     "@tabler/icons-react": "^3.46.0",
     "@vitejs/plugin-react": "5.0.4",
+    "pinyin-pro": "3.29.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "sherpa-onnx-node": "1.13.7",
     "vite": "6.4.2",
     "ws": "^8.21.3"
   },
@@ -63,6 +65,13 @@
         "filter": [
           "*.ico",
           "*.png"
+        ]
+      },
+      {
+        "from": "resources/wake-model",
+        "to": "wake-model",
+        "filter": [
+          "**/*"
         ]
       },
       {

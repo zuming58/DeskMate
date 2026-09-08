@@ -346,6 +346,9 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
     "wake-word-restarting": "本地监听器正在自动恢复，请稍候",
     "wake-word-listener-stopped": "本地监听器连续恢复失败，请重新保存设置或重启 DeskMate",
     "wake-word-engine-unavailable": "Windows 本地语音识别器暂时不可用",
+    "wake-word-engine-failed": "本地唤醒模型运行失败，正在自动恢复",
+    "wake-word-model-missing": "本地唤醒模型文件缺失",
+    "wake-word-phrase-unsupported": "当前唤醒短语暂不受本地关键词模型支持，请使用中文短语",
     "wake-word-microphone-starting": "正在连接 DeskMate 当前选择的电脑麦克风",
     "wake-word-engine-starting": "Windows 本地中文识别器正在启动",
     "wake-word-audio-renderer-unavailable": "DeskMate 电脑麦克风桥尚未就绪",
@@ -542,8 +545,8 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <SectionTitle index="03" title="陪伴对话设置" description="只影响实时陪伴，不改变普通语音输入和文字整理的停顿规则。" />
             <div className="companion-settings-form">
               <label className="field-label">陪伴名称<input value={companionDraft.name} maxLength={32} onChange={(event) => setCompanionDraft({ ...companionDraft, name: event.target.value })} /></label>
-              <label className="field-label">本地唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /><small>使用 Windows 本机中文识别器；唤醒音频不上传云端。</small></label>
-              <div className="companion-automation-control"><div><strong>{companionDraft.wakeEnabled ? "后台本地唤醒已选择" : "后台本地唤醒已关闭"}</strong><small>{conversation.wakeWord?.available ? companionDraft.wakeEnabled ? "保存后在空闲时后台监听；胶囊保持隐藏，只有命中唤醒短语才出现。" : "只有你明确开启后才会占用麦克风。" : "这台电脑没有可用的 Windows 中文识别器。"}</small></div><Toggle label="启用后台本地唤醒" checked={Boolean(companionDraft.wakeEnabled)} disabled={!conversation.wakeWord?.available} onChange={(enabled) => setCompanionDraft({ ...companionDraft, wakeEnabled: enabled })} /></div>
+              <label className="field-label">本地唤醒短语<input value={companionDraft.wakePhrase} maxLength={64} onChange={(event) => setCompanionDraft({ ...companionDraft, wakePhrase: event.target.value })} /><small>使用专用离线关键词模型；唤醒音频不上传云端。</small></label>
+              <div className="companion-automation-control"><div><strong>{companionDraft.wakeEnabled ? "后台本地唤醒已选择" : "后台本地唤醒已关闭"}</strong><small>{conversation.wakeWord?.available ? companionDraft.wakeEnabled ? "保存后在空闲时后台监听；胶囊保持隐藏，只有命中唤醒短语才出现。" : "只有你明确开启后才会占用麦克风。" : "这台电脑没有可用的本地关键词模型。"}</small></div><Toggle label="启用后台本地唤醒" checked={Boolean(companionDraft.wakeEnabled)} disabled={!conversation.wakeWord?.available} onChange={(enabled) => setCompanionDraft({ ...companionDraft, wakeEnabled: enabled })} /></div>
               <label className="field-label">一句话结束静音<span className="number-input-with-unit"><input type="number" min="0.5" max="50" step="0.5" inputMode="decimal" value={companionDraft.endSmoothSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, endSmoothSeconds: event.target.value })} /><strong>秒</strong></span><small>你说完后连续静音这么久，就开始回答；默认 4 秒。</small></label>
               <label className="field-label">前台对话空闲收起<span className="number-input-with-unit"><input type="number" min="0" max="3600" step="1" inputMode="numeric" value={companionDraft.idleTimeoutSeconds} onChange={(event) => setCompanionDraft({ ...companionDraft, idleTimeoutSeconds: event.target.value })} /><strong>秒</strong></span><small>回答结束后如果 10 秒没有新讲话，就结束云端会话、收起胶囊并恢复后台本地唤醒。</small></label>
               <label className="field-label">AI 陪伴音量<Slider label="AI 陪伴音量" min={0} max={100} step={5} value={companionDraft.conversationVolume} onChange={(conversationVolume) => setCompanionDraft({ ...companionDraft, conversationVolume })} /><small>只调节三段式陪伴最终合成的声音，不改变 Windows 系统总音量。</small></label>
@@ -552,7 +555,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
               <Notice tone="info" title="唤醒词空闲时立即生效">名称和判停参数从下一次新建陪伴会话生效；本地唤醒短语保存后会立即重启后台监听器。{sessionActive ? "当前正在对话，结束后自动使用新唤醒短语。" : "当前空闲，可直接用新短语测试。"}</Notice>
               <Button icon={DeviceFloppy} variant="primary" disabled={companionSettingsStatus.state === "saving"} onClick={() => { void saveCompanionSettings(); }}>{companionSettingsStatus.state === "saving" ? "正在保存…" : "保存陪伴设置"}</Button>
             </div>
-            <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.heardCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由 Windows 本机中文识别器通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已分析 ${conversation.wakeWord.audioWindowCount || 0} 个音频窗口，检测到声音 ${conversation.wakeWord.heardCount || 0} 次，未命中 ${conversation.wakeWord.rejectedCount || 0} 次，成功唤醒 ${conversation.wakeWord.wakeCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入三段式陪伴。前台显示“聆听中”时可直接继续说话，不必再叫名字；播报期间说出有效句子可以打断，杂音和播报回声不会触发。</Notice>
+              <Notice tone={conversation.wakeWord?.enabled ? "success" : "info"} title={conversation.wakeWord?.enabled ? conversation.wakeWord?.signalWindowCount > 0 ? "后台唤醒已收到麦克风声音" : "后台本地唤醒正在监听" : state.settings.companionWakeEnabled ? "后台本地唤醒暂时暂停" : "后台本地唤醒未开启"}>{state.settings.companionWakeEnabled && !conversation.wakeWord?.enabled ? `${wakePauseReason}。` : ""}“{state.settings.companionWakePhrase}”由专用离线关键词模型通过 DeskMate 当前选择的电脑麦克风匹配，不上传或保存唤醒音频。{conversation.wakeWord?.enabled ? ` 本次已分析 ${conversation.wakeWord.audioWindowCount || 0} 个音频片段，检测到有效声音 ${conversation.wakeWord.signalWindowCount || 0} 次，关键词候选 ${conversation.wakeWord.heardCount || 0} 次，成功唤醒 ${conversation.wakeWord.wakeCount || 0} 次。` : ""}后台监听不会显示胶囊；命中后才进入三段式陪伴。前台显示“聆听中”时可直接继续说话，不必再叫名字；播报期间说出有效句子可以打断，杂音和播报回声不会触发。</Notice>
           </Card>
           <Card>
             <SectionTitle index="04" title="陪伴人设" description="名称之外的人格、表达和行为边界；每次新会话冻结一个版本。" />

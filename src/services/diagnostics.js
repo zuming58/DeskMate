@@ -243,13 +243,13 @@ export function createDiagnosticReport(input = {}) {
       timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
     },
     wakeWord: {
-      version: wakeSource.version === "windows-speech-wake-v2" ? wakeSource.version : "unavailable",
+      version: ["windows-speech-wake-v2", "windows-speech-wake-v3", "windows-speech-wake-v4", "windows-speech-wake-v5", "sherpa-onnx-kws-v1"].includes(wakeSource.version) ? wakeSource.version : "unavailable",
       available: wakeSource.available === true,
       enabled: wakeSource.enabled === true,
       desiredEnabled: wakeSource.desiredEnabled === true,
       reason: /^[a-z0-9-]{1,120}$/.test(String(wakeSource.reason || "")) ? String(wakeSource.reason) : "unavailable",
       inputMode: ["deskmate-selected-microphone", "windows-system-default"].includes(wakeSource.inputMode) ? wakeSource.inputMode : "unavailable",
-      counters: Object.fromEntries(["audioWindowCount", "heardCount", "rejectedCount", "lowConfidenceCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
+      counters: Object.fromEntries(["audioWindowCount", "signalWindowCount", "heardCount", "rejectedCount", "lowConfidenceCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
     },
     turnLifecycle: {
       ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),
