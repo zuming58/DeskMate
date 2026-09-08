@@ -1,5 +1,13 @@
 # Decisions
 
+## D100 - Spoken interruption is a current-utterance evidence gate
+
+- Date: 2026-09-08
+- Decision: T21B uses Qwen server VAD at the documented balanced threshold `0.2`, consumes its per-item `speech_started` and `speech_stopped` events, and evaluates only the current ASR item's text. An explicit interrupt phrase may stop playback after a matching speech start. An ordinary sentence needs two consistent progressive partials, or a final backed by a prior partial and at least 350 ms of provider-measured speech. One VAD edge, one ordinary partial, a filler, a close assistant echo or cumulative text from older turns cannot own cancellation.
+- Reason: the user's content-free diagnostic showed five TTS starts, zero completed TTS turns, five abandoned turns, forty `asr-final` sink cancellations and eight interruptions. Code review then found that the ASR adapter received a cumulative preview containing all completed user turns, so a new noise fragment inherited old meaningful text. Production VAD was also set to `0.0`, the provider's low-latency/noise-sensitive preset. Those two defects explain why barge-in worked but frequently fired when the user was silent.
+- Observability: the last content-free three-stage pipeline counters now remain available after a conversation ends, including provider speech starts and unstable-evidence rejections. Transcript, reply text and PCM remain excluded.
+- Boundary: this is Windows software only. It changes no ordinary two-press dictation behavior, local wake grammar, firmware, HID, DeskMate Link, motion, Flash or physical audio wiring. Human voice, room noise and speaker-echo behavior remain a user-present acceptance gate.
+
 ## D099 - Spoken interruption owns the entire audible local playback window
 
 - Date: 2026-09-08

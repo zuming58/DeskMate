@@ -5,6 +5,18 @@ Status: `T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`
 This is a Windows-software-only slice. It changes neither firmware image, HID or
 DeskMate Link reports, motion behavior nor the physical audio wiring.
 
+Primary implementation references:
+
+- Alibaba Cloud Qwen realtime client events: `turn_detection.threshold` and
+  `silence_duration_ms` semantics.
+  <https://help.aliyun.com/en/model-studio/qwen-asr-realtime-client-events>
+- Alibaba Cloud Qwen realtime server events: provider-owned
+  `input_audio_buffer.speech_started` / `speech_stopped` evidence.
+  <https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-server-events>
+- Google Gemini Live interruption guidance: confirmed interruption must cancel
+  and clear client-side playback rather than only stopping model generation.
+  <https://ai.google.dev/gemini-api/docs/live-api/capabilities>
+
 ## Recognized-speech barge-in
 
 - Automatic barge-in is available only in the T21 three-stage companion. Legacy
