@@ -1,5 +1,16 @@
 # Decisions
 
+## D104 - System-default wake uses one continuous Windows recognizer
+
+- Date: 2026-09-08
+- Decision: when the Windows microphone selector is `system-default`, idle wake is owned by one continuous `System.Speech` recognizer attached directly to the Windows default capture endpoint. DeskMate no longer cuts this input into independent two-to-three-second recognition windows. An explicitly selected Windows microphone retains the bounded renderer-fed PCM compatibility path.
+- Event handling: continuous speech events are consumed through the PowerShell event queue (`Register-ObjectEvent` / `Wait-Event`). Direct `.add_Speech*` PowerShell callbacks are forbidden because the callback thread has no PowerShell runspace and can terminate the listener after detecting speech.
+- Reason: the user confirmed button-started conversation works, while fresh T21E diagnostics showed the idle PCM path processed windows but produced no reliable wake. A separate default-device recognizer detected speech and then reproduced the no-runspace callback exception. This proves the remaining failure is the local wake implementation, not the TTS/model chain, firmware or a missing physical microphone.
+- Privacy and ownership: no audio, recognized text, configured phrase or confidence is retained or exported. Foreground voice owners still pause background wake. EasyInput remains an optional foreground conversation input; Xiaozhi's microphone remains unused in V1.
+- Supersedes: D098's finite-window requirement for the system-default endpoint and D103's T21E implementation status. T21E exact-grammar acceptance, debounce and privacy rules remain in force.
+- Contract: [`t21f-continuous-background-wake-v1.md`](../docs/contracts/t21f-continuous-background-wake-v1.md).
+- Boundary: Windows software only; no firmware, HID, Link, motion, device or Flash operation.
+
 ## D103 - Codex speech uses stable project identity and exact wake grammar owns acceptance
 
 - Date: 2026-09-08

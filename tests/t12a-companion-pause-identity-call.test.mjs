@@ -128,7 +128,7 @@ test("reserved companion Host Action round-trips without entering AppActionStore
 
 test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v4", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, lowConfidenceCount: 0, wakeCount: 0, lastHeardAt: null });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v5", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, lowConfidenceCount: 0, wakeCount: 0, lastHeardAt: null });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
@@ -180,7 +180,7 @@ test("local wake normalizes punctuation and keeps the short-phrase confidence fl
   assert.equal(wake.confidence, 0.32);
 });
 
-test("local wake v2 keeps recognition private while adding a local bounded dictation fallback", () => {
+test("local wake keeps recognition private and consumes default-device events outside callback runspaces", () => {
   assert.match(LISTENER_SCRIPT, /DictationGrammar/);
   assert.match(LISTENER_SCRIPT, /heard\.Contains\(\$phrase\)/);
   assert.doesNotMatch(LISTENER_SCRIPT, /WriteLine\(\$args\.Result\.Text/);
@@ -189,6 +189,19 @@ test("local wake v2 keeps recognition private while adding a local bounded dicta
   assert.match(LISTENER_SCRIPT, /low-confidence/);
   assert.match(LISTENER_SCRIPT, /\$heard -eq \$phrase/);
   assert.match(LISTENER_SCRIPT, /\$exactGrammar -and \$matched/);
+  assert.match(LISTENER_SCRIPT, /Register-ObjectEvent/);
+  assert.match(LISTENER_SCRIPT, /Wait-Event/);
+  assert.doesNotMatch(LISTENER_SCRIPT, /\.add_SpeechDetected/);
+});
+
+test("local wake can switch between continuous Windows default input and an explicit DeskMate microphone", () => {
+  const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
+  assert.equal(wake.status().inputMode, "windows-system-default");
+  assert.equal(wake.setExternalAudio(true), true);
+  assert.equal(wake.status().inputMode, "deskmate-selected-microphone");
+  assert.equal(wake.setExternalAudio(true), false);
+  assert.equal(wake.setExternalAudio(false), true);
+  assert.equal(wake.status().inputMode, "windows-system-default");
 });
 
 test("local wake can consume DeskMate-selected PCM and reports privacy-safe microphone evidence", async () => {

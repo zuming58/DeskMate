@@ -66,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21e-project-identity-wake";
+const DESKMATE_BUILD_ID = "t21f-continuous-background-wake";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -264,11 +264,15 @@ function handleWakeCaptureEvent(value = {}) {
 async function syncWakeWordListener(reason = "configuration") {
   if (!wakeWordAdapter || !companionPreferenceStore) return { ok: false, reason: "wake-word-unavailable" };
   const preferences = companionPreferenceStore.get();
+  // System.Speech performs much more reliably as one continuous recognizer on
+  // the Windows default endpoint. Keep renderer-fed PCM only when the user has
+  // explicitly selected a non-default microphone in DeskMate.
+  wakeWordAdapter.setExternalAudio?.(Boolean(companionStartOptions.microphoneId));
   wakeWordAdapter.configure({ enabled: preferences.wakeEnabled === true, phrases: configuredWakePhrases(preferences) });
   if (!preferences.wakeEnabled) return wakeWordAdapter.stop();
   const audioBusy = wakeWordTransitioning || companionIsActive() || Boolean(activeDictationSession) || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || easyInputAudioManager?.status?.().micTest;
   if (audioBusy) return wakeWordAdapter.pause(`foreground-${foregroundSessionState.active?.mode || "audio"}-active`);
-  if (!computerCompanionAudio?.diagnostics?.().ready) return wakeWordAdapter.pause("wake-word-audio-renderer-unavailable");
+  if (wakeWordAdapter.status().inputMode === "deskmate-selected-microphone" && !computerCompanionAudio?.diagnostics?.().ready) return wakeWordAdapter.pause("wake-word-audio-renderer-unavailable");
   const result = await wakeWordAdapter.start();
   if (!result.ok) handleCompanionConversationEvent({ type: "wake-word.status", reason: result.reason, trigger: reason });
   return result;
@@ -1237,7 +1241,7 @@ app.whenReady().then(async () => {
     onStatus: (status) => { if (companionConversationController) handleCompanionConversationEvent({ type: "wake-word.status", wakeWord: status }); },
     onInputStart: startWakeCapture,
     onInputStop: stopWakeCapture,
-    externalAudio: true,
+    externalAudio: false,
   });
   await wakeWordAdapter.probe();
   easyInputAudioSource = new EasyInputLanAudioSource();

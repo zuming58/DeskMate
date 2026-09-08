@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
 
-const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v4";
+const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v5";
 const PROBE_SCRIPT = [
   "$ErrorActionPreference='Stop'",
   "Add-Type -AssemblyName System.Speech",
@@ -55,13 +55,25 @@ const LISTENER_SCRIPT = [
   "    try { $engine.SetInputToAudioStream($memory, $format); $result = $engine.Recognize(); if ($null -ne $result) { [Console]::Out.WriteLine('{\"type\":\"heard\"}'); Publish-WakeResult $result } } finally { $engine.SetInputToNull(); $memory.Dispose() }",
   "  }",
   "} else {",
-  "  $engine.add_SpeechDetected({ [Console]::Out.WriteLine('{\"type\":\"heard\"}') })",
-  "  $engine.add_SpeechRecognitionRejected({ [Console]::Out.WriteLine('{\"type\":\"rejected\"}') })",
-  "  $engine.add_SpeechRecognized({ param($sender, $args); Publish-WakeResult $args.Result })",
   "  $engine.SetInputToDefaultAudioDevice()",
+  "  $detected = Register-ObjectEvent -InputObject $engine -EventName SpeechDetected -SourceIdentifier 'deskmate-wake-detected'",
+  "  $rejected = Register-ObjectEvent -InputObject $engine -EventName SpeechRecognitionRejected -SourceIdentifier 'deskmate-wake-rejected'",
+  "  $recognized = Register-ObjectEvent -InputObject $engine -EventName SpeechRecognized -SourceIdentifier 'deskmate-wake-recognized'",
   "  $engine.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple)",
   "  [Console]::Out.WriteLine('{\"type\":\"ready\"}')",
-  "  while ($true) { Start-Sleep -Milliseconds 250 }",
+  "  try {",
+  "    while ($true) {",
+  "      $event = Wait-Event -Timeout 1",
+  "      if ($null -eq $event) { continue }",
+  "      if ($event.SourceIdentifier -eq 'deskmate-wake-detected') { [Console]::Out.WriteLine('{\"type\":\"heard\"}') }",
+  "      elseif ($event.SourceIdentifier -eq 'deskmate-wake-rejected') { [Console]::Out.WriteLine('{\"type\":\"rejected\"}') }",
+  "      elseif ($event.SourceIdentifier -eq 'deskmate-wake-recognized') { Publish-WakeResult $event.SourceEventArgs.Result }",
+  "      Remove-Event -EventIdentifier $event.EventIdentifier -ErrorAction SilentlyContinue",
+  "    }",
+  "  } finally {",
+  "    try { $engine.RecognizeAsyncCancel() } catch {}",
+  "    @('deskmate-wake-detected','deskmate-wake-rejected','deskmate-wake-recognized') | ForEach-Object { Unregister-Event -SourceIdentifier $_ -ErrorAction SilentlyContinue }",
+  "  }",
   "}",
 ].join("; ");
 
@@ -124,6 +136,18 @@ class WindowsSpeechWakeWordAdapter {
   }
 
   emitStatus() { this.onStatus(this.status()); }
+
+  setExternalAudio(value) {
+    const next = value === true;
+    if (next === this.externalAudio) return false;
+    this.externalAudio = next;
+    this.inputReady = !next;
+    this.configurationDirty = Boolean(this.process);
+    this.restartAttempts = 0;
+    this.reason = this.process ? "wake-word-input-mode-changed" : this.reason;
+    this.emitStatus();
+    return true;
+  }
 
   async run(script, { timeoutMs = 4000, environment = {} } = {}) {
     return new Promise((resolve) => {
