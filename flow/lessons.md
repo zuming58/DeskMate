@@ -1,5 +1,17 @@
 # Lessons learned
 
+## An idle deadline must follow recognized activity, not merely a UI state transition
+
+- Symptom: a healthy conversation ends with `listening-idle-timeout` while the user believes they were still talking; provider/model/TTS errors remain zero and ASR drafts are present.
+- Practice: arm the foreground deadline when listening begins, then refresh it on content-free provider speech-start evidence and each accepted partial. Final text still owns the transition to thinking, and missing-final speech still has a bounded timeout.
+- Rule: a visible listening state is not enough to define inactivity. Measure from the latest accepted speech activity, keep playback/noise outside that ownership, and export only counters so the next real diagnostic can prove the timing without exposing speech.
+
+## Stable user biography belongs to an explicit profile, not model inference
+
+- Symptom: recent dialogue continuity works, but the companion cannot reliably state the user's occupation, age or current priorities because no reviewed memory contains them.
+- Practice: provide optional, user-authored profile fields and mark them as contextual data. Keep them separate from the companion's personality, recent transcript and review-first long-term memory; blank fields remain unknown.
+- Rule: never promote demographic or biographical guesses from casual conversation into a permanent profile. Automatic memory processing may propose review candidates, but only the user edits the explicit profile.
+
 ## A working memory page does not prove memory reaches the answering model
 
 - An adapter-local 12-message array lost history whenever the audio provider was replaced, while reviewed SQLite content was attached only at session creation. Test the actual controller's reconnect/tool/rewake routes and inspect the assembled synthetic model request, not just same-adapter two-turn tests.

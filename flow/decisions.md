@@ -1,5 +1,14 @@
 # Decisions
 
+## D109 - Explicit owner profile is not inferred memory, and idle means no speech activity
+
+- Date: 2026-09-08
+- Decision: the companion keeps a separately labelled user-explicit profile for preferred name, occupation/identity, current focus, optional age/life stage and background. It is injected as bounded data on each new model session, not treated as commands, not auto-filled from conversation and not rewritten by daily summaries. Recent dialogue and reviewed long-term memory remain separate evidence layers.
+- Endpointing: the configured ten-second foreground idle close remains the product default, but its deadline is refreshed by provider speech-start evidence and accepted ASR partials while the controller is listening. A missing final still expires after the bounded refreshed deadline; playback noise and assistant speech do not own the timer.
+- Reason: the T21J diagnostic showed 79 recent context messages applied but zero reviewed memories, so context continuity cannot supply stable user biography. The same diagnostic's only terminal reason was `listening-idle-timeout`, with zero provider/model/TTS errors and many ASR partials, exposing a local activity/deadline boundary rather than a cloud or firmware failure.
+- Privacy: owner fields remain local, are omitted from diagnostics and firmware, and blank means unknown. The profile cannot expand tool, application or hardware authority.
+- Contract: [`T21K`](../docs/contracts/t21k-owner-profile-speech-activity-v1.md). Windows software only; no hardware or firmware change.
+
 ## D108 - Audio lifetime does not define companion memory lifetime
 
 - Date: 2026-09-08
