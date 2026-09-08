@@ -7,6 +7,7 @@ const EXPLICIT_BARGE_IN = /(停一下|停下来|先停|暂停|等等|等一下|�
 const NON_SPEECH_LABEL = /^(?:掌声|拍手|拍手声|咳嗽|咳嗽声|噪音|杂音|音乐|背景音)$/;
 const MIN_PARTIAL_SPEECH_MS = 500;
 const MIN_FINAL_SPEECH_MS = 650;
+const DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS = 6500;
 
 function comparisonText(value) {
   return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -48,7 +49,7 @@ function stablePipelineReason(value) {
 }
 
 class ThreeStageCompanionProvider {
-  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, onEvent = () => {}, now = Date.now } = {}) {
+  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     if (![asrFactory, modelFactory, ttsFactory].every((value) => typeof value === "function")) throw new Error("three-stage-provider-factory-required");
     this.asrFactory = asrFactory;
     this.modelFactory = modelFactory;
@@ -56,6 +57,9 @@ class ThreeStageCompanionProvider {
     this.shouldBypassModel = shouldBypassModel;
     this.onEvent = onEvent;
     this.now = now;
+    this.postPlaybackEchoGraceMs = Math.max(1500, Math.min(12000, Number(postPlaybackEchoGraceMs) || DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS));
+    this.schedule = schedule;
+    this.cancelSchedule = cancelSchedule;
     this.asr = null;
     this.model = null;
     this.tts = null;
@@ -65,6 +69,8 @@ class ThreeStageCompanionProvider {
     this.turnSequence = 0;
     this.activeTurn = null;
     this.playbackTail = null;
+    this.postPlaybackEchoTail = null;
+    this.postPlaybackEchoTimer = null;
     this.pendingBargeInFinal = false;
     this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
@@ -74,7 +80,7 @@ class ThreeStageCompanionProvider {
       modelRequests: 0, assistantDeltas: 0, ttsRequests: 0, ttsAudioChunks: 0,
       turnsCompleted: 0, cancellations: 0, errors: 0,
       bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
-      bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0,
+      bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0, postPlaybackEchoDrops: 0,
     };
     this.lastTiming = {
       speechStarted: null, firstAsrPartialMs: null, asrFinalMs: null,
@@ -92,6 +98,7 @@ class ThreeStageCompanionProvider {
       ready: this.ready,
       active: Boolean(this.activeTurn),
       playbackTailActive: Boolean(this.playbackTail),
+      postPlaybackEchoTailActive: Boolean(this.postPlaybackEchoTail),
       counters: Object.freeze({ ...this.counters }),
       lastTiming: Object.freeze({ ...this.lastTiming }),
     });
@@ -135,6 +142,41 @@ class ThreeStageCompanionProvider {
     this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
   }
 
+  clearPostPlaybackEchoTail() {
+    if (this.postPlaybackEchoTimer) this.cancelSchedule(this.postPlaybackEchoTimer);
+    this.postPlaybackEchoTimer = null;
+    this.postPlaybackEchoTail = null;
+  }
+
+  armPostPlaybackEchoTail(assistantText = "") {
+    this.clearPostPlaybackEchoTail();
+    const tail = Object.freeze({
+      assistantText: cleanVisibleText(assistantText),
+      itemId: this.speechEvidence.active ? String(this.speechEvidence.itemId || "").slice(0, 160) : "",
+    });
+    this.postPlaybackEchoTail = tail;
+    this.postPlaybackEchoTimer = this.schedule(() => {
+      if (this.postPlaybackEchoTail === tail) this.postPlaybackEchoTail = null;
+      this.postPlaybackEchoTimer = null;
+    }, this.postPlaybackEchoGraceMs);
+    this.postPlaybackEchoTimer?.unref?.();
+  }
+
+  isPostPlaybackEchoEvent(event = {}) {
+    const tail = this.postPlaybackEchoTail;
+    if (!tail || !["partial", "final"].includes(event.type)) return false;
+    const itemId = String(event.itemId || "").slice(0, 160);
+    if (tail.itemId && itemId) return itemId === tail.itemId;
+    return classifyRecognizedBargeIn(event.text, tail.assistantText).reason === "echo";
+  }
+
+  dropPostPlaybackEcho(event = {}) {
+    if (!this.isPostPlaybackEchoEvent(event)) return false;
+    this.counters.postPlaybackEchoDrops += 1;
+    if (event.type === "final") this.clearPostPlaybackEchoTail();
+    return true;
+  }
+
   matchingSpeechEvidence(itemId = "") {
     const value = String(itemId || "");
     return Boolean(this.speechEvidence.active && (!value || !this.speechEvidence.itemId || value === this.speechEvidence.itemId));
@@ -176,6 +218,7 @@ class ThreeStageCompanionProvider {
       if (this.matchingSpeechEvidence(event.itemId)) this.speechEvidence.audioEndMs = Math.max(0, Number(event.audioEndMs) || 0);
       return;
     }
+    if (this.dropPostPlaybackEcho(event)) return;
     if (event.type === "partial") {
       this.counters.asrPartials += 1;
       if (this.utteranceStartedAt === null) {
@@ -388,7 +431,9 @@ class ThreeStageCompanionProvider {
   }
 
   playbackDrained() {
-    const hadTail = Boolean(this.playbackTail);
+    const tail = this.playbackTail;
+    const hadTail = Boolean(tail);
+    if (tail) this.armPostPlaybackEchoTail(tail.assistantText);
     this.playbackTail = null;
     this.resetSpeechEvidence();
     return hadTail;
@@ -414,6 +459,7 @@ class ThreeStageCompanionProvider {
     }
     this.activeTurn = null;
     this.playbackTail = null;
+    this.clearPostPlaybackEchoTail();
     this.resetSpeechEvidence();
     if (turn?.ttsStarted && !turn.ttsEnded) this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
     return true;
@@ -426,6 +472,7 @@ class ThreeStageCompanionProvider {
     if (turn) turn.abortController.abort("failed");
     this.activeTurn = null;
     this.playbackTail = null;
+    this.clearPostPlaybackEchoTail();
     this.resetSpeechEvidence();
     this.emit({ type: "error", message: stablePipelineReason(reason), diagnostic: { providerEvent: "provider-error", terminalEvent: "provider-error", failureBucket: "unknown-provider-error" } });
   }
@@ -436,6 +483,7 @@ class ThreeStageCompanionProvider {
     if (turn) turn.abortController.abort("closed");
     this.activeTurn = null;
     this.playbackTail = null;
+    this.clearPostPlaybackEchoTail();
     this.resetSpeechEvidence();
     this.pendingBargeInFinal = false;
     this.ready = false;
@@ -450,4 +498,4 @@ class ThreeStageCompanionProvider {
   }
 }
 
-module.exports = { MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };
+module.exports = { DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };

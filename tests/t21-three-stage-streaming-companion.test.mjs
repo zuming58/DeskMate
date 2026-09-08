@@ -266,6 +266,50 @@ test("T21 recognized speech can interrupt after cloud TTS ended while local play
   assert.equal(fixture.provider.diagnostics().playbackTailActive, false);
 });
 
+test("T21 drops a delayed ASR item that began in loudspeaker playback after the sink has drained", async () => {
+  const fixture = fakePipeline();
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "为什么现在没有声音" });
+  await tick();
+  await tick();
+  assert.equal(fixture.modelCalls(), 1);
+  assert.equal(fixture.provider.diagnostics().playbackTailActive, true);
+
+  fixture.emitAsr({ type: "speech.started", itemId: "speaker-echo-tail", audioStartMs: 1000 });
+  assert.equal(fixture.provider.playbackDrained(), true);
+  assert.equal(fixture.provider.diagnostics().postPlaybackEchoTailActive, true);
+  const afterDrain = fixture.events.length;
+  fixture.emitAsr({ type: "partial", text: "听到我声音了没有", itemId: "speaker-echo-tail" });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "speaker-echo-tail", audioEndMs: 2400 });
+  fixture.emitAsr({ type: "final", text: "听到我声音了没有？", itemId: "speaker-echo-tail" });
+  await tick();
+
+  assert.equal(fixture.modelCalls(), 1);
+  assert.equal(fixture.events.slice(afterDrain).some((event) => ["asr.partial", "asr.final"].includes(event.type)), false);
+  assert.equal(fixture.provider.diagnostics().counters.postPlaybackEchoDrops, 2);
+  assert.equal(fixture.provider.diagnostics().postPlaybackEchoTailActive, false);
+});
+
+test("T21 accepts a new microphone utterance that starts after loudspeaker playback drains", async () => {
+  const fixture = fakePipeline();
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "先回答第一个问题" });
+  await tick();
+  await tick();
+  assert.equal(fixture.provider.playbackDrained(), true);
+
+  fixture.emitAsr({ type: "speech.started", itemId: "new-human-turn", audioStartMs: 3000 });
+  fixture.emitAsr({ type: "partial", text: "我还有另外一个问题", itemId: "new-human-turn" });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "new-human-turn", audioEndMs: 3900 });
+  fixture.emitAsr({ type: "final", text: "我还有另外一个问题", itemId: "new-human-turn" });
+  await tick();
+  await tick();
+
+  assert.equal(fixture.modelCalls(), 2);
+  assert.equal(fixture.provider.diagnostics().counters.postPlaybackEchoDrops, 0);
+  assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "我还有另外一个问题"));
+});
+
 test("T21 ignores one short noise item but accepts two meaningful human hypotheses even when ASR revises text", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });

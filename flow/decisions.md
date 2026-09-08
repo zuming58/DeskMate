@@ -1,5 +1,15 @@
 # Decisions
 
+## D106 - Full-duplex loudspeaker use has an item-bound echo-tail quarantine
+
+- Date: 2026-09-08
+- Decision: interactive T21 conversation keeps the selected Windows microphone open while DeskMate speaks so a real person can interrupt. WebRTC echo cancellation/noise suppression/AGC remains the first layer. When the local speaker drains, DeskMate preserves the unresolved cloud-ASR item identifier and bounded assistant reference for one short quarantine; a late partial/final from that same item is discarded before it can become a user turn.
+- Human-speech boundary: the quarantine is not a fixed microphone mute. A distinct new item after drain is accepted immediately. If the provider omits item identity, only a semantic assistant-echo match is discarded. Existing T21D recognized-speech duration/text evidence continues to own interruption while audio is still audible; amplitude and VAD alone never own it.
+- Timing and privacy: the bound is the configured utterance endpoint plus two seconds, clamped to 3–12 seconds. It clears on a matching final, timeout, interruption, provider failure or close. Text and identifiers remain ephemeral and are not exported; diagnostics expose only a drop count.
+- Reason: user HIL confirmed local wake and ordinary conversation, then reported a sentence that they never spoke. The exact sanitized run showed every ASR final arriving only after the controller had returned to listening. Read-only local turn timing showed a plausible paraphrase of the preceding computer-speaker answer committed seconds later. The defect is delayed public-speaker echo finalization, not model-authored spontaneous speech, firmware or microphone selection.
+- Contract: [`t21h-acoustic-echo-tail-guard-v1.md`](../docs/contracts/t21h-acoustic-echo-tail-guard-v1.md).
+- Boundary: Windows software only; no firmware, HID, Link, motion, hardware or device write.
+
 ## D105 - Dedicated local keyword spotting replaces generic System.Speech wake
 
 - Date: 2026-09-08

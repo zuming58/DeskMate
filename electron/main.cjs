@@ -66,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21g-dedicated-local-keyword-wake";
+const DESKMATE_BUILD_ID = "t21h-acoustic-echo-tail-guard";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -1262,6 +1262,7 @@ app.whenReady().then(async () => {
     providerLabel: "three-stage",
     providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
       onEvent,
+      postPlaybackEchoGraceMs: Math.max(3000, Math.min(12000, Number(sessionPreferences.endSmoothWindowMs) + 2000)),
       asrFactory: ({ onEvent: onAsrEvent }) => new BailianStreamingAsrAdapter({
         config: bailianStore.loadSecret(),
         silenceDurationMs: sessionPreferences.endSmoothWindowMs,
