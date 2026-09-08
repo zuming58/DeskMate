@@ -1,6 +1,7 @@
 const { CompanionSpeechSegmenter, cleanVisibleText } = require("./companion-speech-segmenter.cjs");
 
-const MAX_SPEECH_SEGMENTS = 16;
+const MAX_SPEECH_SEGMENTS = 12;
+const TRUNCATED_RESPONSE_CLOSING = "回答有点长，我先说到这里。";
 const BARGE_IN_FILLERS = new Set(["嗯", "啊", "呃", "哦", "诶", "哎", "喂", "嗯嗯", "啊啊", "哦哦"]);
 const EXPLICIT_BARGE_IN = /(停一下|停下来|先停|暂停|等等|等一下|别说了|别讲了|打住|我来说|让我说|换个问题)/;
 
@@ -136,14 +137,15 @@ class ThreeStageCompanionProvider {
     return Boolean(this.speechEvidence.active && (!value || !this.speechEvidence.itemId || value === this.speechEvidence.itemId));
   }
 
-  recordPartialEvidence(text, itemId = "") {
+  recordPartialEvidence(text, itemId = "", confirmedText = "") {
     if (!this.matchingSpeechEvidence(itemId)) return false;
     const normalized = comparisonText(text);
+    const confirmed = comparisonText(confirmedText);
     const previous = this.speechEvidence.lastPartial;
-    this.speechEvidence.meaningfulPartials += 1;
-    this.speechEvidence.stablePartials = consistentPartial(previous, normalized) ? this.speechEvidence.stablePartials + 1 : 1;
+    if (normalized && normalized !== previous) this.speechEvidence.meaningfulPartials += 1;
+    this.speechEvidence.stablePartials = consistentPartial(previous, normalized) ? this.speechEvidence.stablePartials + 1 : normalized ? 1 : 0;
     this.speechEvidence.lastPartial = normalized;
-    return this.speechEvidence.stablePartials >= 2 && normalized.length >= 4;
+    return confirmed.length >= 4 || (this.speechEvidence.meaningfulPartials >= 2 && normalized.length >= 4);
   }
 
   finalSpeechConfirmed(text, itemId = "") {
@@ -151,7 +153,7 @@ class ThreeStageCompanionProvider {
     const duration = this.speechEvidence.audioStartMs !== null && this.speechEvidence.audioEndMs !== null
       ? Math.max(0, this.speechEvidence.audioEndMs - this.speechEvidence.audioStartMs)
       : 0;
-    return comparisonText(text).length >= 4 && this.speechEvidence.meaningfulPartials > 0 && duration >= 350;
+    return comparisonText(text).length >= 4 && duration >= 350;
   }
 
   handleAsrEvent(event = {}, generation = this.generation) {
@@ -186,7 +188,7 @@ class ThreeStageCompanionProvider {
         if (classification.accepted) {
           const confirmed = isExplicitBargeIn(text) && this.matchingSpeechEvidence(event.itemId)
             ? true
-            : this.recordPartialEvidence(text, event.itemId);
+            : this.recordPartialEvidence(text, event.itemId, event.confirmedText);
           if (confirmed) {
             this.counters.bargeInsAccepted += 1;
             this.emit({ type: "barge.start", hadTts: bargeContext.hadTts, diagnostic: { providerEvent: "other" } });
@@ -269,6 +271,8 @@ class ThreeStageCompanionProvider {
       segmenter: new CompanionSpeechSegmenter(),
       speechChain: Promise.resolve(),
       segmentCount: 0,
+      spokenText: "",
+      responseTruncated: false,
       ttsStarted: false,
       ttsEnded: false,
       assistantText: "",
@@ -282,11 +286,15 @@ class ThreeStageCompanionProvider {
     return Boolean(!this.closed && this.activeTurn === turn && turn.generation === this.generation && !turn.abortController.signal.aborted);
   }
 
-  queueSpeech(turn, segment) {
+  queueSpeech(turn, segment, { force = false } = {}) {
     const text = cleanVisibleText(segment).trim();
-    if (!text) return;
+    if (!text) return false;
+    if ((!force && turn.segmentCount >= MAX_SPEECH_SEGMENTS - 1) || turn.segmentCount >= MAX_SPEECH_SEGMENTS) {
+      turn.responseTruncated = true;
+      return false;
+    }
     turn.segmentCount += 1;
-    if (turn.segmentCount > MAX_SPEECH_SEGMENTS) throw new Error("three-stage-response-too-large");
+    turn.spokenText = `${turn.spokenText}${text}`;
     turn.speechChain = turn.speechChain.then(async () => {
       if (!this.isCurrentTurn(turn)) return;
       if (!turn.ttsStarted) {
@@ -310,6 +318,7 @@ class ThreeStageCompanionProvider {
         },
       });
     });
+    return true;
   }
 
   async runModelTurn(text, generation, startedAt = this.now()) {
@@ -332,7 +341,8 @@ class ThreeStageCompanionProvider {
       });
       if (!this.isCurrentTurn(turn)) return;
       for (const segment of turn.segmenter.finish(result.text)) this.queueSpeech(turn, segment);
-      this.emit({ type: "chat.final", text: result.text });
+      if (turn.responseTruncated) this.queueSpeech(turn, TRUNCATED_RESPONSE_CLOSING, { force: true });
+      this.emit({ type: "chat.final", text: turn.responseTruncated ? turn.spokenText : result.text });
       await turn.speechChain;
       if (!this.isCurrentTurn(turn)) return;
       this.completeTurn(turn);

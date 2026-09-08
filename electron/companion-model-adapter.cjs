@@ -46,7 +46,7 @@ class OpenAiStreamingCompanionModelAdapter {
     this.fetchImpl = fetchImpl;
     this.timeoutMs = Math.max(1000, Math.min(60000, Number(timeoutMs) || 30000));
     this.now = now;
-    this.systemPrompt = `${buildPersonaInstructions({ name, persona, memoryContext })}\n你只负责自然对话，不得执行工具。回答尽量简短，先直接回答；只输出要让用户看到并听到的正文。`;
+    this.systemPrompt = `${buildPersonaInstructions({ name, persona, memoryContext })}\n你只负责自然对话，不得执行工具。先直接回答，通常不超过 6 句或 300 个汉字；只有用户明确要求详细说明时才适当展开。只输出要让用户看到并听到的正文。`;
     this.history = [];
   }
 
@@ -77,7 +77,7 @@ class OpenAiStreamingCompanionModelAdapter {
         messages: this.messages(userText),
         stream: true,
         temperature: 0.55,
-        max_tokens: 700,
+        max_tokens: 360,
       };
       if (this.config.provider === "bailian") body.enable_thinking = false;
       const response = await this.fetchImpl(this.config.endpoint, {

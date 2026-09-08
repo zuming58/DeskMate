@@ -17,7 +17,8 @@ class BailianStreamingAsrAdapter {
     if (this.closed) return;
     if (event.kind === "preview") {
       const text = String(event.currentText || event.text || event.preview || "").trim().slice(0, 16384);
-      if (text) this.onEvent({ type: "partial", text, itemId: String(event.itemId || "").slice(0, 160) });
+      const confirmedText = String(event.confirmedText || event.text || "").trim().slice(0, 16384);
+      if (text) this.onEvent({ type: "partial", text, confirmedText, itemId: String(event.itemId || "").slice(0, 160) });
       return;
     }
     if (event.kind === "speech-started") {

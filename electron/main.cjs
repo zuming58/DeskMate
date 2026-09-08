@@ -66,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21b-evidence-gated-barge-in";
+const DESKMATE_BUILD_ID = "t21c-human-barge-recovery";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -303,7 +303,7 @@ function handleCompanionConversationEvent(event = {}) {
   const snapshot = companionConversationController?.snapshot?.();
   const eventSequence = ++companionEventSequence;
   const saved = companionPreferenceStore?.snapshot?.() || { revision: 0, preferences: companionPreferenceStore?.get?.() };
-  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, asrTiming: snapshot?.asrTiming, intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, preferences: saved.preferences, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
+  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, asrTiming: snapshot?.asrTiming, pipeline: snapshot?.pipeline, intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, preferences: saved.preferences, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
   const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...event, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);

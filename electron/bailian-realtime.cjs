@@ -100,7 +100,7 @@ class BailianRealtimeSession {
         if (event.kind === "preview") {
           const current = `${event.text}${event.stash}`.trim();
           this.liveItems.set(event.itemId, current);
-          this.emit({ ...event, currentText: current, preview: this.combinedPreview(event.itemId) });
+          this.emit({ ...event, confirmedText: event.text.trim(), currentText: current, preview: this.combinedPreview(event.itemId) });
         } else if (event.kind === "completed") {
           this.liveItems.delete(event.itemId);
           if (event.text.trim()) this.completedItems.set(event.itemId, event.text.trim());
