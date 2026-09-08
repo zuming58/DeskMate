@@ -1,5 +1,13 @@
 # Decisions
 
+## D101 - Provider-confirmed text and bounded completion replace prefix-only barge evidence
+
+- Date: 2026-09-08
+- Decision: T21 interruption preserves Qwen's confirmed `text` prefix separately from the revisable `stash` suffix. During a matching server speech item, a meaningful confirmed prefix may cancel playback immediately; two distinct meaningful draft hypotheses are also sufficient even if Qwen revised their prefix. A meaningful final may cancel when the same item has at least 350 ms of provider-measured speech, without requiring an earlier partial. This supersedes D100's requirement for two prefix-consistent partials or a final with prior-partial evidence.
+- Liveness: ordinary companion answers are requested within six sentences / roughly 300 Chinese characters and 360 output tokens. The speech queue reserves one final closure; if the model still exceeds the bounded segment budget, DeskMate speaks the closure and returns to listening instead of raising `three-stage-response-too-large` and ending the session.
+- Reason: the user HIL diagnostic showed four ASR arrivals during playback but no accepted interruption, followed by a terminal overlong-response error. Qwen's documented stream distinguishes immutable confirmed `text` from mutable draft `stash`; requiring draft-prefix stability discarded real utterances that the provider had already recognized.
+- Boundary: server speech identity, minimum meaningful text, filler rejection and assistant-echo rejection still apply. Raw amplitude and a VAD edge alone never cancel playback. This is Windows software only and changes no firmware, HID, Link, motion or physical audio behavior.
+
 ## D100 - Spoken interruption is a current-utterance evidence gate
 
 - Date: 2026-09-08

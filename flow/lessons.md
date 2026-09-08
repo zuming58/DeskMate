@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Streaming ASR drafts are not the same evidence as provider-confirmed text
+
+- Symptom: room noise no longer interrupts speech, yet a real user sentence is also ignored even though diagnostics count several ASR arrivals; a later verbose answer can then leave the whole conversation in an error state.
+- Practice: preserve the provider's immutable confirmed prefix separately from its revisable draft suffix. Accept a matching meaningful confirmed prefix promptly, tolerate draft revisions across distinct hypotheses, and allow a duration-backed final when intermediate updates are sparse. Independently cap spoken output and turn excess length into a normal closure rather than a session failure.
+- Rule: do not invent stability semantics by comparing display previews. Use the provider's documented confirmation boundary for interruption evidence, and make an oversized model answer a bounded turn-level condition, never a transport/session terminal.
+
 ## A registered integration can still be completely inactive when trust is unresolved
 
 - Symptom: DeskMate's named-pipe receiver reports listening, Hook JSON and helper files are present, yet the real task list remains empty and the conversation model fills the gap with invented project status.

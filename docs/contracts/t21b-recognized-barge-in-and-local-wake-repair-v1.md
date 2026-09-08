@@ -36,14 +36,16 @@ Primary implementation references:
   contain completed text from earlier user turns are forbidden as interruption
   evidence. This prevents an audio twitch from inheriting an old meaningful
   sentence and being misclassified as new speech.
-- Sound level, a VAD edge or one ordinary ASR partial alone never owns
+- Sound level, a VAD edge or one unconfirmed ordinary ASR draft alone never owns
   cancellation. An explicit phrase such as `等一下` or `先停` may cancel after a
-  matching server speech start. Any other phrase requires two consistent,
-  progressively recognized meaningful partials, or a final with prior partial
-  evidence and at least 350 ms of provider-measured speech. The candidate must
-  not match the assistant text currently being spoken. Fillers such as `嗯`,
-  `啊`, `呃`, one-character hypotheses and close assistant-echo matches are
-  rejected.
+  matching server speech start. For other phrases, Qwen's immutable `text`
+  prefix is preserved separately from its revisable `stash` suffix. A meaningful
+  confirmed prefix may cancel promptly; two distinct meaningful draft
+  hypotheses may also qualify even when the service revises their prefix. A
+  final can qualify without an earlier partial when the matching item has at
+  least 350 ms of provider-measured speech. The candidate must not match the
+  assistant text currently being spoken. Fillers such as `嗯`, `啊`, `呃`,
+  one-character hypotheses and close assistant-echo matches are rejected.
 - A qualified partial immediately cancels the active model/TTS generation and
   the local playback queue. The later final transcript opens exactly one normal
   replacement turn through the existing deterministic intent and model gates;
@@ -53,6 +55,11 @@ Primary implementation references:
 - Diagnostics expose content-free candidate, accepted, weak-rejection and
   echo-rejection counts, plus server speech-start and unstable-evidence counts.
   They never expose either side's text or PCM.
+- Model replies are requested within six sentences / roughly 300 Chinese
+  characters. The speech queue remains bounded and reserves a final spoken
+  closure. A model that still exceeds the segment budget ends that turn
+  normally and returns to listening; answer length must not become a provider
+  or session error.
 
 ## Local wake repair
 
@@ -85,8 +92,11 @@ Automated:
 - weak/filler and assistant-echo hypotheses do not interrupt;
 - cumulative transcript history cannot turn a current noise fragment into a
   qualified interruption;
-- one unstable ordinary partial does not interrupt, while progressive recognized
-  speech or an explicit interrupt phrase does;
+- one unconfirmed ordinary draft does not interrupt, while provider-confirmed
+  text, two distinct meaningful hypotheses, a duration-backed final or an
+  explicit interrupt phrase does;
+- an overlong answer produces one bounded closure and completes without a
+  session error;
 - recognized speech interrupts local playback synchronously and one final starts
   one replacement turn;
 - listener state cannot claim ready from microphone readiness alone;
