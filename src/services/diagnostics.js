@@ -249,7 +249,7 @@ export function createDiagnosticReport(input = {}) {
       desiredEnabled: wakeSource.desiredEnabled === true,
       reason: /^[a-z0-9-]{1,120}$/.test(String(wakeSource.reason || "")) ? String(wakeSource.reason) : "unavailable",
       inputMode: ["deskmate-selected-microphone", "windows-system-default"].includes(wakeSource.inputMode) ? wakeSource.inputMode : "unavailable",
-      counters: Object.fromEntries(["audioWindowCount", "heardCount", "rejectedCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
+      counters: Object.fromEntries(["audioWindowCount", "heardCount", "rejectedCount", "lowConfidenceCount", "wakeCount"].map((key) => [key, Math.max(0, Number(wakeSource[key]) || 0)])),
     },
     turnLifecycle: {
       ...Object.fromEntries(["ttsTurnStarted", "ttsTurnCompleted", "ttsTurnAbandoned", "ttsImplicitStarts", "ttsStartsWhileOpen", "ttsEndsWithoutStart", "chatFinals", "chatFinalsSuppressed", "chatFinalTtsEndPairs", "chatFinalsWithoutTtsEnd", "asrFinalsAccepted", "asrFinalsSuppressed", "bridgeChecks", "bridgeOwnedTurns", "bridgePassThroughTurns", "bridgeFailures"].map((key) => [key, Math.max(0, Number(turnSource[key]) || 0)])),

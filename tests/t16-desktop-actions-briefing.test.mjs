@@ -85,7 +85,7 @@ test("task brief store keeps eight recent tasks, rejects stale sequence and supp
   assert.equal(store.ingest(task({ sequence: 2, milestone: "继续开发" })).announcement, null);
   assert.equal(store.ingest(task({ sequence: 2 })).reason, "codex-task-brief-stale");
   now += 1;
-  assert.equal(store.ingest(task({ sequence: 3, state: "waiting", milestone: "需要选择" })).announcement.text, "DeskMate 软件 需要你回复。");
+  assert.equal(store.ingest(task({ sequence: 3, state: "waiting", milestone: "需要选择" })).announcement.text, "DeskMate 软件 项目的一个任务需要你回复。");
   for (let index = 2; index <= 10; index += 1) store.ingest(task({ taskKey: `task_${String(index).padStart(4, "0")}`, taskLabel: `任务 ${index}`, sequence: 1 }));
   assert.equal(store.list().length, 8);
 });
@@ -102,7 +102,7 @@ test("thinking stays silent while waiting, completed and error remain immediate"
   }
 });
 
-test("aggregate Codex query reports every active task while deterministic templates never invent progress", () => {
+test("aggregate Codex query reports stable projects without temporary task titles or invented progress", () => {
   const store = new CodexTaskBriefStore();
   store.ingest(task({ taskKey: "task_one", taskLabel: "桌面软件", state: "working", milestone: "代码门通过" }));
   store.ingest(task({ taskKey: "task_two", taskLabel: "固件审计", state: "waiting", milestone: "等待人工验证" }));
@@ -110,8 +110,8 @@ test("aggregate Codex query reports every active task while deterministic templa
   assert.equal(aggregate.needsDisambiguation, false);
   assert.equal(aggregate.aggregate, true);
   assert.match(aggregate.answer, /目前有 2 个 Codex 任务正在运行/);
-  assert.match(aggregate.answer, /桌面软件 正在执行：代码门通过/);
-  assert.match(aggregate.answer, /固件审计 正在等你回复：等待人工验证/);
+  assert.match(aggregate.answer, /涉及 2 个项目：固件审计、桌面软件|涉及 2 个项目：桌面软件、固件审计/);
+  assert.doesNotMatch(aggregate.answer, /代码门通过|等待人工验证/);
   const named = store.query("桌面软件做完了吗");
   assert.equal(named.needsDisambiguation, false);
   assert.equal(named.answer, "桌面软件 正在执行：代码门通过");
@@ -119,16 +119,16 @@ test("aggregate Codex query reports every active task while deterministic templa
   assert.doesNotMatch(aggregate.answer, /%/);
 });
 
-test("automatic hook lifecycle creates separate real tasks and can later hydrate their titles", () => {
+test("automatic hook lifecycle creates separate real tasks and can later hydrate their stable project labels", () => {
   const store = new CodexTaskBriefStore();
   const first = store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
   assert.equal(first.task.state, "thinking");
   assert.equal(first.announcement, null);
   const waiting = store.ingestHook({ event: "PermissionRequest", state: "waiting", toolName: "Bash", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
   assert.equal(waiting.task.state, "waiting");
-  assert.equal(waiting.announcement.text, "deskmate 需要你回复。");
-  assert.equal(store.relabel("codex_1234567890123456", "DeskMate 软件闭环").changed, true);
-  assert.equal(store.query("DeskMate 软件闭环怎么样").answer, "DeskMate 软件闭环 正在等你回复：需要你确认");
+  assert.equal(waiting.announcement.text, "deskmate 项目的一个任务需要你回复。");
+  assert.equal(store.relabel("codex_1234567890123456", "DeskMate").changed, true);
+  assert.equal(store.query("DeskMate 项目怎么样").answer, "DeskMate 正在等你回复：需要你确认");
 });
 
 test("automatic terminal announcements require a real active transition and speak once", () => {
@@ -139,7 +139,7 @@ test("automatic terminal announcements require a real active transition and spea
 
   store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
   const completed = store.ingestHook({ event: "Stop", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
-  assert.equal(completed.announcement.text, "真实任务 已结束。");
+  assert.equal(completed.announcement.text, "真实任务 项目的一个任务已结束。");
   const repeated = store.ingestHook({ event: "SessionEnd", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
   assert.equal(repeated.announcement, null);
 });
@@ -154,6 +154,19 @@ test("task lookup tolerates spoken spacing, matches a unique project term, and k
   const similar = store.query("DeskMate 项目怎么样");
   assert.equal(similar.needsDisambiguation, true);
   assert.match(similar.answer, /完整任务名称/);
+});
+
+test("multiple tasks from one project are summarized as one project instead of requiring generated titles", () => {
+  const store = new CodexTaskBriefStore();
+  store.ingest(task({ taskKey: "task_one", taskLabel: "DeskMate", state: "working", milestone: "临时标题甲" }));
+  store.ingest(task({ taskKey: "task_two", taskLabel: "DeskMate", state: "waiting", milestone: "临时标题乙" }));
+  const aggregate = store.query("Codex 有什么任务在跑");
+  assert.equal(aggregate.answer, "目前有 2 个 Codex 任务正在运行。涉及 1 个项目：DeskMate。");
+  assert.doesNotMatch(aggregate.answer, /临时标题/);
+  const named = store.query("DeskMate 项目怎么样");
+  assert.equal(named.needsDisambiguation, false);
+  assert.equal(named.project, true);
+  assert.equal(named.answer, "DeskMate 项目有 2 个任务正在运行，其中 1 个正在等你回复。");
 });
 
 test("Codex status questions and a named follow-up bypass the language model", async () => {

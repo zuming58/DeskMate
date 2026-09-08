@@ -1,5 +1,14 @@
 # Decisions
 
+## D103 - Codex speech uses stable project identity and exact wake grammar owns acceptance
+
+- Date: 2026-09-08
+- Project identity: the read-only Codex App Server catalog may correlate an opaque lifecycle task key, but it derives the spoken project label from the Git repository name first, then the working-directory basename. A generated thread title is only a projectless fallback. Aggregate answers report active-task count plus distinct project names; same-project tasks are grouped and automatic terminal speech says only that one task in that project changed state.
+- Wake: a `System.Speech` result already accepted from the selected-microphone bounded exact grammar is compared for exact normalized phrase equality and then wakes directly. DeskMate no longer applies a second absolute confidence cutoff to that result. The optional unrestricted dictation compatibility path keeps its stricter confidence gate. Diagnostics add only a low-confidence counter and never expose text, confidence or PCM.
+- Reason: the user HIL proved realtime dialogue, recognized human interruption, clap/noise rejection, truthful aggregate task count and voice-channel grounding. The remaining task answer used generated conversation titles, while wake processed 891 finite audio windows and returned two recognized exact-grammar candidates but DeskMate rejected both at its own fixed threshold. Microsoft documents `RecognizedPhrase.Confidence` as an engine-relative ranking rather than an absolute correctness probability, so the second fixed cutoff was not a valid portable gate.
+- Supersedes: D091's use of visible thread titles and D102's `0.32` second gate for selected-microphone exact grammar. D102's one-shot notifications, barge timing, privacy and dictation compatibility threshold remain unchanged.
+- Boundary: Windows software only; no firmware, hardware, HID, Link, motion, device or Flash operation.
+
 ## D102 - Proactive task speech is one-shot and human interruption needs sustained linguistic evidence
 
 - Date: 2026-09-08

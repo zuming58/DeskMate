@@ -86,9 +86,9 @@ function deterministicTaskAnswer(task) {
 
 function taskNotification(task) {
   const copy = {
-    waiting: `${task.taskLabel} 需要你回复。`,
-    completed: `${task.taskLabel} 已结束。`,
-    error: `${task.taskLabel} 遇到问题。`,
+    waiting: `${task.taskLabel} 项目的一个任务需要你回复。`,
+    completed: `${task.taskLabel} 项目的一个任务已结束。`,
+    error: `${task.taskLabel} 项目的一个任务遇到问题。`,
   };
   return copy[task.state] || "";
 }
@@ -119,8 +119,24 @@ function aggregateTaskAnswer(tasks) {
   const candidates = (active.length ? active : tasks).slice(0, MAX_RECENT_TASKS);
   const prefix = active.length ? `目前有 ${active.length} 个 Codex 任务正在运行。` : "目前没有正在运行的 Codex 任务。";
   if (!candidates.length) return prefix;
-  const detail = candidates.map((task, index) => `${index + 1}，${deterministicTaskAnswer(task)}`).join("；");
-  return `${prefix}${detail}`.slice(0, 500);
+  const projects = [...new Set(candidates.map((task) => task.taskLabel))];
+  const scope = active.length ? "涉及" : "最近涉及";
+  return `${prefix}${scope} ${projects.length} 个项目：${projects.join("、")}。`.slice(0, 500);
+}
+
+function projectTaskAnswer(tasks) {
+  const candidates = tasks.slice(0, MAX_RECENT_TASKS);
+  if (!candidates.length) return "Codex 还没有报告这个项目的任务状态";
+  const label = candidates[0].taskLabel;
+  const active = candidates.filter((task) => ["thinking", "working", "waiting"].includes(task.state));
+  if (active.length) {
+    const waiting = active.filter((task) => task.state === "waiting").length;
+    const waitingSuffix = waiting ? `，其中 ${waiting} 个正在等你回复` : "";
+    return `${label} 项目有 ${active.length} 个任务正在运行${waitingSuffix}。`;
+  }
+  const latest = candidates[0];
+  const latestCopy = latest.state === "error" ? "最近一个任务遇到问题" : latest.state === "completed" ? "最近一个任务已结束" : "最近有任务状态更新";
+  return `${label} 项目目前没有运行中的任务，${latestCopy}。`;
 }
 
 function normalizeTaskReference(value) {
@@ -223,6 +239,9 @@ class CodexTaskBriefStore {
     const matches = this.matchingTasks(utterance);
     if (matches.length === 1) return { ok: true, available: true, needsDisambiguation: false, answer: deterministicTaskAnswer(matches[0]), task: this.sanitize(matches[0]) };
     if (matches.length > 1) {
+      if (new Set(matches.map((task) => normalizeTaskReference(task.taskLabel))).size === 1) {
+        return { ok: true, available: true, needsDisambiguation: false, project: true, answer: projectTaskAnswer(matches), tasks: matches.map((task) => this.sanitize(task)) };
+      }
       const labels = matches.slice(0, this.maxTasks).map((task) => task.taskLabel);
       return { ok: true, available: true, needsDisambiguation: true, answer: candidatePrompt(labels, { similar: true }), tasks: labels };
     }
@@ -267,4 +286,4 @@ class CodexTaskBriefServer {
   }
 }
 
-module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, aggregateTaskAnswer, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, hookMilestone, isAggregateTaskQuery, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskNotification, taskReferenceTerms };
+module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, aggregateTaskAnswer, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, hookMilestone, isAggregateTaskQuery, normalizeCodexTaskBrief, normalizeTaskReference, projectTaskAnswer, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskNotification, taskReferenceTerms };

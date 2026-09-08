@@ -5,18 +5,21 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const { opaqueCodexTaskKey } = require("../electron/codex-hook-state.cjs");
-const { CodexTaskCatalog, listCodexThreadCatalog, parseThreadCatalog } = require("../electron/codex-app-server-catalog.cjs");
+const { CodexTaskCatalog, fallbackLabelFromGitInfo, listCodexThreadCatalog, parseThreadCatalog } = require("../electron/codex-app-server-catalog.cjs");
 
-test("Codex App Server catalog keeps only opaque task keys and bounded visible titles", () => {
+test("Codex App Server catalog keeps only opaque task keys and stable project labels", () => {
   const entries = parseThreadCatalog({ data: [
-    { id: "raw-thread-1", name: "DeskMate 软件闭环", cwd: "C:\\secret\\deskmate", preview: "private prompt", turns: [{ text: "private answer" }] },
+    { id: "raw-thread-1", name: "临时生成的修复标题", cwd: "C:\\secret\\build-t10dc-work", gitInfo: { originUrl: "https://github.com/zuming58/DeskMate.git", branch: "private", sha: "private" }, preview: "private prompt", turns: [{ text: "private answer" }] },
     { id: "raw-thread-2", name: "", cwd: "C:\\work\\EasyInput" },
+    { id: "raw-thread-3", name: "项目外临时任务", cwd: "" },
   ] });
   assert.deepEqual([...entries], [
-    [opaqueCodexTaskKey("raw-thread-1"), "DeskMate 软件闭环"],
+    [opaqueCodexTaskKey("raw-thread-1"), "DeskMate"],
     [opaqueCodexTaskKey("raw-thread-2"), "EasyInput"],
+    [opaqueCodexTaskKey("raw-thread-3"), "项目外临时任务"],
   ]);
-  assert.doesNotMatch(JSON.stringify([...entries]), /raw-thread|private prompt|private answer|C:\\\\secret/);
+  assert.doesNotMatch(JSON.stringify([...entries]), /raw-thread|private prompt|private answer|private|build-t10dc-work|C:\\\\secret/);
+  assert.equal(fallbackLabelFromGitInfo({ originUrl: "git@github.com:zuming58/DeskMate.git" }), "DeskMate");
 });
 
 test("Codex App Server catalog requests thread metadata without turns or previews", async () => {
@@ -29,12 +32,12 @@ test("Codex App Server catalog requests thread metadata without turns or preview
     child.stdout.setEncoding = () => {};
     child.kill = () => {};
     queueMicrotask(() => child.stdout.emit("data", `${JSON.stringify({ id: 1, result: {} })}\n`));
-    queueMicrotask(() => child.stdout.emit("data", `${JSON.stringify({ id: 2, result: { data: [{ id: "thread-1", name: "任务一", preview: "ignored" }] } })}\n`));
+    queueMicrotask(() => child.stdout.emit("data", `${JSON.stringify({ id: 2, result: { data: [{ id: "thread-1", name: "任务一", cwd: "C:\\work\\KnowledgeBase", preview: "ignored" }] } })}\n`));
     return child;
   };
   const result = await listCodexThreadCatalog({ spawnImpl, command: "codex", timeoutMs: 1000 });
   assert.equal(result.ok, true);
-  assert.equal(result.entries.get(opaqueCodexTaskKey("thread-1")), "任务一");
+  assert.equal(result.entries.get(opaqueCodexTaskKey("thread-1")), "KnowledgeBase");
   assert.deepEqual(writes[1], { method: "initialized", params: {} });
   assert.deepEqual(writes[2], { method: "thread/list", id: 2, params: { cursor: null, limit: 100, sortKey: "updated_at", sortDirection: "desc", archived: false } });
   assert.doesNotMatch(JSON.stringify(writes), /turn|preview/i);

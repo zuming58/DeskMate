@@ -30,12 +30,26 @@ function fallbackLabelFromCwd(value) {
   return normalizeTaskLabel(path.basename(value));
 }
 
+function fallbackLabelFromGitInfo(value) {
+  const originUrl = typeof value?.originUrl === "string" && Buffer.byteLength(value.originUrl, "utf8") <= 2048 ? value.originUrl.trim() : "";
+  if (!originUrl) return "";
+  const normalized = originUrl.replace(/[\\/]+$/g, "").replace(/\.git$/i, "");
+  const segment = normalized.split(/[\\/:]+/).filter(Boolean).pop() || "";
+  let decoded = segment;
+  try { decoded = decodeURIComponent(segment); } catch { /* retain the safe final segment */ }
+  return normalizeTaskLabel(decoded);
+}
+
 function parseThreadCatalog(result = {}) {
   const entries = new Map();
   for (const thread of Array.isArray(result?.data) ? result.data.slice(0, 200) : []) {
     const taskKey = opaqueCodexTaskKey(thread?.id);
     if (!taskKey) continue;
-    const label = normalizeTaskLabel(thread?.name) || fallbackLabelFromCwd(thread?.cwd);
+    // Thread names are generated per conversation and change as Codex rewrites
+    // the sidebar title.  Project identity must stay stable across those turns,
+    // so prefer the repository name, then the working-directory basename.  A
+    // generated thread title is retained only for projectless compatibility.
+    const label = fallbackLabelFromGitInfo(thread?.gitInfo) || fallbackLabelFromCwd(thread?.cwd) || normalizeTaskLabel(thread?.name);
     if (!label) continue;
     entries.set(taskKey, label);
   }
@@ -129,4 +143,4 @@ class CodexTaskCatalog {
   }
 }
 
-module.exports = { CodexTaskCatalog, DEFAULT_REFRESH_MS, DEFAULT_TIMEOUT_MS, fallbackLabelFromCwd, listCodexThreadCatalog, parseThreadCatalog, resolveCodexExecutable };
+module.exports = { CodexTaskCatalog, DEFAULT_REFRESH_MS, DEFAULT_TIMEOUT_MS, fallbackLabelFromCwd, fallbackLabelFromGitInfo, listCodexThreadCatalog, parseThreadCatalog, resolveCodexExecutable };

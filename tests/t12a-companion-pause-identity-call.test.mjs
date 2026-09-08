@@ -128,21 +128,21 @@ test("reserved companion Host Action round-trips without entering AppActionStore
 
 test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v3", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, wakeCount: 0, lastHeardAt: null });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v4", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, lowConfidenceCount: 0, wakeCount: 0, lastHeardAt: null });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
     sessionPolicy: { sessionApplied: { revision: 3, endSmoothWindowMs: 5000, idleTimeoutMs: 60000 } },
     companionName: "private-name",
     wakePhrase: "private-phrase",
-    wakeWord: { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", audioWindowCount: 9, heardCount: 2, rejectedCount: 1, wakeCount: 1, phrase: "private-phrase" },
+    wakeWord: { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", audioWindowCount: 9, heardCount: 2, rejectedCount: 1, lowConfidenceCount: 1, wakeCount: 1, phrase: "private-phrase" },
   } });
   assert.deepEqual(report.conversation.endpointing, {
     saved: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000 },
     sessionApplied: { revision: 3, endSmoothWindowMs: 5000, idleTimeoutMs: 60000 },
   });
   assert.doesNotMatch(JSON.stringify(report), /private-name|private-phrase/);
-  assert.deepEqual(report.conversation.wakeWord, { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", counters: { audioWindowCount: 9, heardCount: 2, rejectedCount: 1, wakeCount: 1 } });
+  assert.deepEqual(report.conversation.wakeWord, { version: "windows-speech-wake-v2", available: true, enabled: true, desiredEnabled: true, reason: "listening", inputMode: "deskmate-selected-microphone", counters: { audioWindowCount: 9, heardCount: 2, rejectedCount: 1, lowConfidenceCount: 1, wakeCount: 1 } });
 });
 
 test("Windows local wake listener emits only a wake event and can yield the microphone", async () => {
@@ -186,6 +186,9 @@ test("local wake v2 keeps recognition private while adding a local bounded dicta
   assert.doesNotMatch(LISTENER_SCRIPT, /WriteLine\(\$args\.Result\.Text/);
   assert.match(LISTENER_SCRIPT, /bounded-exact/);
   assert.match(LISTENER_SCRIPT, /stdin-pcm16'[)]? \{ try/);
+  assert.match(LISTENER_SCRIPT, /low-confidence/);
+  assert.match(LISTENER_SCRIPT, /\$heard -eq \$phrase/);
+  assert.match(LISTENER_SCRIPT, /\$exactGrammar -and \$matched/);
 });
 
 test("local wake can consume DeskMate-selected PCM and reports privacy-safe microphone evidence", async () => {
@@ -202,7 +205,7 @@ test("local wake can consume DeskMate-selected PCM and reports privacy-safe micr
     child.kill = () => queueMicrotask(() => child.emit("exit", 0));
     children.push(child);
     if (children.length === 1) queueMicrotask(() => { child.stdout.write("ready\n"); child.emit("exit", 0); });
-    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"audio-window"}\n{"type":"heard"}\n{"type":"rejected"}\n{"type":"wake"}\n'));
+    else queueMicrotask(() => child.stdout.write('{"type":"ready"}\n{"type":"audio-window"}\n{"type":"heard"}\n{"type":"rejected"}\n{"type":"low-confidence"}\n{"type":"wake"}\n'));
     return child;
   };
   const wake = new WindowsSpeechWakeWordAdapter({
@@ -221,7 +224,8 @@ test("local wake can consume DeskMate-selected PCM and reports privacy-safe micr
   assert.equal(wake.status().enabled, true);
   assert.equal(wake.status().audioWindowCount, 1);
   assert.equal(wake.status().heardCount, 1);
-  assert.equal(wake.status().rejectedCount, 1);
+  assert.equal(wake.status().rejectedCount, 2);
+  assert.equal(wake.status().lowConfidenceCount, 1);
   assert.equal(wake.status().wakeCount, 1);
   assert.equal(wakes, 1);
   assert.equal(wake.writeAudio(Buffer.from([1, 2, 3, 4])), true);
