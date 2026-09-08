@@ -84,6 +84,15 @@ function deterministicTaskAnswer(task) {
   return copy[task.state];
 }
 
+function taskNotification(task) {
+  const copy = {
+    waiting: `${task.taskLabel} 需要你回复。`,
+    completed: `${task.taskLabel} 已结束。`,
+    error: `${task.taskLabel} 遇到问题。`,
+  };
+  return copy[task.state] || "";
+}
+
 function hookMilestone(value = {}) {
   if (value.event === "UserPromptSubmit") return "开始处理新任务";
   if (value.event === "PermissionRequest") return "需要你确认";
@@ -140,13 +149,14 @@ class CodexTaskBriefStore {
     this.tasks = new Map();
   }
 
-  ingest(value) {
+  ingest(value, { allowAnnouncement = true } = {}) {
     const report = normalizeCodexTaskBrief(value);
     if (!report) return { ok: false, reason: "codex-task-brief-invalid" };
     const previous = this.tasks.get(report.taskKey);
     if (previous && report.sequence <= previous.sequence) return { ok: false, reason: "codex-task-brief-stale" };
     const receivedAt = this.now();
-    const shouldAnnounce = IMMEDIATE_STATES.has(report.state);
+    const stateChanged = Boolean(previous && previous.state !== report.state);
+    const shouldAnnounce = allowAnnouncement && stateChanged && IMMEDIATE_STATES.has(report.state);
     const task = Object.freeze({ ...report, receivedAt, lastAnnouncementAt: shouldAnnounce ? receivedAt : previous?.lastAnnouncementAt || 0, thinkingAnnounced: report.state === "thinking" || previous?.thinkingAnnounced === true });
     this.tasks.delete(report.taskKey);
     this.tasks.set(report.taskKey, task);
@@ -154,7 +164,7 @@ class CodexTaskBriefStore {
     return {
       ok: true,
       task: this.sanitize(task),
-      announcement: shouldAnnounce ? Object.freeze({ text: deterministicTaskAnswer(task), state: task.state, taskLabel: task.taskLabel }) : null,
+      announcement: shouldAnnounce ? Object.freeze({ text: taskNotification(task), state: task.state, taskLabel: task.taskLabel }) : null,
     };
   }
 
@@ -167,6 +177,8 @@ class CodexTaskBriefStore {
     if (value.event === "SessionEnd" && !previous) return { ok: true, registered: false, task: null, announcement: null };
     const state = value.event === "SessionEnd" ? "completed" : value.state;
     if (!STATES.has(state)) return { ok: false, reason: "codex-hook-task-state-unavailable" };
+    const terminalWithoutActiveTask = ["Stop", "SessionEnd"].includes(value.event)
+      && !["thinking", "working", "waiting"].includes(previous?.state);
     return this.ingest({
       version: CODEX_TASK_BRIEF_VERSION,
       provider: "codex",
@@ -175,7 +187,7 @@ class CodexTaskBriefStore {
       state,
       milestone: hookMilestone(value),
       sequence: (previous?.sequence || 0) + 1,
-    });
+    }, { allowAnnouncement: !terminalWithoutActiveTask });
   }
 
   relabel(taskKey, taskLabel) {
@@ -255,4 +267,4 @@ class CodexTaskBriefServer {
   }
 }
 
-module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, aggregateTaskAnswer, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, hookMilestone, isAggregateTaskQuery, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskReferenceTerms };
+module.exports = { CODEX_TASK_BRIEF_PIPE_NAME, CODEX_TASK_BRIEF_VERSION, MAX_MESSAGE_BYTES, MAX_RECENT_TASKS, PROGRESS_THROTTLE_MS, CodexTaskBriefServer, CodexTaskBriefStore, aggregateTaskAnswer, candidatePrompt, decodeCodexTaskBrief, deterministicTaskAnswer, encodeCodexTaskBrief, hookMilestone, isAggregateTaskQuery, normalizeCodexTaskBrief, normalizeTaskReference, resolveCodexTaskBriefPipePath, sendCodexTaskBrief, taskNotification, taskReferenceTerms };

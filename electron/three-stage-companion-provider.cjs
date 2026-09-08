@@ -4,6 +4,9 @@ const MAX_SPEECH_SEGMENTS = 12;
 const TRUNCATED_RESPONSE_CLOSING = "回答有点长，我先说到这里。";
 const BARGE_IN_FILLERS = new Set(["嗯", "啊", "呃", "哦", "诶", "哎", "喂", "嗯嗯", "啊啊", "哦哦"]);
 const EXPLICIT_BARGE_IN = /(停一下|停下来|先停|暂停|等等|等一下|别说了|别讲了|打住|我来说|让我说|换个问题)/;
+const NON_SPEECH_LABEL = /^(?:掌声|拍手|拍手声|咳嗽|咳嗽声|噪音|杂音|音乐|背景音)$/;
+const MIN_PARTIAL_SPEECH_MS = 500;
+const MIN_FINAL_SPEECH_MS = 650;
 
 function comparisonText(value) {
   return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -11,7 +14,7 @@ function comparisonText(value) {
 
 function classifyRecognizedBargeIn(candidate, assistantText = "") {
   const normalized = comparisonText(candidate);
-  if (!normalized || BARGE_IN_FILLERS.has(normalized)) return Object.freeze({ accepted: false, reason: "weak" });
+  if (!normalized || BARGE_IN_FILLERS.has(normalized) || NON_SPEECH_LABEL.test(normalized)) return Object.freeze({ accepted: false, reason: "weak" });
   const meaningfulLength = [...normalized].length;
   const explicitShortInterrupt = /^(停|等等|等一下|先停|别说|不是)$/.test(normalized);
   if (meaningfulLength < 3 && !explicitShortInterrupt) return Object.freeze({ accepted: false, reason: "weak" });
@@ -63,7 +66,7 @@ class ThreeStageCompanionProvider {
     this.activeTurn = null;
     this.playbackTail = null;
     this.pendingBargeInFinal = false;
-    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
     this.counters = {
@@ -129,7 +132,7 @@ class ThreeStageCompanionProvider {
   }
 
   resetSpeechEvidence() {
-    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
   }
 
   matchingSpeechEvidence(itemId = "") {
@@ -145,7 +148,9 @@ class ThreeStageCompanionProvider {
     if (normalized && normalized !== previous) this.speechEvidence.meaningfulPartials += 1;
     this.speechEvidence.stablePartials = consistentPartial(previous, normalized) ? this.speechEvidence.stablePartials + 1 : normalized ? 1 : 0;
     this.speechEvidence.lastPartial = normalized;
-    return confirmed.length >= 4 || (this.speechEvidence.meaningfulPartials >= 2 && normalized.length >= 4);
+    const observedMs = this.speechEvidence.receivedStartAt === null ? 0 : Math.max(0, this.now() - this.speechEvidence.receivedStartAt);
+    const linguisticEvidence = confirmed.length >= 5 || (this.speechEvidence.meaningfulPartials >= 2 && normalized.length >= 5);
+    return linguisticEvidence && observedMs >= MIN_PARTIAL_SPEECH_MS;
   }
 
   finalSpeechConfirmed(text, itemId = "") {
@@ -153,7 +158,7 @@ class ThreeStageCompanionProvider {
     const duration = this.speechEvidence.audioStartMs !== null && this.speechEvidence.audioEndMs !== null
       ? Math.max(0, this.speechEvidence.audioEndMs - this.speechEvidence.audioStartMs)
       : 0;
-    return comparisonText(text).length >= 4 && duration >= 350;
+    return comparisonText(text).length >= 5 && duration >= MIN_FINAL_SPEECH_MS;
   }
 
   handleAsrEvent(event = {}, generation = this.generation) {
@@ -163,6 +168,7 @@ class ThreeStageCompanionProvider {
       this.speechEvidence.active = true;
       this.speechEvidence.itemId = String(event.itemId || "").slice(0, 160);
       this.speechEvidence.audioStartMs = Math.max(0, Number(event.audioStartMs) || 0);
+      this.speechEvidence.receivedStartAt = this.now();
       if (this.bargeContext()) this.counters.bargeSpeechStarts += 1;
       return;
     }
@@ -444,4 +450,4 @@ class ThreeStageCompanionProvider {
   }
 }
 
-module.exports = { MAX_SPEECH_SEGMENTS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };
+module.exports = { MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };

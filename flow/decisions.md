@@ -1,5 +1,15 @@
 # Decisions
 
+## D102 - Proactive task speech is one-shot and human interruption needs sustained linguistic evidence
+
+- Date: 2026-09-08
+- Decision: automatic Codex speech is emitted only on a real transition into `waiting`, `completed` or `error`, uses one sentence with task name plus state, and suppresses repeated or terminal-without-active hook events. A notification that opens its own voice session forwards no microphone audio and closes after playback; an already interactive companion session remains open.
+- Voice presentation: the conversational model is explicitly told it is receiving a live microphone turn and must not claim that it lacks a microphone or expose the ASR/text/TTS chain. Assistant reply text remains available to trusted TTS and final-turn memory, but is removed from renderer/capsule payloads.
+- Interruption: an explicit stop phrase remains prompt, while ordinary partial evidence must survive at least 500 ms and an ordinary final needs at least 650 ms of provider speech. Common non-speech labels remain weak. This supersedes D101's immediate cancellation on any four-character confirmed prefix and its 350 ms final threshold.
+- Wake: selected-microphone wake uses the bounded exact grammar without competing dictation, includes joined and spaced name cadence variants, and uses a `0.32` exact-grammar default while dictation compatibility remains at least `0.42`. Diagnostic export reads a fresh main-process wake snapshot and never exports recognized text, confidence or PCM.
+- Reason: user HIL reported claps interrupting speech, proactive task announcements continuing into unwanted listening and extra replies, the model claiming it only saw text, no visible wake hit, and repeated announcements without a new completed task. Content-free diagnostics showed 19 barge candidates but only four provider speech starts, while code review proved every repeated terminal report was eligible to announce and the exported wake field was accidentally omitted.
+- Boundary: Windows software only; no firmware, hardware, HID, Link, motion or device write changes.
+
 ## D101 - Provider-confirmed text and bounded completion replace prefix-only barge evidence
 
 - Date: 2026-09-08

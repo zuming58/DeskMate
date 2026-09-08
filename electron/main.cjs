@@ -66,7 +66,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21c-human-barge-recovery";
+const DESKMATE_BUILD_ID = "t21d-voice-notification-wake";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -238,7 +238,7 @@ function finishDictationForeground() {
 function configuredWakePhrases(preferences = companionPreferenceStore?.get?.() || {}) {
   const name = String(preferences.name || "").trim();
   const phrase = String(preferences.wakePhrase || "").trim();
-  return [...new Set([phrase, name ? `你好${name}` : "", name ? `${name}${name}` : ""].filter(Boolean))];
+  return [...new Set([phrase, name ? `你好${name}` : "", name ? `你好 ${name}` : "", name ? `${name}${name}` : "", name ? `${name} ${name}` : ""].filter(Boolean))];
 }
 
 function startWakeCapture() {
@@ -279,10 +279,11 @@ function updateCompanionOverlay(event = {}) {
     if (!companionIsActive()) overlayWindow?.hide();
     return;
   }
+  if (["reply.partial", "turn.assistant-final"].includes(event.type)) return;
   if (!shouldUpdateCompanionOverlay(event)) return;
   const map = { connecting: "organizing", listening: "recording", thinking: "transcribing", speaking: "outputting", completed: "completed", error: "error", idle: "idle", stopping: "cancelled" };
   const state = event.type === "state" ? map[event.state] : null;
-  const transcript = ["transcript.partial", "turn.user-final", "reply.partial", "turn.assistant-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
+  const transcript = ["transcript.partial", "turn.user-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
   const snapshot = {
     state: state || (event.type?.startsWith("reply") ? "outputting" : event.type?.startsWith("transcript") ? "recording" : "organizing"),
     message: event.error || ({ connecting: "正在连接三段式语音…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
@@ -304,7 +305,8 @@ function handleCompanionConversationEvent(event = {}) {
   const eventSequence = ++companionEventSequence;
   const saved = companionPreferenceStore?.snapshot?.() || { revision: 0, preferences: companionPreferenceStore?.get?.() };
   const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, asrTiming: snapshot?.asrTiming, pipeline: snapshot?.pipeline, intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, preferences: saved.preferences, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
-  const payload = event.type === "state" ? { ...event, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...event, ...lifecycle, eventSequence };
+  const visibleEvent = ["reply.partial", "turn.assistant-final"].includes(event.type) ? { ...event, text: "" } : event;
+  const payload = event.type === "state" ? { ...visibleEvent, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...visibleEvent, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
   updateCompanionOverlay(payload);
   if (event.type === "state") motionAutomationCoordinator?.onCompanionState(event.state);
@@ -1121,7 +1123,7 @@ async function startCompanionConversation(value = {}) {
   const savedPersona = companionPersonaStore.snapshot();
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext(), hotwords: options.hotwords, rules: options.rules } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start({ ...lease, initialAnnouncement, restoreVolume: initialAnnouncement ? conversationVolume : undefined });
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false });
   if (!result.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); }
   else void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
@@ -1131,7 +1133,7 @@ async function startCompanionConversation(value = {}) {
 async function announceCodexTaskBrief(announcement = {}) {
   const text = normalizeTrustedAnnouncement(announcement.text);
   if (!text) return { ok: false, reason: "codex-task-brief-announcement-empty" };
-  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "three-stage-tts", listeningAfterPlayback: true });
+  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "three-stage-tts", listeningAfterPlayback: false });
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active" };
   }
@@ -1139,7 +1141,7 @@ async function announceCodexTaskBrief(announcement = {}) {
     const preferences = companionPreferenceStore.get();
     return companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
   }
-  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text });
+  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true });
 }
 
 async function stopCompanionConversation(reason = "user") {

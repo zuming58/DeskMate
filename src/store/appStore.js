@@ -204,7 +204,7 @@ export function reduceAppState(state, action) {
       for (const key of ["audioSource", "audioSink", "audioSelection", "echoGuard", "computerAudio", "service", "intentBridge", "build", "mainState", "stopLifecycle", "providerLifecycle", "turnLifecycle", "sessionPolicy", "preferences", "wakeWord"]) if (value[key] !== undefined) next[key] = value[key];
       if (next.state === "idle") { next.transcript = ""; next.reply = ""; }
     } else if (["transcript.partial", "turn.user-final"].includes(value.type)) next.transcript = String(value.text || "").slice(-500);
-    else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = String(value.text || "").slice(-1000);
+    else if (["reply.partial", "turn.assistant-final"].includes(value.type)) next.reply = "";
     else if (value.type === "audio.selection") next.audioSelection = { requestedSource: value.requestedSource || "computer", activeSource: value.activeSource || "computer", output: "computer", fallback: value.fallback || null };
     else if (value.type === "stop.lifecycle") {
       next.stopLifecycle = { ...(next.stopLifecycle || {}), ...(value.stopLifecycle || {}) };

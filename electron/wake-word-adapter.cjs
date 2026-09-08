@@ -1,6 +1,6 @@
 const { spawn } = require("child_process");
 
-const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v2";
+const WAKE_WORD_ADAPTER_VERSION = "windows-speech-wake-v3";
 const PROBE_SCRIPT = [
   "$ErrorActionPreference='Stop'",
   "Add-Type -AssemblyName System.Speech",
@@ -28,9 +28,11 @@ const LISTENER_SCRIPT = [
   "$engine = New-Object System.Speech.Recognition.SpeechRecognitionEngine($recognizer)",
   "$grammar.Name = 'bounded-exact'",
   "$engine.LoadGrammar($grammar)",
-  "try { $dictation = New-Object System.Speech.Recognition.DictationGrammar; $dictation.Name = 'local-fallback'; $engine.LoadGrammar($dictation) } catch { $dictation = $null }",
+  "$dictation = $null",
+  "if ($env:DESKMATE_WAKE_AUDIO_MODE -ne 'stdin-pcm16') { try { $dictation = New-Object System.Speech.Recognition.DictationGrammar; $dictation.Name = 'local-fallback'; $engine.LoadGrammar($dictation) } catch { $dictation = $null } }",
   "$threshold = [Double]::Parse($env:DESKMATE_WAKE_CONFIDENCE, [Globalization.CultureInfo]::InvariantCulture)",
-  "function Publish-WakeResult($result) { $heard = ([string]$result.Text -replace '[^\\p{L}\\p{Nd}]', '').ToLowerInvariant(); $matched = $false; foreach ($phrase in $normalizedPhrases) { if ($phrase -and $heard.Contains($phrase)) { $matched = $true; break } }; if ($matched -and $result.Confidence -ge $threshold) { [Console]::Out.WriteLine('{\"type\":\"wake\"}') } else { [Console]::Out.WriteLine('{\"type\":\"rejected\"}') } }",
+  "$fallbackThreshold = [Math]::Max(0.42, $threshold)",
+  "function Publish-WakeResult($result) { $heard = ([string]$result.Text -replace '[^\\p{L}\\p{Nd}]', '').ToLowerInvariant(); $matched = $false; foreach ($phrase in $normalizedPhrases) { if ($phrase -and $heard.Contains($phrase)) { $matched = $true; break } }; $required = if ($result.Grammar.Name -eq 'bounded-exact') { $threshold } else { $fallbackThreshold }; if ($matched -and $result.Confidence -ge $required) { [Console]::Out.WriteLine('{\"type\":\"wake\"}') } else { [Console]::Out.WriteLine('{\"type\":\"rejected\"}') } }",
   "if ($env:DESKMATE_WAKE_AUDIO_MODE -eq 'stdin-pcm16') {",
   "  $format = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono)",
   "  $input = [Console]::OpenStandardInput()",
@@ -81,7 +83,7 @@ function cleanPhrases(value) {
 }
 
 class WindowsSpeechWakeWordAdapter {
-  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, onInputStart = () => {}, onInputStop = () => {}, externalAudio = false, confidence = 0.45, now = () => Date.now(), wakeDebounceMs = 3000, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
+  constructor({ platform = process.platform, spawnImpl = spawn, onWake = () => {}, onStatus = () => {}, onInputStart = () => {}, onInputStop = () => {}, externalAudio = false, confidence = 0.32, now = () => Date.now(), wakeDebounceMs = 3000, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     this.platform = platform;
     this.spawnImpl = spawnImpl;
     this.onWake = onWake;
@@ -89,7 +91,7 @@ class WindowsSpeechWakeWordAdapter {
     this.onInputStart = onInputStart;
     this.onInputStop = onInputStop;
     this.externalAudio = externalAudio === true;
-    this.confidence = Math.max(0.42, Math.min(0.95, Number(confidence) || 0.45));
+    this.confidence = Math.max(0.25, Math.min(0.95, Number(confidence) || 0.32));
     this.now = now;
     this.schedule = schedule;
     this.cancelSchedule = cancelSchedule;

@@ -160,6 +160,7 @@ class CompanionConversationController {
     this.trustedSpeechTimer = null;
     this.trustedSpeechTimerGeneration = 0;
     this.restoreSinkVolumeAfterAnnouncement = null;
+    this.closeAfterTrustedAnnouncement = false;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
     this.turnLifecycle = {
       ttsTurnStarted: 0, ttsTurnCompleted: 0, ttsTurnAbandoned: 0,
@@ -192,6 +193,7 @@ class CompanionConversationController {
 
   microphoneUplinkAllowed() {
     if (!this.active || this.stopPromise) return false;
+    if (this.closeAfterTrustedAnnouncement) return false;
     if (this.halfDuplexPhase === "listening" && !this.playbackDraining) return true;
     return this.providerLabel === "three-stage" && ["speaking", "draining"].includes(this.halfDuplexPhase);
   }
@@ -401,6 +403,8 @@ class CompanionConversationController {
     }
     this.markTtsTurnInterrupted("trusted-timeout");
     this.abandonOpenTurn("trusted-timeout");
+    const shouldClose = this.closeAfterTrustedAnnouncement;
+    this.closeAfterTrustedAnnouncement = false;
     this.pendingTrustedResponse = null;
     this.trustedResponseActive = false;
     this.discardResponseUntilTtsEnd = false;
@@ -408,6 +412,7 @@ class CompanionConversationController {
     this.playbackDraining = false;
     await this.restoreAnnouncementVolume();
     this.onEvent({ type: "trusted-speech.timeout", reason: phase === "audio-quiet" ? "trusted-tts-end-missing" : "trusted-speech-timeout", phase, sessionId: this.active.sessionId, generation: this.active.generation });
+    if (shouldClose) return this.stop("proactive-announcement-timeout");
     return this.reconnect(token, { reason: phase === "audio-quiet" ? "trusted-tts-end-missing" : "trusted-speech-timeout" });
   }
 
@@ -462,7 +467,7 @@ class CompanionConversationController {
     });
   }
 
-  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume } = {}) {
+  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume, closeAfterAnnouncement = false } = {}) {
     if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     const sinkStatus = availability(this.audioSink, "audio-sink-unavailable");
@@ -480,6 +485,7 @@ class CompanionConversationController {
     this.pendingChatFinals = 0;
     this.pendingTrustedResponse = null;
     this.trustedResponseActive = false;
+    this.closeAfterTrustedAnnouncement = false;
     this.clearTrustedSpeechTimer();
     this.lastPartialAt = null;
     this.asrTiming = { metric: "provider-partial-to-final-v1", status: "unavailable", lastMs: 0, samples: 0 };
@@ -498,6 +504,7 @@ class CompanionConversationController {
       if (!source?.ok) throw new Error(source?.reason || "audio-source-start-failed");
       const announcement = boundedText(initialAnnouncement, 240).trim();
       if (announcement) {
+        this.closeAfterTrustedAnnouncement = closeAfterAnnouncement === true;
         this.restoreSinkVolumeAfterAnnouncement = Number.isFinite(Number(restoreVolume)) ? Number(restoreVolume) : null;
         await this.transition("thinking", { reason: "trusted-proactive-announcement" });
         if (!this.provider?.sayHello?.(announcement)) throw new Error("companion-announcement-unavailable");
@@ -903,8 +910,11 @@ class CompanionConversationController {
       this.provider?.playbackDrained?.();
       this.finishTtsTurn();
       this.playbackDraining = false;
+      const shouldClose = this.closeAfterTrustedAnnouncement && this.trustedResponseActive;
+      this.closeAfterTrustedAnnouncement = false;
       this.trustedResponseActive = false;
       await this.restoreAnnouncementVolume();
+      if (shouldClose) return this.stop("proactive-announcement-completed");
       await this.transition("listening", { reason: drainResult?.ok ? "tts-playback-drained" : "tts-playback-drain-timeout" });
       return { ok: true, drained: Boolean(drainResult?.ok) };
     }
@@ -949,6 +959,7 @@ class CompanionConversationController {
     this.playbackDraining = false;
     this.pendingTrustedResponse = null;
     this.trustedResponseActive = false;
+    this.closeAfterTrustedAnnouncement = false;
     await this.cleanup(provider, "provider");
     this.state = "error";
     this.onEvent({ type: "state", state: "error", error: this.lastError, sessionId: session.sessionId, generation: session.generation });
@@ -989,6 +1000,7 @@ class CompanionConversationController {
     this.playbackDraining = false;
     this.pendingTrustedResponse = null;
     this.trustedResponseActive = false;
+    this.closeAfterTrustedAnnouncement = false;
     this.clearTrustedSpeechTimer();
     await this.cleanup(provider, "stop");
     this.state = "idle";

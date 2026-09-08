@@ -2,6 +2,11 @@
 
 Status: `T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`
 
+T21D tightens the ordinary interruption timing and selected-microphone exact
+grammar behavior. For those two points, the newer
+[`t21d-voice-notification-wake-v1.md`](./t21d-voice-notification-wake-v1.md)
+supersedes this baseline.
+
 This is a Windows-software-only slice. It changes neither firmware image, HID or
 DeskMate Link reports, motion behavior nor the physical audio wiring.
 

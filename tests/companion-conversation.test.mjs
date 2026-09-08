@@ -216,7 +216,7 @@ test("stopped companion retains the last content-free pipeline counters for diag
   assert.equal(controller.snapshot().active, false);
 });
 
-test("trusted task brief uses provider voice, then returns to continuous listening without a wake word", async () => {
+test("one-shot trusted task brief closes after provider speech instead of opening a listening session", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();
   const volumes = [];
@@ -228,28 +228,44 @@ test("trusted task brief uses provider voice, then returns to continuous listeni
     audioSink: sink,
     wait: async () => {},
   });
-  const started = await controller.start({ sessionId: "task-brief-session", generation: 1, initialAnnouncement: "任务已经完成", restoreVolume: 75 });
+  const started = await controller.start({ sessionId: "task-brief-session", generation: 1, initialAnnouncement: "任务已经完成", restoreVolume: 75, closeAfterAnnouncement: true });
   assert.equal(started.ok, true);
   assert.deepEqual(provider.hellos, ["任务已经完成"]);
   assert.equal(controller.snapshot().state, "thinking");
   source.push(Buffer.from([1, 2, 3]));
   assert.equal(provider.audio.length, 0);
   provider.emit({ type: "tts.start" });
+  source.push(Buffer.from([4, 5, 6]));
+  assert.equal(provider.audio.length, 0);
   provider.emit({ type: "audio", audio: Buffer.from([9, 8]) });
   provider.emit({ type: "tts.end" });
   await controller.eventChain;
   assert.deepEqual(volumes, [75]);
-  assert.equal(controller.snapshot().state, "listening");
-  source.push(Buffer.from([4, 5, 6]));
-  assert.deepEqual([...provider.audio.at(-1)], [4, 5, 6]);
+  assert.equal(controller.snapshot().state, "idle");
+  assert.equal(controller.snapshot().active, false);
+  assert.equal(controller.snapshot().sessionPolicy.lastStopReason, "proactive-announcement-completed");
+});
+
+test("trusted announcement inside an existing conversation restores volume and keeps listening", async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const volumes = [];
+  sink.setVolume = async (volume) => { volumes.push(volume); return { ok: true, volume }; };
+  let provider;
+  const controller = new CompanionConversationController({
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source,
+    audioSink: sink,
+    wait: async () => {},
+  });
+  await controller.start({ sessionId: "interactive-announcement", generation: 1 });
   assert.equal((await controller.announce("又有一条进度", { volume: 30, restoreVolume: 75 })).ok, true);
-  assert.deepEqual(provider.spokenTexts, ["又有一条进度"]);
-  assert.equal(controller.snapshot().state, "thinking");
   provider.emit({ type: "tts.start" });
   provider.emit({ type: "audio", audio: Buffer.from([7, 6]) });
   provider.emit({ type: "tts.end" });
   await controller.eventChain;
-  assert.deepEqual(volumes, [75, 30, 75]);
+  assert.equal(controller.snapshot().state, "listening");
+  assert.deepEqual(volumes, [30, 75]);
   await controller.stop("test-complete");
 });
 

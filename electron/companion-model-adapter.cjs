@@ -46,7 +46,7 @@ class OpenAiStreamingCompanionModelAdapter {
     this.fetchImpl = fetchImpl;
     this.timeoutMs = Math.max(1000, Math.min(60000, Number(timeoutMs) || 30000));
     this.now = now;
-    this.systemPrompt = `${buildPersonaInstructions({ name, persona, memoryContext })}\n你只负责自然对话，不得执行工具。先直接回答，通常不超过 6 句或 300 个汉字；只有用户明确要求详细说明时才适当展开。只输出要让用户看到并听到的正文。`;
+    this.systemPrompt = `${buildPersonaInstructions({ name, persona, memoryContext })}\n你正在 DeskMate 的实时语音会话中，用户的话已经通过麦克风成功送达。用户问“能听到吗”时，应按当前语音会话直接回答听得到。不得声称没有麦克风、只能文字聊天，也不要解释识别、转写、ASR、TTS 或文字中转等内部链路。你只负责自然对话，不得执行工具。先直接回答，通常不超过 6 句或 300 个汉字；只有用户明确要求详细说明时才适当展开。只输出要让用户听到的正文。`;
     this.history = [];
   }
 

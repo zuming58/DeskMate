@@ -85,7 +85,7 @@ test("task brief store keeps eight recent tasks, rejects stale sequence and supp
   assert.equal(store.ingest(task({ sequence: 2, milestone: "继续开发" })).announcement, null);
   assert.equal(store.ingest(task({ sequence: 2 })).reason, "codex-task-brief-stale");
   now += 1;
-  assert.match(store.ingest(task({ sequence: 3, state: "waiting", milestone: "需要选择" })).announcement.text, /等你回复/);
+  assert.equal(store.ingest(task({ sequence: 3, state: "waiting", milestone: "需要选择" })).announcement.text, "DeskMate 软件 需要你回复。");
   for (let index = 2; index <= 10; index += 1) store.ingest(task({ taskKey: `task_${String(index).padStart(4, "0")}`, taskLabel: `任务 ${index}`, sequence: 1 }));
   assert.equal(store.list().length, 8);
 });
@@ -126,9 +126,22 @@ test("automatic hook lifecycle creates separate real tasks and can later hydrate
   assert.equal(first.announcement, null);
   const waiting = store.ingestHook({ event: "PermissionRequest", state: "waiting", toolName: "Bash", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
   assert.equal(waiting.task.state, "waiting");
-  assert.match(waiting.announcement.text, /需要你确认/);
+  assert.equal(waiting.announcement.text, "deskmate 需要你回复。");
   assert.equal(store.relabel("codex_1234567890123456", "DeskMate 软件闭环").changed, true);
   assert.equal(store.query("DeskMate 软件闭环怎么样").answer, "DeskMate 软件闭环 正在等你回复：需要你确认");
+});
+
+test("automatic terminal announcements require a real active transition and speak once", () => {
+  const store = new CodexTaskBriefStore();
+  assert.equal(store.ingest(task({ state: "completed" })).announcement, null);
+  const freshStop = store.ingestHook({ event: "Stop", state: "completed", taskKey: "codex_fresh_terminal", taskLabel: "无活动任务" });
+  assert.equal(freshStop.announcement, null);
+
+  store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
+  const completed = store.ingestHook({ event: "Stop", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
+  assert.equal(completed.announcement.text, "真实任务 已结束。");
+  const repeated = store.ingestHook({ event: "SessionEnd", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
+  assert.equal(repeated.announcement, null);
 });
 
 test("task lookup tolerates spoken spacing, matches a unique project term, and keeps similar names ambiguous", () => {
@@ -260,6 +273,8 @@ test("proactive Codex speech is user-switchable while task status remains availa
   const preloadSource = fs.readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
   const pagesSource = fs.readFileSync(new URL("../src/pages.jsx", import.meta.url), "utf8");
   assert.match(mainSource, /result\.announcement\s*&&\s*announcementsEnabled/);
+  assert.match(mainSource, /listeningAfterPlayback:\s*false/);
+  assert.match(mainSource, /closeAfterAnnouncement:\s*true/);
   assert.match(mainSource, /desktop:set-codex-task-brief-announcements/);
   assert.match(preloadSource, /setCodexTaskBriefAnnouncements/);
   assert.match(pagesSource, /主动语音播报/);

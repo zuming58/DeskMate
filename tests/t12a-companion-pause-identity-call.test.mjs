@@ -128,7 +128,7 @@ test("reserved companion Host Action round-trips without entering AppActionStore
 
 test("wake boundary stays local and unavailable on unsupported systems while diagnostics separate saved from applied endpointing", async () => {
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v2", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, wakeCount: 0, lastHeardAt: null });
+  assert.deepEqual(wake.status(), { version: "windows-speech-wake-v3", available: false, enabled: false, desiredEnabled: false, reason: "wake-word-windows-only", mode: "background-local", inputMode: "windows-system-default", capsuleVisible: false, localOnly: true, optInRequired: true, visibleMicrophoneRequired: true, foregroundAudioOwnerRequired: true, audioWindowCount: 0, heardCount: 0, rejectedCount: 0, wakeCount: 0, lastHeardAt: null });
   assert.equal((await wake.start()).ok, false);
   const report = createDiagnosticReport({ conversation: {
     savedPreferences: { revision: 4, endSmoothWindowMs: 3000, idleTimeoutMs: 120000, name: "private-name", wakePhrase: "private-phrase" },
@@ -177,13 +177,15 @@ test("Windows local wake listener emits only a wake event and can yield the micr
 test("local wake normalizes punctuation and keeps the short-phrase confidence floor usable", () => {
   assert.deepEqual(cleanPhrases(["小岚, 小岚", "小岚小岚"]), ["小岚, 小岚", "小岚小岚"]);
   const wake = new WindowsSpeechWakeWordAdapter({ platform: "linux" });
-  assert.equal(wake.confidence, 0.45);
+  assert.equal(wake.confidence, 0.32);
 });
 
 test("local wake v2 keeps recognition private while adding a local bounded dictation fallback", () => {
   assert.match(LISTENER_SCRIPT, /DictationGrammar/);
   assert.match(LISTENER_SCRIPT, /heard\.Contains\(\$phrase\)/);
   assert.doesNotMatch(LISTENER_SCRIPT, /WriteLine\(\$args\.Result\.Text/);
+  assert.match(LISTENER_SCRIPT, /bounded-exact/);
+  assert.match(LISTENER_SCRIPT, /stdin-pcm16'[)]? \{ try/);
 });
 
 test("local wake can consume DeskMate-selected PCM and reports privacy-safe microphone evidence", async () => {

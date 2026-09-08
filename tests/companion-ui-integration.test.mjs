@@ -109,6 +109,10 @@ test("companion desktop layout keeps the overview aligned and only the independe
   assert.match(main, /width: 320,[\s\S]*height: 58/);
   assert.match(main, /overlay-preload\.cjs/);
   assert.match(main, /function updateCompanionOverlay\(event = \{\}\)/);
+  assert.match(main, /\["transcript\.partial", "turn\.user-final"\]\.includes\(event\.type\)/);
+  assert.match(main, /if \(\["reply\.partial", "turn\.assistant-final"\]\.includes\(event\.type\)\) return/);
+  assert.match(main, /\["reply\.partial", "turn\.assistant-final"\]\.includes\(event\.type\) \? \{ \.\.\.event, text: "" \}/);
+  assert.doesNotMatch(pages, /conversation\.reply \|\| "回复音频/);
   assert.match(main, /overlayWindow\.showInactive\(\)/);
   assert.match(pages, /disabled=\{conversation\.stopLifecycle\?\.pending\}/);
   assert.match(app, /stopCompanion\("escape"\)/);

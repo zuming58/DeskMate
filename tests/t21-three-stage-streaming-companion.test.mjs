@@ -59,6 +59,8 @@ test("T21 companion model streams only visible content and keeps bounded multi-t
   assert.equal(requests[0].enable_thinking, undefined);
   assert.equal(requests[0].max_tokens, 360);
   assert.match(requests[0].messages[0].content, /不超过 6 句或 300 个汉字/);
+  assert.match(requests[0].messages[0].content, /用户的话已经通过麦克风成功送达/);
+  assert.match(requests[0].messages[0].content, /不得声称没有麦克风、只能文字聊天/);
 });
 
 test("T21 companion model rejects tool-call drafts instead of speaking them", () => {
@@ -136,13 +138,14 @@ test("T21 TTS adapter reconnects lazily after an idle transport close", async ()
   assert.equal((await synthesis).ok, true);
 });
 
-function fakePipeline({ bypass = false, modelRun } = {}) {
+function fakePipeline({ bypass = false, modelRun, now = Date.now } = {}) {
   let asrEvent;
   const events = [];
   const spoken = [];
   let modelCalls = 0;
   const provider = new ThreeStageCompanionProvider({
     onEvent: (event) => events.push(event),
+    now,
     shouldBypassModel: () => bypass,
     asrFactory: ({ onEvent }) => {
       asrEvent = onEvent;
@@ -182,6 +185,7 @@ test("T21 partial text never reaches the model and duplicate final submits once"
 
 test("T21 recognized-speech barge-in rejects weak noise and spoken-answer echo", () => {
   assert.deepEqual(classifyRecognizedBargeIn("嗯", "这里是回答"), { accepted: false, reason: "weak" });
+  assert.deepEqual(classifyRecognizedBargeIn("掌声", "这里是回答"), { accepted: false, reason: "weak" });
   assert.deepEqual(classifyRecognizedBargeIn("这里是回答", "祖名，这里是回答。后面还有一句。"), { accepted: false, reason: "echo" });
   assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "祖名，这里是回答。"), { accepted: true, reason: "recognized-speech" });
 });
@@ -263,7 +267,8 @@ test("T21 recognized speech can interrupt after cloud TTS ended while local play
 });
 
 test("T21 ignores one short noise item but accepts two meaningful human hypotheses even when ASR revises text", async () => {
-  const fixture = fakePipeline();
+  let now = 0;
+  const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
   fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
   await tick();
@@ -279,8 +284,10 @@ test("T21 ignores one short noise item but accepts two meaningful human hypothes
   assert.equal(fixture.modelCalls(), 1);
 
   fixture.emitAsr({ type: "speech.started", itemId: "human", audioStartMs: 2000 });
+  now = 200;
   fixture.emitAsr({ type: "partial", text: "我想问另外", itemId: "human" });
   assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
+  now = 600;
   fixture.emitAsr({ type: "partial", text: "换一个完全不同的问题", itemId: "human" });
   fixture.emitAsr({ type: "final", text: "我想问另外一个问题", itemId: "human" });
   await tick();
@@ -291,13 +298,15 @@ test("T21 ignores one short noise item but accepts two meaningful human hypothes
 });
 
 test("T21 provider-confirmed partial interrupts without waiting for a second hypothesis", async () => {
-  const fixture = fakePipeline();
+  let now = 0;
+  const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
   fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
   await tick();
   await tick();
   const before = fixture.events.length;
   fixture.emitAsr({ type: "speech.started", itemId: "confirmed-human", audioStartMs: 1000 });
+  now = 550;
   fixture.emitAsr({ type: "partial", text: "我想换一个问题", confirmedText: "我想换一个", itemId: "confirmed-human" });
   assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
 });
