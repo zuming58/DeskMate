@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-08 - T21B first HIL rejection traced to the local playback tail and repaired
+
+- User HIL rejected the first recognized-speech interruption candidate even though ordinary T21 dialogue and voice motion remained usable. The exact latest package had been launched, so this was not treated as a stale-binary report. The visible recognized sentence arrived only after DeskMate finished speaking.
+- Root cause: the Doubao direct-speech terminal means the provider has finished delivering PCM, not that the computer speaker has finished playing its queued PCM. At that terminal the controller entered local playback drain, stopped forwarding microphone PCM and the provider discarded the bounded assistant text. The remaining audible tail was therefore neither interruptible nor echo-checkable.
+- Repair `5fdb58a2673f4a1c8ec25b330b6353175b23c137`: only the T21 three-stage path now keeps its existing Bailian ASR uplink open through both active speech and local drain. The provider retains the bounded current assistant text until the computer audio sink confirms playback drained. Meaningful recognized speech can synchronously cancel the local queue anywhere in the audible window; weak/filler hypotheses and recognized answer echo remain rejected. Legacy providers retain strict half duplex. The companion UI now says `回答中 · 可语音打断` and removes the obsolete claim that automatic interruption is paused.
+- Verification: focused T21/controller regression passed `50/50`; full `npm test` passed `443/443`; `npm run build:desktop`, syntax checks, `git diff --check` and packaged InputBridge self-test passed. Fresh unpacked artifacts: `DeskMate.exe` 202,690,560 bytes / SHA-256 `A1EA4AC1571CD2421804A542FB45EE3F39B603749A0BEC981B40F85F0328E077`; `app.asar` 113,177,122 bytes / `9E1092C8B34E9D6059782D995445749E6EB8BD894BC2B3439B4F7B902FEFB3CC`.
+- Classification: `FIRST_BARGE_HIL_REJECTED / LOCAL_PLAYBACK_TAIL_ROOT_CAUSE_CONFIRMED / REPAIR_CODE_BUILD_CONFIRMED / USER_HUMAN_BARGE_NOISE_ECHO_RETEST_PENDING / LOCAL_WAKE_HIL_PENDING / FIRMWARE_UNCHANGED / NO_DEVICE_WRITE`.
+
 # 2026-09-08 - T21B recognized-speech barge-in and the broken local wake PCM path repaired
 
 - User HIL accepted the existing T21 realtime conversation and voice motion path, then requested two remaining behaviors: speaking a real sentence must interrupt DeskMate while noise must not, and the configured idle wake phrase must actually start the companion. Implementation is on `codex/t21-three-stage-streaming-companion` at `be9739b86053d0d9a84776c53981caf70246b0ce`; no firmware source or device state changed.
