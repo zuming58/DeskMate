@@ -1,5 +1,15 @@
 # Decisions
 
+## D111 - Prompt scenes own host key routing; Tab switches and KEY8 only pastes
+
+- Date: 2026-09-10. Final user clarification supersedes the earlier KEY8 dual-role idea.
+- KEY4 reveals the existing main window at the prompt page; a second press copies literal selected text and hides it. Tab/Shift+Tab changes the persisted scene, prompt list and KEY5–7 host mappings together. KEY8 remains the existing firmware paste action in every state. No prompt body is executed or auto-submitted.
+- Escape hides only a transient KEY4 invocation, not ordinary browsing. Editing consumes Escape first; shared voice activity and its cancellation transition cannot hide the main window. Page navigation, wheel and scene shortcuts are foreground-only; form entry and IME keep normal editing semantics.
+- One explicit read/preview/confirm/readback config patch installs KEY4–7 reserved UUID actions and KEY8 paste under existing frozen contracts. Preserve KEY1–3, encoder and unknown configuration; scene changes are local and do not rewrite NVS. No firmware/protocol change.
+- Scene speech is one literal sentence through configured Doubao synthesis at work-reminder volume, debounced to the latest scene and skipped while voice is busy. It does not request a model answer or open a listening conversation.
+- Builtin prompt bodies are immutable user-supplied source data. Edits fork into a separate atomic, revisioned local store; import validates and preserves a prior backup. Diagnostics omit prompt contents, window identities and personal usage data.
+
+
 ## D110 - Current explicit identity wins over stale dialogue inference
 
 - Date: 2026-09-08

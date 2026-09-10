@@ -14,7 +14,7 @@ internal static class Program
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
         {
-            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && HidCollectionContracts.RunSelfTest() ? 0 : 1;
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && HidCollectionContracts.RunSelfTest() && RawInputWindow.InputLayoutSelfTest() ? 0 : 1;
             return;
         }
         var writer = new EventWriter();
@@ -235,11 +235,21 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request" && type.GetString() != "choreography-request") ||
+                (type.GetString() != "workbench-input" && type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request" && type.GetString() != "choreography-request") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
             commandType = type.GetString()!;
+            if (commandType == "workbench-input")
+            {
+                var operation = root.GetProperty("operation").GetString() ?? "";
+                var shortcut = root.GetProperty("shortcut").GetString() ?? "";
+                var expiry = root.GetProperty("expiresUnixMs").GetInt64();
+                var owner = root.GetProperty("ownerProcessId").GetUInt32();
+                var output = RawInputWindow.WorkbenchInput(operation, shortcut, expiry, owner);
+                _writer.DesktopOutputResult(requestId, output.ok, output.reason);
+                return Task.CompletedTask;
+            }
             if (commandType == "choreography-request")
             {
                 if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-choreography-report");
@@ -330,10 +340,11 @@ internal sealed class ConfigCommandListener : IDisposable
             var result = HidFeatureDevice.WriteConfigReports(reports);
             _writer.ConfigWrite(requestId, result.ok, result.reason);
         }
-        catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException)
+        catch (Exception error) when (error is JsonException or FormatException or InvalidOperationException or KeyNotFoundException)
         {
             var reason = error.Message.Length <= 80 ? error.Message : "invalid-command";
-            if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
+            if (commandType == "workbench-input") _writer.DesktopOutputResult(requestId, false, "invalid-workbench-command");
+            else if (commandType == "set-agent-state") _writer.AgentStateWrite(requestId, false, reason);
             else if (commandType == "manual-calibration-request") _writer.ManualCalibrationWrite(requestId, false, reason);
             else if (commandType == "motion-preset-request") _writer.MotionPresetWrite(requestId, false, reason);
             else if (commandType == "choreography-request") _writer.ChoreographyWrite(requestId, false, reason);
@@ -629,6 +640,59 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
+    internal static bool InputLayoutSelfTest() => Marshal.SizeOf<NativeInput>() == (IntPtr.Size == 8 ? 40 : 28);
+    private static IntPtr _workbenchTarget;
+    private static uint _workbenchTargetProcess;
+    private static long _workbenchCapturedAt;
+    public static (bool ok, string reason) WorkbenchInput(string operation, string shortcut, long expiry, uint owner)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if (expiry < now || expiry > now + 2000 || owner == 0) return (false, "workbench-command-expired");
+        var target = GetForegroundWindow();
+        if (operation == "capture")
+        {
+            _workbenchTarget = IntPtr.Zero;
+            GetWindowThreadProcessId(target, out var pid);
+            if (target == IntPtr.Zero || !IsWindowVisible(target) || pid == owner || pid == Environment.ProcessId) return (false, "workbench-no-external-target");
+            _workbenchTarget = target; _workbenchTargetProcess = pid; _workbenchCapturedAt = now;
+            return (true, "");
+        }
+        if (operation == "restore")
+        {
+            var saved = _workbenchTarget; _workbenchTarget = IntPtr.Zero;
+            GetWindowThreadProcessId(saved, out var pid);
+            GetWindowThreadProcessId(target, out var foregroundPid);
+            if (saved == IntPtr.Zero || pid != _workbenchTargetProcess || !IsWindowVisible(saved) || now - _workbenchCapturedAt > 3600000) return (false, "workbench-target-gone");
+            // Hiding DeskMate normally already restores the previous foreground.
+            if (target == saved) return (true, "");
+            if (target != IntPtr.Zero && foregroundPid != owner) return (false, "workbench-focus-changed");
+            return SetForegroundWindow(saved) ? (true, "") : (false, "workbench-focus-denied");
+        }
+        if (operation != "chord" || shortcut.Length > 64 || target == IntPtr.Zero || !IsWindowVisible(target)) return (false, "invalid-workbench-input");
+        var parts = shortcut.Split('+');
+        var modifiers = new Dictionary<string, ushort> { ["Ctrl"] = 0x11, ["Alt"] = 0x12, ["Shift"] = 0x10, ["Win"] = 0x5b };
+        var named = new Dictionary<string, ushort> { ["Space"] = 0x20, ["Enter"] = 0x0d, ["Tab"] = 9, ["Escape"] = 0x1b, ["Backspace"] = 8, ["Delete"] = 0x2e, ["Left"] = 0x25, ["Right"] = 0x27, ["Up"] = 0x26, ["Down"] = 0x28, ["Home"] = 0x24, ["End"] = 0x23, ["PageUp"] = 0x21, ["PageDown"] = 0x22 };
+        if (parts.Length is < 1 or > 5 || parts.Distinct().Count() != parts.Length || parts.Take(parts.Length - 1).Any(p => !modifiers.ContainsKey(p))) return (false, "invalid-workbench-shortcut");
+        var final = parts[^1]; ushort key;
+        if (final.Length == 1 && (final[0] is >= 'A' and <= 'Z' or >= '0' and <= '9')) key = final[0];
+        else if (final.StartsWith('F') && int.TryParse(final[1..], out var number) && number is >= 1 and <= 12) key = (ushort)(0x6f + number);
+        else if (!named.TryGetValue(final, out key)) return (false, "invalid-workbench-shortcut");
+        var physicalModifiers = new[] { 0x10, 0x11, 0x12, 0x5b, 0x5c };
+        var deadline = Math.Min(expiry, now + 300);
+        while (physicalModifiers.Any(k => (GetAsyncKeyState(k) & 0x8000) != 0))
+        {
+            if (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= deadline) return (false, "workbench-modifier-held");
+            Thread.Sleep(10);
+        }
+        if (GetForegroundWindow() != target || !IsWindowVisible(target) || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() > expiry) return (false, "target-window-changed");
+        var keys = parts.Take(parts.Length - 1).Select(p => modifiers[p]).Append(key).ToArray();
+        var inputs = keys.Select(k => NativeInput.Key(k, false)).Concat(keys.Reverse().Select(k => NativeInput.Key(k, true))).ToArray();
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>());
+        if (sent == inputs.Length) return (true, "");
+        var releases = keys.Reverse().Select(k => NativeInput.Key(k, true)).ToArray();
+        SendInput((uint)releases.Length, releases, Marshal.SizeOf<NativeInput>());
+        return (false, "workbench-output-denied");
+    }
     private static RawInputWindow? Current;
     public static void BeginRead(string requestId, uint numericRequest, byte flag) => Current?.BeginReadInternal(requestId, numericRequest, flag);
     public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
@@ -1202,7 +1266,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
             Type = 1,
             Value = new NativeInputUnion
             {
-                Keyboard = new NativeKeyboardInput { VirtualKey = virtualKey, Flags = keyUp ? 0x0002u : 0u }
+                Keyboard = new NativeKeyboardInput { VirtualKey = virtualKey, Flags = (keyUp ? 0x0002u : 0u) | (virtualKey is >= 0x21 and <= 0x2e or 0x5b or 0x5c ? 0x0001u : 0u) }
             }
         };
     }
@@ -1211,6 +1275,16 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     private struct NativeInputUnion
     {
         [FieldOffset(0)] public NativeKeyboardInput Keyboard;
+        // INPUT is sized by its largest member (MOUSEINPUT), even for keyboard output.
+        [FieldOffset(0)] public NativeMouseInput Mouse;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeMouseInput
+    {
+        public int X, Y;
+        public uint MouseData, Flags, Time;
+        public UIntPtr ExtraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1248,6 +1322,12 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
 
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(IntPtr window);

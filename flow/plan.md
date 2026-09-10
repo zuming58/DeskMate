@@ -1,6 +1,16 @@
 # Development plan
 
-## Current stage: T21 three-stage streaming companion experiment
+## Current stage: T22 prompt workbench and scene keyboard routing
+
+**2026-09-10 当前执行点：** 在权威工作树 `build-t10dc-work` 的 `codex/t22-prompt-workbench-scenes` 分支实现提示词工作台，基于 `e62afa7e9bc138be9282540960bb53b605cf668d`。T21L 陪伴/资料基线保留，根目录旧脏工作树不动。本切片不改固件、不烧录；用户在界面预览并确认后才写入现有按键配置合同。
+
+- 代码完成：左侧独立提示词页、80 条原始模板、个人版本/回收站、搜索收藏最近、备份导入导出、可编辑场景与第 5～7 键。
+- 最终交互：第 4 键打开主窗口提示词页，再按复制收起；旋钮选词；Tab/Shift+Tab 切场景与快捷键并简短播报；第 8 键始终为原生粘贴。Esc 区分临时调出、手动浏览、编辑与语音取消。
+- 自动证据：完整测试 493/493；原生 Electron 交互 23 项、1440×1024 与 960×680 布局通过。桌面包和实际启动证据见最新 progress，不以单测代替硬件验收。
+- 待人工：确认一次 KEY4～8 配置差异，验收真实旋钮、焦点返回/粘贴、KEY5～7 场景切换、豆包场景播报、KEY1～3/语音回归。
+- 实现合同及来源：[`prompt-workbench-scenes.md`](../docs/architecture/prompt-workbench-scenes.md)。此前 T21 记录如下，历史状态不覆盖本节。
+
+## Previous stage: T21 three-stage streaming companion experiment
 
 目标：在独立实验分支把陪伴主链替换为“百炼流式 ASR → DeskMate CompanionModel → 流式 TTS”。普通陪伴对话只由 CompanionModel 维护人设、短期上下文和回答；豆包不再接收麦克风音频或决定说什么，只把 DeskMate 已确认的短句合成为声音。现有 Codex 状态和白名单动作先保留为确定性兼容工具，避免模型编造或越权。T20 隐藏唤醒、T15D 动作和普通语音输入保持原合同。本阶段只改 Windows 软件，不修改 Host HID、DeskMate Link 或两套固件。
 

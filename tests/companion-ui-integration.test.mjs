@@ -17,7 +17,7 @@ test("keeps shared memory in primary navigation and companion-only tools in AI C
   const navigationBlock = app.match(/const navigation = \[([\s\S]*?)\n\];/)?.[1] || "";
   const labels = [...navigationBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "按键配置", "记忆管理", "设备与诊断"]);
+  assert.deepEqual(labels, ["工作台", "语音输入", "AI 陪伴", "历史记录", "词库", "提示词", "按键配置", "记忆管理", "设备与诊断"]);
   for (const hiddenLabel of ["表情库", "表情编辑", "动作编排", "环境感知", "AI 联动"]) {
     assert.equal(labels.includes(hiddenLabel), false);
   }

@@ -17,6 +17,7 @@ import {
   IconX as X,
 } from "@tabler/icons-react";
 import { pageMeta } from "./appData.js";
+import { PromptWorkbenchPage } from './PromptWorkbenchPage.jsx';
 import { CompanionFace } from "./CompanionFace.jsx";
 import { AppStoreProvider, useAppStore } from "./store/appStore.js";
 import { mockAdapters } from "./adapters/index.js";
@@ -49,6 +50,7 @@ const navigation = [
   { id: "companion", label: "AI 陪伴", icon: MessageCircle },
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
+  { id: "prompts", label: "提示词", icon: Sparkles },
   { id: "keymap", label: "按键配置", icon: Keyboard },
   { id: "memory", label: "记忆管理", icon: Database },
   { id: "settings", label: "设备与诊断", icon: Settings2 },
@@ -109,6 +111,7 @@ function AppHeader({ current, setMobileOpen }) {
 }
 
 const pages = {
+  prompts: PromptWorkbenchPage,
   dashboard: DashboardPage,
   voice: VoicePage,
   companion: CompanionPage,
@@ -187,6 +190,11 @@ function AppContent() {
     deviceEventBus.publish(createDeviceEvent("key-diagnostic", source, { key: detail.key || "", action: detail.action || "", sequence: Number(detail.sequence) || null }, { at: detail.time || detail.at }));
   }), []);
   useEffect(() => voiceAdapters.desktop.onHostActionResult((result) => {
+    if (result?.kind === 'prompt-workbench') {
+      if (result.reason === 'host-action-duplicate') return;
+      if (!result.ok || result.warning || result.copied) setToast(result.warning || result.reason || '已复制，按第 8 键粘贴');
+      return;
+    }
     if (result?.kind === "fixed-text") setToast(result?.ok ? `已输入固定文字（${result.bytes || 0} 字节）` : `固定文字输入失败：${result?.reason || "未知错误"}`);
     else if (result?.kind === "companion-call") {
       if (result?.reason === "host-action-duplicate") return;

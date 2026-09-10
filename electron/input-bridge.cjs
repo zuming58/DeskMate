@@ -247,6 +247,21 @@ class InputBridgeManager extends EventEmitter {
     });
   }
 
+  workbenchInput(operation, shortcut = '') {
+    if (!['capture', 'restore', 'chord'].includes(operation)) return Promise.resolve({ ok: false, reason: 'invalid-workbench-input' });
+    if (operation === 'chord') { try { require('./prompt-workbench.cjs').chord(shortcut); } catch { return Promise.resolve({ ok: false, reason: 'invalid-workbench-shortcut' }); } }
+    if (this.pendingPaste) return Promise.resolve({ ok: false, reason: 'active-window-output-busy' });
+    if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: 'input-bridge-unavailable' });
+    const requestId = `workbench-${randomUUID()}`;
+    return new Promise(resolve => {
+      const timeout = this.setTimer(() => this.finishPaste({ ok: false, reason: 'workbench-input-timeout' }), 1500);
+      this.pendingPaste = { requestId, timeout, resolve };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: 'workbench-input', requestId, operation, shortcut, ownerProcessId: process.pid, expiresUnixMs: Date.now() + 1000 })}\n`, error => {
+        if (error) this.finishPaste({ ok: false, reason: 'input-bridge-write-failed' });
+      });
+    });
+  }
+
   captureActiveWindow() {
     if (this.pendingCapture) return Promise.resolve({ ok: false, reason: "foreground-capture-busy" });
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });

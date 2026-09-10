@@ -1,3 +1,17 @@
+# T22 prompt workbench and scene routing design QA — 2026-09-10
+
+- Scope: adapt the user-supplied Frost scene/list reference inside the real DeskMate application, not a separate prototype or pixel-identical standalone clone. Preserve graphite navigation and existing typography/tokens; restrained glass is limited to the scene rail, while prompt text/editors remain opaque.
+- Reference: `C:/Users/Administrator/AppData/Local/Temp/codex-clipboard-1edc48ac-b1f6-499a-a59d-ab007bcaabed.png`.
+- Verified captures and report: `C:/Users/Administrator/AppData/Local/Temp/deskmate-prompt-qa-YQmBk8/` — `prompts-1440.png`, `prompts-960.png`, `prompt-editor-1440.png`, `prompt-scene-editor.png`, `report.json`. Logical viewports 1440×1024 and 960×680; Windows device scale factor 1.5.
+- Actual packaged-app launch was separately verified by a scoped native window capture: `C:/Users/Administrator/AppData/Local/Temp/deskmate-t22-running-package.png`. It shows the real DeskMate prompt page and office-scene list, not the isolated QA window. No device write or user-data edit was performed to obtain that capture.
+- The reference and implementation captures were inspected together. Scene grouping, pastel library icons, cobalt selected row, fine borders and readable white list follow the reference. A horizontal scene rail avoids nesting a second sidebar. No prompt-region horizontal overflow at either viewport; the existing compact-window nav remains scrollable. Editor fields/buttons use consistent rounded borders and a focus loop.
+- `scripts/verify-prompt-workbench.cjs` passed 23 native Electron interaction assertions: persisted 80-item data, scene Tab/reverse/KEY5–7 changes, wheel selection, form Tab isolation, editor save, mine/favorite/trash/restore, search/all library, smaller layout, KEY4 re-entry focus, transient Escape without copy, and second KEY4 exact-copy/hide. Ordinary browsing Escape stays visible. Domain tests separately exercise voice cancellation protection and failure paths.
+- This harness uses the production renderer/preload/controller/store with isolated temporary user data. Native keyboard, speech, hardware and clipboard are explicit test sinks; physical buttons, focus recovery to the user's editor, real paste and Doubao announcement quality remain user-present acceptance, not claimed passed.
+- P0/P1/P2: no remaining blocking issue in the tested prompt UI scope. P3: existing Google Fonts import is rejected by the application CSP; installed fallback fonts render correctly. CSP was not weakened. Existing Vite chunk-size warning is non-blocking.
+- Result: **passed for scoped visual and automated interaction QA; hardware/audio acceptance pending**.
+
+---
+
 # T15E motion and memory UX design QA
 
 - User reference: `C:\Users\ADMINI~1\AppData\Local\Temp\codex-clipboard-571d29fc-d3a5-4f99-b4ed-280eb0294eda.png`

@@ -20,7 +20,7 @@
     "build:input-bridge": "dotnet publish native/DeskMate.InputBridge/DeskMate.InputBridge.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/DeskMate.InputBridge/publish",
     "dev:desktop": "npm run build:input-bridge && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron electron/main.cjs --dev\"",
     "build": "vite build && node scripts/prepare-sites-build.mjs",
-    "build:desktop": "npm run build:input-bridge && npm run build && electron-builder --win --dir",
+    "build:desktop": "npm run build:input-bridge && npm run build && electron-builder --win --dir && node scripts/verify-prompt-package.cjs",
     "build:beta": "npm run build:input-bridge && npm run build && electron-builder --win nsis",
     "preview": "vite preview",
     "report:codex-task": "node scripts/report-codex-task-brief.cjs",

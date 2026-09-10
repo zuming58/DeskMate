@@ -35,6 +35,8 @@ const { DoubaoStreamingTtsAdapter } = require("./streaming-tts-adapter.cjs");
 const { ThreeStageCompanionProvider } = require("./three-stage-companion-provider.cjs");
 const { finishForegroundSession, initialForegroundSession, startForegroundSession } = require("./foreground-session.cjs");
 const { AppActionStore, HostActionExecutor } = require("./app-actions.cjs");
+const { PromptWorkbenchStore, ACTIONS: PROMPT_ACTIONS, setupPatch: promptSetupPatch } = require('./prompt-workbench.cjs');
+const { PromptWorkbenchController } = require('./prompt-workbench-controller.cjs');
 const { COMPANION_CALL_ACTION, wakeGreeting } = require("./companion-call.cjs");
 const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
 const { SherpaKeywordWakeWordAdapter } = require("./sherpa-keyword-wake-adapter.cjs");
@@ -67,7 +69,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t21l-profile-activation-layout";
+const DESKMATE_BUILD_ID = "t22-prompt-workbench-scenes";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -80,6 +82,9 @@ const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
 let mainWindow;
+let promptWorkbench;
+let promptAnnouncementTimer;
+let lastActiveVoiceCancelAt = 0;
 let overlayWindow;
 let tray;
 let inputBridge;
@@ -720,6 +725,7 @@ async function emitVoiceToggle(source = "global-shortcut", label = shortcut, req
 }
 
 async function emitVoiceCancel(source = "keyboard") {
+  if (companionIsActive() || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) lastActiveVoiceCancelAt = Date.now();
   if (!isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) {
     if (companionIsActive()) return companionConversationController.stop(source === "keyboard" ? "escape" : source);
     if (easyInputAudioManager?.status?.().micTest) return easyInputAudioManager.stopMicTest(source === "keyboard" ? "escape" : source);
@@ -870,6 +876,7 @@ function updateVoiceState(value = {}) {
 }
 
 function showMain(route) {
+  if (promptWorkbench && route !== 'prompts') promptWorkbench.transient = false;
   if (!mainWindow) createWindow();
   mainWindow.show();
   mainWindow.restore();
@@ -905,7 +912,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
   if (process.argv.includes("--dev")) mainWindow.loadURL(getDevUrl());
-  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"));
+  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-prompts') ? { hash: '/prompts' } : {});
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
@@ -975,7 +982,8 @@ function startInputBridge() {
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
     const result = await hostActionExecutor.execute(event.hostActionId);
-    sendToMain("host-action-result", { kind: event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app", ...result, at: new Date().toISOString() });
+    const kind = Object.values(PROMPT_ACTIONS).some(a => a.id === event.hostActionId) ? 'prompt-workbench' : event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app";
+    sendToMain("host-action-result", { kind, ...result, at: new Date().toISOString() });
   });
   inputBridge.on("fixed-text", async (event) => {
     const blockedWindowHandles = [mainWindow, overlayWindow].filter(Boolean).map((window) => {
@@ -1315,7 +1323,23 @@ app.whenReady().then(async () => {
     mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
     readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona }),
   });
-  hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")]]) });
+  promptWorkbench = new PromptWorkbenchController({
+    store: new PromptWorkbenchStore({ userDataPath: app.getPath('userData') }),
+    isForeground: () => Boolean(mainWindow?.isFocused() && mainWindow.webContents.getURL().split('#')[1] === '/prompts'),
+    show: () => { showMain('prompts'); mainWindow?.focus(); }, hide: () => mainWindow?.hide(),
+    capture: () => inputBridge?.workbenchInput('capture'), restore: () => inputBridge?.workbenchInput('restore'),
+    input: chord => inputBridge?.workbenchInput('chord', chord) || { ok: false, reason: 'input-bridge-unavailable' },
+    writeClipboard: text => clipboard.writeText(text), publish: value => sendToMain('prompt-workbench-state', value),
+    isVoiceActive: () => Date.now() - lastActiveVoiceCancelAt < 500 || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || companionIsActive(),
+    announce: text => {
+      clearTimeout(promptAnnouncementTimer);
+      promptAnnouncementTimer = setTimeout(() => {
+        if (companionIsActive() || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return;
+        void startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true }).catch(() => {});
+      }, 500);
+    },
+  });
+  hostActionExecutor = new HostActionExecutor({ store: appActionStore, reservedActions: new Map([[COMPANION_CALL_ACTION.id, () => callCompanionConversation("easyinput-host-action")], ...promptWorkbench.reservedActions()]) });
   codexHookServer = new CodexHookStateServer({ onState: (value) => { void handleCodexHookState(value); } });
   const codexReceiver = await codexHookServer.start();
   codexHookStatus = { ...codexHookStatus, receiver: codexReceiver.ok ? "listening" : "unavailable" };
@@ -1333,6 +1357,28 @@ app.whenReady().then(async () => {
   createWindow();
   createOverlayWindow();
   createTray();
+  handleTrusted('prompts:command', async (value = {}) => {
+    try { return await promptWorkbench.command(value); }
+    catch (error) { return { ok: false, reason: error.message || '提示词操作失败' }; }
+  });
+  handleTrusted('prompts:setup-patch', () => promptSetupPatch());
+  handleTrusted('prompts:export', async () => {
+    const selected = await dialog.showSaveDialog(mainWindow, { title: '导出提示词备份（包含个人提示词）', defaultPath: 'deskmate-prompts-backup.json', filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (selected.canceled || !selected.filePath) return { ok: false, cancelled: true };
+    try { fs.writeFileSync(selected.filePath, promptWorkbench.store.export(), 'utf8'); return { ok: true }; }
+    catch { return { ok: false, reason: '导出失败，请检查目标目录权限' }; }
+  });
+  handleTrusted('prompts:import', async (revision) => {
+    const selected = await dialog.showOpenDialog(mainWindow, { title: '导入 DeskMate 提示词备份', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (selected.canceled || !selected.filePaths[0]) return { ok: false, cancelled: true };
+    const confirmed = await dialog.showMessageBox(mainWindow, { type: 'warning', buttons: ['取消', '导入并替换个人库'], defaultId: 0, cancelId: 0, message: '将替换个人提示词、场景、收藏和使用记录。内置 80 条不会改变；旧数据会先保留为本地 previous 备份。' });
+    if (confirmed.response !== 1) return { ok: false, cancelled: true };
+    try {
+      if (fs.statSync(selected.filePaths[0]).size > 40000000) return { ok: false, reason: '备份文件过大' };
+      promptWorkbench.store.import(fs.readFileSync(selected.filePaths[0], 'utf8'), revision);
+      promptWorkbench.changed(); return { ok: true };
+    } catch { return { ok: false, reason: '导入失败：格式无效、版本冲突或文件不可写；现有数据未替换' }; }
+  });
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
   handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridgeSnapshot(); return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
   handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
@@ -1664,7 +1710,7 @@ app.whenReady().then(async () => {
   startInputBridge();
   await syncWakeWordListener("application-ready");
   app.on("activate", () => showMain());
-  app.on("second-instance", () => showMain());
+  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-prompts') ? 'prompts' : undefined));
 });
 
 app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });

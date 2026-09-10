@@ -1,5 +1,6 @@
 const { createHash } = require("crypto");
 const { COMPANION_CALL_ACTION } = require("./companion-call.cjs");
+const { ACTIONS: PROMPT_ACTIONS } = require("./prompt-workbench.cjs");
 
 function stable(value) { if (Array.isArray(value)) return value.map(stable); if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])])); return value; }
 function configFingerprint(value) { return createHash("sha256").update(JSON.stringify(stable(value)), "utf8").digest("hex").slice(0, 16); }
@@ -13,6 +14,8 @@ function sanitizedBinding(press, describeAppAction) {
   if (typeof press === "string" && press.startsWith("host_action:")) {
     const appActionId = press.slice(12);
     if (appActionId === COMPANION_CALL_ACTION.id) return { action: COMPANION_CALL_ACTION.kind };
+    const promptAction = Object.values(PROMPT_ACTIONS).find(a => a.id === appActionId);
+    if (promptAction) return { action: promptAction.kind };
     const description = typeof describeAppAction === "function" ? describeAppAction(appActionId) : null;
     return description?.id === appActionId && typeof description.label === "string"
       ? { action: "open-app", appActionId, appName: description.label }
@@ -34,6 +37,8 @@ const KEY_ACTIONS = new Set(["voice-input", "voice-edit", "select-all", "copy", 
 const ENCODER_ACTIONS = new Set(["scroll-axis-toggle", "text-caret-select", "disabled", "hotkey", "enter", "backspace", "fixed-text", "open-app"]);
 
 function bindingToPress(item, allowed = KEY_ACTIONS) {
+  const promptAction = Object.values(PROMPT_ACTIONS).find(a => a.kind === item?.action);
+  if (promptAction && allowed === KEY_ACTIONS) return `host_action:${promptAction.id}`;
   if (!item || typeof item !== "object" || !allowed.has(item.action)) throw new Error("按键动作未批准");
   if (item.action === "voice-input") return "voice_ptt_hold";
   if (item.action === "voice-edit") return "edit_ptt_hold";

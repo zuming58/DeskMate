@@ -12,13 +12,17 @@ export const KEY_ACTIONS = [
   { id: "fixed-text", label: "固定文字" },
   { id: "open-app", label: "打开应用" },
   { id: "companion-call", label: "AI 陪伴呼唤" },
+  { id: 'prompt-key-4', label: '提示词页 / 复制收起' },
+  { id: 'prompt-key-5', label: '场景按键 5' },
+  { id: 'prompt-key-6', label: '场景按键 6' },
+  { id: 'prompt-key-7', label: '场景按键 7' },
   { id: "disabled", label: "禁用" },
 ];
 
 export const ENCODER_PRESS_ACTIONS = [
   { id: "scroll-axis-toggle", label: "切换方向" },
   { id: "text-caret-select", label: "文字选择" },
-  ...KEY_ACTIONS.filter((item) => item.id !== "companion-call"),
+  ...KEY_ACTIONS.filter((item) => item.id !== "companion-call" && !item.id.startsWith('prompt-key-')),
 ];
 
 export const DEFAULT_KEYMAP = [
@@ -120,6 +124,7 @@ export function firmwareAction(binding) {
   if (value.action === "fixed-text" && value.text) return { text: value.text };
   if (value.action === "open-app" && value.appActionId) return `host_action:${value.appActionId}`;
   if (value.action === "companion-call") return `host_action:${COMPANION_CALL_ACTION_ID}`;
+  if (/^prompt-key-[4-7]$/.test(value.action)) return `host_action:922d0be0-5ee8-4a32-bcff-00000000000${value.action.slice(-1)}`;
   throw new Error(`${actionLabel(value)}还缺少必要设置`);
 }
 

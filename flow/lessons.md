@@ -1,5 +1,17 @@
 # Lessons learned
 
+## A packaged Electron build must verify resources, not just the builder exit status
+
+- T22 initially put a required JSON beside icons under `electron/assets`. The existing extraResources source excludes that directory from asar even when its copy filter only includes PNG/ICO, so the JSON was in neither destination.
+- Keep required main-process data at `electron/prompt-library.json`. The desktop build now verifies exact packaged seed bodies/count, main/preload, current UI and native bridge before success. Normalize archive paths with the platform path implementation; nested slash-only paths can fail with Windows asar traversal.
+- Package mutation and native self-tests should run sequentially on Windows to avoid release-file locks; a transient directory rename failure is not an application behavior result.
+
+## Win32 INPUT requires the complete native union even for keyboard-only callers
+
+- A keyboard-only C# union made INPUT 32 bytes on x64 instead of the Win32 40-byte layout. Include the mouse union member solely for ABI size/alignment; this does not authorize or inject mouse actions.
+- Assert `Marshal.SizeOf(INPUT)` is 40 on x64 or 28 on x86 in the native protocol self-test. Keep modifier-release waits, foreground rechecks, expiry and reverse key-up cleanup alongside chord validation.
+
+
 ## An idle deadline must follow recognized activity, not merely a UI state transition
 
 - Symptom: a healthy conversation ends with `listening-idle-timeout` while the user believes they were still talking; provider/model/TTS errors remain zero and ASR drafts are present.
