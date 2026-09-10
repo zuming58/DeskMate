@@ -10,8 +10,11 @@ const source = JSON.parse(fs.readFileSync(path.join(root, 'electron/prompt-libra
 assert.deepEqual(bundled, source, 'packaged prompt data must match source including all original bodies');
 assert.equal(bundled.prompts.length, 80);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t22d-keycap-sync-feedback'));
+assert(main.includes('t22e-native-prompt-wheel'));
 assert(main.includes('--show-prompts'));
+for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs']) {
+  assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
+}
 assert(packagedFile('electron/prompt-workbench.cjs').toString().includes("require('./prompt-library.json')"));
 assert(packagedFile('electron/preload.cjs').toString().includes('prompts:command'));
 assert(packagedFile('dist/client/index.html').equals(fs.readFileSync(path.join(root, 'dist/client/index.html'))));

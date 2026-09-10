@@ -61,6 +61,17 @@ app.whenReady().then(async () => {
   const old = controller.snapshot().selectedId;
   await run(`document.querySelector('.prompt-rows').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}))`); await pause(180);
   record('wheel selects next prompt', controller.snapshot().selectedId !== old);
+  // This is a separate physical action, not a delayed twin of the previous DOM event.
+  await pause(520);
+  const nativeStart = controller.snapshot().rows.findIndex(p => p.id === controller.snapshot().selectedId);
+  window.webContents.send('prompt-wheel', { step: -1 }); await pause(180);
+  record('board wheel IPC selects without mouse hover or DOM wheel', controller.snapshot().selectedId === controller.snapshot().rows[nativeStart + 1].id);
+  await run(`document.querySelector('.prompt-rows').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}))`); await pause(180);
+  record('legacy wheel duplicate does not select twice', controller.snapshot().selectedId === controller.snapshot().rows[nativeStart + 1].id);
+  await run(`document.querySelector('[aria-label="搜索提示词"]').focus()`);
+  window.webContents.send('prompt-wheel', { step: -1 }); await pause(180);
+  record('board wheel does not navigate while typing in search', controller.snapshot().selectedId === controller.snapshot().rows[nativeStart + 1].id);
+  await run(`document.querySelector('.prompt-workbench').focus()`);
   record('prompt page has no keyboard configuration controls', await run(`!document.querySelector('.prompt-key-grid') && !document.querySelector('.scene-key-settings')`));
   record('no outer vertical scroll 1440', await run(`document.documentElement.scrollHeight<=window.innerHeight && document.querySelector('.app-shell').getBoundingClientRect().height<=window.innerHeight`));
   record('preview has at least the list width', await run(`document.querySelector('.prompt-context').getBoundingClientRect().width>=document.querySelector('.prompt-library').getBoundingClientRect().width`));
@@ -155,6 +166,11 @@ app.whenReady().then(async () => {
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='按键配置').click()`); await pause(300);
   record('prompt Tab and keymap use same scene across navigation', store.data.activeScene==='scene-video' && await run(`document.querySelector('.keymap-scene.is-active strong').textContent==='视频剪辑' && document.querySelector('[data-key="5"] strong').textContent==='保存项目'`));
   record('pending shared edit survives page navigation', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
+  const acceptedKeys = await run(`JSON.stringify(JSON.parse(localStorage.getItem('deskmate.app-state')).keymap.slice(2,4))`);
+  qaConfigEnabled = true;
+  await clickText('将第 8 键设为粘贴');
+  record('KEY8 repair opens preview without writing or changing accepted KEY3/4', configPreviews.at(-1)?.keymap.KEY8.action === 'paste' && configCommits.length === 0 && await run(`!!document.querySelector('[role=dialog]') && JSON.stringify(JSON.parse(localStorage.getItem('deskmate.app-state')).keymap.slice(2,4))===${JSON.stringify(acceptedKeys)}`));
+  await clickText('取消'); qaConfigEnabled = false;
   await run(`document.querySelector('.keymap-more').open=true`); await clickText('填入推荐方案');
   record('recommended shared actions are local until explicit synchronization', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='弹出/收起' && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY8.action==='paste'`));
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='提示词').click()`); await pause(300);

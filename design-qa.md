@@ -1,3 +1,10 @@
+# T22E rotary delivery and paste setup QA — 2026-09-11
+
+- Final isolated native Electron QA **61/61**, evidence `%TEMP%/deskmate-prompt-qa-6o3YOG/`. Production renderer/preload/controller, test clipboard/configuration sinks only. Inspected keymap-shared-1440 and prompts-960: KEY8 repair sits below the sole physical keyboard diagram, same rounded styling; prompt fixed 45/55 list/preview retained without outer scroll.
+- Added IPC wheel test with no DOM event, duplicate legacy DOM delivery, search-field protection, and KEY8-only repair preview without committing or altering accepted KEY3/4. Existing scene Tab, compact keycaps, clipboard/copy-hide, contextual Escape and configuration cancellation/readback tests retained.
+- Initial new native test followed a separate DOM test inside the newly covered late-pair window. Explicitly separated those independent actions by 520 ms; dedicated fake-clock tests still cover both duplicate orders, coalescing and genuinely late paired events. No product gate or assertion removed. First UI pass was 60/60 before the late-pair/KEY8 additions; final is 61/61.
+- Physical rotary delivery/direction, simultaneous ordinary-mouse input and actual KEY8 paste after user-confirmed sync remain separate acceptance gates. Existing CSP font/deprecation warnings unchanged.
+
 # T22D compact keycaps and sync feedback QA — 2026-09-10
 
 - User screenshot shows the long prompt key title wrapping and the explicit pending marker. Scope is a compact-caption/status correction, not a layout redesign or firmware change.

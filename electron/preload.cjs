@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   exportPrompts: () => ipcRenderer.invoke('prompts:export'),
   importPrompts: revision => ipcRenderer.invoke('prompts:import', revision),
   onPromptWorkbenchState: listener => { const handler = (_event, value) => listener(value); ipcRenderer.on('prompt-workbench-state', handler); return () => ipcRenderer.removeListener('prompt-workbench-state', handler); },
+  onPromptWheel: listener => { const handler = (_event, value) => listener(value); ipcRenderer.on('prompt-wheel', handler); return () => ipcRenderer.removeListener('prompt-wheel', handler); },
   previewKeyboardConfigPatch: (patch) => ipcRenderer.invoke("desktop:preview-keyboard-config-patch", patch),
   commitKeyboardConfig: (token) => ipcRenderer.invoke("desktop:commit-keyboard-config", token),
   setTriggerConfig: (value) => ipcRenderer.invoke("desktop:set-trigger-config", value),

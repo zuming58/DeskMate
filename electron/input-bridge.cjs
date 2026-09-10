@@ -129,6 +129,10 @@ class InputBridgeManager extends EventEmitter {
       this.emit("status", this.snapshot());
     }
     if (result.kind === "host-action") this.emit("host-action", event);
+    if (result.kind === "board-wheel") {
+      this.status.boardWheelCount = Math.min(0xffffffff, (this.status.boardWheelCount || 0) + 1);
+      this.emit("board-wheel", event);
+    }
     if (result.kind === "fixed-text") this.emit("fixed-text", event);
     if (result.kind === "fixed-text-result" && this.pendingFixedText?.requestId === event.requestId) {
       this.finishFixedText(event.ok ? { ok: true, bytes: event.bytes } : { ok: false, reason: event.reason || "fixed-text-injection-failed", bytes: event.bytes });

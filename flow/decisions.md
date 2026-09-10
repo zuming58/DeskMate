@@ -1,5 +1,11 @@
 # Decisions
 
+## D117 - Physical prompt rotary uses read-only source-identified wheel input
+
+- 2026-09-11: DOM hover-dependent wheel delivery is insufficient for a hardware shortcut workbench. Read the known EasyInput standard mouse collection without suppressing global input; forward only bounded wheel direction to the focused prompts page. Preserve firmware configuration and normal other-app behavior.
+- Relative selection is main-owned. Pair Raw Input with legacy DOM duplicates; flush pending wheel fallback before copying. Clipboard verification must finish before hiding. Typing/modals, background pages and voice retain ownership.
+- KEY8 paste remediation is independent of accepted KEY3/4, using existing explicit configuration preview/confirmation/readback. Existing custom actions are not silently overwritten. See T22E architecture and physical acceptance gates.
+
 ## D116 - Xiaozhi is an optional physical extension, not a prerequisite for companion software
 
 - Date: 2026-09-10, explicit user requirement for sharing DeskMate with classmates who have only EasyInput.

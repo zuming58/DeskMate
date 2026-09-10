@@ -56,6 +56,10 @@ internal sealed class EventWriter
         1, "host-action", "easyinput-hid", "HostAction", "invoke",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, hostActionId: id));
 
+    public void Wheel(string axis, string direction) => Write(new BridgeEvent(
+        1, "board-wheel", "easyinput-hid", axis, direction,
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null));
+
     public void FixedTextReady(string requestId, int bytes) => Write(new BridgeEvent(
         1, "fixed-text", "easyinput-hid", "FixedText", "ready",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null, requestId: requestId, bytes: bytes));
@@ -640,7 +644,19 @@ internal static class HidFeatureDevice
 
 internal sealed class RawInputWindow : NativeWindow, IDisposable
 {
-    internal static bool InputLayoutSelfTest() => Marshal.SizeOf<NativeInput>() == (IntPtr.Size == 8 ? 40 : 28);
+    internal static bool InputLayoutSelfTest() => Marshal.SizeOf<NativeInput>() == (IntPtr.Size == 8 ? 40 : 28)
+        && Marshal.SizeOf<RawMouse>() == 24 && Marshal.OffsetOf<RawMouse>(nameof(RawMouse.ButtonFlags)).ToInt32() == 4
+        && WheelDirection(0x400, 120) == "negative" && WheelDirection(0x400, unchecked((ushort)-120)) == "positive"
+        && WheelDirection(0x800, 120) == "positive" && WheelDirection(0x800, unchecked((ushort)-120)) == "negative"
+        && WheelDirection(0, 120) == "" && WheelDirection(0xC00, 120) == "" && WheelDirection(0x400, 0) == "";
+
+    internal static string WheelDirection(ushort flags, ushort data) {
+        var wheel = flags & 0xC00;
+        if (wheel is not (0x400 or 0x800) || data == 0) return "";
+        // DOM Y is the opposite of Windows wheel Y; horizontal signs agree.
+        var delta = (int)unchecked((short)data) * (wheel == 0x400 ? -1 : 1);
+        return delta > 0 ? "positive" : "negative";
+    }
     private static IntPtr _workbenchTarget;
     private static uint _workbenchTargetProcess;
     private static long _workbenchCapturedAt;
@@ -793,6 +809,8 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     {
         var devices = new[]
         {
+            new RawInputDevice { UsagePage = HidUsagePageGeneric, Usage = 0x02,
+                Flags = RidevInputSink | RidevDeviceNotify, Target = Handle },
             new RawInputDevice
             {
                 UsagePage = HidUsagePageGeneric,
@@ -836,6 +854,15 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         {
             if (GetRawInputData(inputHandle, RidInput, buffer, ref size, headerSize) != size) return;
             var header = Marshal.PtrToStructure<RawInputHeader>(buffer);
+            if (header.Type == 0) {
+                if (size < headerSize + Marshal.SizeOf<RawMouse>()) return;
+                var mouse = Marshal.PtrToStructure<RawMouse>(IntPtr.Add(buffer, (int)headerSize));
+                var direction = WheelDirection(mouse.ButtonFlags, mouse.ButtonData);
+                // Ignore high-rate pointer motion before any device lookup or JSON allocation.
+                if (direction.Length != 0 && GetDeviceName(header.Device).Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase))
+                    _writer.Wheel((mouse.ButtonFlags & 0x400) != 0 ? "vertical" : "horizontal", direction);
+                return;
+            }
             var name = GetDeviceName(header.Device);
             var board = name.Contains(BoardVidPid, StringComparison.OrdinalIgnoreCase);
             if (header.Type == RimTypeHid && board) ReadVendorReports(buffer, headerSize, size);
@@ -1216,6 +1243,12 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RawInputDevice { public ushort UsagePage; public ushort Usage; public uint Flags; public IntPtr Target; }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct RawMouse {
+        [FieldOffset(4)] public ushort ButtonFlags;
+        [FieldOffset(6)] public ushort ButtonData;
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RawInputHeader { public uint Type; public uint Size; public IntPtr Device; public IntPtr WParam; }

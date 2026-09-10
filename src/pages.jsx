@@ -1363,6 +1363,13 @@ export function KeymapPage({ notify }) {
       setSyncState((current) => ({ status: "review", readStatus: current.readStatus, label: "等待确认同步" }));
     } catch (error) { setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" })); notify(`同步失败：${error.message}`); }
   };
+  const usePasteKey = async () => {
+    if (locked || !await scenes.save()) return;
+    const next = { ...pendingRef.current, keymap: { ...pendingRef.current.keymap, KEY8: { action: 'paste' } } };
+    pendingRef.current = next;
+    patch({ keyboardPending: next, keymap: bindings.map((binding, index) => index === 7 ? { action: 'paste' } : binding) });
+    await syncKeyboard();
+  };
   const cancelKeyboardSync = useCallback(() => {
     if (configConfirmation?.busy) return;
     setConfigConfirmation(null);
@@ -1412,6 +1419,7 @@ export function KeymapPage({ notify }) {
             <button disabled={locked || scenes.busy} className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER · 全局共用</small></button>
           </div>
           <div className="keymap-board-footer"><span>{sceneKeysReady ? '场景路由已配置 · 切场景无需重复同步' : '第 5～7 键场景功能待同步到键盘'}</span><small>标有“待同步”的功能尚未写入键盘，实体键仍按旧配置执行。请点“同步到键盘”并确认。</small></div>
+          {bindings[7]?.action !== 'paste' && <div className="keymap-recommended"><p>第 8 键当前不是粘贴，复制提示词后不会执行 Ctrl+V。</p><Button disabled={locked || scenes.busy || !scenes.data} onClick={usePasteKey}>将第 8 键设为粘贴</Button></div>}
         </Card>
         <Card className="key-editor">
           {selectedInput.kind === "key" ? <>

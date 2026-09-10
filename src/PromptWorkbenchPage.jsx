@@ -40,10 +40,7 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
   const copy = useCallback(id => command({ type: 'copy', id }), [command]);
   useEffect(() => {
     const move = step => {
-      const d = latest.current; if (!d?.rows?.length) return;
-      const index = Math.max(0, d.rows.findIndex(p => p.id === d.selectedId));
-      const id = d.rows[Math.max(0, Math.min(d.rows.length - 1, index + step))].id;
-      void command({ type: 'view', selectedId: id });
+      void command({ type: 'move', step });
     };
     const onKey = event => {
       if (event.isComposing || event.keyCode === 229 || event.repeat || event.ctrlKey || event.altKey || event.metaKey || !document.hasFocus()) return;
@@ -70,11 +67,14 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
       const step = promptWheelStep(event, latest.current?.reverseSelection);
       if (!step) return; event.preventDefault(); event.stopPropagation();
       if (performance.now() - wheelAt.current < 90) return;
-      wheelAt.current = performance.now(); move(step);
+      wheelAt.current = performance.now(); void command({ type: 'wheel', source: 'dom', step });
     };
-    const element = root.current;
-    window.addEventListener('keydown', onKey, true); element?.addEventListener('wheel', onWheel, { passive: false });
-    return () => { window.removeEventListener('keydown', onKey, true); element?.removeEventListener('wheel', onWheel); };
+    const offWheel = bridge()?.onPromptWheel?.(event => {
+      if (editing || !document.hasFocus() || document.activeElement?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
+      void command({ type: 'wheel', source: 'native', step: event.step * (latest.current?.reverseSelection === false ? 1 : -1) });
+    });
+    window.addEventListener('keydown', onKey, true); window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => { offWheel?.(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('wheel', onWheel, true); };
   }, [editing, command, copy]);
   const openEditor = prompt => {
     setEditor({ id: prompt?.id || '', title: prompt?.title || '', description: prompt?.description || '', body: prompt?.body || '', primarySceneId: prompt?.primarySceneId || data.activeScene, revision: data.revision, origin: prompt?.origin });

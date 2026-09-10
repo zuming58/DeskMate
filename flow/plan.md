@@ -1,6 +1,8 @@
 # Development plan
 
-## Current stage: T22D compact keycaps and explicit pending synchronization
+## Current stage: T22E native rotary input and KEY8 paste setup
+
+2026-09-11: 用户已确认实体 KEY3 陪伴、KEY4 弹出/返回正常。继续修旋钮 Raw Input → 前台提示词选词、重复事件去重、复制回读；KEY8 提供单独粘贴配置预览，必须确认后才写板。实际旋钮和粘贴验收仍待用户，新功能不改固件。
 
 **2026-09-10 当前执行点：** 在权威工作树 `build-t10dc-work` 的 `codex/t22-prompt-workbench-scenes` 分支实现提示词工作台，基于 `e62afa7e9bc138be9282540960bb53b605cf668d`。T21L 陪伴/资料基线保留，根目录旧脏工作树不动。本切片不改固件、不烧录；用户在界面预览并确认后才写入现有按键配置合同。
 

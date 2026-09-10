@@ -162,6 +162,7 @@ export function createDiagnosticReport(input = {}) {
     configCollection: collectionState(bridge.configCollectionWritable),
     calibrationCollection: collectionState(bridge.calibrationCollectionWritable),
     motionCollection: collectionState(bridge.motionCollectionWritable),
+    ...(Number.isInteger(bridge.boardWheelCount) ? { boardWheelCount: Math.max(0, Math.min(0xffffffff, bridge.boardWheelCount)) } : {}),
   };
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);

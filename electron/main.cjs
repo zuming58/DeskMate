@@ -69,7 +69,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t22d-keycap-sync-feedback";
+const DESKMATE_BUILD_ID = "t22e-native-prompt-wheel";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -974,6 +974,9 @@ function startInputBridge() {
     }
   });
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
+  inputBridge.on("board-wheel", event => {
+    if (promptWorkbench?.isForeground() && Math.abs(Date.now() - Date.parse(event.time)) < 500) sendToMain('prompt-wheel', { step: event.action === 'positive' ? 1 : -1 });
+  });
   inputBridge.on("trigger", (event) => {
     sendToMain("key-diagnostic", event);
     if (event.key === "VoiceEdit") cancelPendingEditShortcut();
@@ -1330,7 +1333,10 @@ app.whenReady().then(async () => {
     show: () => { showMain('prompts'); mainWindow?.focus(); }, hide: () => mainWindow?.hide(),
     capture: () => inputBridge?.workbenchInput('capture'), restore: () => inputBridge?.workbenchInput('restore'),
     input: chord => inputBridge?.workbenchInput('chord', chord) || { ok: false, reason: 'input-bridge-unavailable' },
-    writeClipboard: text => clipboard.writeText(text), publish: value => sendToMain('prompt-workbench-state', value),
+    writeClipboard: text => {
+      clipboard.writeText(text);
+      if (clipboard.readText() !== text) throw new Error('clipboard-verification-failed');
+    }, publish: value => sendToMain('prompt-workbench-state', value),
     isVoiceActive: () => Date.now() - lastActiveVoiceCancelAt < 500 || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || companionIsActive(),
     announce: text => {
       clearTimeout(promptAnnouncementTimer);

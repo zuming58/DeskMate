@@ -1,5 +1,23 @@
 # T22 Prompt workbench and scene routing
 
+## T22E physical wheel delivery and paste setup (2026-09-11)
+
+The user confirms KEY3 companion and KEY4 opening/return now work; rotary selection and physical KEY8 paste remain unaccepted. The new diagnostic is T22D and has no wheel/clipboard trace. The previous actual KEY8 readback was Codex; the user explicitly identified KEY8, not Ctrl+V, as the unsuccessful paste action. Do not claim the current clipboard is broken or a device write failed without evidence.
+
+| Fixed reference / regression gap | Software correction |
+| --- | --- |
+| Product `input_runtime.cpp` / `encoder_axis_vectors`: vertical HID wheel and horizontal HID pan; cursor mode emits arrow keys. | No firmware/config changes for the wheel. Preserve signs and normalize Windows vertical sign to DOM sign once. |
+| Native bridge registered keyboard/vendor collections only; React only listened on the prompt root. Existing QA synthesized a DOM event directly on the list. | Register read-only standard mouse Raw Input; accept wheel flags only from known VID/PID. No coordinates/buttons/device paths leave native. Forward a bounded direction only while the prompt window is focused, dropping events older than 500 ms. |
+| Raw Input and legacy Chromium wheel delivery can both occur for one movement. | Main-owned relative selection; native events act immediately. DOM fallback waits 150 ms; matching recent native events suppress duplicate DOM within 250 ms, including coalescing. Pending DOM selections flush before copy and clear on scene/editor/leave/cancel/reopen. Physical timing and two-device simultaneous wheel use remain HIL gates. |
+| KEY3/4 migration deliberately preserved KEY8. | A visible keymap-only KEY8 paste repair stages only KEY8 plus existing pending edits, then opens the existing preview/confirm/readback flow. Never silently reinterpret the old Codex UUID or write the device. |
+| Clipboard write had no readback. | Compare clipboard text immediately after writing; mismatch/exception retains the page and reports failure. No clipboard contents enter diagnostics. |
+
+Native mouse layout/flags follow [Microsoft RAWMOUSE](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-rawmouse); this is Windows IPC, not a new vendor HID or firmware protocol. The standard mouse collection remains read-only INPUTSINK without NOLEGACY or a suppressing mouse hook. Other apps keep their wheel behavior; Windows can still scroll an inactive window under the pointer. Selection is foreground-prompt only, and modal/input editing retains normal behavior. Ordinary mouse DOM wheel fallback remains supported. Optional diagnostics `easyInputHid.boardWheelCount` counts accepted board wheel reports without recording content.
+
+Acceptance: board rotary with pointer over list, preview, sidebar and another window; both directions, fast turn/reverse, no duplicate selection; KEY4 exact selected-body copy/return; KEY8 after explicit paste sync; KEY1–3, other-app wheel and voice Escape unchanged. Synthetic/native IPC QA is not physical acceptance.
+
+Late arrival refinement: retain applied DOM fallback credits for up to 500 ms, so a delayed native twin does not select twice. Reset clears pending, native and DOM credits. This is bounded correlation, not perfect device attribution of Chromium's source-less wheel event; simultaneous independent mouse/board use within that window remains a documented limitation and physical test case.
+
 ## User contract (2026-09-10)
 
 With the recommended assignment, KEY4 opens **the existing DeskMate main window** on `#/prompts`, not a separate popup. A second press copies the selected prompt, hides DeskMate and returns focus to the captured work window. Enter confirms. **Tab/Shift+Tab cycles scenes; KEY8 defaults to the existing firmware paste action, with no contextual second role. T22B allows the user to reassign shared keys explicitly; the defaults are not immutable bindings.** Escape cancels without touching clipboard and hides only a shortcut-invoked transient page; ordinary browsing stays visible. During voice activity (including its cancellation transition), Escape remains voice-only. In a prompt editor Escape closes the editor first. KEY5–7 route locally by active scene. **The recommended KEY3 assignment is the existing companion-call action, replacing voice editing; filling the recommendation preserves KEY1–2 and encoder settings.** Encoder wheel/cursor events are consumed by the foreground prompt page only, never by a background hook. Editing and IME composition suspend page shortcuts. Clipboard copy never sends Enter.

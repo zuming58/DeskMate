@@ -35,6 +35,10 @@ function parseBridgeLine(line) {
   let value;
   try { value = JSON.parse(line); } catch { return null; }
   if (!value || value.version !== 1) return null;
+  if (value.type === "board-wheel") {
+    if (value.source !== "easyinput-hid" || !["vertical", "horizontal"].includes(value.key) || !["positive", "negative"].includes(value.action) || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "board-wheel", source: "easyinput-hid", key: value.key, action: value.action, time: value.time, sequence: value.sequence });
+  }
   if (value.type === "choreography-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     try {
@@ -181,6 +185,7 @@ class InputTriggerFilter {
 
   accept(event) {
     if (!event) return { kind: "ignored" };
+    if (event.type === "board-wheel") return { kind: "board-wheel", event };
     if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "choreography-write", "choreography-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) {

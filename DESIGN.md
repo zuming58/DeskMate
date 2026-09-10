@@ -1,5 +1,7 @@
 # DeskMate design direction
 
+T22E (2026-09-11): prompt rotary selection must not require hovering over the list. Keep the 45/55 fixed panes; source-identified wheel input only changes foreground selection. Key mapping shows a compact KEY8 paste repair when its assignment is not paste, leading to existing synchronization confirmation. Do not add a second keyboard editor to Prompts.
+
 ## Product feeling
 
 DeskMate 不是传统硬件调试器，而是一个安静、可信、带有生命感的 AI 工作伙伴。界面应让第一次使用者无需理解 GPIO、HID 报告或网络协议，也能完成语音输入、查看状态和配置设备。

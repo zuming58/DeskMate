@@ -1,5 +1,10 @@
 # Lessons learned
 
+## A DOM wheel test does not prove hardware rotary delivery
+
+- A synthetic WheelEvent dispatched to the list bypasses Windows routing and the native bridge. Cover Raw Input parsing, main/preload forwarding without any DOM wheel, raw/legacy duplicate orders, burst direction changes, field ownership and exact-copy behavior separately.
+- Physical KEY8 can still be an app-launch action after migrating only KEY3/4. Ask which paste key failed and inspect mapping before diagnosing the clipboard. Never reassign a shared host-action UUID as a shortcut fix.
+
 ## Device-read success must not masquerade as pending-write success
 
 - A green fingerprint next to a pending keycap is confusing: separate successful configuration reads from draft changes and verified device writes. Only a confirmed write plus matching readback should clear pending deltas. A saved-but-unverified response remains pending.
