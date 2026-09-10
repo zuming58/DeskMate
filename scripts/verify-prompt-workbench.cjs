@@ -16,7 +16,8 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 let window; const calls = []; const assertions = []; const errors = [];
 const record = (name, condition) => { assert(condition, name); assertions.push(name); };
 const store = new PromptWorkbenchStore({ userDataPath: path.join(output, 'store') });
-const controller = new PromptWorkbenchController({ store, isForeground: () => window.isFocused(),
+const controller = new PromptWorkbenchController({ store, isForeground: () => window.isFocused() && window.webContents.getURL().endsWith('#/prompts'),
+  isSettingsForeground: () => window.isFocused() && window.webContents.getURL().endsWith('#/keymap'),
   show: () => { window.show(); window.focus(); }, hide: () => { calls.push('hide'); window.hide(); },
   capture: async () => calls.push('capture'), restore: async () => { calls.push('restore'); return { ok: true }; },
   input: async value => { calls.push(['input', value]); return { ok: true }; }, writeClipboard: async value => calls.push(['copy', value]),
@@ -38,9 +39,10 @@ app.whenReady().then(async () => {
   window.webContents.on('console-message', (_e, level, message) => { if (level >= 3 && !/No handler registered|isolated-ui-qa/.test(message)) errors.push(message.slice(0, 200)); });
   await window.loadFile(path.join(root, 'dist/client/index.html'), { hash: '/prompts' }); await pause(1200); window.focus();
   const run = code => window.webContents.executeJavaScript(code);
+  const waitFor = async (test, label) => { const deadline = Date.now() + 3000; while (!await test()) { if (Date.now() > deadline) throw Error(`UI readiness timeout: ${label}`); await pause(40); } };
   const clickText = async text => { await run(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===${JSON.stringify(text)})?.click()`); await pause(150); };
   const shot = async name => { const png = await window.webContents.capturePage(); fs.writeFileSync(path.join(output, name + '.png'), png.toPNG()); };
-  const press = async (key, modifiers = []) => { window.show(); window.focus(); await pause(80); window.webContents.sendInputEvent({ type: 'keyDown', keyCode: key, modifiers }); window.webContents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers }); await pause(180); };
+  const press = async (key, modifiers = []) => { window.show(); window.focus(); await waitFor(() => run('document.hasFocus()'), 'keyboard focus'); window.webContents.sendInputEvent({ type: 'keyDown', keyCode: key, modifiers }); window.webContents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers }); await pause(180); };
   record('80 builtin prompts', controller.snapshot().builtinCount === 80);
   record('main DeskMate nav contains prompts', await run(`document.querySelector('.sidebar__nav').textContent.includes('提示词')`));
   record('16 coding prompts rendered', await run(`document.querySelectorAll('.prompt-row').length===16`));
@@ -86,14 +88,50 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('[aria-label="新增场景"]').click()`); await pause(200); await shot('prompt-scene-editor');
   record('prompt scene editor has no key binding controls', await run(`document.querySelectorAll('.prompt-binding').length===0`)); await press('Escape');
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='按键配置').click()`); await pause(400);
-  record('key configuration owns three scene bindings', await run(`document.querySelectorAll('.scene-key-settings .prompt-binding').length===3`));
-  record('key configuration describes KEY3 companion and KEY4 prompts', await run(`document.querySelector('.scene-key-contract').textContent.includes('KEY 3 · 语音助手') && document.querySelector('.scene-key-contract').textContent.includes('KEY 4 · 提示词')`));
-  await run(`(() => { const select=document.querySelector('[aria-label="配置场景"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'scene-video'); select.dispatchEvent(new Event('change',{bubbles:true})); })()`); await pause(120);
-  await run(`document.querySelector('.scene-key-bindings fieldset input[maxlength="64"]').focus()`); await press('a',['control']); window.webContents.insertText('Ctrl+S'); await pause(120);
-  await clickText('保存场景按键');
-  record('scene key editor saves real local binding', store.data.scenes.find(s=>s.id==='scene-video').bindings[5].value==='Ctrl+S');
-  record('editing other scene keeps active scene unchanged', store.data.activeScene==='coding');
+  record('one keyboard diagram and one editor, no duplicate scene form', await run(`document.querySelectorAll('.keyboard-visual').length===1 && document.querySelectorAll('.key-editor').length===1 && !document.querySelector('.scene-key-settings') && !document.querySelector('[aria-label="配置场景"]')`));
+  record('scene rail precedes keyboard above the fold', await run(`document.querySelector('.keymap-scenes').getBoundingClientRect().bottom < document.querySelector('.keyboard-visual').getBoundingClientRect().top && document.querySelector('.keyboard-visual').getBoundingClientRect().bottom < innerHeight`));
+  record('three scene buttons plus add; details collapsed', await run(`document.querySelectorAll('.keymap-scene').length===3 && !!document.querySelector('[aria-label="添加工作场景"]') && !document.querySelector('.keymap-more').open`));
+  await shot('keymap-shared-1440');
+  const sceneClick = async title => { await run(`Array.from(document.querySelectorAll('.keymap-scene')).find(b=>b.querySelector('strong').textContent===${JSON.stringify(title)})?.click()`); await pause(180); };
+  await sceneClick('视频剪辑');
+  record('scene button activates real routing and diagram', store.data.activeScene==='scene-video' && await run(`document.querySelector('[data-key="5"]').textContent.includes('Space')`));
+  await run(`document.querySelector('[data-key="5"]').click()`); await pause(180);
+  record('clicking key 5 edits only that scene in right panel', await run(`document.querySelector('.key-scope-badge').textContent.includes('视频剪辑') && !!document.querySelector('.key-editor [aria-label="场景快捷键"]')`));
+  record('right editor inputs use the rounded app styling', await run(`parseFloat(getComputedStyle(document.querySelector('[aria-label="场景按键名称"]')).borderRadius)>=10 && document.querySelector('[aria-label="场景快捷键"]').getBoundingClientRect().height>=40`));
+  await shot('keymap-video-1440');
+  await run(`document.querySelector('[aria-label="场景快捷键"]').focus()`); await press('a',['control']); window.webContents.insertText('Ctrl+S'); await pause(120);
+  await run(`document.querySelector('[aria-label="场景按键名称"]').focus()`); await press('a',['control']); window.webContents.insertText('保存项目'); await pause(120);
+  await clickText('保存当前按键');
+  record('single-key editor saves real scene binding', store.data.scenes.find(s=>s.id==='scene-video').bindings[5].value==='Ctrl+S');
+  await sceneClick('Web Coding');
+  record('coding key 5 retains its own action', await run(`document.querySelector('[data-key="5"]').textContent.includes('Ctrl+A')`));
+  await run(`document.querySelector('[data-key="1"]').click()`); await pause(180);
+  await run(`(() => { const select=document.querySelector('.key-editor [aria-label="按键动作"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'copy'); select.dispatchEvent(new Event('change',{bubbles:true})); })()`); await pause(160);
+  await sceneClick('视频剪辑');
+  record('shared key edit follows all scenes, scene key stays separate', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制' && document.querySelector('[data-key="5"] strong').textContent==='保存项目'`));
+  await run(`document.querySelector('[data-key="5"]').click()`); await pause(180);
+  await run(`document.querySelector('[aria-label="场景快捷键"]').focus()`); await press('a',['control']); window.webContents.insertText('Ctrl+'); await pause(120);
+  await sceneClick('Web Coding');
+  record('invalid shortcut blocks scene switch and retains draft', store.data.activeScene==='scene-video' && await run(`document.querySelector('[aria-label="场景快捷键"]').value==='Ctrl+'`));
+  await clickText('取消修改'); await sceneClick('Web Coding');
+  await run(`document.querySelector('[aria-label="添加工作场景"]').click()`); await pause(100); await shot('keymap-new-scene');
+  await run(`document.querySelector('.keymap-scene-modal input').focus()`); window.webContents.insertText('QA 工作场景'); await pause(80); await clickText('创建场景');
+  record('add scene persists and selects without changing shared keys', store.data.scenes.length===4 && await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
+  await sceneClick('Web Coding');
+  await pause(2300);
+  window.setContentSize(960,680); await pause(250); await run('window.scrollTo(0,0)'); await shot('keymap-960');
+  record('keymap remains two-column at 960 with no horizontal overflow', await run(`document.documentElement.scrollWidth<=innerWidth && document.querySelector('.key-editor').getBoundingClientRect().left >= document.querySelector('.keymap-board').getBoundingClientRect().right`));
+  window.setContentSize(1440,1024); await pause(200);
   await shot('prompt-keys-1440');
+  await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='提示词').click()`); await pause(300);
+  await waitFor(() => run(`!!document.querySelector('.prompt-rows') && document.querySelector('.prompt-scene.active strong')?.textContent==='Web Coding'`), 'prompt route ready after keymap');
+  await run(`document.querySelector('.prompt-workbench').focus()`); await press('Tab');
+  await waitFor(() => store.data.activeScene === 'scene-video', 'prompt Tab scene committed');
+  await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='按键配置').click()`); await pause(300);
+  record('prompt Tab and keymap use same scene across navigation', store.data.activeScene==='scene-video' && await run(`document.querySelector('.keymap-scene.is-active strong').textContent==='视频剪辑' && document.querySelector('[data-key="5"] strong').textContent==='保存项目'`));
+  record('pending shared edit survives page navigation', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
+  await run(`document.querySelector('.keymap-more').open=true`); await clickText('填入推荐方案');
+  record('recommended shared actions are local until explicit synchronization', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='提示词页 / 复制收起' && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY8.action==='paste'`));
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='提示词').click()`); await pause(300);
   window.setContentSize(960, 680); await pause(250); await run('window.scrollTo(0,0)'); await shot('prompts-960');
   record('no horizontal overflow 960', await run(`document.documentElement.scrollWidth<=window.innerWidth`));

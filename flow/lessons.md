@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A diagram editor must be the real editor, not a second projection of parallel forms
+
+- T22A moved scene settings to the right page but left an independent dropdown and three forms above the existing eight-key editor. That duplicated both interaction and configuration ownership. Reuse the diagram as selection, show one contextual editor, and make scope explicit: one shared configuration versus per-scene bindings.
+- Separate pending local edits from a freshly read hardware projection. Preserve those deltas across navigation/restart/readback; merge only authorized paths into the previewed patch, and clear deltas only after confirmed readback. A scene label or prompt body is never a physical board binding.
+- Exercise actual renderer mount and screenshot styles as well as domain tests. A both-undefined optional comparison initially dereferenced a null draft, and a missing scoped input rule left native black-bordered inputs in the otherwise rounded editor. The isolated Electron harness caught the former; same-input reference/screenshot review caught the latter. Both fixes received a full repeat check.
+
 ## Nested scroll ownership and encoder polarity require separate tests
 
 - scrollIntoView can move a selected row's list and its application ancestors. For a fixed prompt workbench, constrain flex heights with min-height: 0, give each content box its own overflow, and reveal rows by adjusting only the list scrollTop.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { PromptKeySettings } from './PromptKeySettings.jsx';
+import { isSceneKey, KeymapSceneRail, SceneKeyEditor, useSceneKeymap } from './PromptKeySettings.jsx';
+import { normalizeKeyboardPending, projectKeyboardRead, workspaceKeyboardPatch } from './domain/keymapWorkspace.js';
 import {
   IconAdjustmentsHorizontal as AdjustmentsHorizontal,
   IconAlertCircle as AlertCircle,
@@ -1289,18 +1290,33 @@ export function VocabularyPage({ notify }) {
 
 export function KeymapPage({ notify }) {
   const { state, patch } = useAppStore();
+  const scenes = useSceneKeymap(notify);
   const [selectedInput, setSelectedInput] = useState({ kind: "key", index: 0 });
   const [diagnostics, setDiagnostics] = useState([]);
   const [syncState, setSyncState] = useState({ status: "idle", readStatus: "idle", label: "本机配置 · 未同步" });
   const [configConfirmation, setConfigConfirmation] = useState(null);
-  const dirtyKeys = useRef(new Set());
-  const dirtyEncoder = useRef(new Set());
   const configReadEpoch = useRef(0);
+  const pending = normalizeKeyboardPending(state.keyboardPending);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const boardConnected = Boolean(state.runtime?.inputBridge?.boardConnected);
   const bindings = state.keymap.map((item, index) => normalizeKeyBinding(item, state.keymap[index]));
   const encoder = normalizeEncoder(state.encoder);
-  const updateKey = (value) => { dirtyKeys.current.add(selectedInput.index); patch({ keymap: bindings.map((binding, index) => index === selectedInput.index ? normalizeKeyBinding(value) : binding) }); };
-  const updateEncoder = (value) => { Object.keys(value).forEach((key) => dirtyEncoder.current.add(key)); patch({ encoder: normalizeEncoder({ ...encoder, ...value }) }); };
+  const updateKey = (value) => { const binding = normalizeKeyBinding(value); const next = { ...pendingRef.current, keymap: { ...pendingRef.current.keymap, [`KEY${selectedInput.index + 1}`]: binding } }; pendingRef.current = next; patch({ keyboardPending: next, keymap: bindings.map((item, index) => index === selectedInput.index ? binding : item) }); };
+  const updateEncoder = (value) => { const next = { ...pendingRef.current, encoder: { ...pendingRef.current.encoder, ...value } }; pendingRef.current = next; patch({ keyboardPending: next, encoder: normalizeEncoder({ ...encoder, ...value }) }); };
+  const locked = ["syncing", "review"].includes(syncState.status);
+  const selectedSceneKey = selectedInput.kind === 'key' && isSceneKey(selectedInput.index);
+  const sceneBinding = scenes.scene?.bindings[selectedInput.index + 1];
+  const selectInput = value => scenes.beforeSelect(() => setSelectedInput(value));
+  const sceneKeysReady = [4, 5, 6].every(index => bindings[index]?.action === `prompt-key-${index + 1}`);
+  const useRecommendedKeys = async () => {
+    if (!await scenes.save()) return;
+    const recommended = { KEY3: { action: 'companion-call' }, KEY4: { action: 'prompt-key-4' }, KEY8: { action: 'paste' } };
+    const next = { ...pendingRef.current, keymap: { ...pendingRef.current.keymap, ...recommended } };
+    pendingRef.current = next;
+    patch({ keyboardPending: next, keymap: bindings.map((binding, index) => recommended[`KEY${index + 1}`] || binding) });
+    notify('推荐方案已填入本机；同步到键盘前仍需确认');
+  };
   const loadKeyboardConfig = useCallback(async ({ announceFailure = false } = {}) => {
     const epoch = ++configReadEpoch.current;
     if (!boardConnected) {
@@ -1311,12 +1327,7 @@ export function KeymapPage({ notify }) {
     const result = await readKeyboardConfigWithRetry({ read: () => voiceAdapters.desktop.readKeyboardConfig() });
     if (epoch !== configReadEpoch.current) return { ok: false, reason: "config-read-superseded" };
     if (result?.ok && result.config) {
-      dirtyKeys.current.clear();
-      dirtyEncoder.current.clear();
-      patch({
-        ...(Array.isArray(result.config.keymap) ? { keymap: result.config.keymap.map((item) => normalizeKeyBinding(item)) } : {}),
-        encoder: normalizeEncoder(result.config.encoder),
-      });
+      if (Array.isArray(result.config.keymap) && result.config.keymap.length === 8) patch(projectKeyboardRead(result.config, pendingRef.current));
       const sourceLabel = ["DeskMate NVS", "Maker NVS", "编译默认值", "安全恢复值"][result.source] || "未知来源";
       setSyncState({ status: "success", readStatus: "success", label: `${sourceLabel} · ${result.fingerprint || "已读取"}` });
       return result;
@@ -1332,18 +1343,15 @@ export function KeymapPage({ notify }) {
     return () => { configReadEpoch.current += 1; };
   }, [loadKeyboardConfig]);
   const syncKeyboard = async () => {
+    if (locked || !scenes.data || !await scenes.save()) return;
     setSyncState((current) => ({ status: "syncing", readStatus: current.readStatus, label: "正在读取板上配置…" }));
     try {
-      const selectedKeys = Object.fromEntries([...dirtyKeys.current].map((index) => [`KEY${index + 1}`, bindings[index]]));
-      const selectedEncoder = Object.fromEntries([...dirtyEncoder.current].map((key) => [key, encoder[key]]));
-      const patch = {};
-      if (Object.keys(selectedKeys).length > 0) patch.keymap = selectedKeys;
-      if (Object.keys(selectedEncoder).length > 0) patch.encoder = selectedEncoder;
+      const patch = workspaceKeyboardPatch(pendingRef.current, bindings);
       if (Object.keys(patch).length === 0) { setSyncState((current) => ({ status: "idle", readStatus: current.readStatus, label: "没有待同步修改" })); return; }
       const preview = await voiceAdapters.desktop.previewKeyboardConfigPatch(patch);
       if (!preview?.ok) throw new Error(preview?.reason || "读取配置失败");
       const paths = (preview.diff || []).map((item) => item.path).filter(Boolean);
-      setConfigConfirmation({ token: preview.token, paths: paths.length ? paths : ["无配置变化"], busy: false });
+      setConfigConfirmation({ token: preview.token, paths: paths.length ? paths : ["无配置变化"], patch, busy: false });
       setSyncState((current) => ({ status: "review", readStatus: current.readStatus, label: "等待确认同步" }));
     } catch (error) { setSyncState((current) => ({ status: "error", readStatus: current.readStatus, label: "同步失败" })); notify(`同步失败：${error.message}`); }
   };
@@ -1366,8 +1374,8 @@ export function KeymapPage({ notify }) {
         return;
       }
       if (!result?.ok) throw new Error(result?.reason || "键盘未确认配置");
-      dirtyKeys.current.clear();
-      dirtyEncoder.current.clear();
+      pendingRef.current = { keymap: {}, encoder: {} };
+      patch({ keyboardPending: pendingRef.current, keymap: bindings.map((binding, index) => pending.patch.keymap?.[`KEY${index + 1}`] || binding) });
       setConfigConfirmation(null);
       setSyncState({ status: "success", readStatus: "success", label: "已保存并回读确认" });
       notify("按键与旋钮配置已同步到键盘并完成回读确认");
@@ -1384,38 +1392,41 @@ export function KeymapPage({ notify }) {
     });
   }, [state.settings.keyDiagnosticsEnabled]);
   return (
-    <div className="page">
-      <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={["syncing", "review"].includes(syncState.status)} onClick={syncKeyboard}>同步到键盘</Button></>} />
-      <PromptKeySettings notify={notify} onConfigured={() => loadKeyboardConfig({ announceFailure: true })} />
-      <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。同步前会重新读取板上配置，只提交按键与旋钮路径；网络、音频和未知字段保持原值。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
-      <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
-      {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}
+    <div className="page keymap-workspace">
+      <PageIntro title="按键配置" description="选一个工作场景，再点按键设置功能。" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={locked || scenes.busy || !scenes.data} onClick={syncKeyboard}>同步到键盘</Button></>} />
+      <KeymapSceneRail scenes={scenes} disabled={locked} />
+      <div className="keymap-scope-line"><span>当前：<strong>{scenes.scene?.title || '正在读取…'}</strong></span><span>1 · 2 · 3 · 4 · 8 全局共用 <i />5 · 6 · 7 随场景切换</span><small>与提示词页 Tab 切换同步</small></div>
       <div className="keymap-grid">
         <Card className="keymap-board">
           <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.readStatus === "success" ? "已读取" : syncState.readStatus === "syncing" ? "读取中" : syncState.readStatus === "pending" ? "待核对" : syncState.readStatus === "waiting" ? "等待连接" : syncState.readStatus === "retry" ? "可重试" : syncState.readStatus === "error" ? "读取失败" : "未读取"}</strong></span><span className="device-line__result">同步结果 <strong className={syncState.status === "success" ? "success-text" : ["error", "warning"].includes(syncState.status) ? "warning-text" : ""}>{syncState.label}</strong>{["retry", "error"].includes(syncState.readStatus) && <button type="button" className="config-read-retry" disabled={syncState.status === "syncing"} onClick={() => void loadKeyboardConfig({ announceFailure: true })}><Refresh size={13} />重新读取</button>}</span></div>
           <div className="keyboard-visual">
-            <div className="key-grid">{bindings.map((binding, index) => <button key={index} className={`hardware-key ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{actionLabel(binding)}</strong></button>)}</div>
-            <button className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => setSelectedInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER</small></button>
+            <div className="key-grid">{bindings.map((binding, index) => { const local = isSceneKey(index); const action = scenes.scene?.bindings[index + 1]; const label = local ? action?.label || '未配置' : actionLabel(binding); return <button key={index} aria-label={`KEY${index + 1} ${label}`} aria-pressed={selectedInput.kind === "key" && selectedInput.index === index} disabled={locked || scenes.busy} data-key={index + 1} className={`hardware-key ${local ? 'is-scene-key' : ''} ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{label}</strong><span className="hardware-key-scope">{local ? action?.type === 'hotkey' ? action.value : action?.type === 'prompt' ? '复制提示词' : '已禁用' : '全局共用'}</span></button>; })}</div>
+            <button disabled={locked || scenes.busy} className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER · 全局共用</small></button>
           </div>
+          <div className="keymap-board-footer"><span>{sceneKeysReady ? '场景路由已配置 · 切场景无需重复同步' : '第 5～7 键场景功能待同步到键盘'}</span><small>共用键的本机修改将在确认同步后用于实体键盘。</small></div>
         </Card>
         <Card className="key-editor">
           {selectedInput.kind === "key" ? <>
             <div className="key-editor__title"><span>KEY {selectedInput.index + 1}</span><strong>按键设置</strong></div>
-            <BindingEditor binding={bindings[selectedInput.index]} onChange={updateKey} notify={notify} />
-            <div className="mapping-preview"><span>当前映射</span><strong>{actionLabel(bindings[selectedInput.index])}</strong><small>修改后自动保存到本机</small></div>
-            <Button variant="primary" className="button--wide" disabled={["syncing", "review"].includes(syncState.status)} onClick={syncKeyboard}>保存当前按键</Button>
+            <div className={`key-scope-badge ${selectedSceneKey ? 'scene' : ''}`}>{selectedSceneKey ? `仅 ${scenes.scene?.title || '当前场景'}` : '全局共用 · 所有场景一起生效'}</div>
+            <fieldset className="key-editor-fields" disabled={locked || scenes.busy}>{selectedSceneKey ? <SceneKeyEditor binding={sceneBinding} onChange={value => scenes.change(selectedInput.index + 1, value)} /> : <BindingEditor binding={bindings[selectedInput.index]} options={KEY_ACTIONS.filter(item => !['prompt-key-5', 'prompt-key-6', 'prompt-key-7'].includes(item.id))} onChange={updateKey} notify={notify} />}</fieldset>
+            {selectedSceneKey ? <><small className="key-save-hint">只改本场景。切换按键或场景时也会保存；无效内容会提示修正。</small><div className="key-save-actions"><Button variant="ghost" disabled={!scenes.dirty || scenes.busy} onClick={scenes.discard}>取消修改</Button><Button variant="primary" disabled={!scenes.dirty || scenes.busy || locked} onClick={() => void scenes.save()}>保存当前按键</Button></div></> : <><div className="mapping-preview"><span>所有场景共用</span><strong>{actionLabel(bindings[selectedInput.index])}</strong><small>{pending.keymap[`KEY${selectedInput.index + 1}`] ? '已保存本机 · 待同步到键盘' : '共用一份配置，不随场景切换'}</small></div><Button variant="primary" className="button--wide" disabled={locked || scenes.busy || !scenes.data} onClick={syncKeyboard}>保存当前按键</Button></>}
           </> : <>
             <div className="key-editor__title"><span>ENCODER</span><strong>旋钮设置</strong></div>
+            <fieldset className="key-editor-fields" disabled={locked || scenes.busy}>
             <label>旋转模式<Segmented compact value={encoder.mode} onChange={(mode) => updateEncoder({ mode })} options={[{ value: "scroll", label: "滚动页面" }, { value: "cursor", label: "移动光标" }]} /></label>
             <label>滚动方向<Segmented compact value={encoder.axis} onChange={(axis) => updateEncoder({ axis })} options={[{ value: "vertical", label: "上下" }, { value: "horizontal", label: "左右" }]} /></label>
             <label>滚动速度<Slider label="旋钮滚动速度" min={1} max={5} suffix="" value={encoder.speed} onChange={(speed) => updateEncoder({ speed })} /></label>
             <SettingRow title="反转上下方向"><Toggle checked={encoder.reverseVertical} onChange={(reverseVertical) => updateEncoder({ reverseVertical })} /></SettingRow>
             <SettingRow title="反转左右方向"><Toggle checked={encoder.reverseHorizontal} onChange={(reverseHorizontal) => updateEncoder({ reverseHorizontal })} /></SettingRow>
             <BindingEditor binding={encoder.press} options={ENCODER_PRESS_ACTIONS} onChange={(press) => updateEncoder({ press })} notify={notify} />
+            </fieldset>
             <div className="mapping-preview"><span>旋钮短按</span><strong>{actionLabel(encoder.press)}</strong><small>旋转与短按会一起同步</small></div>
+            <Button variant="primary" className="button--wide" disabled={locked || scenes.busy || !scenes.data} onClick={syncKeyboard}>保存旋钮设置</Button>
           </>}
         </Card>
       </div>
+      <details className="keymap-more"><summary>更多设置与诊断</summary><div className="keymap-options"><label><input type="checkbox" checked={scenes.data?.announcements ?? true} disabled={!scenes.data || scenes.busy || locked} onChange={event => scenes.setting({ announcements: event.target.checked })} />切换场景时语音播报</label><label><input type="checkbox" checked={scenes.data?.reverseSelection ?? true} disabled={!scenes.data || scenes.busy || locked} onChange={event => scenes.setting({ reverseSelection: event.target.checked })} />反转提示词选词方向</label></div><small>选词方向只影响提示词页；播报使用豆包音色与工作提醒音量，语音忙时不插播。</small><div className="keymap-recommended"><p>推荐共用键：1 语音输入 · 2 回车 · 3 语音助手 · 4 提示词 · 8 粘贴。保留现有 1、2 键，仅填入 3、4、8。</p><Button disabled={locked || scenes.busy || !scenes.data} onClick={useRecommendedKeys}>填入推荐方案</Button></div><Notice tone="info" title="保存与同步">场景键保存在本机；共用键与旋钮的修改需要预览并确认同步。只提交按键与旋钮路径，网络、音频和未知字段保持原值，不烧录固件。</Notice><SettingRow title="按键诊断模式" description="只记录语音触发键的来源类别与时间，不记录输入文字"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>{diagnostics.length > 0 && <div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div>}</details>
       <ConfirmationDialog
         open={Boolean(configConfirmation)}
         title="确认同步到键盘"

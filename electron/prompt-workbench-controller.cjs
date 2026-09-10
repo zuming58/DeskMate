@@ -1,8 +1,8 @@
 const { ACTIONS } = require('./prompt-workbench.cjs');
 
 class PromptWorkbenchController {
-  constructor({ store, isForeground, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive = () => false }) {
-    Object.assign(this, { store, isForeground, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive });
+  constructor({ store, isForeground, isSettingsForeground = () => false, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive = () => false }) {
+    Object.assign(this, { store, isForeground, isSettingsForeground, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive });
     this.view = { query: '', filter: 'all', scope: 'scene', category: '' };
     this.selected = ''; this.editing = false; this.transient = false; this.busy = false; this.openSequence = 0;
   }
@@ -36,7 +36,7 @@ class PromptWorkbenchController {
       }
       if (key === 8) return await this.input('Ctrl+V');
       if (![5, 6, 7].includes(key)) return { ok: false, reason: '按键无效' };
-      if (this.isForeground()) return { ok: false, reason: '请回到工作窗口使用场景快捷键' };
+      if (this.isForeground() || this.isSettingsForeground()) return { ok: false, reason: '请回到工作窗口使用场景快捷键' };
       const state = this.store.snapshot(); const action = state.scenes.find(s => s.id === state.activeScene).bindings[key];
       if (action.type === 'disabled') return { ok: false, reason: '当前场景未配置这个按键' };
       if (action.type === 'prompt') {
@@ -65,7 +65,7 @@ class PromptWorkbenchController {
       this.transient = false; this.hide(); await this.restore(); return { ok: true, hidden: true };
     }
     if (value.type === 'cycle' || value.type === 'scene') {
-      if (!this.isForeground() || this.editing) return { ok: false, reason: '请先退出编辑' };
+      if ((!this.isForeground() && !this.isSettingsForeground()) || this.editing) return { ok: false, reason: '请先退出编辑' };
       const d = this.store.snapshot();
       const i = d.scenes.findIndex(s => s.id === d.activeScene);
       const id = value.type === 'scene' ? value.id : d.scenes[(i + (value.reverse ? -1 : 1) + d.scenes.length) % d.scenes.length].id;

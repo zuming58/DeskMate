@@ -1,5 +1,13 @@
 # Decisions
 
+## D113 - One keyboard diagram; shared keys and scene keys have different owners
+
+- Date: 2026-09-10. T22B supersedes D111/D112's immutable defaults and independent scene-edit dropdown, not their safety or prompt/voice boundaries.
+- KEY1, KEY2, KEY3, KEY4, KEY8 and the rotary are one editable global configuration. KEY5–7 belong only to each scene. Default voice/Enter/companion/prompts/paste mappings remain recommendations; no custom shared key is silently overwritten on scene changes.
+- The Key mapping page begins with large scene buttons, then the existing eight-key/rotary diagram and a single right-hand editor. Selecting a scene explicitly changes the same activeScene used by prompt-page Tab. Save a valid current scene draft before changing keys/scenes; reject invalid edits without losing the draft. Do not offer another dropdown plus three duplicate forms.
+- Persist only shared-key/encoder pending deltas beside the existing global store. A board read cannot erase unsynchronized local changes. The confirmed patch contains those deltas and missing KEY5–7 host routes, never per-scene prompt text/chords. Scene switches do not write NVS; copy/hide and native input retain foreground ownership.
+- Secondary settings/diagnostics are collapsed below. Review UI first; explicit configuration confirmation and physical acceptance are a later, separate user step. No firmware or protocol change.
+
 ## D112 - Key configuration has one home; prompt selection never scrolls the app
 
 - Date: 2026-09-10. T22A supersedes D111 only for KEY3 preservation and configuration ownership.

@@ -8,6 +8,9 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
 import { promptWheelStep, revealPromptRow } from '../src/domain/promptNavigation.js';
+import { normalizeKeyboardPending, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
+import { DEFAULT_KEYMAP, DEFAULT_ENCODER } from '../src/domain/keymap.js';
+import { validateConfig } from '../src/store/appStore.js';
 const require = createRequire(import.meta.url);
 const { ACTIONS, setupPatch, library, PromptWorkbenchStore, validateState, chord, normalize } = require('../electron/prompt-workbench.cjs');
 const { PromptWorkbenchController } = require('../electron/prompt-workbench-controller.cjs');
@@ -173,4 +176,44 @@ test('T22 native request is bounded, result matched and not replayed after resta
   manager.handleLine(JSON.stringify({ version: 1, type: 'desktop-output-result', source: 'desktop-output', requestId: sent.requestId, ok: true, reason: '', time: '2026-09-10T00:00:00.000Z', sequence: 1 }));
   assert.deepEqual(await request, { ok: true });
   const interrupted = manager.workbenchInput('restore'); manager.stop(); assert.equal((await interrupted).ok, false); assert.equal(writes.length, 2);
+});
+
+test('T22B shared key edits survive persisted state and device readback', () => {
+  const pending = { keymap: { KEY1: { action: 'copy' }, KEY8: { action: 'undo' } }, encoder: { speed: 5 } };
+  const restored = validateConfig({ ...validateConfig({}), keyboardPending: pending });
+  assert.deepEqual(restored.keyboardPending, pending);
+  const view = projectKeyboardRead({ keymap: DEFAULT_KEYMAP, encoder: DEFAULT_ENCODER }, restored.keyboardPending);
+  assert.equal(view.keymap[0].action, 'copy'); assert.equal(view.keymap[7].action, 'undo'); assert.equal(view.encoder.speed, 5);
+  assert.deepEqual(view.keymap[1], DEFAULT_KEYMAP[1]);
+});
+
+test('T22B board patch carries shared edits and routes, never per-scene payloads', () => {
+  const patch = workspaceKeyboardPatch({ keymap: { KEY1: { action: 'copy' }, KEY6: { action: 'fixed-text', text: 'must stay local' } }, encoder: { speed: 4 } }, DEFAULT_KEYMAP);
+  assert.deepEqual(Object.keys(patch.keymap), ['KEY1', 'KEY5', 'KEY6', 'KEY7']);
+  assert.deepEqual(patch.keymap.KEY6, { action: 'prompt-key-6' });
+  assert(!JSON.stringify(patch).includes('must stay local'));
+  const configured = DEFAULT_KEYMAP.map((binding, index) => patch.keymap[`KEY${index + 1}`] || binding);
+  assert.deepEqual(workspaceKeyboardPatch({}, configured), {});
+  assert.deepEqual(normalizeKeyboardPending({ keymap: { KEY99: { action: 'copy' } }, encoder: { unknown: true } }), { keymap: {}, encoder: {} });
+});
+
+test('T22B key settings can activate scenes but cannot copy or run shortcuts into itself', async () => {
+  const h = harness(); let settings = true; h.controller.isSettingsForeground = () => settings;
+  const next = await h.controller.command({ type: 'scene', id: 'scene-video' });
+  assert.equal(next.activeScene, 'scene-video'); assert(h.calls.some(c => Array.isArray(c) && c[0] === 'say'));
+  assert.equal((await h.controller.copy()).ok, false);
+  assert.equal((await h.controller.key(5)).ok, false);
+  assert(!h.calls.includes('Space'));
+  settings = false; assert.equal((await h.controller.command({ type: 'cycle' })).ok, false);
+  await h.controller.key(5); assert(h.calls.includes('Space'));
+});
+
+test('T22B editing key 5 in video does not change coding or other scene keys', () => {
+  const s = fresh(); const before = s.snapshot();
+  s.mutate({ type: 'scene', id: 'scene-video' });
+  const scene = structuredClone(s.data.scenes[1]); scene.bindings[5] = { type: 'hotkey', label: '保存项目', value: 'Ctrl+S' };
+  s.mutate({ type: 'save-scene', scene, revision: s.data.revision, activate: false });
+  assert.deepEqual(s.data.scenes[0], before.scenes[0]); assert.deepEqual(s.data.scenes[2], before.scenes[2]);
+  assert.deepEqual(s.data.scenes[1].bindings[6], before.scenes[1].bindings[6]);
+  assert.equal(s.data.scenes[1].bindings[5].value, 'Ctrl+S');
 });

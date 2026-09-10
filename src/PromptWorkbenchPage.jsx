@@ -99,7 +99,7 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
         {d.scenes.map(s => { const Icon = sceneIcon(s.id); return <button key={s.id} className={`prompt-scene ${s.id === d.activeScene ? 'active' : ''}`} onClick={() => { void command({ type: 'scene', id: s.id }); root.current?.focus(); }}><span className={`scene-glyph ${s.icon}`}><Icon size={22} /></span><span><strong>{s.title}</strong><small>{s.hint || '自定义工作场景'}</small></span>{s.id === d.activeScene && <IconCheck size={17} />}</button>; })}
         <button className="prompt-add-scene" title="新增场景" aria-label="新增场景" onClick={() => setSceneEditor({ title: '', hint: '', bindings: structuredClone(scene.bindings), revision: d.revision })}><IconPlus size={20} /></button>
       </div>
-      <div className="prompt-key-hint"><span><kbd>Tab</kbd> 切换场景，按键同步切换</span><span><kbd>旋钮</kbd> 选择</span><span><kbd>KEY 4</kbd> 复制并收起</span><span><kbd>KEY 8</kbd> 粘贴</span></div>
+      <div className="prompt-key-hint"><span><kbd>Tab</kbd> 切换场景，按键同步切换</span><span><kbd>旋钮</kbd> 选择</span><span><kbd>KEY 4</kbd> 复制并收起（默认）</span><span><kbd>KEY 8</kbd> 粘贴（默认）</span></div>
       <div className="prompt-columns">
         <div className="prompt-library">
           <div className="prompt-list-title"><h2>{d.view.scope === 'all' ? '全部提示词' : scene.title}<span>{d.rows.length}</span></h2><button className="pw-link" onClick={() => command({ type: 'view', scope: d.view.scope === 'all' ? 'scene' : 'all', category: '' })}>{d.view.scope === 'all' ? '回到当前场景' : `浏览全部 ${d.builtinCount} 条`}</button></div>

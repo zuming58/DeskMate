@@ -505,3 +505,37 @@ kbd { display: inline-grid; place-items: center; min-width: 36px; height: 30px; 
   .motion-avatar .companion-face { animation: none !important; }
   .confirmation-overlay, .confirmation-dialog { animation: none !important; }
 }
+
+/* One scene rail, one keyboard diagram, one contextual editor. */
+.keymap-scenes { display:flex; gap:14px; overflow-x:auto; padding:3px 2px 8px; scrollbar-width:thin; }
+.keymap-scene { display:flex; align-items:center; gap:14px; flex:1 0 210px; min-width:0; min-height:84px; padding:18px; border:1px solid #cfd9e6; border-bottom:5px solid #cfd9e6; border-radius:16px; background:#fff; color:#627590; text-align:left; box-shadow:0 4px 12px rgba(32,49,70,.04); }
+.keymap-scene > span { display:flex; flex:1; flex-direction:column; gap:6px; min-width:0; }.keymap-scene strong { font-size:14px; color:#3d4f68; overflow-wrap:anywhere; }.keymap-scene small { font-size:10px; line-height:1.6; color:#8593a6; }
+.keymap-scene.is-active { border-color:#4d7df0; background:#eff5ff; color:#356cf3; }.keymap-scene.is-active strong { color:#2f5eb6; }
+.keymap-scene-add { flex:0 0 50px; border:1px dashed #cdd8e8; border-radius:14px; color:#7790b0; background:transparent; }
+.keymap-scope-line { display:flex; align-items:center; flex-wrap:wrap; gap:10px 24px; color:#77879d; font-size:11px; margin:4px 0 -2px; }.keymap-scope-line strong { color:#425b7d; }.keymap-scope-line i { display:inline-block; width:1px; height:10px; background:#cbd7e4; margin:0 12px; }.keymap-scope-line small { margin-left:auto; font-size:10px; }
+.keymap-workspace .keymap-grid { align-items:start; }.keymap-workspace .keymap-board { padding:24px; }.keymap-workspace .keyboard-visual { margin-top:20px; padding:22px; gap:22px; }
+.keymap-workspace .hardware-key { min-height:125px; padding:10px 5px; gap:9px; }.keymap-workspace .hardware-key strong { white-space:normal; text-align:center; overflow-wrap:anywhere; font-size:12px; line-height:1.5; }.hardware-key-scope { font-size:9px; color:#8b99ad; }.hardware-key.is-scene-key { border-color:#bccfeb; background:#f7faff; }.hardware-key.is-selected.is-scene-key { border-color:#4d7df0; background:#eff5ff; }.is-scene-key .hardware-key-scope { color:#6487bf; }
+.keymap-board-footer { display:flex; flex-direction:column; gap:8px; margin-top:18px; color:#6d7f98; font-size:11px; }.keymap-board-footer small { font-size:10px; color:#8a99ab; }
+.keymap-workspace .key-editor { gap:16px; }.key-scope-badge { color:#72829a; background:#f3f6fa; padding:9px 12px; border-radius:9px; font-size:11px; }.key-scope-badge.scene { color:#3866b4; background:#edf4ff; }
+.key-editor-fields { display:flex; flex-direction:column; gap:16px; border:0; padding:0; margin:0; min-width:0; }.key-save-hint { color:#8291a6; font-size:10px; line-height:1.8; }.key-save-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:auto; }
+.key-editor-fields input:not([type=checkbox]), .key-editor-fields textarea { box-sizing:border-box; width:100%; min-width:0; min-height:42px; border:1px solid #dbe4ef; border-radius:12px; padding:12px 14px; background:#fff; color:#42516a; font:inherit; line-height:1.6; outline:none; }.key-editor-fields textarea { min-height:110px; }.key-editor-fields input:focus,.key-editor-fields textarea:focus { border-color:#4d7df0; }
+.keymap-more { color:#7b8ba0; font-size:11px; border-top:1px solid #dce5ee; padding-top:16px; }.keymap-more summary { cursor:pointer; width:max-content; }.keymap-more > small { line-height:1.8; }.keymap-options { display:flex; gap:24px; flex-wrap:wrap; padding:20px 0 10px; }.keymap-options label { display:flex; align-items:center; gap:8px; }.keymap-options input { accent-color:#356cf3; }.keymap-recommended { display:flex; align-items:center; gap:18px; padding:16px 0; }.keymap-recommended p { flex:1; line-height:1.8; }.keymap-more .notice { margin:12px 0; }.keymap-more .setting-row { padding-block:16px; }
+.keymap-workspace :focus-visible { outline:2px solid #4f83f0; outline-offset:3px; }
+@media (max-width:1180px) {
+  .keymap-workspace .keymap-grid { grid-template-columns:minmax(0,1fr) 270px; gap:14px; }
+  .keymap-workspace .key-editor { display:flex; padding:18px; }.keymap-workspace .keymap-board { padding:16px; }
+  .keymap-workspace .keyboard-visual { grid-template-columns:minmax(0,1fr) 112px; gap:14px; padding:14px; }
+  .keymap-workspace .key-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }.keymap-workspace .hardware-key { min-height:100px; }.keymap-workspace .hardware-key strong { font-size:10px; }
+  .keymap-workspace .dial-control { width:112px; border-width:6px; }.keymap-workspace .dial-control strong { font-size:10px; }.keymap-workspace .dial-control svg { width:30px; height:30px; }
+  .keymap-workspace .device-line { flex-wrap:wrap; gap:8px; }.keymap-workspace .device-line__result { flex-basis:100%; }.keymap-scene { flex-basis:175px; padding:12px; gap:10px; }.keymap-scene small { display:none; }.keymap-scope-line small { display:none; }
+}
+@media (max-width:800px) {
+  .keymap-workspace .keymap-grid { grid-template-columns:1fr; }.keymap-workspace .key-editor { display:flex; }.keymap-scene { flex-basis:160px; }.keymap-workspace .keymap-recommended { flex-direction:column; align-items:start; }
+}
+@media (min-width:801px) and (max-width:1050px) {
+  .keymap-workspace .keymap-grid { grid-template-columns:minmax(0,1fr) 225px; gap:12px; }
+  .keymap-workspace .keyboard-visual { grid-template-columns:minmax(0,1fr) 90px; gap:10px; padding:10px; }
+  .keymap-workspace .dial-control { width:90px; }.keymap-workspace .dial-control small { font-size:7px; letter-spacing:0; }
+  .keymap-workspace .hardware-key { min-height:98px; gap:6px; border-radius:12px; }.keymap-workspace .hardware-key-scope { font-size:8px; }
+  .keymap-workspace .key-grid { gap:6px; }.keymap-workspace .key-editor { padding:16px; }.keymap-workspace .key-save-actions { flex-wrap:wrap; }
+}

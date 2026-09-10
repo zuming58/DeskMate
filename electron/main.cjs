@@ -69,7 +69,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t22a-prompt-layout-key3";
+const DESKMATE_BUILD_ID = "t22b-unified-keymap-scenes";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -912,7 +912,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
   if (process.argv.includes("--dev")) mainWindow.loadURL(getDevUrl());
-  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-prompts') ? { hash: '/prompts' } : {});
+  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : {});
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
@@ -1326,6 +1326,7 @@ app.whenReady().then(async () => {
   promptWorkbench = new PromptWorkbenchController({
     store: new PromptWorkbenchStore({ userDataPath: app.getPath('userData') }),
     isForeground: () => Boolean(mainWindow?.isFocused() && mainWindow.webContents.getURL().split('#')[1] === '/prompts'),
+    isSettingsForeground: () => Boolean(mainWindow?.isFocused() && mainWindow.webContents.getURL().split('#')[1] === '/keymap'),
     show: () => { showMain('prompts'); mainWindow?.focus(); }, hide: () => mainWindow?.hide(),
     capture: () => inputBridge?.workbenchInput('capture'), restore: () => inputBridge?.workbenchInput('restore'),
     input: chord => inputBridge?.workbenchInput('chord', chord) || { ok: false, reason: 'input-bridge-unavailable' },
@@ -1710,7 +1711,7 @@ app.whenReady().then(async () => {
   startInputBridge();
   await syncWakeWordListener("application-ready");
   app.on("activate", () => showMain());
-  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-prompts') ? 'prompts' : undefined));
+  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : undefined));
 });
 
 app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
