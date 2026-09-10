@@ -1,5 +1,12 @@
 # Decisions
 
+## D116 - Xiaozhi is an optional physical extension, not a prerequisite for companion software
+
+- Date: 2026-09-10, explicit user requirement for sharing DeskMate with classmates who have only EasyInput.
+- Support Windows + EasyInput with an optional Xiaozhi extension in the same product. A persistent settings switch disables the physical display/expression/servo/dance capabilities together, while retaining computer-audio AI companion, wake, dictation, prompts, scene keys, Codex briefs and memory.
+- Disabling must gate main-process commands, not merely hide UI. Hardware absence is normal in this mode and must not block core software; retain existing safety and do not replay queued motions when re-enabled.
+- Requirement accepted, implementation and acceptance pending: [T23](tasks/t23-optional-xiaozhi-hardware.md). This record is not firmware/write authorization and does not claim the setting exists today.
+
 ## D115 - Compact action captions and distinct read/draft/write evidence
 
 - Date: 2026-09-10. The prompt action's keycap is `弹出/收起`; full copy-and-hide behavior remains in the editor/accessibility title and the action/UUID is unchanged. Long key labels cannot enlarge the keyboard row.

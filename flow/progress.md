@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-10 - T23 optional Xiaozhi hardware requirement recorded (docs only)
+
+- Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t22-prompt-workbench-scenes`, base HEAD `89cbe94`. User requested documenting a future feature, not implementing it now.
+- Recorded `flow/tasks/t23-optional-xiaozhi-hardware.md` as `PLANNED / NOT_IMPLEMENTED`: one persistent settings switch turns off physical Xiaozhi screen/expression/servo/dance capabilities so classmates with only EasyInput can use the same software and matching firmware. Computer-audio companion/wake, dictation, prompts, scene keys, Codex briefs and memory remain available independently.
+- Synchronized charter, future plan, DESIGN and D116. Included main-process gating, absent-device non-blocking behavior, safe active-motion shutdown, no replay on re-enable, and a clean sharing-package acceptance checklist. No new wire protocol or power-off claim.
+- Verification: documentation diff/ASCII paths and local task links checked; no executable source changed, so no build or hardware test run or claimed. Current T22D package and outstanding KEY3/4 synchronization/voice acceptance are unchanged. No application restart, device access/write, firmware operation or user-data change in this turn.
+- Next: keep T23 in the future software backlog and complete it before the intended EasyInput-only sharing release. Classification: `T23_REQUIREMENT_RECORDED / IMPLEMENTATION_PENDING / DOCS_ONLY`.
+
 # 2026-09-10 - T22D compact prompt key and honest synchronization status
 
 - Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t22-prompt-workbench-scenes`, implementation HEAD `5e997d1c5a7fa03d230845ee8f48e3935b6eba4b`, based on Flow HEAD `b3cb8905e42a5293e030a41e5d56ffcc2e8388b0`. Parent stale checkout untouched; no push/computer handoff.

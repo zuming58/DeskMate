@@ -14,6 +14,12 @@
 - 当前待人工：检查按键页连续 Tab；第 3/4 键无需手动逐项设置，已作为本机待同步项。后续明确预览/确认后再验收真实语音入口、提示词呼出/复制、旋钮、焦点返回/粘贴、KEY5～7 场景切换及豆包场景播报。其他推荐键仍需用户主动选择。
 - 实现合同及来源：[`prompt-workbench-scenes.md`](../docs/architecture/prompt-workbench-scenes.md)。此前 T21 记录如下，历史状态不覆盖本节。
 
+## Planned: T23 optional Xiaozhi hardware — not implemented
+
+- 为只有 EasyInput 开发板的同学提供同一套 DeskMate 软件，在设置中一键关闭“小智硬件扩展”。停用实体屏幕/表情、舵机、跳舞及自动动作，保留电脑端 AI 语音陪伴、唤醒、听写、提示词、场景键、Codex 提醒与记忆。
+- 小智缺席不得阻塞核心软件或持续告警；开关持久保存，主进程命令出口也要拦截，重新启用不重放旧动作。小智是可选附加硬件，不是核心软件的前置条件。
+- 当前仅记录，后续安排实现，并纳入分享/内测包发布前的仅 EasyInput 模式验收。任务：[t23-optional-xiaozhi-hardware.md](tasks/t23-optional-xiaozhi-hardware.md)。不改变当前 T22 未完成的实体按键同步/语音验收状态，不授权固件修改或烧录。
+
 ## Previous stage: T21 three-stage streaming companion experiment
 
 目标：在独立实验分支把陪伴主链替换为“百炼流式 ASR → DeskMate CompanionModel → 流式 TTS”。普通陪伴对话只由 CompanionModel 维护人设、短期上下文和回答；豆包不再接收麦克风音频或决定说什么，只把 DeskMate 已确认的短句合成为声音。现有 Codex 状态和白名单动作先保留为确定性兼容工具，避免模型编造或越权。T20 隐藏唤醒、T15D 动作和普通语音输入保持原合同。本阶段只改 Windows 软件，不修改 Host HID、DeskMate Link 或两套固件。
