@@ -4,6 +4,19 @@ export const SHARED_KEY_INDEXES = [0, 1, 2, 3, 7];
 export const SCENE_KEY_INDEXES = [4, 5, 6];
 export const sceneRouteBinding = index => ({ action: `prompt-key-${index + 1}` });
 
+// One-time local migration of the known pre-workbench layout, not a device write.
+// Explicit pending edits and later custom assignments remain the user's choices.
+export function prepareCompanionPromptKeys(state) {
+  if (state.keyboardLayoutVersion >= 1) return null;
+  const keys = state.keymap;
+  const pending = normalizeKeyboardPending(state.keyboardPending);
+  const oldFourth = keys?.[3]?.action === 'companion-call' || (keys?.[3]?.action === 'hotkey' && keys[3].shortcut === 'Backspace');
+  if (keys?.[2]?.action !== 'voice-edit' || !oldFourth || pending.keymap.KEY3 || pending.keymap.KEY4) return { keyboardLayoutVersion: 1 };
+  const updates = { KEY3: { action: 'companion-call' }, KEY4: { action: 'prompt-key-4' } };
+  return { keyboardLayoutVersion: 1, keyboardPending: { ...pending, keymap: { ...pending.keymap, ...updates } },
+    keymap: keys.map((binding, index) => updates[`KEY${index + 1}`] || binding) };
+}
+
 // Pending global edits survive navigation/restarts and readback, without claiming board sync.
 export function normalizeKeyboardPending(value) {
   const keymap = Object.fromEntries(SHARED_KEY_INDEXES.filter(i => value?.keymap?.[`KEY${i + 1}`]).map(i => [`KEY${i + 1}`, normalizeKeyBinding(value.keymap[`KEY${i + 1}`])]));

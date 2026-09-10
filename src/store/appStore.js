@@ -39,6 +39,7 @@ export const defaultState = {
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
   keyboardPending: { keymap: {}, encoder: {} },
+  keyboardLayoutVersion: 0,
   settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "", companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs, companionConversationVolume: COMPANION_DEFAULTS.conversationVolume, companionCodexBriefVolume: COMPANION_DEFAULTS.codexBriefVolume, companionWakeEnabled: false },
   runtime: {
     inputBridge: { available: false, process: "unknown", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "" },
@@ -67,6 +68,7 @@ function mergeDefaults(value) {
     keymap: Array.isArray(value.keymap) && value.keymap.length === 8 ? value.keymap.map((item, index) => normalizeKeyBinding(item, defaultState.keymap[index])) : structuredClone(defaultState.keymap),
     encoder: normalizeEncoder(value.encoder),
     keyboardPending: normalizeKeyboardPending(value.keyboardPending),
+    keyboardLayoutVersion: value.keyboardLayoutVersion >= 1 ? 1 : 0,
     vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
     settings: (() => { const companion = normalizeCompanionPreferences({ name: value.settings?.companionName, wakePhrase: value.settings?.companionWakePhrase, endSmoothWindowMs: value.settings?.companionEndSmoothWindowMs, idleTimeoutMs: value.settings?.companionIdleTimeoutMs, conversationVolume: value.settings?.companionConversationVolume, codexBriefVolume: value.settings?.companionCodexBriefVolume, wakeEnabled: value.settings?.companionWakeEnabled }); return { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle", companionName: companion.name, companionWakePhrase: companion.wakePhrase, companionEndSmoothWindowMs: companion.endSmoothWindowMs, companionIdleTimeoutMs: companion.idleTimeoutMs, companionConversationVolume: companion.conversationVolume, companionCodexBriefVolume: companion.codexBriefVolume, companionWakeEnabled: companion.wakeEnabled }; })(),
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },

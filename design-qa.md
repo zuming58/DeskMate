@@ -1,3 +1,14 @@
+# T22C scene Tab and KEY3/4 migration QA — 2026-09-10
+
+- User evidence: `C:/Users/Administrator/AppData/Local/Temp/codex-clipboard-70ef3249-da23-4eee-a5d8-177de5025d01.png` shows native focus on a non-scene control and the old KEY3 voice-edit / KEY4 companion assignment. Layout remains the accepted single diagram; this is an interaction correction, not a redesign.
+- Fixed behavior reference: the foreground scene-cycling path in `src/PromptWorkbenchPage.jsx`, contrasted with T22B's missing keymap-page listener. Key mapping now uses the same main-owned cycle; Tab and Shift+Tab wrap scenes without selecting different physical keys. Editing, recording Tab itself and dialogs remain protected.
+- Final native Electron QA: **50/50** assertions at 1440×1024 and 960×680, production renderer/preload/store/controller with isolated test sinks. Evidence `%TEMP%/deskmate-prompt-qa-EmXYYW/`, including `keymap-shared-1440.png`, `keymap-video-1440.png`, `keymap-960.png` and `report.json`. User reference and resulting shared-key capture were inspected together; existing layout/style retained, two upgraded keycaps visibly say pending synchronization.
+- An initial isolated repeat stopped at the existing prompt-editor Escape assertion; a repeat passed that step and exposed a real continuous-Tab issue in the first candidate: disabling a busy scene button moved focus to body outside its subtree listener. Page-level ownership plus post-commit focus restoration fixed this; final full 50-assertion rerun passed. No assertion was removed or replaced with a direct scene command.
+- Domain checks prove known legacy/default migration is local and one-time, pending readback survives, other/custom keys remain untouched, and later reassignments are not undone. Final complete software suite **502/502**. Device configuration and physical-key/audio acceptance remain separate; software migration does not claim a board write.
+- Result: **passed for scoped software interaction/visual regression; explicit board synchronization and physical acceptance pending**.
+
+---
+
 # T22B single keyboard-diagram editor QA — 2026-09-10
 
 - User target: the original eight-key/rotary diagram and right-hand editor, with large scene buttons above it. The screenshot's separate top scene dropdown/three forms are the rejected pattern, not a second design to preserve. KEY1/2/3/4/8 are shared; KEY5/6/7 belong only to the selected scene.

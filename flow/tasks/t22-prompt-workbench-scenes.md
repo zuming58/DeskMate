@@ -8,7 +8,7 @@ Make the eight-key EasyInput board useful for daily work without adding firmware
 
 - KEY1, KEY2, KEY3, KEY4, KEY8 are globally shared and explicitly editable; KEY5–7 are per-scene. The optional recommendation preserves existing KEY1/KEY2, fills KEY3 companion call, KEY4 prompts and KEY8 paste locally before board confirmation. Existing custom assignments are not silently overwritten.
 - KEY4: show the existing main window at the last prompt scene; again copy selected text, hide to background and return to the work window. Enter also confirms.
-- Tab / Shift+Tab: next / previous scene; list and KEY5–7 change together, optionally one short Doubao announcement.
+- Tab / Shift+Tab: next / previous scene on both Prompts and Key mapping; list and KEY5–7 change together, optionally one short Doubao announcement. Keymap's right editor, shortcut recording and modal dialogs retain normal Tab behavior.
 - Knob: select a prompt while that page is foreground, without changing the board's encoder configuration outside the page.
 - KEY5–7: editable per-scene shortcut or copy-only fixed prompt.
 - KEY8: recommended firmware paste, never a contextual scene switch; any explicit reassignment is global.
@@ -23,7 +23,7 @@ Read/preview/confirm/readback configuration patches from the existing Key mappin
 ## Acceptance still requiring the user
 
 0. First let the user inspect the layout and single-editor interaction; the current request explicitly prioritizes UI before hardware function testing.
-1. Later connect EasyInput. If desired, open “更多设置与诊断” → “填入推荐方案”, then “同步到键盘” and inspect/confirm exact changes including KEY5–7 host routes. The recommendation only fills local drafts; the software does not silently apply a board patch.
+1. Later connect EasyInput. The recognized legacy KEY3/4 pair is automatically staged locally as companion/prompts once, with pending labels; no need to select those functions individually. Optionally use “更多设置与诊断” → “填入推荐方案” for the remaining defaults, then “同步到键盘” and inspect/confirm exact changes including KEY5–7 host routes. The software does not silently apply a board patch.
 2. From a disposable editor, KEY4 → rotate → KEY4 → KEY8: correct literal prompt, app returns to background, no automatic Enter.
 3. KEY4 → Tab: scene/list and KEY5–7 change together; rapid Tab announces only the final scene when voice is idle. Close and reopen: scene remains.
 4. Test KEY5–7 in each intended application and edit defaults if that application's shortcuts differ.

@@ -1,5 +1,11 @@
 # Decisions
 
+## D114 - Both workbench pages own scene Tab; legacy KEY3/4 upgrades stay local
+
+- Date: 2026-09-10. The user's T22B screenshot confirms that sharing scene state alone is insufficient: Key mapping must also handle Tab/Shift+Tab outside editors, recording and dialogs. Use the existing main-owned cycle, save valid scene drafts, and restore focus only after the busy scene button re-enables. Voice cancellation is unchanged.
+- Explicitly requested KEY3 companion and KEY4 prompts are staged once from recognized legacy local defaults, tracked by keyboardLayoutVersion. Do not repeat the migration after later user reassignments, override pending/custom assignments, or change other keys/rotary. Pending keycaps must be visibly distinguished from confirmed board mappings.
+- No implicit board write: keep CONFIG_V1_FROZEN and HOST_ACTION_V1_FROZEN preview/token/confirmation/readback. Software upgrades can fill a local draft; physical effect still needs user-visible confirmation.
+
 ## D113 - One keyboard diagram; shared keys and scene keys have different owners
 
 - Date: 2026-09-10. T22B supersedes D111/D112's immutable defaults and independent scene-edit dropdown, not their safety or prompt/voice boundaries.

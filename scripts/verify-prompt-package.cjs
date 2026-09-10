@@ -10,7 +10,7 @@ const source = JSON.parse(fs.readFileSync(path.join(root, 'electron/prompt-libra
 assert.deepEqual(bundled, source, 'packaged prompt data must match source including all original bodies');
 assert.equal(bundled.prompts.length, 80);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t22b-unified-keymap-scenes'));
+assert(main.includes('t22c-keymap-tab-key34'));
 assert(main.includes('--show-prompts'));
 assert(packagedFile('electron/prompt-workbench.cjs').toString().includes("require('./prompt-library.json')"));
 assert(packagedFile('electron/preload.cjs').toString().includes('prompts:command'));

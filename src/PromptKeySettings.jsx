@@ -51,9 +51,45 @@ export function useSceneKeymap(notify) {
     discard: () => setDraft(null),
     beforeSelect: callback => transact(async () => { await save(); callback(); }),
     select: id => transact(async () => { await save(); await command({ type: 'scene', id }); }),
+    cycle: reverse => transact(async () => { await save(); await command({ type: 'cycle', reverse }); }),
     add: fields => transact(async () => { await save(); const current = await command({ type: 'get' }); await command({ type: 'save-scene', scene: fields, revision: current.revision }); }),
     setting: fields => transact(async () => { await save(); const current = await command({ type: 'get' }); await command({ type: 'settings', ...fields, revision: current.revision }); }),
   };
+}
+
+// Page navigation owns Tab only outside editors and dialogs. Native shortcut
+// recording runs earlier and retains Tab as a valid key, not a scene command.
+export function useKeymapSceneTab(scenes, disabled) {
+  const root = useRef(null);
+  const restoreSceneFocus = useRef(false);
+  useEffect(() => {
+    if (!restoreSceneFocus.current || scenes.busy) return;
+    const element = root.current;
+    const selected = element?.querySelector('.keymap-scene[aria-pressed="true"]');
+    const rail = element?.querySelector('.keymap-scenes');
+    if (!selected || !rail || selected.disabled) return;
+    restoreSceneFocus.current = false;
+    selected.focus({ preventScroll: true });
+    const itemBox = selected.getBoundingClientRect(); const railBox = rail.getBoundingClientRect();
+    if (itemBox.right > railBox.right) rail.scrollLeft += itemBox.right - railBox.right;
+    else if (itemBox.left < railBox.left) rail.scrollLeft -= railBox.left - itemBox.left;
+  }, [scenes.data?.activeScene, scenes.busy]);
+  useEffect(() => {
+    const element = root.current;
+    const key = event => {
+      if (!element?.isConnected || event.key !== 'Tab' || event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || event.isComposing || event.keyCode === 229 || !document.hasFocus()) return;
+      if (event.target.closest?.('.key-editor,input,textarea,select,[contenteditable="true"]') || document.querySelector('[role="dialog"],[role="alertdialog"],.shortcut-recorder__field.is-capturing')) return;
+      event.preventDefault();
+      if (event.repeat || disabled || scenes.busy || !scenes.data) return;
+      restoreSceneFocus.current = true;
+      void scenes.cycle(event.shiftKey).then(ok => { if (!ok) restoreSceneFocus.current = false; });
+    };
+    // A disabled in-flight scene button temporarily sends native focus to body.
+    // Keep page ownership there too, and restore focus only after React enables it.
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [scenes, disabled]);
+  return root;
 }
 
 export function KeymapSceneRail({ scenes, disabled }) {

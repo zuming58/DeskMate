@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Shared scene state does not automatically share keyboard behavior
+
+- Mouse scene buttons passing tests do not prove Tab is wired on another page. Add actual keyDown/keyUp tests starting on a toolbar button, a full forward wrap, reverse wrap, field Tab, shortcut recording and modal focus cases.
+- Disabling the currently focused button during an async save can move native focus to body. A listener bound only to that button/page subtree then misses the next Tab. Keep foreground-page ownership through this transition and restore active-scene focus after the enabled DOM commits, not in an early promise/animation callback.
+- One-time local migrations need a durable marker and explicit pending-state labels. Keep known legacy-default migration separate from later custom choices and from the device's confirmed configuration.
+
 ## A diagram editor must be the real editor, not a second projection of parallel forms
 
 - T22A moved scene settings to the right page but left an independent dropdown and three forms above the existing eight-key editor. That duplicated both interaction and configuration ownership. Reuse the diagram as selection, show one contextual editor, and make scope explicit: one shared configuration versus per-scene bindings.

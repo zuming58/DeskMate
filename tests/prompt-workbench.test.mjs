@@ -8,7 +8,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
 import { promptWheelStep, revealPromptRow } from '../src/domain/promptNavigation.js';
-import { normalizeKeyboardPending, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
+import { normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
 import { DEFAULT_KEYMAP, DEFAULT_ENCODER } from '../src/domain/keymap.js';
 import { validateConfig } from '../src/store/appStore.js';
 const require = createRequire(import.meta.url);
@@ -216,4 +216,27 @@ test('T22B editing key 5 in video does not change coding or other scene keys', (
   assert.deepEqual(s.data.scenes[0], before.scenes[0]); assert.deepEqual(s.data.scenes[2], before.scenes[2]);
   assert.deepEqual(s.data.scenes[1].bindings[6], before.scenes[1].bindings[6]);
   assert.equal(s.data.scenes[1].bindings[5].value, 'Ctrl+S');
+});
+
+test('T22C legacy key 3 and 4 stage locally once and survive old device readback', () => {
+  const keys = structuredClone(DEFAULT_KEYMAP); keys[3] = { action: 'companion-call' };
+  const state = { keymap: keys, keyboardPending: { keymap: { KEY1: { action: 'copy' } }, encoder: { speed: 4 } } };
+  const upgrade = prepareCompanionPromptKeys(state);
+  assert.equal(upgrade.keymap[2].action, 'companion-call'); assert.equal(upgrade.keymap[3].action, 'prompt-key-4');
+  for (const i of [0,1,4,5,6,7]) assert.deepEqual(upgrade.keymap[i], keys[i]);
+  assert.equal(upgrade.keyboardPending.keymap.KEY1.action, 'copy'); assert.equal(upgrade.keyboardPending.encoder.speed, 4);
+  const persisted = validateConfig({ ...validateConfig({}), ...state, ...upgrade });
+  const readback = projectKeyboardRead({ keymap: keys, encoder: DEFAULT_ENCODER }, persisted.keyboardPending);
+  assert.equal(readback.keymap[2].action, 'companion-call'); assert.equal(readback.keymap[3].action, 'prompt-key-4');
+  assert.equal(prepareCompanionPromptKeys(persisted), null);
+  const defaults = prepareCompanionPromptKeys({ keymap: DEFAULT_KEYMAP });
+  assert.equal(defaults.keymap[3].action, 'prompt-key-4');
+});
+
+test('T22C legacy migration does not overwrite custom, pending or later reassigned keys', () => {
+  const custom = structuredClone(DEFAULT_KEYMAP); custom[3] = { action: 'copy' };
+  assert.deepEqual(prepareCompanionPromptKeys({ keymap: custom }), { keyboardLayoutVersion: 1 });
+  assert.deepEqual(prepareCompanionPromptKeys({ keymap: DEFAULT_KEYMAP, keyboardPending: { keymap: { KEY3: { action: 'undo' } } } }), { keyboardLayoutVersion: 1 });
+  assert.equal(prepareCompanionPromptKeys({ keymap: DEFAULT_KEYMAP, keyboardLayoutVersion: 1 }), null);
+  assert.deepEqual(DEFAULT_KEYMAP[2], { action: 'voice-edit' });
 });

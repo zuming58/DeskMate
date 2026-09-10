@@ -91,6 +91,13 @@ app.whenReady().then(async () => {
   record('one keyboard diagram and one editor, no duplicate scene form', await run(`document.querySelectorAll('.keyboard-visual').length===1 && document.querySelectorAll('.key-editor').length===1 && !document.querySelector('.scene-key-settings') && !document.querySelector('[aria-label="配置场景"]')`));
   record('scene rail precedes keyboard above the fold', await run(`document.querySelector('.keymap-scenes').getBoundingClientRect().bottom < document.querySelector('.keyboard-visual').getBoundingClientRect().top && document.querySelector('.keyboard-visual').getBoundingClientRect().bottom < innerHeight`));
   record('three scene buttons plus add; details collapsed', await run(`document.querySelectorAll('.keymap-scene').length===3 && !!document.querySelector('[aria-label="添加工作场景"]') && !document.querySelector('.keymap-more').open`));
+  record('legacy key 3 and 4 auto-stage as companion and prompts without hardware sync', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='提示词页 / 复制收起' && document.querySelector('[data-key="4"]').textContent.includes('待同步') && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY4.action==='prompt-key-4'`));
+  await run(`Array.from(document.querySelectorAll('.page-intro button')).find(b=>b.textContent.includes('同步到键盘')).focus()`);
+  for (const expected of ['scene-video','office','coding']) { await press('Tab'); await waitFor(() => store.data.activeScene===expected, 'keymap forward Tab'); }
+  record('keymap Tab cycles all three scenes and wraps without selecting keyboard buttons', await run(`document.querySelector('[data-key="1"]').getAttribute('aria-pressed')==='true' && document.activeElement.classList.contains('keymap-scene')`));
+  await press('Tab',['shift']); await waitFor(() => store.data.activeScene==='office', 'keymap reverse Tab');
+  record('keymap Shift Tab reverses with corresponding scene keys', await run(`document.querySelector('[data-key="6"]').textContent.includes('Ctrl+S')`));
+  await press('Tab'); await waitFor(() => store.data.activeScene==='coding', 'keymap Tab returns coding');
   await shot('keymap-shared-1440');
   const sceneClick = async title => { await run(`Array.from(document.querySelectorAll('.keymap-scene')).find(b=>b.querySelector('strong').textContent===${JSON.stringify(title)})?.click()`); await pause(180); };
   await sceneClick('视频剪辑');
@@ -98,6 +105,8 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('[data-key="5"]').click()`); await pause(180);
   record('clicking key 5 edits only that scene in right panel', await run(`document.querySelector('.key-scope-badge').textContent.includes('视频剪辑') && !!document.querySelector('.key-editor [aria-label="场景快捷键"]')`));
   record('right editor inputs use the rounded app styling', await run(`parseFloat(getComputedStyle(document.querySelector('[aria-label="场景按键名称"]')).borderRadius)>=10 && document.querySelector('[aria-label="场景快捷键"]').getBoundingClientRect().height>=40`));
+  await run(`document.querySelector('[aria-label="场景按键名称"]').focus()`); await press('Tab');
+  record('Tab inside key editor keeps normal field navigation, not scene switching', store.data.activeScene==='scene-video' && await run(`document.activeElement.getAttribute('aria-label')==='场景按键动作'`));
   await shot('keymap-video-1440');
   await run(`document.querySelector('[aria-label="场景快捷键"]').focus()`); await press('a',['control']); window.webContents.insertText('Ctrl+S'); await pause(120);
   await run(`document.querySelector('[aria-label="场景按键名称"]').focus()`); await press('a',['control']); window.webContents.insertText('保存项目'); await pause(120);
@@ -109,12 +118,18 @@ app.whenReady().then(async () => {
   await run(`(() => { const select=document.querySelector('.key-editor [aria-label="按键动作"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'copy'); select.dispatchEvent(new Event('change',{bubbles:true})); })()`); await pause(160);
   await sceneClick('视频剪辑');
   record('shared key edit follows all scenes, scene key stays separate', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制' && document.querySelector('[data-key="5"] strong').textContent==='保存项目'`));
+  await run(`document.querySelector('[data-key="2"]').click()`); await pause(150);
+  await run(`document.querySelector('.shortcut-recorder__field').click()`); await pause(150); await press('Tab');
+  record('shortcut recorder can capture Tab without cycling scenes', store.data.activeScene==='scene-video' && await run(`document.querySelector('.shortcut-recorder__field').textContent.includes('Tab')`));
+  await clickText('取消');
   await run(`document.querySelector('[data-key="5"]').click()`); await pause(180);
   await run(`document.querySelector('[aria-label="场景快捷键"]').focus()`); await press('a',['control']); window.webContents.insertText('Ctrl+'); await pause(120);
   await sceneClick('Web Coding');
   record('invalid shortcut blocks scene switch and retains draft', store.data.activeScene==='scene-video' && await run(`document.querySelector('[aria-label="场景快捷键"]').value==='Ctrl+'`));
   await clickText('取消修改'); await sceneClick('Web Coding');
   await run(`document.querySelector('[aria-label="添加工作场景"]').click()`); await pause(100); await shot('keymap-new-scene');
+  await run(`document.querySelector('.keymap-scene-modal input').focus()`); await press('Tab');
+  record('add-scene dialog keeps its Tab focus loop without changing active scene', store.data.activeScene==='coding' && await run(`document.activeElement===document.querySelectorAll('.keymap-scene-modal input')[1]`));
   await run(`document.querySelector('.keymap-scene-modal input').focus()`); window.webContents.insertText('QA 工作场景'); await pause(80); await clickText('创建场景');
   record('add scene persists and selects without changing shared keys', store.data.scenes.length===4 && await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
   await sceneClick('Web Coding');

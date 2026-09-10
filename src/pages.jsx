@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { isSceneKey, KeymapSceneRail, SceneKeyEditor, useSceneKeymap } from './PromptKeySettings.jsx';
-import { normalizeKeyboardPending, projectKeyboardRead, workspaceKeyboardPatch } from './domain/keymapWorkspace.js';
+import { isSceneKey, KeymapSceneRail, SceneKeyEditor, useSceneKeymap, useKeymapSceneTab } from './PromptKeySettings.jsx';
+import { normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from './domain/keymapWorkspace.js';
 import {
   IconAdjustmentsHorizontal as AdjustmentsHorizontal,
   IconAlertCircle as AlertCircle,
@@ -1305,6 +1305,13 @@ export function KeymapPage({ notify }) {
   const updateKey = (value) => { const binding = normalizeKeyBinding(value); const next = { ...pendingRef.current, keymap: { ...pendingRef.current.keymap, [`KEY${selectedInput.index + 1}`]: binding } }; pendingRef.current = next; patch({ keyboardPending: next, keymap: bindings.map((item, index) => index === selectedInput.index ? binding : item) }); };
   const updateEncoder = (value) => { const next = { ...pendingRef.current, encoder: { ...pendingRef.current.encoder, ...value } }; pendingRef.current = next; patch({ keyboardPending: next, encoder: normalizeEncoder({ ...encoder, ...value }) }); };
   const locked = ["syncing", "review"].includes(syncState.status);
+  const workspaceRef = useKeymapSceneTab(scenes, locked);
+  useEffect(() => {
+    const upgrade = prepareCompanionPromptKeys(state);
+    if (!upgrade) return;
+    if (upgrade.keyboardPending) pendingRef.current = upgrade.keyboardPending;
+    patch(upgrade);
+  }, [state.keyboardLayoutVersion]);
   const selectedSceneKey = selectedInput.kind === 'key' && isSceneKey(selectedInput.index);
   const sceneBinding = scenes.scene?.bindings[selectedInput.index + 1];
   const selectInput = value => scenes.beforeSelect(() => setSelectedInput(value));
@@ -1392,15 +1399,15 @@ export function KeymapPage({ notify }) {
     });
   }, [state.settings.keyDiagnosticsEnabled]);
   return (
-    <div className="page keymap-workspace">
+    <div className="page keymap-workspace" ref={workspaceRef} tabIndex={-1}>
       <PageIntro title="按键配置" description="选一个工作场景，再点按键设置功能。" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={locked || scenes.busy || !scenes.data} onClick={syncKeyboard}>同步到键盘</Button></>} />
       <KeymapSceneRail scenes={scenes} disabled={locked} />
-      <div className="keymap-scope-line"><span>当前：<strong>{scenes.scene?.title || '正在读取…'}</strong></span><span>1 · 2 · 3 · 4 · 8 全局共用 <i />5 · 6 · 7 随场景切换</span><small>与提示词页 Tab 切换同步</small></div>
+      <div className="keymap-scope-line"><span>当前：<strong>{scenes.scene?.title || '正在读取…'}</strong></span><span>1 · 2 · 3 · 4 · 8 全局共用 <i />5 · 6 · 7 随场景切换</span><small>Tab / Shift+Tab 切场景 · 编辑区内正常跳转</small></div>
       <div className="keymap-grid">
         <Card className="keymap-board">
           <div className="device-line"><span>当前电脑 <strong>Windows</strong></span><span>键盘系统 <strong>{syncState.readStatus === "success" ? "已读取" : syncState.readStatus === "syncing" ? "读取中" : syncState.readStatus === "pending" ? "待核对" : syncState.readStatus === "waiting" ? "等待连接" : syncState.readStatus === "retry" ? "可重试" : syncState.readStatus === "error" ? "读取失败" : "未读取"}</strong></span><span className="device-line__result">同步结果 <strong className={syncState.status === "success" ? "success-text" : ["error", "warning"].includes(syncState.status) ? "warning-text" : ""}>{syncState.label}</strong>{["retry", "error"].includes(syncState.readStatus) && <button type="button" className="config-read-retry" disabled={syncState.status === "syncing"} onClick={() => void loadKeyboardConfig({ announceFailure: true })}><Refresh size={13} />重新读取</button>}</span></div>
           <div className="keyboard-visual">
-            <div className="key-grid">{bindings.map((binding, index) => { const local = isSceneKey(index); const action = scenes.scene?.bindings[index + 1]; const label = local ? action?.label || '未配置' : actionLabel(binding); return <button key={index} aria-label={`KEY${index + 1} ${label}`} aria-pressed={selectedInput.kind === "key" && selectedInput.index === index} disabled={locked || scenes.busy} data-key={index + 1} className={`hardware-key ${local ? 'is-scene-key' : ''} ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{label}</strong><span className="hardware-key-scope">{local ? action?.type === 'hotkey' ? action.value : action?.type === 'prompt' ? '复制提示词' : '已禁用' : '全局共用'}</span></button>; })}</div>
+            <div className="key-grid">{bindings.map((binding, index) => { const local = isSceneKey(index); const action = scenes.scene?.bindings[index + 1]; const label = local ? action?.label || '未配置' : actionLabel(binding); return <button key={index} aria-label={`KEY${index + 1} ${label}`} aria-pressed={selectedInput.kind === "key" && selectedInput.index === index} disabled={locked || scenes.busy} data-key={index + 1} className={`hardware-key ${local ? 'is-scene-key' : ''} ${selectedInput.kind === "key" && selectedInput.index === index ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "key", index })}><small>KEY{index + 1}</small><Keyboard size={25} stroke={1.5} /><strong>{label}</strong><span className="hardware-key-scope">{local ? action?.type === 'hotkey' ? action.value : action?.type === 'prompt' ? '复制提示词' : '已禁用' : pending.keymap[`KEY${index + 1}`] ? '全局共用 · 待同步' : '全局共用'}</span></button>; })}</div>
             <button disabled={locked || scenes.busy} className={`dial-control ${selectedInput.kind === "encoder" ? "is-selected" : ""}`} onClick={() => selectInput({ kind: "encoder" })}><AdjustmentsHorizontal size={42} stroke={1.3} /><strong>{encoder.mode === "scroll" ? "滚动页面" : "移动光标"} · {encoder.axis === "vertical" ? "上下" : "左右"}</strong><small>ENCODER · 全局共用</small></button>
           </div>
           <div className="keymap-board-footer"><span>{sceneKeysReady ? '场景路由已配置 · 切场景无需重复同步' : '第 5～7 键场景功能待同步到键盘'}</span><small>共用键的本机修改将在确认同步后用于实体键盘。</small></div>
