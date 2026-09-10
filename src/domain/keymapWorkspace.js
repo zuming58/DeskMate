@@ -36,3 +36,14 @@ export function workspaceKeyboardPatch(pending, bindings) {
   for (const i of SCENE_KEY_INDEXES) if (bindings[i]?.action !== sceneRouteBinding(i).action) changes.keymap[`KEY${i + 1}`] = sceneRouteBinding(i);
   return { ...(Object.keys(changes.keymap).length ? { keymap: changes.keymap } : {}), ...(Object.keys(changes.encoder).length ? { encoder: changes.encoder } : {}) };
 }
+
+export function keyboardSyncFeedback(sync, pending) {
+  // A successful read is not proof that a local draft was written to the board.
+  if (['syncing', 'review', 'error', 'warning'].includes(sync.status)) {
+    return { label: sync.label, tone: ['error', 'warning'].includes(sync.status) ? 'warning' : 'demo' };
+  }
+  const changes = normalizeKeyboardPending(pending);
+  if (Object.keys(changes.keymap).length || Object.keys(changes.encoder).length) return { label: '本机修改待同步', tone: 'warning' };
+  if (sync.verified) return { label: '已同步并回读确认', tone: 'success' };
+  return { label: sync.readStatus === 'success' ? '键盘配置已读取' : sync.label, tone: 'demo' };
+}

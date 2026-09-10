@@ -1,5 +1,10 @@
 # Decisions
 
+## D115 - Compact action captions and distinct read/draft/write evidence
+
+- Date: 2026-09-10. The prompt action's keycap is `弹出/收起`; full copy-and-hide behavior remains in the editor/accessibility title and the action/UUID is unchanged. Long key labels cannot enlarge the keyboard row.
+- A successful board read is neutral evidence, not synchronized draft state. Pending global/encoder changes are amber; only successful commit/readback is green verified synchronization. Errors and unverified saves retain pending changes and their specific status. The existing explicit confirmation remains required.
+
 ## D114 - Both workbench pages own scene Tab; legacy KEY3/4 upgrades stay local
 
 - Date: 2026-09-10. The user's T22B screenshot confirms that sharing scene state alone is insufficient: Key mapping must also handle Tab/Shift+Tab outside editors, recording and dialogs. Use the existing main-owned cycle, save valid scene drafts, and restore focus only after the busy scene button re-enables. Voice cancellation is unchanged.

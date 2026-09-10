@@ -1,3 +1,10 @@
+# T22D compact keycaps and sync feedback QA — 2026-09-10
+
+- User screenshot shows the long prompt key title wrapping and the explicit pending marker. Scope is a compact-caption/status correction, not a layout redesign or firmware change.
+- Native Electron QA **57/57** at 1440×1024 and 960×680. Evidence `%TEMP%/deskmate-prompt-qa-med415/`; inspected both keymap captures. `弹出/收起` fits fully on one line and the key height matches its row; full behavior stays in its title and right editor. The top pending badge is amber. Existing narrow scope captions/rotary wrapping remain outside this small change.
+- Real production renderer/preload/controller plus isolated test configuration replies exercise preview (contains KEY3/4), cancel (no commit), saved without readback (pending retained), and verified success (pending cleared). No hardware or real user data/clipboard used by QA.
+- First new badge assertion selected the hidden always-mounted voice page; scoped it to the visible keymap page and reran the entire suite. No production behavior was bypassed. Existing CSP font warning remains unchanged.
+
 # T22C scene Tab and KEY3/4 migration QA — 2026-09-10
 
 - User evidence: `C:/Users/Administrator/AppData/Local/Temp/codex-clipboard-70ef3249-da23-4eee-a5d8-177de5025d01.png` shows native focus on a non-scene control and the old KEY3 voice-edit / KEY4 companion assignment. Layout remains the accepted single diagram; this is an interaction correction, not a redesign.

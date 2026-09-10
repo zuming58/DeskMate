@@ -14,6 +14,7 @@ app.setPath('userData', path.join(output, 'profile'));
 app.disableHardwareAcceleration();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 let window; const calls = []; const assertions = []; const errors = [];
+let qaConfigEnabled = false; let qaConfigResult = { ok: false, saved: true }; const configPreviews = []; const configCommits = [];
 const record = (name, condition) => { assert(condition, name); assertions.push(name); };
 const store = new PromptWorkbenchStore({ userDataPath: path.join(output, 'store') });
 const controller = new PromptWorkbenchController({ store, isForeground: () => window.isFocused() && window.webContents.getURL().endsWith('#/prompts'),
@@ -30,7 +31,12 @@ app.whenReady().then(async () => {
     if (channel === 'prompts:command') return controller.command(value).catch(e => ({ ok: false, reason: e.message }));
     if (channel === 'desktop:get-capabilities') return { supported: true, platform: 'win32', inputBridge: { available: false, boardConnected: false } };
     if (channel === 'desktop:register-shortcut') return { registered: false, shortcut: 'Ctrl+Shift+Space' };
-    if (channel === 'desktop:preview-keyboard-config-patch') return { ok: false, reason: 'qa-no-hardware' };
+    if (channel === 'desktop:preview-keyboard-config-patch') {
+      if (!qaConfigEnabled) return { ok: false, reason: 'qa-no-hardware' };
+      configPreviews.push(structuredClone(value));
+      return { ok: true, token: 'isolated-qa-token', diff: Object.keys(value.keymap || {}).map(key => ({ path: `/profiles/0/keys/${key}/press` })) };
+    }
+    if (channel === 'desktop:commit-keyboard-config') { configCommits.push(value); return qaConfigResult; }
     return { ok: false, reason: 'isolated-ui-qa' };
   }));
   window = new BrowserWindow({ width: 1440, height: 1024, useContentSize: true, show: true,
@@ -91,7 +97,10 @@ app.whenReady().then(async () => {
   record('one keyboard diagram and one editor, no duplicate scene form', await run(`document.querySelectorAll('.keyboard-visual').length===1 && document.querySelectorAll('.key-editor').length===1 && !document.querySelector('.scene-key-settings') && !document.querySelector('[aria-label="配置场景"]')`));
   record('scene rail precedes keyboard above the fold', await run(`document.querySelector('.keymap-scenes').getBoundingClientRect().bottom < document.querySelector('.keyboard-visual').getBoundingClientRect().top && document.querySelector('.keyboard-visual').getBoundingClientRect().bottom < innerHeight`));
   record('three scene buttons plus add; details collapsed', await run(`document.querySelectorAll('.keymap-scene').length===3 && !!document.querySelector('[aria-label="添加工作场景"]') && !document.querySelector('.keymap-more').open`));
-  record('legacy key 3 and 4 auto-stage as companion and prompts without hardware sync', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='提示词页 / 复制收起' && document.querySelector('[data-key="4"]').textContent.includes('待同步') && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY4.action==='prompt-key-4'`));
+  record('legacy key 3 and 4 auto-stage as companion and prompts without hardware sync', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='弹出/收起' && document.querySelector('[data-key="4"]').textContent.includes('待同步') && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY4.action==='prompt-key-4'`));
+  record('pending badge states local-only changes, not board write success', await run(`document.querySelector('.keymap-workspace .page-intro .status-badge').textContent.trim()==='本机修改待同步'`));
+  const compactPromptKey = () => run(`(() => { const key=document.querySelector('[data-key="4"]'), name=key.querySelector('strong'); return getComputedStyle(name).whiteSpace==='nowrap' && name.scrollWidth<=name.clientWidth+1 && name.getBoundingClientRect().height<=parseFloat(getComputedStyle(name).lineHeight)+1 && key.title.includes('复制收起') && Math.abs(key.getBoundingClientRect().height-document.querySelector('[data-key="1"]').getBoundingClientRect().height)<1; })()`);
+  record('prompt key has a full one-line short label and equal key height at 1440', await compactPromptKey());
   await run(`Array.from(document.querySelectorAll('.page-intro button')).find(b=>b.textContent.includes('同步到键盘')).focus()`);
   for (const expected of ['scene-video','office','coding']) { await press('Tab'); await waitFor(() => store.data.activeScene===expected, 'keymap forward Tab'); }
   record('keymap Tab cycles all three scenes and wraps without selecting keyboard buttons', await run(`document.querySelector('[data-key="1"]').getAttribute('aria-pressed')==='true' && document.activeElement.classList.contains('keymap-scene')`));
@@ -136,6 +145,7 @@ app.whenReady().then(async () => {
   await pause(2300);
   window.setContentSize(960,680); await pause(250); await run('window.scrollTo(0,0)'); await shot('keymap-960');
   record('keymap remains two-column at 960 with no horizontal overflow', await run(`document.documentElement.scrollWidth<=innerWidth && document.querySelector('.key-editor').getBoundingClientRect().left >= document.querySelector('.keymap-board').getBoundingClientRect().right`));
+  record('prompt key still fits one line without taller keys at 960', await compactPromptKey());
   window.setContentSize(1440,1024); await pause(200);
   await shot('prompt-keys-1440');
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='提示词').click()`); await pause(300);
@@ -146,7 +156,7 @@ app.whenReady().then(async () => {
   record('prompt Tab and keymap use same scene across navigation', store.data.activeScene==='scene-video' && await run(`document.querySelector('.keymap-scene.is-active strong').textContent==='视频剪辑' && document.querySelector('[data-key="5"] strong').textContent==='保存项目'`));
   record('pending shared edit survives page navigation', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
   await run(`document.querySelector('.keymap-more').open=true`); await clickText('填入推荐方案');
-  record('recommended shared actions are local until explicit synchronization', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='提示词页 / 复制收起' && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY8.action==='paste'`));
+  record('recommended shared actions are local until explicit synchronization', await run(`document.querySelector('[data-key="3"] strong').textContent==='AI 陪伴呼唤' && document.querySelector('[data-key="4"] strong').textContent==='弹出/收起' && JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY8.action==='paste'`));
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='提示词').click()`); await pause(300);
   window.setContentSize(960, 680); await pause(250); await run('window.scrollTo(0,0)'); await shot('prompts-960');
   record('no horizontal overflow 960', await run(`document.documentElement.scrollWidth<=window.innerWidth`));
@@ -158,6 +168,18 @@ app.whenReady().then(async () => {
   await press('Escape'); record('transient Escape hides main window without copying', !window.isVisible() && !calls.some(c => Array.isArray(c) && c[0] === 'copy'));
   await controller.key(4); await pause(180); const selected = controller.snapshot().selectedId;
   await controller.key(4); record('second KEY4 copies exact body and hides main window', !window.isVisible() && calls.some(c => Array.isArray(c) && c[0] === 'copy' && c[1] === store.get(selected).body));
+  window.show(); window.focus(); window.setContentSize(1440,1024);
+  await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='按键配置').click()`); await pause(300);
+  qaConfigEnabled = true;
+  await clickText('同步到键盘');
+  record('sync previews include key 3 and 4 but do not commit before confirmation', configPreviews.at(-1).keymap.KEY3.action==='companion-call' && configPreviews.at(-1).keymap.KEY4.action==='prompt-key-4' && configCommits.length===0 && await run(`!!document.querySelector('[role=dialog]')`));
+  await clickText('取消');
+  record('cancel keeps pending changes and leaves the board untouched', configCommits.length===0 && await run(`JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY4.action==='prompt-key-4'`));
+  await clickText('同步到键盘'); await clickText('确认并同步');
+  record('saved without verified readback keeps pending and does not claim success', configCommits.length===1 && await run(`document.querySelector('.keymap-workspace .page-intro .status-badge').textContent.trim()==='已保存，回读待确认' && !!JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap.KEY4`));
+  qaConfigResult = { ok: true, saved: true };
+  await clickText('同步到键盘'); await clickText('确认并同步');
+  record('verified sync alone clears pending and reports confirmed success', configCommits.length===2 && await run(`document.querySelector('.keymap-workspace .page-intro .status-badge').textContent.trim()==='已同步并回读确认' && Object.keys(JSON.parse(localStorage.getItem('deskmate.app-state')).keyboardPending.keymap).length===0 && !document.querySelector('[data-key="4"]').textContent.includes('待同步')`));
   const report = { result: 'passed', assertions, errors, output, nativeInput: 'test sink; physical board not tested', clipboard: 'test sink; system clipboard unchanged' };
   fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report)); app.quit();

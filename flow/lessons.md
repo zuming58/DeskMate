@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Device-read success must not masquerade as pending-write success
+
+- A green fingerprint next to a pending keycap is confusing: separate successful configuration reads from draft changes and verified device writes. Only a confirmed write plus matching readback should clear pending deltas. A saved-but-unverified response remains pending.
+- Keycap copy should be shorter than an editor action description. Preserve full labels in the editor/accessibility title and use one-line keycaps, with native layout assertions at both normal and compact viewports.
+- DeskMate keeps a hidden VoicePage mounted. UI tests must scope generic `.page-intro .status-badge` selectors to `.keymap-workspace`, otherwise they assert the hidden voice badge instead of the visible synchronization state.
+
 ## Shared scene state does not automatically share keyboard behavior
 
 - Mouse scene buttons passing tests do not prove Tab is wired on another page. Add actual keyDown/keyUp tests starting on a toolbar button, a full forward wrap, reverse wrap, field Tab, shortcut recording and modal focus cases.

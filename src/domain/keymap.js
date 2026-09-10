@@ -104,6 +104,11 @@ export function actionLabel(binding) {
     || "禁用";
 }
 
+// Keycaps stay compact; the editor and accessible title retain the full action.
+export function keycapLabel(binding) {
+  return normalizeKeyBinding(binding).action === 'prompt-key-4' ? '弹出/收起' : actionLabel(binding);
+}
+
 export function firmwareAction(binding) {
   const value = normalizeKeyBinding(binding);
   const named = {

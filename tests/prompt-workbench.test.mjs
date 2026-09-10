@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
+import { actionLabel, keycapLabel, createKeyboardConfig, firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
 import { promptWheelStep, revealPromptRow } from '../src/domain/promptNavigation.js';
-import { normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
+import { keyboardSyncFeedback, normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
 import { DEFAULT_KEYMAP, DEFAULT_ENCODER } from '../src/domain/keymap.js';
 import { validateConfig } from '../src/store/appStore.js';
 const require = createRequire(import.meta.url);
@@ -239,4 +239,37 @@ test('T22C legacy migration does not overwrite custom, pending or later reassign
   assert.deepEqual(prepareCompanionPromptKeys({ keymap: DEFAULT_KEYMAP, keyboardPending: { keymap: { KEY3: { action: 'undo' } } } }), { keyboardLayoutVersion: 1 });
   assert.equal(prepareCompanionPromptKeys({ keymap: DEFAULT_KEYMAP, keyboardLayoutVersion: 1 }), null);
   assert.deepEqual(DEFAULT_KEYMAP[2], { action: 'voice-edit' });
+});
+
+test('T22D prompt keycap stays short without changing the full action or firmware route', () => {
+  const binding = { action: 'prompt-key-4' };
+  assert.equal(keycapLabel(binding), '弹出/收起');
+  assert.equal(actionLabel(binding), '提示词页 / 复制收起');
+  assert.equal(firmwareAction(binding), 'host_action:922d0be0-5ee8-4a32-bcff-000000000004');
+  assert.equal(keycapLabel({ action: 'companion-call' }), 'AI 陪伴呼唤');
+});
+
+test('T22D local key migration actually enters the confirmed patch, preserving unrelated values', () => {
+  const keys = structuredClone(DEFAULT_KEYMAP); keys[3] = { action: 'companion-call' };
+  const raw = createKeyboardConfig({ keymap: keys, encoder: DEFAULT_ENCODER });
+  const upgrade = prepareCompanionPromptKeys({ keymap: keys });
+  const patch = workspaceKeyboardPatch(upgrade.keyboardPending, upgrade.keymap);
+  const merged = mergeKeyboardPatch(raw, patch);
+  assert.equal(raw.profiles[0].keys.KEY4.press, firmwareAction({ action: 'companion-call' }));
+  assert.equal(merged.profiles[0].keys.KEY3.press, firmwareAction({ action: 'companion-call' }));
+  assert.equal(merged.profiles[0].keys.KEY4.press, firmwareAction({ action: 'prompt-key-4' }));
+  for (const key of ['KEY1','KEY2','KEY8']) assert.deepEqual(merged.profiles[0].keys[key], raw.profiles[0].keys[key]);
+  assert.deepEqual(merged.profiles[0].encoder, raw.profiles[0].encoder);
+  assert.equal(sanitizeKeyboardConfig(merged).keymap[3].action, 'prompt-key-4');
+});
+
+test('T22D sync feedback separates device read, local pending, failures and verified write', () => {
+  const read = { status: 'success', readStatus: 'success', label: 'DeskMate NVS' };
+  const pending = { keymap: { KEY4: { action: 'prompt-key-4' } } };
+  assert.deepEqual(keyboardSyncFeedback(read, {}), { label: '键盘配置已读取', tone: 'demo' });
+  assert.deepEqual(keyboardSyncFeedback(read, pending), { label: '本机修改待同步', tone: 'warning' });
+  assert.equal(keyboardSyncFeedback(read, { encoder: { speed: 4 } }).tone, 'warning');
+  for (const status of ['syncing','review','error','warning']) assert.equal(keyboardSyncFeedback({ ...read, status, label: 'specific status' }, pending).label, 'specific status');
+  assert.equal(keyboardSyncFeedback({ ...read, verified: true }, {}).tone, 'success');
+  assert.equal(keyboardSyncFeedback({ ...read, verified: true }, pending).tone, 'warning');
 });

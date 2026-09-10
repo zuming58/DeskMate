@@ -6,7 +6,14 @@ With the recommended assignment, KEY4 opens **the existing DeskMate main window*
 
 Switching scenes does not rewrite device NVS. An explicitly previewed and confirmed `easyinput-config-v1` patch installs reserved UUID host routes on KEY5–7 under the existing `HOST_ACTION_V1_FROZEN` slice and only the shared-key/encoder changes the user made. The optional recommendation fills KEY3 `companion-call`, KEY4 `prompt-key-4` and KEY8 `paste` locally before confirmation. Its entry lives only in the existing Key mapping page. No firmware/protocol change or flash operation. KEY5–7 can be validated keyboard chords, copy-only fixed prompts or disabled actions.
 
-## T22C keyboard-page Tab and legacy key migration (current)
+## T22D compact keycaps and truthful sync feedback (current)
+
+- The user's KEY4 screenshot still says `待同步`, consistent with the old physical companion action. No evidence of a failed write was supplied. T22C staged local changes but did not commit them; a green device-read badge was too easy to mistake for sync success.
+- Only the keycap uses `弹出/收起`; full action labels and the existing host UUID remain unchanged. Key names are single-line with overflow ellipsis and a full title/accessible label, instead of stretching the keyboard row.
+- The top badge now distinguishes neutral device-read evidence, amber pending local changes and green verified commit. Busy/review/failure/readback-pending states take precedence. Saving a draft, cancelling, or receiving an unverified saved response cannot claim verified synchronization or clear pending keys.
+- Regression checks trace the migrated KEY3/4 through the sparse merge/readback projection, preserve unrelated keys/encoder, and exercise the real UI preview/cancel/confirm flow with an isolated configuration sink. Physical writes still require the existing user confirmation; no host/firmware protocol changed.
+
+## T22C keyboard-page Tab and legacy key migration
 
 The user's real T22B screenshot confirmed two remaining gaps: Tab traversed individual controls on Key mapping, and the actual legacy KEY3 voice-edit / KEY4 companion pair remained unchanged. The already-working foreground Tab handler in `src/PromptWorkbenchPage.jsx` is the fixed local behavior reference: explicit main-owned cycle, reverse with Shift, skip editing/IME and do not rewrite hardware. T22B only shared scene buttons/state, not the keyboard event itself.
 
