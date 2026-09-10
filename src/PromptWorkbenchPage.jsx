@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconSearch, IconPlus, IconCopy, IconPencil, IconStar, IconTrash, IconArrowBackUp, IconCode, IconScissors, IconBriefcase, IconKeyboard, IconDownload, IconUpload, IconX, IconCheck, IconSettings2, IconLayersIntersect } from '@tabler/icons-react';
+import { IconSearch, IconPlus, IconCopy, IconPencil, IconStar, IconTrash, IconArrowBackUp, IconCode, IconScissors, IconBriefcase, IconDownload, IconUpload, IconX, IconCheck, IconLayersIntersect } from '@tabler/icons-react';
 import './prompt-workbench.css';
+import { promptWheelStep, revealPromptRow } from './domain/promptNavigation.js';
 
 const bridge = () => window.desktopBridge;
 const sceneIcon = id => id === 'coding' ? IconCode : id === 'scene-video' ? IconScissors : IconBriefcase;
 const filterNames = { all: '全部', favorites: '收藏', recent: '最近', mine: '我的', trash: '回收站' };
-const actionNames = { 'prompt-key-4': '提示词页 / 复制收起', 'prompt-key-5': '场景按键 5', 'prompt-key-6': '场景按键 6', 'prompt-key-7': '场景按键 7', paste: '粘贴', copy: '复制', undo: '撤销', 'select-all': '全选', 'companion-call': 'AI 陪伴呼唤' };
 
 export function PromptWorkbenchPage({ notify = () => {} }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [editor, setEditor] = useState(null);
   const [sceneEditor, setSceneEditor] = useState(null);
-  const [confirmation, setConfirmation] = useState(null);
-  const [setupBusy, setSetupBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const root = useRef(null); const latest = useRef(null); const wheelAt = useRef(0);
-  const editing = Boolean(editor || sceneEditor || confirmation);
+  const editing = Boolean(editor || sceneEditor);
   const accept = useCallback(value => { if (value?.rows) { setData(value); latest.current = value; } }, []);
   const command = useCallback(async value => {
     try {
@@ -37,7 +35,7 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
   useEffect(() => { void bridge()?.promptWorkbench?.({ type: 'editing', active: editing }); }, [editing]);
   useEffect(() => { if (data?.openSequence) root.current?.focus(); }, [data?.openSequence]);
   useEffect(() => {
-    root.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    revealPromptRow(root.current?.querySelector('.prompt-rows'), root.current?.querySelector('[data-selected="true"]'));
   }, [data?.selectedId]);
   const copy = useCallback(id => command({ type: 'copy', id }), [command]);
   useEffect(() => {
@@ -58,7 +56,7 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
         return;
       }
       if (event.key === 'Escape') {
-        if (editing) { event.preventDefault(); event.stopImmediatePropagation(); setEditor(null); setSceneEditor(null); setConfirmation(null); return; }
+        if (editing) { event.preventDefault(); event.stopImmediatePropagation(); setEditor(null); setSceneEditor(null); return; }
         // Voice Escape is owned by the shared voice workflow; controller won't hide while voice is active.
         void command({ type: 'cancel' }); return;
       }
@@ -69,10 +67,10 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
     };
     const onWheel = event => {
       if (editing || event.ctrlKey || event.metaKey || !document.hasFocus() || event.target.closest?.('input,textarea,select,.prompt-preview-body')) return;
-      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      if (!delta) return; event.preventDefault();
+      const step = promptWheelStep(event, latest.current?.reverseSelection);
+      if (!step) return; event.preventDefault(); event.stopPropagation();
       if (performance.now() - wheelAt.current < 90) return;
-      wheelAt.current = performance.now(); move(delta > 0 ? 1 : -1);
+      wheelAt.current = performance.now(); move(step);
     };
     const element = root.current;
     window.addEventListener('keydown', onKey, true); element?.addEventListener('wheel', onWheel, { passive: false });
@@ -85,22 +83,6 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
     setBusy(true);
     const result = await command({ type: 'save', id: editor.id, saveAs, revision: editor.revision, prompt: { title: editor.title, description: editor.description, body: editor.body, primarySceneId: editor.primarySceneId } });
     setBusy(false); if (result.ok !== false) { setEditor(null); notify('提示词已保存'); }
-  };
-  const previewSetup = async () => {
-    setSetupBusy(true);
-    try {
-      const patch = await bridge().getPromptSetupPatch();
-      const result = await bridge().previewKeyboardConfigPatch(patch);
-      if (result?.ok) { if (result.diff?.length) setConfirmation(result); else notify('当前开发板已经使用提示词按键配置，无需重复写入'); }
-      else notify(`尚未配置开发板：${result?.reason || '请连接 EasyInput'}`);
-    } catch { notify('无法读取开发板配置'); }
-    setSetupBusy(false);
-  };
-  const commitSetup = async () => {
-    setSetupBusy(true);
-    try { const r = await bridge().commitKeyboardConfig(confirmation.token); notify(r.ok ? '按键配置已写入并读回验证，请测试第 4 键' : `未完成：${r.reason}`); if (r.ok) setConfirmation(null); }
-    catch { notify('写入结果未确认，请重新读取开发板配置'); }
-    setSetupBusy(false);
   };
   const transfer = async kind => {
     try { const r = kind === 'export' ? await bridge().exportPrompts() : await bridge().importPrompts(data.revision); if (r.ok) { notify(kind === 'export' ? '备份已导出' : '备份已导入'); await command({ type: 'get' }); } else if (!r.cancelled) notify(r.reason); }
@@ -133,17 +115,11 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
           <footer className="prompt-library-footer"><span>点击标题即复制并收起 · 旁边铅笔可编辑</span><div><button title="导出含个人提示词的 JSON 备份" onClick={() => transfer('export')}><IconDownload size={16} />导出</button><button onClick={() => transfer('import')}><IconUpload size={16} />导入</button></div></footer>
         </div>
         <aside className="prompt-context">
-          <div className="prompt-context-card"><div className="prompt-card-heading"><IconKeyboard size={20} /><h3>当前场景按键</h3><button title="编辑场景与按键" aria-label="编辑场景与按键" onClick={() => setSceneEditor({ ...structuredClone(scene), revision: d.revision })}><IconSettings2 size={18} /></button></div><p>{scene.title} · 只改变第 5～7 键</p>
-            <div className="prompt-key-grid">{['语音输入', '回车', '语音编辑', '提示词'].map((name, i) => <div key={name}><small>KEY {i + 1}</small><strong>{name}</strong></div>)}{[5, 6, 7].map(key => <button key={key} onClick={() => setSceneEditor({ ...structuredClone(scene), revision: d.revision })}><small>KEY {key}</small><strong>{scene.bindings[key].label || '未配置'}</strong><span>{scene.bindings[key].type === 'hotkey' ? scene.bindings[key].value : scene.bindings[key].type === 'prompt' ? '复制固定提示词' : '禁用'}</span></button>)}<div><small>KEY 8</small><strong>粘贴</strong><span>Ctrl+V</span></div></div>
-            <button className="pw-button full" disabled={setupBusy} onClick={previewSetup}><IconKeyboard size={17} />{setupBusy ? '正在读取开发板…' : '配置到 EasyInput…'}</button><small className="prompt-help">首次使用需预览并确认第 4～8 键映射。保留第 1～3 键、旋钮与其他配置；不烧录固件。</small>
-            <label className="prompt-check"><input type="checkbox" checked={d.announcements} onChange={e => command({ type: 'settings', announcements: e.target.checked, revision: d.revision })} />切换场景时语音播报</label><small className="prompt-help">使用已配置的豆包音色与工作提醒音量。语音忙碌时不插播。</small>
-          </div>
           <div className="prompt-context-card prompt-preview"><div className="prompt-card-heading"><IconCopy size={19} /><h3>选中内容</h3></div><strong>{selected?.title || '等待选择'}</strong><div className="prompt-preview-body">{selected?.body || '旋转旋钮或按方向键，查看要复制的提示词。'}</div>{selected && d.view.filter !== 'trash' && <button className="pw-button primary full" onClick={() => copy(selected.id)}><IconCopy size={17} />复制并收起</button>}<small className="prompt-help">{d.transient ? 'Esc：取消本次呼出，收回后台，不复制。' : '当前为普通浏览。Esc 不会隐藏主窗口。'}</small></div>
         </aside>
       </div>
     </>}
     {editor && <div className="prompt-modal-scrim"><section className="prompt-modal" role="dialog" aria-modal="true" aria-labelledby="prompt-edit-title"><div className="prompt-modal-title"><h2 id="prompt-edit-title">{editor.id ? '编辑提示词' : '新建提示词'}</h2><button aria-label="关闭编辑" onClick={() => setEditor(null)}><IconX /></button></div><p>{editor.origin === 'builtin' ? '保存为个人版本，原始内置内容仍保留。' : '直接编辑要复制的正文，不需要填写变量表单。'}</p><label>标题<input autoFocus maxLength={120} value={editor.title} onChange={e => setEditor({ ...editor, title: e.target.value })} /></label><div className="prompt-form-pair"><label>工作场景<select value={editor.primarySceneId} onChange={e => setEditor({ ...editor, primarySceneId: e.target.value })}>{d.scenes.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label><label>一句话说明<input maxLength={240} value={editor.description} onChange={e => setEditor({ ...editor, description: e.target.value })} /></label></div><label>提示词正文<textarea rows={12} maxLength={30000} value={editor.body} onChange={e => setEditor({ ...editor, body: e.target.value })} /></label><div className="prompt-modal-footer"><button className="pw-button" onClick={() => setEditor(null)}>取消</button>{editor.id && <button className="pw-button" disabled={busy} onClick={() => savePrompt(true)}>另存为新提示词</button>}<button className="pw-button primary" disabled={busy} onClick={() => savePrompt(false)}>保存提示词</button></div></section></div>}
-    {sceneEditor && <div className="prompt-modal-scrim"><section className="prompt-modal" role="dialog" aria-modal="true" aria-labelledby="scene-edit-title"><div className="prompt-modal-title"><h2 id="scene-edit-title">场景与按键</h2><button aria-label="关闭场景编辑" onClick={() => setSceneEditor(null)}><IconX /></button></div><div className="prompt-form-pair"><label>场景名称<input autoFocus maxLength={40} value={sceneEditor.title} onChange={e => setSceneEditor({ ...sceneEditor, title: e.target.value })} /></label><label>场景说明<input maxLength={100} value={sceneEditor.hint} onChange={e => setSceneEditor({ ...sceneEditor, hint: e.target.value })} /></label></div>{[5, 6, 7].map(key => { const b = sceneEditor.bindings[key]; const change = fields => setSceneEditor({ ...sceneEditor, bindings: { ...sceneEditor.bindings, [key]: { ...b, ...fields } } }); return <fieldset key={key} className="prompt-binding"><legend>KEY {key}</legend><div className="prompt-form-pair"><label>名称<input maxLength={50} value={b.label} onChange={e => change({ label: e.target.value })} /></label><label>动作<select value={b.type} onChange={e => change({ type: e.target.value, value: e.target.value === 'hotkey' ? 'Ctrl+Z' : '' })}><option value="hotkey">快捷键</option><option value="prompt">复制固定提示词</option><option value="disabled">禁用</option></select></label></div>{b.type === 'hotkey' && <label>快捷键（例如 Ctrl+A、Space、Ctrl+K）<input value={b.value} maxLength={64} onChange={e => change({ value: e.target.value })} /></label>}{b.type === 'prompt' && <label>提示词正文<textarea rows={3} maxLength={30000} value={b.value} onChange={e => change({ value: e.target.value })} /></label>}</fieldset>; })}<small className="prompt-help">固定提示词键只复制，按第 8 键粘贴；不会自动发送。剪辑快捷键以你使用的软件设置为准。</small><div className="prompt-modal-footer"><button className="pw-button" onClick={() => setSceneEditor(null)}>取消</button><button className="pw-button primary" disabled={busy} onClick={async () => { setBusy(true); const r = await command({ type: 'save-scene', scene: sceneEditor, revision: sceneEditor.revision }); setBusy(false); if (r.ok !== false) setSceneEditor(null); }}>保存场景</button></div></section></div>}
-    {confirmation && <div className="prompt-modal-scrim"><section className="prompt-modal" role="dialog" aria-modal="true" aria-labelledby="prompt-setup-title"><h2 id="prompt-setup-title">确认开发板按键变更</h2><p>仅修改以下按下动作。第 1～3 键、旋钮及其他配置保持原样。修改后按 Tab 切场景，无需反复写入开发板。</p><ul className="prompt-diff">{confirmation.diff.map(item => <li key={item.path}><strong>{item.path.match(/KEY\d/)?.[0] || item.path}</strong><span>{actionNames[item.before.action] || item.before.shortcut || item.before.action} → {actionNames[item.after.action] || item.after.action}</span></li>)}</ul><div className="prompt-modal-footer"><button className="pw-button" onClick={() => setConfirmation(null)}>取消</button><button className="pw-button primary" disabled={setupBusy} onClick={commitSetup}>{setupBusy ? '写入并读回验证…' : '确认写入第 4～8 键'}</button></div></section></div>}
+    {sceneEditor && <div className="prompt-modal-scrim"><section className="prompt-modal" role="dialog" aria-modal="true" aria-labelledby="scene-edit-title"><div className="prompt-modal-title"><h2 id="scene-edit-title">新建场景</h2><button aria-label="关闭场景编辑" onClick={() => setSceneEditor(null)}><IconX /></button></div><div className="prompt-form-pair"><label>场景名称<input autoFocus maxLength={40} value={sceneEditor.title} onChange={e => setSceneEditor({ ...sceneEditor, title: e.target.value })} /></label><label>场景说明<input maxLength={100} value={sceneEditor.hint} onChange={e => setSceneEditor({ ...sceneEditor, hint: e.target.value })} /></label></div><small className="prompt-help">这里只管理场景名称。场景快捷键在左侧“按键配置”里设置。</small><div className="prompt-modal-footer"><button className="pw-button" onClick={() => setSceneEditor(null)}>取消</button><button className="pw-button primary" disabled={busy} onClick={async () => { setBusy(true); const r = await command({ type: 'save-scene', scene: sceneEditor, revision: sceneEditor.revision }); setBusy(false); if (r.ok !== false) setSceneEditor(null); }}>保存场景</button></div></section></div>}
   </section>;
 }

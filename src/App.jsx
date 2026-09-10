@@ -311,7 +311,7 @@ function AppContent() {
   };
   const CurrentPage = pages[current] || DashboardPage;
   return (
-    <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""}`}>
+    <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""} ${current === 'prompts' ? 'is-prompt-workbench' : ''}`}>
       <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} expressionId={state.currentExpression} />
       {mobileOpen && <button className="mobile-scrim" aria-label="关闭菜单" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">

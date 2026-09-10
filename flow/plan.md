@@ -1,13 +1,14 @@
 # Development plan
 
-## Current stage: T22 prompt workbench and scene keyboard routing
+## Current stage: T22A prompt reading layout and unified key configuration
 
 **2026-09-10 当前执行点：** 在权威工作树 `build-t10dc-work` 的 `codex/t22-prompt-workbench-scenes` 分支实现提示词工作台，基于 `e62afa7e9bc138be9282540960bb53b605cf668d`。T21L 陪伴/资料基线保留，根目录旧脏工作树不动。本切片不改固件、不烧录；用户在界面预览并确认后才写入现有按键配置合同。
 
 - 代码完成：左侧独立提示词页、80 条原始模板、个人版本/回收站、搜索收藏最近、备份导入导出、可编辑场景与第 5～7 键。
 - 最终交互：第 4 键打开主窗口提示词页，再按复制收起；旋钮选词；Tab/Shift+Tab 切场景与快捷键并简短播报；第 8 键始终为原生粘贴。Esc 区分临时调出、手动浏览、编辑与语音取消。
-- 自动证据：完整测试 493/493；原生 Electron 交互 23 项、1440×1024 与 960×680 布局通过。桌面包和实际启动证据见最新 progress，不以单测代替硬件验收。
-- 待人工：确认一次 KEY4～8 配置差异，验收真实旋钮、焦点返回/粘贴、KEY5～7 场景切换、豆包场景播报、KEY1～3/语音回归。
+- T22A 用户修订：第 3 键由语音编辑改为语音助手；全部场景按键配置和硬件应用入口移至“按键配置”。提示词页左快选约 45% / 右正文约 55%，固定高度、框内滚动。按实测增加仅该页使用的选词方向反转，不改变板上旋钮配置。
+- 自动证据：完整测试 496/496；原生 Electron 交互 33 项、1440×1024 与 960×680 布局通过。桌面包和实际启动证据见最新 progress，不以单测代替硬件验收。
+- 待人工：在按键配置确认一次 KEY3～8 配置差异，验收真实旋钮方向、焦点返回/粘贴、KEY5～7 场景切换、豆包场景播报、KEY1～2 保留及 KEY3 语音助手回归。
 - 实现合同及来源：[`prompt-workbench-scenes.md`](../docs/architecture/prompt-workbench-scenes.md)。此前 T21 记录如下，历史状态不覆盖本节。
 
 ## Previous stage: T21 three-stage streaming companion experiment

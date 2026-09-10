@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Nested scroll ownership and encoder polarity require separate tests
+
+- scrollIntoView can move a selected row's list and its application ancestors. For a fixed prompt workbench, constrain flex heights with min-height: 0, give each content box its own overflow, and reveal rows by adjusting only the list scrollTop.
+- Verify top-to-bottom selection with unchanged outer scroll offsets at both full and compact windows; screenshots of only the first row cannot establish this.
+- Firmware quadrature sign, HID wheel axis sign, Windows reverse settings and browser delta are different layers. Compare the fixed decoder/runtime reference before changing direction. A local foreground-selection polarity can correct an observed path without modifying encoder NVS or outside-app behavior; actual physical direction remains a separate acceptance gate.
+
 ## A packaged Electron build must verify resources, not just the builder exit status
 
 - T22 initially put a required JSON beside icons under `electron/assets`. The existing extraResources source excludes that directory from asar even when its copy filter only includes PNG/ICO, so the JSON was in neither destination.

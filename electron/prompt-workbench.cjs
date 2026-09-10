@@ -7,7 +7,7 @@ const ACTIONS = Object.freeze(Object.fromEntries([4, 5, 6, 7].map(key => [key, O
   id: `922d0be0-5ee8-4a32-bcff-00000000000${key}`, kind: `prompt-key-${key}`,
   label: ({ 4: '提示词页面 / 复制并收起', 5: '场景按键 5', 6: '场景按键 6', 7: '场景按键 7', 8: '粘贴' })[key],
 })])));
-const setupPatch = () => ({ keymap: { ...Object.fromEntries(Object.entries(ACTIONS).map(([key, action]) => [`KEY${key}`, { action: action.kind }])), KEY8: { action: 'paste' } } });
+const setupPatch = () => ({ keymap: { KEY3: { action: 'companion-call' }, ...Object.fromEntries(Object.entries(ACTIONS).map(([key, action]) => [`KEY${key}`, { action: action.kind }])), KEY8: { action: 'paste' } } });
 const clone = value => structuredClone(value);
 const normalize = value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 const fail = reason => { throw new Error(reason); };
@@ -32,7 +32,7 @@ const defaultBindings = id => id === 'scene-video'
     : { 5: hotkey('全选', 'Ctrl+A'), 6: hotkey('撤销', 'Ctrl+Z'), 7: hotkey('复制', 'Ctrl+C') };
 const initial = () => ({ schema: 'deskmate.prompt-workbench', schemaVersion: 1, revision: 0,
   scenes: library.primaryScenes.map(scene => ({ ...scene, bindings: defaultBindings(scene.id) })),
-  activeScene: 'coding', selected: {}, personal: [], favorites: [], usage: [], history: [], announcements: true });
+  activeScene: 'coding', selected: {}, personal: [], favorites: [], usage: [], history: [], announcements: true, reverseSelection: true });
 
 function validateState(raw) {
   if (raw?.schema !== 'deskmate.prompt-workbench' || raw.schemaVersion !== 1 || !Number.isSafeInteger(raw.revision) || raw.revision < 0) fail('提示词备份版本不受支持');
@@ -62,7 +62,7 @@ function validateState(raw) {
   const selected = Object.fromEntries(scenes.map(s => [s.id, ids.has(raw.selected?.[s.id]) ? raw.selected[s.id] : '']));
   // Revision history is bounded and validated as plain snapshots, never interpreted.
   const history = (Array.isArray(raw.history) ? raw.history : []).slice(-100).map(h => ({ id: text(h.id, 80), title: text(h.title, 120), body: text(h.body, 30000), revision: Number.isSafeInteger(h.revision) ? h.revision : 1 }));
-  return { schema: raw.schema, schemaVersion: 1, revision: raw.revision, scenes, activeScene: raw.activeScene, selected, personal, favorites, usage, history, announcements: raw.announcements !== false };
+  return { schema: raw.schema, schemaVersion: 1, revision: raw.revision, scenes, activeScene: raw.activeScene, selected, personal, favorites, usage, history, announcements: raw.announcements !== false, reverseSelection: raw.reverseSelection !== false };
 }
 
 function rowsFor(state, { query = '', filter = 'all', scope = 'scene', category = '' } = {}) {
@@ -115,7 +115,10 @@ class PromptWorkbenchStore {
     switch (command.type) {
       case 'scene':
         if (!d.scenes.some(s => s.id === command.id)) fail('场景不存在'); d.activeScene = command.id; break;
-      case 'settings': d.announcements = command.announcements === true; break;
+      case 'settings':
+        if (command.announcements !== undefined) d.announcements = command.announcements === true;
+        if (command.reverseSelection !== undefined) d.reverseSelection = command.reverseSelection === true;
+        break;
       case 'select': d.selected[d.activeScene] = command.id; break;
       case 'used': d.selected[d.activeScene] = command.id; d.usage = [{ id: command.id, at: Date.now() }, ...d.usage.filter(u => u.id !== command.id)].slice(0, 200); break;
       case 'favorite': d.favorites = d.favorites.includes(command.id) ? d.favorites.filter(id => id !== command.id) : [...d.favorites, command.id]; break;
@@ -138,7 +141,7 @@ class PromptWorkbenchStore {
         const next = { ...old, ...scene, id: old?.id || `scene-${randomUUID()}`, bindings: scene.bindings || defaultBindings('coding') };
         d.scenes = [...d.scenes.filter(s => s.id !== next.id), next];
         if (old) d.scenes.sort((a, b) => this.data.scenes.findIndex(s => s.id === a.id) - this.data.scenes.findIndex(s => s.id === b.id));
-        d.activeScene = next.id; break;
+        if (command.activate !== false) d.activeScene = next.id; break;
       }
       default: fail('不支持的提示词操作');
     }

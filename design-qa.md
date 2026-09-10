@@ -1,3 +1,17 @@
+# T22A prompt reading layout and key-settings ownership QA — 2026-09-10
+
+- User amendments: narrow the mostly-empty quick list, enlarge the actual prompt reading area, remove duplicate keyboard settings from prompts, keep scrolling inside fixed boxes and correct the observed knob selection direction.
+- References: `C:/Users/Administrator/AppData/Local/Temp/codex-clipboard-3e5f3385-12bb-4fa8-820a-6ccf09a4fcd7.png` (reading width), `codex-clipboard-74d212ab-5c68-4c81-b4f5-478056259a19.png` (configuration ownership), and `codex-clipboard-d787912f-fcdc-4b54-b590-cd7dac60fb02.png` (nested scrolling), all from the same supplied temporary directory.
+- Final capture/report directory: `C:/Users/Administrator/AppData/Local/Temp/deskmate-prompt-qa-rXqXAi/`: `prompts-1440.png`, `prompts-video-1440.png`, `prompts-scrolled-1440.png`, `prompts-960.png`, `prompt-keys-1440.png`, editor captures and `report.json`. Native Electron logical viewports 1440×1024 and 960×680; device scale factor 1.5.
+- References and resulting video-scene/full-scroll captures were inspected together. Left quick list is approximately 45%, right preview 55%, aligned and full-height. Prompt body is 14 px with stronger contrast (13 px compact), its own overflow and a fixed copy action. No configuration card interrupts reading. Scene/search/filter controls stay stationary; outer prompt page has no vertical or horizontal overflow at either viewport.
+- The isolated production renderer/preload/controller/store harness passed **33/33** assertions, including page ownership, viewport bounds, preview width, list-only end-row reveal, key-settings rendering and saving a non-active scene without activating it. Small-window list/preview retain at least 160 px usable content height. Prompt editor, search, favorite/trash, Tab, Enter and contextual Escape tests remain covered.
+- Exact production package separately launched at build ID `t22a-prompt-layout-key3`; scoped native capture `C:/Users/Administrator/AppData/Local/Temp/deskmate-t22a-running-package.png` confirms the real video prompt page uses the new split and no outer scrollbar. This is not the isolated test window.
+- Full software tests **496/496**, desktop build and packaged-resource check passed. Test clipboard/native/speech sinks did not write system clipboard or hardware. Real KEY3 call, physical knob direction, focus/paste and scene audio still require user observation after explicitly applying the key scheme.
+- No blocking P0/P1/P2 issue remains in the tested UI scope. Existing CSP-blocked Google Fonts import and Vite chunk-size warning remain non-blocking; fallback fonts render and CSP was not relaxed.
+- Result: **passed for scoped visual and automated interaction QA; hardware/audio acceptance pending**.
+
+---
+
 # T22 prompt workbench and scene routing design QA — 2026-09-10
 
 - Scope: adapt the user-supplied Frost scene/list reference inside the real DeskMate application, not a separate prototype or pixel-identical standalone clone. Preserve graphite navigation and existing typography/tokens; restrained glass is limited to the scene rail, while prompt text/editors remain opaque.

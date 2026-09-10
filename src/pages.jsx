@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { PromptKeySettings } from './PromptKeySettings.jsx';
 import {
   IconAdjustmentsHorizontal as AdjustmentsHorizontal,
   IconAlertCircle as AlertCircle,
@@ -1385,6 +1386,7 @@ export function KeymapPage({ notify }) {
   return (
     <div className="page">
       <PageIntro title="按键配置" description="配置键盘按键、旋钮和快捷动作" actions={<><StatusBadge tone={syncState.status === "success" ? "success" : ["error", "warning"].includes(syncState.status) ? "warning" : "demo"}>{syncState.label}</StatusBadge><Button icon={Send} variant="primary" disabled={["syncing", "review"].includes(syncState.status)} onClick={syncKeyboard}>同步到键盘</Button></>} />
+      <PromptKeySettings notify={notify} onConfigured={() => loadKeyboardConfig({ announceFailure: true })} />
       <Notice tone="info" title="保存与同步是两件事">页面修改会自动保存到本机。同步前会重新读取板上配置，只提交按键与旋钮路径；网络、音频和未知字段保持原值。回车、退格等标准动作仍由键盘直接发送给 Windows。</Notice>
       <SettingRow title="按键诊断模式" description="只记录 F22 / 右 Alt 的来源类别、按下释放和时间；不记录普通输入、文字或设备路径"><Toggle checked={state.settings.keyDiagnosticsEnabled} onChange={(value) => patch({ settings: { ...state.settings, keyDiagnosticsEnabled: value } })} /></SettingRow>
       {diagnostics.length > 0 && <Card><div className="history-list">{diagnostics.map((item, index) => <div className="history-item" key={`${item.at}-${index}`}><time>{item.at}</time><div><p>{item.key || "语音触发"} · {item.action || "切换"}</p><small>{item.source}</small></div></div>)}</div></Card>}

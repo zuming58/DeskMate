@@ -1,5 +1,13 @@
 # Decisions
 
+## D112 - Key configuration has one home; prompt selection never scrolls the app
+
+- Date: 2026-09-10. T22A supersedes D111 only for KEY3 preservation and configuration ownership.
+- KEY3 becomes the existing companion-call action, KEY4 remains prompt-page/copy-and-hide, KEY8 remains paste. Preview and explicitly confirm KEY3–8 once in Key mapping; preserve KEY1–2, encoder and unrelated fields. No firmware/protocol change or silent hardware write.
+- Per-scene KEY5–7 editors, board setup, scene-announcement option and page-local selection polarity belong only to Key mapping. Editing a different scene must not activate it. Tab and explicit prompt scene selection still change the active routing.
+- Prompt page uses a fixed-height 45/55 quick-list/preview split. Each content box scrolls independently; selected-row reveal adjusts only the list scroll offset. No outer long scrollbar on this route; ordinary application pages retain normal scrolling.
+- The user-reported reversed knob path is corrected with a persisted, adjustable page-only polarity. Physical rotation and browser wheel sign are not interchangeable evidence; real right/down and left/up must still be observed after applying the key scheme.
+
 ## D111 - Prompt scenes own host key routing; Tab switches and KEY8 only pastes
 
 - Date: 2026-09-10. Final user clarification supersedes the earlier KEY8 dual-role idea.

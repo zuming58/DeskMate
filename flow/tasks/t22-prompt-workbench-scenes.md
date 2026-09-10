@@ -6,7 +6,7 @@ Make the eight-key EasyInput board useful for daily work without adding firmware
 
 ## Frozen user interaction
 
-- KEY1 voice, KEY2 Enter, KEY3 voice editing: preserve existing board configuration.
+- KEY1 voice and KEY2 Enter: preserve existing board configuration. T22A changes KEY3 to the existing AI companion call action, replacing voice editing.
 - KEY4: show the existing main window at the last prompt scene; again copy selected text, hide to background and return to the work window. Enter also confirms.
 - Tab / Shift+Tab: next / previous scene; list and KEY5–7 change together, optionally one short Doubao announcement.
 - Knob: select a prompt while that page is foreground, without changing the board's encoder configuration outside the page.
@@ -18,15 +18,15 @@ Make the eight-key EasyInput board useful for daily work without adding firmware
 
 80 user-supplied original templates; immutable builtin/fork/save-as, search, favorites, recent, personal/trash, scene editing and local backup import/export. Main-owned versioned store, validated native chords and main-window ownership. No user-controlled shell/executable, auto-submit, prompt execution, firmware update or new HID protocol.
 
-Read/preview/confirm/readback the existing configuration patch once. Preserve first three keys, encoder and unknown device fields. A scene switch changes local routing only, not device NVS.
+Read/preview/confirm/readback the existing configuration patch once from the existing Key mapping page. Preserve first two keys, encoder and unknown device fields. A scene switch changes local routing only, not device NVS. Key binding editors and announcement/polarity settings live only in Key mapping; the prompt page has a fixed-height 45/55 quick-list/reading layout with independent scroll regions.
 
 ## Acceptance still requiring the user
 
-1. Connect EasyInput, click “配置到 EasyInput…”, inspect KEY4–8 changes and confirm.
+1. Connect EasyInput, open “按键配置” → “应用提示词按键方案…”, inspect KEY3–8 changes and confirm. The software does not silently apply this patch.
 2. From a disposable editor, KEY4 → rotate → KEY4 → KEY8: correct literal prompt, app returns to background, no automatic Enter.
 3. KEY4 → Tab: scene/list and KEY5–7 change together; rapid Tab announces only the final scene when voice is idle. Close and reopen: scene remains.
 4. Test KEY5–7 in each intended application and edit defaults if that application's shortcuts differ.
 5. KEY4 → Escape cancels with clipboard unchanged. Normal DeskMate browsing + Escape stays visible. Active voice Escape still cancels only voice.
-6. Verify KEY1–3, rotary behavior outside DeskMate, disconnect/reconnect, and no accidental send.
+6. Verify KEY1–2 unchanged, KEY3 calls AI companion, right-turn selects down / left-turn selects up inside prompts, unchanged rotary behavior outside DeskMate, disconnect/reconnect, and no accidental send. Adjust only “反转提示词选词方向” if the actual input axis differs.
 
 Implementation, source comparison and safety: `docs/architecture/prompt-workbench-scenes.md`. Results belong in `flow/progress.md`; automated tests do not close physical acceptance.

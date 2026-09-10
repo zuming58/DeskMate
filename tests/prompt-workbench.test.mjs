@@ -7,6 +7,7 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
+import { promptWheelStep, revealPromptRow } from '../src/domain/promptNavigation.js';
 const require = createRequire(import.meta.url);
 const { ACTIONS, setupPatch, library, PromptWorkbenchStore, validateState, chord, normalize } = require('../electron/prompt-workbench.cjs');
 const { PromptWorkbenchController } = require('../electron/prompt-workbench-controller.cjs');
@@ -117,14 +118,50 @@ test('T22 scene fixed prompt copies but never auto-pastes or submits', async () 
   const h = harness(); const scene = structuredClone(h.store.data.scenes[0]); scene.bindings[5] = { type: 'prompt', label: '自定', value: '安全正文' };
   h.store.mutate({ type: 'save-scene', scene }); await h.controller.key(5); assert.deepEqual(h.calls, [['copy', '安全正文']]);
 });
-test('T22 setup patch preserves first 3 keys, encoder and opaque config fields', () => {
+test('T22 setup patch moves companion to KEY3, preserves first 2 keys and encoder', () => {
   const raw = { schema: 'ai_keyboard.v1', unknown: { preserved: true }, profiles: [{ id: 'default', keys: Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`KEY${i + 1}`, { press: 'copy', release: 'keep' }])), encoder: { scroll: { axis: 'horizontal', mode: 'scroll', speed: 4 }, press: 'scroll_axis_toggle' } }] };
   const next = mergeKeyboardPatch(raw, setupPatch());
-  for (let k = 1; k <= 3; k++) assert.deepEqual(next.profiles[0].keys[`KEY${k}`], raw.profiles[0].keys[`KEY${k}`]);
+  for (let k = 1; k <= 2; k++) assert.deepEqual(next.profiles[0].keys[`KEY${k}`], raw.profiles[0].keys[`KEY${k}`]);
+  assert.equal(sanitizeKeyboardConfig(next).keymap[2].action, 'companion-call');
+  assert.equal(next.profiles[0].keys.KEY3.release, 'keep');
   assert.deepEqual(next.profiles[0].encoder, raw.profiles[0].encoder); assert.deepEqual(next.unknown, raw.unknown);
   for (let k = 4; k <= 7; k++) { const b = sanitizeKeyboardConfig(next).keymap[k - 1]; assert.equal(b.action, ACTIONS[k].kind); assert.equal(firmwareAction(normalizeKeyBinding(b)), `host_action:${ACTIONS[k].id}`); }
   assert.equal(next.profiles[0].keys.KEY8.press, 'paste');
   assert.equal(checkHostCapabilities(next, {}).ok, false); assert.equal(checkHostCapabilities(next, { host_action_v1: true }).ok, true);
+});
+
+test('T22 page-only wheel polarity supports the reported device without changing encoder settings', () => {
+  assert.equal(promptWheelStep({ deltaY: -120 }), 1);
+  assert.equal(promptWheelStep({ deltaY: 120 }), -1);
+  assert.equal(promptWheelStep({ deltaX: -120, deltaY: 0 }), 1);
+  assert.equal(promptWheelStep({ deltaX: 120, deltaY: 0 }), -1);
+  assert.equal(promptWheelStep({ deltaY: 120 }, false), 1);
+  assert.equal(promptWheelStep({ deltaY: 0 }), 0);
+  assert.equal(promptWheelStep({ deltaY: NaN }), 0);
+  const store = new PromptWorkbenchStore();
+  store.mutate({ type: 'settings', reverseSelection: false });
+  assert.equal(store.data.announcements, true);
+  store.mutate({ type: 'settings', announcements: false });
+  assert.equal(store.data.reverseSelection, false);
+  assert.equal(validateState(JSON.parse(store.export())).reverseSelection, false);
+});
+
+test('T22 selected row reveals only within its own list, never via ancestor scrollIntoView', () => {
+  const list = { scrollTop: 50, getBoundingClientRect: () => ({ top: 200, bottom: 400 }) };
+  revealPromptRow(list, { getBoundingClientRect: () => ({ top: 420, bottom: 480 }) });
+  assert.equal(list.scrollTop, 130);
+  revealPromptRow(list, { getBoundingClientRect: () => ({ top: 180, bottom: 220 }) });
+  assert.equal(list.scrollTop, 110);
+  revealPromptRow(list, { getBoundingClientRect: () => ({ top: 240, bottom: 280 }) });
+  assert.equal(list.scrollTop, 110);
+});
+
+test('T22 editing scene shortcuts on key settings does not switch active scene', () => {
+  const store = new PromptWorkbenchStore();
+  const scene = structuredClone(store.data.scenes[1]); scene.bindings[5].value = 'Ctrl+S';
+  store.mutate({ type: 'save-scene', scene, activate: false });
+  assert.equal(store.data.activeScene, 'coding');
+  assert.equal(store.data.scenes[1].bindings[5].value, 'Ctrl+S');
 });
 test('T22 native request is bounded, result matched and not replayed after restart', async () => {
   const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => {};

@@ -2,9 +2,21 @@
 
 ## User contract (2026-09-10)
 
-KEY4 opens **the existing DeskMate main window** on `#/prompts`, not a separate popup. A second press copies the selected prompt, hides DeskMate and returns focus to the captured work window. Enter confirms. **Final user clarification: Tab/Shift+Tab cycles scenes; KEY8 ALWAYS pastes via the existing firmware paste action, no contextual second role.** Escape cancels without touching clipboard and hides only a KEY4-invoked transient page; ordinary browsing stays visible. During voice activity (including its cancellation transition), Escape remains voice-only. In a prompt editor Escape closes the editor first. KEY5–7 route locally by active scene. KEY1–3 and encoder settings are preserved. Encoder wheel/cursor events are consumed by the foreground prompt page only, never by a background hook. Editing and IME composition suspend page shortcuts. Clipboard copy never sends Enter.
+KEY4 opens **the existing DeskMate main window** on `#/prompts`, not a separate popup. A second press copies the selected prompt, hides DeskMate and returns focus to the captured work window. Enter confirms. **Final user clarification: Tab/Shift+Tab cycles scenes; KEY8 ALWAYS pastes via the existing firmware paste action, no contextual second role.** Escape cancels without touching clipboard and hides only a KEY4-invoked transient page; ordinary browsing stays visible. During voice activity (including its cancellation transition), Escape remains voice-only. In a prompt editor Escape closes the editor first. KEY5–7 route locally by active scene. **T22A: KEY3 becomes the existing companion-call action, replacing voice editing; KEY1–2 and encoder settings are preserved.** Encoder wheel/cursor events are consumed by the foreground prompt page only, never by a background hook. Editing and IME composition suspend page shortcuts. Clipboard copy never sends Enter.
 
-Switching scenes does not rewrite device NVS. A one-time, explicitly previewed and confirmed `easyinput-config-v1` patch maps KEY4–7 to reserved UUID host actions under the existing `HOST_ACTION_V1_FROZEN` slice and KEY8 to firmware `paste`. No firmware/protocol change or flash operation. KEY5–7 can be validated keyboard chords or copy-only fixed prompts; KEY8 explicitly pastes the latter.
+Switching scenes does not rewrite device NVS. A one-time, explicitly previewed and confirmed `easyinput-config-v1` patch maps KEY3 to `companion-call`, KEY4–7 to reserved UUID host actions under the existing `HOST_ACTION_V1_FROZEN` slice and KEY8 to firmware `paste`. Its entry lives only in the existing Key mapping page. No firmware/protocol change or flash operation. KEY5–7 can be validated keyboard chords or copy-only fixed prompts; KEY8 explicitly pastes the latter.
+
+## T22A ownership, scrolling and direction amendment
+
+- Prompt page: scenes, search/quick selection, prompt editing and reading/copying only. Key binding configuration, hardware patch preview/confirmation, scene announcements and selection polarity belong to the existing Key mapping page. Editing a scene binding does not activate that scene; Tab or explicit scene selection owns activation.
+- Fixed viewport: approximately 45% quick list / 55% full-height preview. Scene/search/filter controls remain stationary. List and preview own their vertical scroll separately; revealing a selected row adjusts only list.scrollTop, never scrollIntoView on scrollable ancestors. Other application pages retain normal page scrolling.
+- The user observed the current physical knob direction was reversed. Default page-local reverseSelection=true corrects the observed path and is user-adjustable; old T22 stores lacking this optional field migrate without resetting personal prompts. This is not an encoder NVS patch or a universal claim about every mouse/encoder axis.
+
+| Fixed reference / evidence | Behavior | T22A boundary |
+| --- | --- | --- |
+| Official firmware input_runtime.cpp and input_core_tests.cpp | Encoder +1 maps cursor to Down/Right; wheel Y and X have different HID signs, then per-axis reverse flags apply. Quadrature tests prove decoder sign, not physical right direction. | Preserve firmware and board encoder settings; normalize only foreground prompt wheel selection. Real right/down and left/up remain a user-present gate. |
+| Maker reference config_state.cpp | Windows encoder reverse flags are independently configured. | Do not infer physical direction from browser delta alone or change outside-app behavior. |
+| User scroll screenshot and old prompt scrollIntoView | Selection may scroll both the list and application ancestor. | Explicit list-relative reveal, constrained flex heights and overscroll containment; assert the outer page position remains unchanged. |
 
 ## Reference comparison and provenance (before implementation)
 
@@ -26,8 +38,8 @@ Native `workbench-input` is a local stdin/stdout bridge command, not a hardware 
 
 ## Visual direction
 
-Keep DeskMate's graphite navigation and light workspace. Add restrained frosted scene rail/toolbar with fine borders and soft shadow. Prompt body/editor remains opaque and high-contrast. Use the supplied Frost screenshot for scene/list hierarchy, not a second sidebar competing with app navigation or a whole-app glass redesign.
+Keep DeskMate's graphite navigation and light workspace. Add restrained frosted scene rail/toolbar with fine borders and soft shadow. Prompt body/editor remains opaque and high-contrast. Use the supplied Frost screenshot for scene/list hierarchy, not a second sidebar competing with app navigation or a whole-app glass redesign. T22A removes the key card from the prompt page, widens the preview and increases its readable body type to 14 px (13 px at the compact viewport).
 
 ## Required verification
 
-Domain tests: seed integrity/count, literal copy, forks/trash/restore, search, favorites/recent, persisted scene, rejected import, optimistic conflicts, clipboard failure, target restoration, contextual routing and editor protection. Build native and desktop; inspect 1440×1024 and 960×680. Hardware acceptance remains separate: preview patch, confirm KEY4–8, rotary selection, KEY4 copy/return, KEY8 paste, scene switching and KEY1–3/voice regression.
+Domain tests: seed integrity/count, literal copy, forks/trash/restore, search, favorites/recent, persisted scene, rejected import, optimistic conflicts, clipboard failure, target restoration, contextual routing and editor protection; T22A adds polarity migration, list-only reveal and inactive scene editing. Build native and desktop; inspect 1440×1024 and 960×680, including bottom-of-list and fixed outer bounds. Hardware acceptance remains separate: preview in Key mapping, confirm KEY3–8, rotary direction/selection, KEY4 copy/return, KEY8 paste, scene switching, KEY1–2 preservation and KEY3 companion/voice regression.
