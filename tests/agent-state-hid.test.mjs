@@ -9,7 +9,9 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const {
   AgentStatePublisher,
+  CodexLedStatePublisher,
   CODEX_HOOK_SOURCE_HASH,
+  CODEX_LED_SOURCE_HASH,
   COMPANION_CONVERSATION_SOURCE_HASH,
   MANUAL_AGENT_SOURCE_HASH,
   createTransitionSequence,
@@ -108,6 +110,21 @@ test("real Codex hook publication uses a distinct source and respects stream int
   assert.equal((await publisher.publishProviderState({ source: "simulation", state: "working" })).ignored, true);
   assert.deepEqual(reports.map((report) => report[2]), [2, 0, 2]);
   assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [CODEX_HOOK_SOURCE_HASH, MANUAL_AGENT_SOURCE_HASH, CODEX_HOOK_SOURCE_HASH]);
+});
+
+test("Codex LED publication uses a firmware-routed source independent from Xiaozhi face state", async () => {
+  const reports = [];
+  let now = 1_000;
+  const publisher = new CodexLedStatePublisher({ send: async (report) => { reports.push(report); return { ok: true }; }, nextTransitionId: createTransitionSequence(51), now: () => now });
+  assert.equal((await publisher.publish({ source: "codex-hook-v1", state: "working" })).ok, true);
+  assert.equal((await publisher.publish({ source: "codex-hook-v1", state: "working" })).suppressed, true);
+  assert.equal((await publisher.publish({ source: "simulation", state: "error" })).ignored, true);
+  assert.equal((await publisher.publish({ source: "codex-hook-v1", state: "completed" })).ok, true);
+  assert.deepEqual(reports.map((report) => report[2]), [3, 5]);
+  assert.deepEqual(reports.map((report) => report.readUInt32LE(13)), [CODEX_LED_SOURCE_HASH, CODEX_LED_SOURCE_HASH]);
+  now = 12_000;
+  await publisher.recoverCurrentState();
+  assert.equal(reports.at(-1)[2], 0, "expired terminal light must recover as off");
 });
 
 test("companion conversation owns the seven-state stream until VoiceWorkflow preempts it", async () => {

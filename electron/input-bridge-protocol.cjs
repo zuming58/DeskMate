@@ -117,12 +117,13 @@ function parseBridgeLine(line) {
   }
   if (value.type === "config-capabilities") {
     if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.configReadV1 !== "boolean" || typeof value.configWriteV1 !== "boolean" || (value.hostActionV1 !== undefined && typeof value.hostActionV1 !== "boolean") || (value.fixedTextV1 !== undefined && typeof value.fixedTextV1 !== "boolean") || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
-    const diagnosticsFields = ["deskMateLinkV1", "agentStateBridgeV1", "linkState", "linkRxFrames", "linkTxFrames", "linkRequestTimeouts", "linkRetries", "linkPeerRestarts", "agentAccepted", "agentMalformed", "agentDroppedDisconnected", "agentForwarded", "agentQueueDrops"];
+    const diagnosticsFields = ["deskMateLinkV1", "agentStateBridgeV1", "codexLedStatusV1", "linkState", "linkRxFrames", "linkTxFrames", "linkRequestTimeouts", "linkRetries", "linkPeerRestarts", "agentAccepted", "agentMalformed", "agentDroppedDisconnected", "agentForwarded", "agentQueueDrops"];
     const hasDiagnostics = diagnosticsFields.some((field) => value[field] !== undefined);
     if (hasDiagnostics &&
         (typeof value.deskMateLinkV1 !== "boolean" || typeof value.agentStateBridgeV1 !== "boolean" ||
+         (value.codexLedStatusV1 !== undefined && typeof value.codexLedStatusV1 !== "boolean") ||
          !LINK_STATES.has(value.linkState) ||
-         !diagnosticsFields.slice(3).every((field) => isUInt32(value[field])))) return null;
+         !diagnosticsFields.slice(4).every((field) => isUInt32(value[field])))) return null;
     return Object.freeze({
       version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: value.requestId,
       configReadV1: value.configReadV1, configWriteV1: value.configWriteV1,

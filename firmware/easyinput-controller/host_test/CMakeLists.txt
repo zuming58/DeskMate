@@ -45,6 +45,15 @@ add_executable(agent_state_core_tests
 target_include_directories(agent_state_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME agent_state_core_tests COMMAND agent_state_core_tests)
 
+add_executable(codex_led_status_tests
+    codex_led_status_tests.cpp
+    ../components/input_core/src/codex_led_status.cpp
+    ../components/input_core/src/agent_state_core.cpp
+    ../components/input_core/src/led_feedback.cpp
+)
+target_include_directories(codex_led_status_tests PRIVATE ../components/input_core/include)
+add_test(NAME codex_led_status_tests COMMAND codex_led_status_tests)
+
 add_executable(manual_calibration_bridge_core_tests
     manual_calibration_bridge_core_tests.cpp
     ../components/input_core/src/manual_calibration_bridge_core.cpp

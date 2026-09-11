@@ -1,6 +1,12 @@
 # Development plan
 
-## Current stage: T22F prompt ordering and scene-action presets
+## Current stage: T23 optional Xiaozhi mode + T24 Codex EasyInput LEDs
+
+2026-09-11: 按用户选择先实施复盘项 1 和 3，外部知识库资料扫描（原第 2 项）继续等待。T23 在设置/设备页加入“启用小智硬件扩展”，关闭时停用实体屏幕、表情、舵机、跳舞、配乐和自动动作，主进程出口统一拒绝绕过；AI 陪伴、唤醒、听写、提示词、场景键、记忆、Codex 播报和 EasyInput 均保留。升级默认启用，关闭选择本机持久化，重新启用不重放旧动作。
+
+T24 将真实 Codex Hook 的七态通过专用 `CDXL` 来源送到 EasyInput 五颗 WS2812，固件只有显式声明 `codex_led_status_v1` 后桌面才发送；该来源在总控本机消费，绝不转发小智。输入灯效短暂覆盖后恢复状态底色，GPIO12/GRB 和 GPIO8 单一共享电源所有权不变。合同：[`t24-codex-led-status-v1.md`](../docs/contracts/t24-codex-led-status-v1.md)。本轮只做代码、Host/桌面/ESP-IDF 构建；不接硬件、不烧录，真机颜色与仅 EasyInput 模式仍待验收。
+
+## Previous stage: T22F prompt ordering and scene-action presets
 
 2026-09-11: 提示词当前场景支持相邻上移/下移并持久保存；搜索、收藏、最近、我的和回收站是派生视图，不提供排序以免歧义。KEY5～7 编辑器直接提供全选、复制、粘贴、撤销、保存，也保留自定义快捷键、复制提示词、打开白名单应用和禁用。场景动作仍在电脑端执行，不改固件、不自动写板。
 
@@ -18,11 +24,11 @@
 - 当前待人工：检查按键页连续 Tab；第 3/4 键无需手动逐项设置，已作为本机待同步项。后续明确预览/确认后再验收真实语音入口、提示词呼出/复制、旋钮、焦点返回/粘贴、KEY5～7 场景切换及豆包场景播报。其他推荐键仍需用户主动选择。
 - 实现合同及来源：[`prompt-workbench-scenes.md`](../docs/architecture/prompt-workbench-scenes.md)。此前 T21 记录如下，历史状态不覆盖本节。
 
-## Planned: T23 optional Xiaozhi hardware — not implemented
+## T23 optional Xiaozhi hardware — implemented, HIL pending
 
 - 为只有 EasyInput 开发板的同学提供同一套 DeskMate 软件，在设置中一键关闭“小智硬件扩展”。停用实体屏幕/表情、舵机、跳舞及自动动作，保留电脑端 AI 语音陪伴、唤醒、听写、提示词、场景键、Codex 提醒与记忆。
 - 小智缺席不得阻塞核心软件或持续告警；开关持久保存，主进程命令出口也要拦截，重新启用不重放旧动作。小智是可选附加硬件，不是核心软件的前置条件。
-- 当前仅记录，后续安排实现，并纳入分享/内测包发布前的仅 EasyInput 模式验收。任务：[t23-optional-xiaozhi-hardware.md](tasks/t23-optional-xiaozhi-hardware.md)。不改变当前 T22 未完成的实体按键同步/语音验收状态，不授权固件修改或烧录。
+- 代码已加入持久化开关、主进程硬件命令门、安全清理和中性状态表达，并纳入分享/内测包发布前的仅 EasyInput 模式验收。任务：[t23-optional-xiaozhi-hardware.md](tasks/t23-optional-xiaozhi-hardware.md)。不改变当前 T22 未完成的实体按键同步/语音验收状态，也不构成固件烧录授权。
 
 ## Previous stage: T21 three-stage streaming companion experiment
 

@@ -8,6 +8,10 @@ const MAX_TTL_MS = 600000;
 const VOICE_WORKFLOW_SOURCE_HASH = 0x7c89f35a;
 const MANUAL_AGENT_SOURCE_HASH = 0x4d414e55;
 const CODEX_HOOK_SOURCE_HASH = 0x43445848;
+// Little-endian wire bytes spell "CDXL". Firmware that advertises
+// codex_led_status_v1 consumes this source locally and never forwards it to
+// Xiaozhi's display owner.
+const CODEX_LED_SOURCE_HASH = 0x4c584443;
 const COMPANION_CONVERSATION_SOURCE_HASH = 0x434f4d50;
 
 const AGENT_STATES = Object.freeze({
@@ -178,12 +182,58 @@ class AgentStatePublisher {
   }
 }
 
+class CodexLedStatePublisher {
+  constructor({ send, nextTransitionId = createTransitionSequence(), now = () => Date.now() } = {}) {
+    if (typeof send !== "function") throw new Error("codex-led-send-required");
+    if (typeof nextTransitionId !== "function") throw new Error("agent-transition-source-required");
+    this.send = send;
+    this.nextTransitionId = nextTransitionId;
+    this.now = now;
+    this.currentIntent = null;
+    this.lastState = null;
+    this.interrupted = false;
+  }
+
+  publish(value = {}) {
+    if (value.source !== "codex-hook-v1") return Promise.resolve({ ok: false, ignored: true, reason: "codex-led-source-invalid" });
+    const state = String(value.state || "");
+    if (!Object.hasOwn(AGENT_STATES, state)) return Promise.resolve({ ok: false, ignored: true, reason: "codex-led-state-invalid" });
+    if (!this.interrupted && state === this.lastState) return Promise.resolve({ ok: true, suppressed: true });
+    this.interrupted = false;
+    this.lastState = state;
+    return this.publishState(state);
+  }
+
+  publishState(state) {
+    const ttlMs = STATE_TTL_MS[state];
+    const issuedAt = this.now();
+    this.currentIntent = Object.freeze({ state, issuedAt, expiresAt: ttlMs === 0 ? null : issuedAt + ttlMs });
+    const report = encodeAgentStateFeatureReport({ state, transitionId: this.nextTransitionId(), ttlMs, sourceHash: CODEX_LED_SOURCE_HASH });
+    return Promise.resolve(this.send(report)).catch(() => ({ ok: false, reason: "codex-led-send-failed" }));
+  }
+
+  recoverCurrentState() {
+    const intent = this.currentIntent;
+    const valid = Boolean(intent && (intent.expiresAt === null || intent.expiresAt > this.now()));
+    return this.publishState(valid ? intent.state : "idle");
+  }
+
+  interrupt() { this.interrupted = true; }
+
+  currentStateSnapshot() {
+    const intent = this.currentIntent;
+    if (!intent) return Object.freeze({ state: "idle", valid: false, expiresAt: null });
+    return Object.freeze({ state: intent.state, valid: intent.expiresAt === null || intent.expiresAt > this.now(), expiresAt: intent.expiresAt });
+  }
+}
+
 module.exports = {
   AGENT_STATES,
   AGENT_STATE_PAYLOAD_BYTES,
   AGENT_STATE_PROTOCOL_VERSION,
   AGENT_STATE_REPORT_ID,
   CODEX_HOOK_SOURCE_HASH,
+  CODEX_LED_SOURCE_HASH,
   COMPANION_CONVERSATION_SOURCE_HASH,
   MAX_TTL_MS,
   MANUAL_AGENT_SOURCE_HASH,
@@ -191,6 +241,7 @@ module.exports = {
   VOICE_STATE_MAP,
   WINDOWS_FEATURE_REPORT_BYTES,
   AgentStatePublisher,
+  CodexLedStatePublisher,
   createTransitionSequence,
   encodeAgentStateFeatureReport,
 };

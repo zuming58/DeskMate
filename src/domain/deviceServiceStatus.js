@@ -37,10 +37,11 @@ function microphonePresentation(audioStatus = {}, preferredMicrophoneSource = "c
 
 export function deviceServiceStatus({ inputBridge = {}, audioStatus = {}, preferredMicrophoneSource = "computer", companion = {}, memory = {} } = {}) {
   const link = normalizeLinkDiagnostics(inputBridge?.linkDiagnostics);
-  const linkPresentation = LINK_PRESENTATION[link.status];
+  const hardwareEnabled = inputBridge?.xiaozhiHardware?.enabled !== false;
+  const linkPresentation = hardwareEnabled ? LINK_PRESENTATION[link.status] : Object.freeze({ label: "已关闭", tone: "neutral" });
   return Object.freeze({
     easyInput: Object.freeze({ connected: inputBridge?.boardConnected === true, label: inputBridge?.boardConnected === true ? "已连接" : "等待设备", tone: inputBridge?.boardConnected === true ? "success" : "demo" }),
-    xiaozhi: Object.freeze({ ...linkPresentation, state: link.status, counters: link.counters }),
+    xiaozhi: Object.freeze({ ...linkPresentation, state: hardwareEnabled ? link.status : "disabled", hardwareEnabled, counters: link.counters }),
     microphone: microphonePresentation(audioStatus, preferredMicrophoneSource),
     realtime: Object.freeze({ configured: companion?.service?.configured === true, label: companion?.service?.configured === true ? "凭据已配置" : "待配置", tone: companion?.service?.configured === true ? "success" : "demo" }),
     memory: Object.freeze({ ready: memory?.ready === true, label: memory?.ready === true ? "SQLite 已接入" : "不可用", tone: memory?.ready === true ? "success" : "demo" }),

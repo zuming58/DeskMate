@@ -78,6 +78,32 @@ void ripple_frames_and_final_black() {
     CHECK(!animator.update(241, frame));
 }
 
+void transient_feedback_restores_persistent_status() {
+    LedFeedbackAnimator animator;
+    LedFrame frame{};
+    LedFrame status{};
+    status.fill({0, 22, 22});
+    animator.set_resting_frame(status);
+    CHECK(animator.update(0, frame));
+    CHECK(frame == status);
+    animator.start(feedback_for_input_event(key(0, true)), 10);
+    CHECK(animator.update(10, frame));
+    CHECK(frame != status);
+    CHECK(animator.update(150, frame));
+    CHECK(frame == status);
+    CHECK(!animator.active());
+
+    LedStatusMailbox mailbox;
+    LedFrame newer{};
+    newer.fill({28, 0, 0});
+    CHECK(mailbox.publish(status));
+    CHECK(mailbox.publish(newer));
+    LedFrame consumed{};
+    CHECK(mailbox.consume(consumed));
+    CHECK(consumed == newer);
+    CHECK(!mailbox.consume(consumed));
+}
+
 void direction_pulse_grb_and_replacement() {
     LedFeedbackAnimator animator;
     LedFrame frame{};
@@ -212,6 +238,7 @@ int main() {
     eight_key_vectors_and_release_silence();
     encoder_vectors_and_invalid_events();
     ripple_frames_and_final_black();
+    transient_feedback_restores_persistent_status();
     direction_pulse_grb_and_replacement();
     mailbox_overwrite_diagnostics_and_time_wrap();
     confirmed_input_only_and_latest_event_wins();

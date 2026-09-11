@@ -13,6 +13,13 @@ test("companion and diagnostics share every bounded Link state", () => {
   assert.equal(deviceServiceStatus({ inputBridge: { boardConnected: true } }).xiaozhi.label, "不可读取");
 });
 
+test("disabled Xiaozhi hardware is a neutral choice rather than a Link fault", () => {
+  const status = deviceServiceStatus({ inputBridge: { boardConnected: true, xiaozhiHardware: { enabled: false }, linkDiagnostics: { state: "faulted" } } });
+  assert.equal(status.xiaozhi.state, "disabled");
+  assert.equal(status.xiaozhi.label, "已关闭");
+  assert.equal(status.xiaozhi.tone, "neutral");
+});
+
 test("accepted EasyInput microphone remains integrated when computer is selected", () => {
   const notSelected = deviceServiceStatus({
     audioStatus: { kind: "easyinput-lan", configured: true, available: true, state: "ready", setup: { configured: true } },

@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getCapabilities: () => ipcRenderer.invoke("desktop:get-capabilities"),
+  getXiaozhiHardwarePolicy: () => ipcRenderer.invoke("desktop:get-xiaozhi-hardware-policy"),
+  setXiaozhiHardwarePolicy: (enabled) => ipcRenderer.invoke("desktop:set-xiaozhi-hardware-policy", { enabled: Boolean(enabled) }),
   refreshLinkDiagnostics: () => ipcRenderer.invoke("desktop:refresh-link-diagnostics"),
   getManualCalibrationStatus: () => ipcRenderer.invoke("desktop:get-manual-calibration-status"),
   queryManualCalibration: () => ipcRenderer.invoke("desktop:query-manual-calibration"),

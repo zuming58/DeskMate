@@ -71,9 +71,24 @@ private:
     LedFeedbackEvent event_{};
 };
 
+// A separate latest-wins base frame. Transient key/encoder feedback may
+// replace it briefly, then the animator restores this frame.
+class LedStatusMailbox {
+public:
+    bool publish(const LedFrame& frame);
+    bool consume(LedFrame& frame);
+    bool pending() const { return pending_.load(std::memory_order_acquire); }
+
+private:
+    std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+    std::atomic<bool> pending_{false};
+    LedFrame frame_{};
+};
+
 class LedFeedbackAnimator {
 public:
     void start(const LedFeedbackEvent& event, uint32_t now_ms);
+    void set_resting_frame(const LedFrame& frame);
     bool update(uint32_t now_ms, LedFrame& frame);
     bool active() const { return active_; }
 
@@ -82,7 +97,8 @@ private:
     uint32_t started_at_ms_{0};
     uint32_t rendered_frame_{UINT32_MAX};
     bool active_{false};
-    bool black_sent_{true};
+    LedFrame resting_frame_{};
+    bool resting_sent_{true};
 
     LedFrame render(uint32_t frame_index) const;
 };

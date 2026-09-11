@@ -1,5 +1,5 @@
 export const LINK_STATES = ["disabled", "waiting", "connected", "faulted"];
-export const AGENT_DELIVERY_STATES = ["never", "sending", "acknowledged", "failed"];
+export const AGENT_DELIVERY_STATES = ["never", "sending", "acknowledged", "failed", "disabled", "unsupported"];
 export const AGENT_TRANSPORT_STATES = ["idle", "listening", "thinking", "working", "waiting", "completed", "error"];
 
 const COUNTER_FIELDS = ["rxFrames", "txFrames", "requestTimeouts", "retries", "peerRestarts", "agentAccepted", "agentForwarded", "agentDroppedDisconnected", "agentQueueDrops"];

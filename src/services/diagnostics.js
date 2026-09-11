@@ -166,6 +166,17 @@ export function createDiagnosticReport(input = {}) {
   };
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentStateDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
+  const codexLedDelivery = { ...normalizeAgentDelivery(bridge.codexLedDelivery), supported: bridge.codexLedDelivery?.supported === true };
+  const xiaozhiHardware = {
+    enabled: bridge.xiaozhiHardware?.enabled !== false,
+    state: ["disabled", "connected", "enabled-disconnected"].includes(bridge.xiaozhiHardware?.state) ? bridge.xiaozhiHardware.state : "enabled-disconnected",
+    transitioning: bridge.xiaozhiHardware?.transitioning === true,
+    lastShutdown: {
+      state: ["not-run", "not-required", "confirmed", "unconfirmed"].includes(bridge.xiaozhiHardware?.lastShutdown?.state) ? bridge.xiaozhiHardware.lastShutdown.state : "not-run",
+      confirmed: bridge.xiaozhiHardware?.lastShutdown?.confirmed === true,
+      reason: /^[a-z0-9-]{0,80}$/.test(String(bridge.xiaozhiHardware?.lastShutdown?.reason || "")) ? String(bridge.xiaozhiHardware?.lastShutdown?.reason || "") : "",
+    },
+  };
   const manualCalibration = normalizeManualCalibrationDiagnostics(bridge.manualCalibration);
   const motionPresets = normalizeMotionPresetDiagnostics(bridge.motionPresets);
   const choreography = normalizeChoreographyDiagnostics(bridge.choreography);
@@ -290,5 +301,5 @@ export function createDiagnosticReport(input = {}) {
     taskCount: Math.max(0, Math.min(8, Number(taskBriefSource.taskCount) || 0)),
     announcementsEnabled: taskBriefSource.announcementsEnabled !== false,
   };
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, codexTaskBrief, easyInputHid, deskMateLink: link, agentStateDelivery, manualCalibration, motionPresets, choreography };
+  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, codexTaskBrief, easyInputHid, xiaozhiHardware, deskMateLink: link, agentStateDelivery, codexLedDelivery, manualCalibration, motionPresets, choreography };
 }

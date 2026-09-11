@@ -110,7 +110,7 @@ class InputBridgeManager extends EventEmitter {
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
     }
     if (result.kind === "config-capabilities" && this.pendingRead?.requestId === event.requestId) {
-      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1, ...(event.deskMateLinkV1 === undefined ? {} : { deskmate_link_v1: event.deskMateLinkV1, agent_state_bridge_v1: event.agentStateBridgeV1 }) };
+      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1, ...(event.deskMateLinkV1 === undefined ? {} : { deskmate_link_v1: event.deskMateLinkV1, agent_state_bridge_v1: event.agentStateBridgeV1, codex_led_status_v1: event.codexLedStatusV1 === true }) };
       const linkDiagnostics = event.linkState === undefined ? null : {
         state: event.linkState,
         rxFrames: event.linkRxFrames,

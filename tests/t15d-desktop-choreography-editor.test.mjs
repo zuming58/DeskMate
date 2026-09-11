@@ -196,7 +196,7 @@ test("T15D preload and renderer expose persistence, default dance, settings and 
   assert.match(main, /desktop:run-motion-preset[\s\S]*runMotionPreset\(value\)/);
   assert.match(main, /runMotionPreset[\s\S]*noteLegacyFallback/);
   assert.match(editor, /Windows 输入桥拒绝了 V2 动作报文/);
-  assert.match(editor, /disabled={!adapter\.ready/);
+  assert.match(editor, /disabled={!hardwareEnabled \|\| !adapter\.ready/);
   assert.match(editor, /if \(adapter\.ready !== true\)/);
   assert.match(editor, /choreography-boundary-note/);
   assert.match(editor, /软件预览不等于实体执行/);

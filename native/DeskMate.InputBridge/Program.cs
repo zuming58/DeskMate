@@ -136,7 +136,7 @@ internal sealed class EventWriter
 
     public void ConfigCapabilities(
         string requestId, bool read, bool write, bool hostAction, bool fixedText,
-        bool deskMateLink, bool agentStateBridge, string linkState,
+        bool deskMateLink, bool agentStateBridge, bool codexLedStatus, string linkState,
         uint linkRxFrames, uint linkTxFrames, uint linkRequestTimeouts,
         uint linkRetries, uint linkPeerRestarts,
         uint agentAccepted, uint agentMalformed, uint agentDroppedDisconnected,
@@ -146,6 +146,7 @@ internal sealed class EventWriter
         requestId: requestId, configReadV1: read, configWriteV1: write,
         hostActionV1: hostAction, fixedTextV1: fixedText,
         deskMateLinkV1: deskMateLink, agentStateBridgeV1: agentStateBridge,
+        codexLedStatusV1: codexLedStatus,
         linkState: linkState, linkRxFrames: linkRxFrames,
         linkTxFrames: linkTxFrames, linkRequestTimeouts: linkRequestTimeouts,
         linkRetries: linkRetries, linkPeerRestarts: linkPeerRestarts,
@@ -193,6 +194,7 @@ internal sealed record BridgeEvent(
     bool? fixedTextV1 = null,
     bool? deskMateLinkV1 = null,
     bool? agentStateBridgeV1 = null,
+    bool? codexLedStatusV1 = null,
     string? linkState = null,
     uint? linkRxFrames = null,
     uint? linkTxFrames = null,
@@ -1053,6 +1055,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
                         capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("deskmate_link_v1",out var deskMateLink)&&deskMateLink.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("agent_state_bridge_v1",out var agentStateBridge)&&agentStateBridge.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("codex_led_status_v1",out var codexLedStatus)&&codexLedStatus.ValueKind==JsonValueKind.True,
                         link.GetProperty("state").GetString() ?? "faulted",
                         ReadCounter(link, "rx_frames"),
                         ReadCounter(link, "tx_frames"),

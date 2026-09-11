@@ -10,13 +10,13 @@ const source = JSON.parse(fs.readFileSync(path.join(root, 'electron/prompt-libra
 assert.deepEqual(bundled, source, 'packaged prompt data must match source including all original bodies');
 assert.equal(bundled.prompts.length, 80);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t22f-prompt-order-scene-actions'));
+assert(main.includes('t24-optional-xiaozhi-codex-led'));
 assert(main.includes('--show-prompts'));
-for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs']) {
+for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
 }
 assert(packagedFile('electron/prompt-workbench.cjs').toString().includes("require('./prompt-library.json')"));
 assert(packagedFile('electron/preload.cjs').toString().includes('prompts:command'));
 assert(packagedFile('dist/client/index.html').equals(fs.readFileSync(path.join(root, 'dist/client/index.html'))));
 assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/input-bridge/DeskMate.InputBridge.exe')).equals(fs.readFileSync(path.join(root, 'native/DeskMate.InputBridge/publish/DeskMate.InputBridge.exe'))));
-console.log('T22 packaged resource check passed: 80 prompts, main/preload, current UI and native bridge.');
+console.log('T24 packaged resource check passed: optional Xiaozhi policy, Codex LED routing, 80 prompts, current UI and native bridge.');

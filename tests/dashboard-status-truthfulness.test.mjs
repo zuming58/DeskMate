@@ -34,6 +34,13 @@ test("dashboard exposes only the bounded Link state as hardware evidence", () =>
   }
 });
 
+test("dashboard treats optional Xiaozhi disablement as a valid EasyInput-only mode", () => {
+  const status = dashboardHardwareStatus({ boardConnected: true, xiaozhiHardware: { enabled: false }, linkDiagnostics: { state: "faulted" } });
+  assert.equal(status.badge, "仅 EasyInput 模式");
+  assert.equal(status.tone, "success");
+  assert.match(status.summary, /小智硬件扩展已关闭/);
+});
+
 test("workbench labels previews and pending hardware without fabricated readings", async () => {
   const page = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");

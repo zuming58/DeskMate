@@ -119,6 +119,22 @@ test("T15C skips lower-priority work without queuing or replaying it", async () 
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
+test("T23 hardware gate suspends automation without erasing its saved preference or replaying work", async () => {
+  const directory = temporaryDirectory();
+  const calls = [];
+  try {
+    const coordinator = new MotionAutomationCoordinator({ policyStore: enabledStore(directory, true), executePreset: async (...args) => { calls.push(args); return { ok: true }; } });
+    coordinator.setHardwareEnabled(false);
+    assert.equal((await coordinator.trigger("companion-start", "attention", 1, "context")).reason, "xiaozhi-hardware-disabled");
+    assert.deepEqual(coordinator.snapshot().policy, { version: 1, enabled: true, idleEnabled: true });
+    coordinator.setHardwareEnabled(true);
+    assert.equal(calls.length, 0);
+    await coordinator.trigger("companion-start", "attention", 1, "context");
+    assert.deepEqual(calls, [["attention", 1, "context"]]);
+    coordinator.close();
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("T15C idle search waits 90 seconds, skips active conversation, and never enables itself", async () => {
   const directory = temporaryDirectory();
   const clock = new FakeClock();

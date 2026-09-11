@@ -37,6 +37,8 @@ import { EasyInputLanAudioAdapter } from "./easyInputLanAudioAdapter.js";
 export class DesktopBridgeAdapter {
   constructor(bridge = globalThis.window?.desktopBridge) { this.bridge = bridge; }
   async capabilities() { return this.bridge?.getCapabilities ? this.bridge.getCapabilities() : { supported: false, platform: "web" }; }
+  async getXiaozhiHardwarePolicy() { return this.bridge?.getXiaozhiHardwarePolicy ? this.bridge.getXiaozhiHardwarePolicy() : { ok: false, enabled: true, state: "enabled-disconnected", reason: "desktop-bridge-unavailable" }; }
+  async setXiaozhiHardwarePolicy(enabled) { return this.bridge?.setXiaozhiHardwarePolicy ? this.bridge.setXiaozhiHardwarePolicy(enabled) : { ok: false, enabled: true, state: "enabled-disconnected", reason: "desktop-bridge-unavailable" }; }
   async refreshLinkDiagnostics() { return this.bridge?.refreshLinkDiagnostics ? this.bridge.refreshLinkDiagnostics() : { ok: false, reason: "desktop-bridge-unavailable" }; }
   async getManualCalibrationStatus() { return this.bridge?.getManualCalibrationStatus ? this.bridge.getManualCalibrationStatus() : { available: false, gate: "unavailable", controlsEnabled: false }; }
   async queryManualCalibration() { return this.bridge?.queryManualCalibration ? this.bridge.queryManualCalibration() : { ok: false, reason: "desktop-bridge-unavailable" }; }

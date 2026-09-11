@@ -30,6 +30,15 @@ const LINK_COPY = Object.freeze({
 
 export function dashboardHardwareStatus(inputBridge = {}) {
   const link = normalizeLinkDiagnostics(inputBridge?.linkDiagnostics);
+  if (inputBridge?.xiaozhiHardware?.enabled === false) {
+    return Object.freeze({
+      boardConnected: inputBridge?.boardConnected === true,
+      link,
+      badge: "仅 EasyInput 模式",
+      summary: inputBridge?.boardConnected === true ? "EasyInput 已连接 · 小智硬件扩展已关闭" : "EasyInput 等待连接 · 小智硬件扩展已关闭",
+      tone: inputBridge?.boardConnected === true ? "success" : "neutral",
+    });
+  }
   if (!inputBridge?.boardConnected) {
     return Object.freeze({
       boardConnected: false,

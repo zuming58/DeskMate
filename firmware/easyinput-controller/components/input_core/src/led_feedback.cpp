@@ -94,26 +94,53 @@ bool LedFeedbackMailbox::consume(LedFeedbackEvent& event) {
     return true;
 }
 
+bool LedStatusMailbox::publish(const LedFrame& frame) {
+    if (lock_.test_and_set(std::memory_order_acquire)) return false;
+    frame_ = frame;
+    pending_.store(true, std::memory_order_release);
+    lock_.clear(std::memory_order_release);
+    return true;
+}
+
+bool LedStatusMailbox::consume(LedFrame& frame) {
+    if (!pending_.load(std::memory_order_acquire)) return false;
+    if (lock_.test_and_set(std::memory_order_acquire)) return false;
+    if (!pending_.load(std::memory_order_relaxed)) {
+        lock_.clear(std::memory_order_release);
+        return false;
+    }
+    frame = frame_;
+    pending_.store(false, std::memory_order_release);
+    lock_.clear(std::memory_order_release);
+    return true;
+}
+
 void LedFeedbackAnimator::start(const LedFeedbackEvent& event, uint32_t now_ms) {
     event_ = event;
     started_at_ms_ = now_ms;
     rendered_frame_ = UINT32_MAX;
     active_ = event.active && event.frame_interval_ms != 0 && event.duration_ms != 0;
-    black_sent_ = false;
+    resting_sent_ = false;
+}
+
+void LedFeedbackAnimator::set_resting_frame(const LedFrame& frame) {
+    if (resting_frame_ == frame) return;
+    resting_frame_ = frame;
+    resting_sent_ = false;
 }
 
 bool LedFeedbackAnimator::update(uint32_t now_ms, LedFrame& frame) {
     if (!active_) {
-        if (black_sent_) return false;
-        frame = {};
-        black_sent_ = true;
+        if (resting_sent_) return false;
+        frame = resting_frame_;
+        resting_sent_ = true;
         return true;
     }
     const uint32_t elapsed = now_ms - started_at_ms_;
     if (elapsed >= event_.duration_ms) {
         active_ = false;
-        frame = {};
-        black_sent_ = true;
+        frame = resting_frame_;
+        resting_sent_ = true;
         return true;
     }
     const uint32_t frame_index = elapsed / event_.frame_interval_ms;

@@ -1,5 +1,6 @@
 #include "agent_state_core.h"
 #include "choreography_bridge_core.h"
+#include "codex_led_status.h"
 #include "audio_capture_service.h"
 #include "audio_io_arbiter.h"
 #include "board_pins.h"
@@ -93,6 +94,7 @@ UsbPhysicalPresenceMonitor usb_physical_presence{kUsbDisconnectConfirmMs};
 UsbDeviceConnectionGate usb_device_connection;
 std::atomic<bool> tinyusb_driver_ready{false};
 LedFeedbackMailbox led_feedback_mailbox;
+LedStatusMailbox led_status_mailbox;
 LedFeedbackDiagnostics led_feedback_diagnostics;
 PeripheralPowerController peripheral_power;
 AudioIoArbiter audio_io_arbiter;
@@ -110,6 +112,7 @@ ConfigReadStream config_read_stream;
 ConfigStatusStream config_status_stream;
 DeskMateLinkUart deskmate_link_uart;
 AgentStateBridge agent_state_bridge;
+CodexLedStatusController codex_led_status;
 ManualCalibrationBridge manual_calibration_bridge;
 MotionPresetBridge motion_preset_bridge;
 ChoreographyBridge choreography_bridge;
@@ -210,6 +213,12 @@ void publish_led_feedback(const InputEvent& event) {
     }
 }
 
+void publish_led_status(const LedFrame& frame) {
+    if (led_status_mailbox.publish(frame) && led_task_handle != nullptr) {
+        xTaskNotifyGive(led_task_handle);
+    }
+}
+
 void led_feedback_task(void*) {
     LedStrip strip;
     if (peripheral_power.begin_awake() != ESP_OK ||
@@ -226,6 +235,10 @@ void led_feedback_task(void*) {
 
     LedFeedbackAnimator animator;
     for (;;) {
+        LedFrame resting_frame{};
+        if (led_status_mailbox.consume(resting_frame)) {
+            animator.set_resting_frame(resting_frame);
+        }
         LedFeedbackEvent event{};
         if (led_feedback_mailbox.consume(event)) {
             animator.start(event, monotonic_milliseconds(
@@ -240,7 +253,7 @@ void led_feedback_task(void*) {
             led_feedback_diagnostics.record_tx_failure();
         }
 
-        if (led_feedback_mailbox.pending()) continue;
+        if (led_feedback_mailbox.pending() || led_status_mailbox.pending()) continue;
         const TickType_t wait_ticks = animator.active()
             ? static_cast<TickType_t>(1)
             : portMAX_DELAY;
@@ -420,17 +433,31 @@ void input_owner_task(void*) {
                 runtime.diagnostics().usb_mount_epoch;
             if (input_owner_config_command.epoch != current_epoch) {
                 agent_state_bridge.clear_for_usb_epoch(current_epoch);
+                LedFrame cleared_frame{};
+                if (codex_led_status.clear_for_usb_epoch(current_epoch,
+                                                         cleared_frame)) {
+                    publish_led_status(cleared_frame);
+                }
                 continue;
             }
-            AgentStateDispatch dispatch{};
-            if (agent_state_bridge.accept(
-                    input_owner_config_command.payload.data(),
-                    input_owner_config_command.length,
-                    input_owner_config_command.epoch, now_ms,
-                    deskmate_link_uart.snapshot(), dispatch)) {
-                agent_state_bridge.note_forward_result(
-                    deskmate_link_uart.queue_agent_state(
-                        dispatch.state, dispatch.transition_id));
+            LedFrame led_frame{};
+            const CodexLedRouteResult led_route = codex_led_status.accept(
+                input_owner_config_command.payload.data(),
+                input_owner_config_command.length,
+                input_owner_config_command.epoch, now_ms, led_frame);
+            if (led_route == CodexLedRouteResult::Applied) {
+                publish_led_status(led_frame);
+            } else if (led_route == CodexLedRouteResult::NotForCodexLed) {
+                AgentStateDispatch dispatch{};
+                if (agent_state_bridge.accept(
+                        input_owner_config_command.payload.data(),
+                        input_owner_config_command.length,
+                        input_owner_config_command.epoch, now_ms,
+                        deskmate_link_uart.snapshot(), dispatch)) {
+                    agent_state_bridge.note_forward_result(
+                        deskmate_link_uart.queue_agent_state(
+                            dispatch.state, dispatch.transition_id));
+                }
             }
         }
         while (xQueueReceive(manual_calibration_command_queue,
@@ -545,6 +572,12 @@ void input_owner_task(void*) {
 
         agent_state_bridge.clear_for_usb_epoch(
             runtime.diagnostics().usb_mount_epoch);
+        LedFrame led_frame{};
+        if (codex_led_status.poll(now_ms,
+                                  runtime.diagnostics().usb_mount_epoch,
+                                  led_frame)) {
+            publish_led_status(led_frame);
+        }
         AgentStateDispatch expiry_dispatch{};
         if (agent_state_bridge.poll(
                 now_ms, runtime.diagnostics().usb_mount_epoch,

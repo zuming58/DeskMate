@@ -1,5 +1,17 @@
 # Decisions
 
+## D120 - Codex work state belongs on EasyInput LEDs, not Xiaozhi's face
+
+- 2026-09-11: Real `codex-hook-v1` events use the existing T09 Feature report `0x12` with dedicated source `0x4c584443` (`CDXL`). EasyInput advertises `codex_led_status_v1`, consumes that source locally and never forwards it through DeskMate Link. Old firmware therefore receives nothing, and other T09 sources retain their frozen Xiaozhi behavior.
+- All five WS2812 pixels show one low-brightness base color per state. T04 key/encoder feedback has brief visual priority and then restores the newest base frame. Terminal colors expire after 10 seconds; all other non-idle states retain T09's 600-second maximum. GPIO12/GRB and the GPIO8 single shared-power owner remain unchanged.
+- Code/build verification does not authorize flashing or claim physical color/audio acceptance. Contract: [`T24`](../docs/contracts/t24-codex-led-status-v1.md).
+
+## D119 - Optional Xiaozhi mode is enforced at the physical command boundary
+
+- 2026-09-11: The existing T23 requirement is now implemented as one local, persistent `启用小智硬件扩展` policy. Upgrade/default behavior stays enabled. Disabled is a neutral `Windows + EasyInput` product mode, not a Link failure.
+- The Electron main process—not renderer visibility—gates physical display state, manual calibration/control, motion presets, custom choreography, dance music and automatic motion. Disabling clears queued software work and uses existing stop/center/neutral paths when something is active; missing endpoint confirmation remains explicitly unconfirmed. Re-enabling preserves configuration but never replays an old action.
+- AI companion, wake, dictation, prompts, scene keys, memory, Codex task speech and EasyInput remain outside the physical gate. Diagnostics expose only policy/state and sanitized shutdown evidence, never personal data or device identity. HIL remains pending.
+
 ## D118 - Prompt order is canonical per scene; application keys reuse the whitelist
 
 - 2026-09-11: Persist one explicit prompt order per scene and edit it only from the full, unfiltered current-scene list. Search, favorites, recent, personal, trash, category and all-scene views are projections and cannot define canonical order. Use adjacent up/down controls instead of drag-and-drop so the action is stable with mouse, keyboard and the fixed-height scrolling list.
@@ -17,7 +29,7 @@
 - Date: 2026-09-10, explicit user requirement for sharing DeskMate with classmates who have only EasyInput.
 - Support Windows + EasyInput with an optional Xiaozhi extension in the same product. A persistent settings switch disables the physical display/expression/servo/dance capabilities together, while retaining computer-audio AI companion, wake, dictation, prompts, scene keys, Codex briefs and memory.
 - Disabling must gate main-process commands, not merely hide UI. Hardware absence is normal in this mode and must not block core software; retain existing safety and do not replay queued motions when re-enabled.
-- Requirement accepted, implementation and acceptance pending: [T23](tasks/t23-optional-xiaozhi-hardware.md). This record is not firmware/write authorization and does not claim the setting exists today.
+- Requirement accepted here and later implemented under D119: [T23](tasks/t23-optional-xiaozhi-hardware.md). Physical acceptance remains pending; this record is not firmware/write authorization.
 
 ## D115 - Compact action captions and distinct read/draft/write evidence
 

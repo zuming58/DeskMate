@@ -88,7 +88,7 @@ function TrackChoices({ beatIndex, label, value, values, onChange, expression = 
   );
 }
 
-export function ChoreographyEditor({ notify, onDanceLibraryChange }) {
+export function ChoreographyEditor({ notify, onDanceLibraryChange, hardwareEnabled = true }) {
   const [actions, setActions] = useState([]);
   const [builtInDance, setBuiltInDance] = useState(null);
   const [selectedName, setSelectedName] = useState(BUILT_IN_DANCE_ID);
@@ -277,7 +277,7 @@ export function ChoreographyEditor({ notify, onDanceLibraryChange }) {
 
   return (
     <Card className="choreography-editor">
-      <SectionTitle index="02" title="自定义舞蹈" description="选择即可查看节拍；保存自己的舞蹈后，再激活为快速动作和语音“跳舞”的内容。" action={<span className="motion-heading-actions"><StatusBadge tone={adapter.ready ? "success" : "demo"}>{adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
+      <SectionTitle index="02" title="自定义舞蹈" description="选择即可查看节拍；保存自己的舞蹈后，再激活为快速动作和语音“跳舞”的内容。" action={<span className="motion-heading-actions"><StatusBadge tone={hardwareEnabled && adapter.ready ? "success" : "demo"}>{!hardwareEnabled ? "小智硬件已关闭" : adapter.ready ? "实体适配器已就绪" : "实体适配器待接入"}</StatusBadge><Button icon={Refresh} disabled={!hardwareEnabled} onClick={() => { void refresh(); }}>刷新适配器</Button></span>} />
       <div className="choreography-library">
         <div className="choreography-selection-bar">
           <label className="choreography-selector-field"><span>舞蹈动作</span><Select value={selectedName} onChange={selectSaved} ariaLabel="内置或已保存的舞蹈动作"><option value={BUILT_IN_DANCE_ID}>内置默认舞蹈{defaultDanceName === "" ? " · 当前已激活" : ""}</option><option value="">新建草稿（未保存）</option>{actions.map((action) => <option key={action.name} value={action.name}>{action.name}{action.name === defaultDanceName ? " · 当前已激活" : ""}</option>)}</Select></label>
@@ -320,9 +320,9 @@ export function ChoreographyEditor({ notify, onDanceLibraryChange }) {
       <div className="choreography-actions">
         <Button icon={DeviceFloppy} variant="primary" disabled={builtInSelected || busy !== ""} onClick={() => { void save(); }}>保存</Button>
         <Button icon={preview.running ? PlayerPause : PlayerPlay} disabled={busy !== ""} onClick={() => preview.running ? stopPreview(true) : startPreview()}>{preview.running ? "停止预览" : "软件预览"}</Button>
-        <Button icon={PlayerPlay} disabled={!adapter.ready || busy !== ""} title={adapter.ready ? "在小智上执行" : "实体传输尚未接入"} onClick={() => { void runReal(); }}>实体执行</Button>
-        <Button icon={PlayerPause} disabled={busy !== ""} onClick={() => { void runSafety("stop"); }}>停止回中</Button>
-        <Button icon={AlertCircle} variant="danger" disabled={busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button>
+        <Button icon={PlayerPlay} disabled={!hardwareEnabled || !adapter.ready || busy !== ""} title={!hardwareEnabled ? "小智硬件扩展已关闭" : adapter.ready ? "在小智上执行" : "实体传输尚未接入"} onClick={() => { void runReal(); }}>实体执行</Button>
+        <Button icon={PlayerPause} disabled={!hardwareEnabled || busy !== ""} onClick={() => { void runSafety("stop"); }}>停止回中</Button>
+        <Button icon={AlertCircle} variant="danger" disabled={!hardwareEnabled || busy !== ""} onClick={() => { void runSafety("estop"); }}>急停</Button>
       </div>
       <div className="choreography-boundary-note"><AlertCircle size={16} stroke={1.8} /><span>软件预览不等于实体执行；两者都只运行当前画面，不会改变已激活舞蹈。只有保存后再明确激活，快速“跳舞”和语音“小智跳个舞”才会改用它。</span></div>
     </Card>

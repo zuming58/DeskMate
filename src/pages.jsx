@@ -288,6 +288,7 @@ function ExpressionTile({ preset, selected, onClick, compact = false }) {
 
 function AgentStateTestPanel({ notify, navigate, index = "03" }) {
   const { state, patch, event } = useAppStore();
+  const hardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
   const control = normalizeAgentControl(state.agentControl);
   const evidence = agentStateEvidence(state.runtime?.inputBridge);
   const [request, setRequest] = useState({ status: "idle", label: "尚未发送", at: "" });
@@ -311,20 +312,23 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
   };
   const requestIsNewest = request.at && (!evidence.delivery.at || Date.parse(request.at) >= Date.parse(evidence.delivery.at));
   const showRequest = request.status === "sending" || requestIsNewest;
-  const deliveryLabel = showRequest ? request.label : evidence.easyInputLabel;
-  const deliveryTone = showRequest && request.status === "success" ? "success" : showRequest && request.status === "error" ? "warning" : evidence.delivery.status === "acknowledged" ? "success" : "neutral";
+  const deliveryLabel = !hardwareEnabled ? "已关闭" : showRequest ? request.label : evidence.easyInputLabel;
+  const deliveryTone = !hardwareEnabled ? "neutral" : showRequest && request.status === "success" ? "success" : showRequest && request.status === "error" ? "warning" : evidence.delivery.status === "acknowledged" ? "success" : "neutral";
+  const linkLabel = hardwareEnabled ? evidence.linkLabel : "已关闭";
+  const linkTone = hardwareEnabled && evidence.link.status === "connected" ? "success" : "demo";
   return (
     <Card className="companion-hardware-state-test">
       <div className="companion-hardware-state-test__header">
         <SectionTitle index={index} title="小智工作状态测试" description="通过既有 Agent State 通道真实写入 EasyInput；重复点击当前状态也会产生一次新发送。" />
-        <StatusBadge tone={evidence.link.status === "connected" ? "success" : "demo"}>Link · {evidence.linkLabel}</StatusBadge>
+        <StatusBadge tone={linkTone}>Link · {linkLabel}</StatusBadge>
       </div>
-      <div className="manual-agent-state-grid" aria-label="发送小智真实工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={request.status === "sending"} key={item.id} onClick={() => { void sendState(item.id); }}><strong>{item.label}</strong><span>{item.transport}</span><small>{item.description}</small></button>)}</div>
+      {!hardwareEnabled && <Notice tone="info" title="小智硬件扩展已关闭">手动屏幕状态下发已停用；Codex 的工作状态改由 EasyInput 五颗灯显示。</Notice>}
+      <div className="manual-agent-state-grid" aria-label="发送小智真实工作状态">{MANUAL_AGENT_STATES.map((item) => <button type="button" className={control.state === item.id ? "is-selected" : ""} aria-pressed={control.state === item.id} disabled={!hardwareEnabled || request.status === "sending"} key={item.id} onClick={() => { void sendState(item.id); }}><strong>{item.label}</strong><span>{item.transport}</span><small>{item.description}</small></button>)}</div>
       <div className="agent-state-evidence" aria-live="polite">
         <div><small>当前选择</small><strong>{manualAgentState(control.state).label}</strong></div>
         <div><small>EasyInput 写入</small><StatusBadge tone={deliveryTone}>{deliveryLabel}</StatusBadge></div>
-        <div><small>小智 DeskMate Link</small><StatusBadge tone={evidence.link.status === "connected" ? "success" : "demo"}>{evidence.linkLabel}</StatusBadge></div>
-        <div><small>显示证据</small><strong>{evidence.link.status === "connected" ? "需观察小智屏幕确认" : "当前不能确认"}</strong></div>
+        <div><small>小智 DeskMate Link</small><StatusBadge tone={linkTone}>{linkLabel}</StatusBadge></div>
+        <div><small>显示证据</small><strong>{!hardwareEnabled ? "实体显示已停用" : evidence.link.status === "connected" ? "需观察小智屏幕确认" : "当前不能确认"}</strong></div>
       </div>
       <div className="companion-hardware-state-test__footer"><p>Codex 工作状态不再占用小智表情；这里只做明确的手动真机测试。EasyInput ACK 只证明写入被总控接受，不等于小智已经显示。</p><Button icon={Gauge} variant="ghost" onClick={() => navigate?.("settings/diagnostics")}>查看系统诊断</Button></div>
     </Card>
@@ -333,6 +337,7 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
 
 export function CompanionPage({ notify, navigate, stopCompanion }) {
   const { state, patch, updateCompanion } = useAppStore();
+  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
   const [section, setSection] = useState("overview");
   const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
@@ -561,7 +566,7 @@ export function CompanionPage({ notify, navigate, stopCompanion }) {
             <SectionTitle index="01" title="自动情境动作" description="一个总开关控制陪伴中的关注、寻找和轻点头；跳舞仍只接受明确指令。" />
             <div className="companion-automation-control">
               <div><strong>{overviewMotionAutomation.policy.enabled ? "已开启" : "已关闭"}</strong><small>{overviewMotionAutomation.policy.enabled ? "开始陪伴、持续思考和回答结束时可自动配合实体动作。" : "当前不会因对话情境自动转动。"}</small></div>
-              <Toggle label="自动情境动作总开关" checked={overviewMotionAutomation.policy.enabled} onChange={(enabled) => { void updateOverviewMotionAutomation({ enabled }); }} />
+              <Toggle label="自动情境动作总开关" disabled={!xiaozhiHardwareEnabled} checked={xiaozhiHardwareEnabled && overviewMotionAutomation.policy.enabled} onChange={(enabled) => { void updateOverviewMotionAutomation({ enabled }); }} />
             </div>
             <div className="companion-automation-footer"><small>空闲环视仍默认关闭，可在动作编排页单独开启。</small><Button variant="ghost" onClick={() => setSection("motion")}>打开动作编排</Button></div>
           </Card>
@@ -1564,6 +1569,8 @@ export function ConnectionsPage({ notify, embedded = false }) {
   useEffect(() => { voiceAdapters.desktop.capabilities().then(setDesktopCaps).catch(() => setDesktopCaps({ supported: false, shortcutRegistered: false })); }, [state.settings.voiceShortcut]);
   useEffect(() => deviceEventBus.subscribe((event) => { if (event.type === "voice-toggle" || event.type === "key-diagnostic") setLastTrigger({ source: event.source, key: event.payload.key || event.payload.shortcut || "", at: event.at }); }), []);
   const bridge = state.runtime?.inputBridge || desktopCaps.inputBridge || {};
+  const xiaozhiHardware = bridge.xiaozhiHardware || { enabled: true, state: "enabled-disconnected", transitioning: false, lastShutdown: { state: "not-run", reason: "" } };
+  const codexLed = bridge.codexLedDelivery || { status: "never", supported: false, targetState: "idle", reason: "" };
   const audioStatus = state.runtime?.easyInputAudio || {};
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
   const agentDelivery = normalizeAgentDelivery(bridge.agentStateDelivery);
@@ -1577,7 +1584,11 @@ export function ConnectionsPage({ notify, embedded = false }) {
     const result = await voiceAdapters.desktop.refreshLinkDiagnostics();
     const caps = await voiceAdapters.desktop.capabilities().catch(() => ({ supported: false }));
     setDesktopCaps(caps);
-    notify(result?.ok ? "已刷新 EasyInput 与小智 Link 状态" : `Link 状态刷新失败：${result?.reason || "unavailable"}`);
+    notify(result?.ok ? xiaozhiHardware.enabled ? "已刷新 EasyInput 与小智 Link 状态" : "已刷新 EasyInput 状态；小智硬件扩展已关闭" : `设备状态刷新失败：${result?.reason || "unavailable"}`);
+  };
+  const toggleXiaozhiHardware = async (enabled) => {
+    const result = await voiceAdapters.desktop.setXiaozhiHardwarePolicy(enabled).catch(() => ({ ok: false, reason: "desktop-bridge-unavailable" }));
+    notify(result?.ok ? `小智硬件扩展已${enabled ? "启用" : "关闭"}` : `设置未保存：${result?.reason || "xiaozhi-hardware-policy-failed"}`);
   };
   const toggleMicTest = async () => {
     const result = audioStatus.micTest ? await voiceAdapters.desktop.stopEasyInputMicTest() : await voiceAdapters.desktop.startEasyInputMicTest();
@@ -1588,14 +1599,15 @@ export function ConnectionsPage({ notify, embedded = false }) {
     <div className={embedded ? "connections-embedded" : "page"}>
       {!embedded && <PageIntro title="设备与连接" description="检查板子触发、麦克风音频、转写和文字输出链路" actions={<Button icon={Refresh} onClick={refreshConnections}>刷新能力</Button>} />}
       {embedded && <div className="embedded-heading"><div><span>DEVICE CONNECTIONS</span><h2>设备连接</h2><p>检查板子触发、麦克风音频、转写和文字输出链路。</p></div><Button icon={Refresh} onClick={refreshConnections}>刷新能力</Button></div>}
+      <Card className="xiaozhi-hardware-policy-card"><SettingRow icon={Robot} title="启用小智硬件扩展" description="关闭后停用小智实体屏幕、表情、舵机、跳舞和自动动作；AI 陪伴、语音唤醒、听写、提示词、EasyInput 按键与 Codex 状态灯仍可使用。"><span className="xiaozhi-hardware-policy-action"><StatusBadge tone={!xiaozhiHardware.enabled ? "neutral" : xiaozhiHardware.state === "connected" ? "success" : "warning"}>{!xiaozhiHardware.enabled ? "已关闭" : xiaozhiHardware.state === "connected" ? "已连接" : "已启用但未连接"}</StatusBadge><Toggle label="启用小智硬件扩展" disabled={xiaozhiHardware.transitioning} checked={xiaozhiHardware.enabled} onChange={(enabled) => { void toggleXiaozhiHardware(enabled); }} /></span></SettingRow>{xiaozhiHardware.lastShutdown?.state === "unconfirmed" && <Notice tone="warning" title="上次安全停止未获得端点确认">{xiaozhiHardware.lastShutdown.reason || "设备当时未连接"}。关闭状态已经生效且不会重放旧动作；如需确认实体姿态，请在设备旁重新启用后使用现有停止/回中流程。</Notice>}</Card>
       <Segmented value={tab} onChange={setTab} options={[{ value: "overview", label: "连接概览" }, { value: "microphone", label: "麦克风" }, { value: "network", label: "Wi-Fi 与蓝牙" }, { value: "sound", label: "提示音" }]} />
       {tab === "overview" && <><Notice tone={bridge.boardConnected ? "success" : "warning"} title={bridge.boardConnected ? "EasyInput 真机语音桥已连接" : "等待 EasyInput USB 设备"}>{bridge.boardConnected ? "Raw Input 桥只接受 EasyInput 设备发出的语音与语音编辑组合键，并调用与页面按钮相同的 VoiceWorkflow；普通键盘全局快捷键默认关闭。" : "连接开发板后，Raw Input 桥只读识别 VID 303A / PID 1006 的语音组合键和 F22 兼容路径，不读取文字、序列号，也不会向板子写输入数据。"}</Notice><div className="connection-cards">
-        <Card interactive><div className="connection-icon"><Link size={28} /></div><div><strong>EasyInput HID</strong><p>{lastTrigger ? `最后触发：${lastTrigger.key || "语音切换"} · ${lastTrigger.source}` : "语音键由 EasyInput 原生来源识别；普通键盘快捷键默认关闭"}</p></div><StatusBadge tone={bridge.boardConnected ? "success" : "demo"}>{bridge.boardConnected ? "已连接" : bridge.process === "running" ? "监听中" : "桥未运行"}</StatusBadge></Card>
-        <Card className="link-diagnostics-card"><div className="connection-icon"><Robot size={28} /></div><div><strong>小智云台 / DeskMate Link</strong><p>状态来自 EasyInput 的冻结 Link 状态报告；EasyInput HID 已连接不等于小智已连接。</p></div><StatusBadge tone={sharedStatus.xiaozhi.tone}>{linkStateLabel}</StatusBadge><div className="link-diagnostics-grid">{[["接收帧", link.counters.rxFrames], ["发送帧", link.counters.txFrames], ["请求超时", link.counters.requestTimeouts], ["重试", link.counters.retries], ["对端重启", link.counters.peerRestarts], ["Agent accepted", link.counters.agentAccepted], ["Agent forwarded", link.counters.agentForwarded], ["断线丢弃", link.counters.agentDroppedDisconnected], ["队列丢弃", link.counters.agentQueueDrops]].map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div><div className="agent-delivery-line"><span>最近 Agent State</span><strong>{agentDelivery.status === "acknowledged" ? "EasyInput 写入 ACK 成功" : agentDelivery.status === "failed" ? `失败 · ${agentDelivery.reason || "unknown"}` : agentDelivery.status === "sending" ? "请求中" : "尚未发送"}</strong><small>{agentDelivery.targetState}{agentDelivery.at ? ` · ${new Date(agentDelivery.at).toLocaleTimeString()}` : ""}</small></div></Card>
+        <Card interactive><div className="connection-icon"><Link size={28} /></div><div><strong>EasyInput HID</strong><p>{lastTrigger ? `最后触发：${lastTrigger.key || "语音切换"} · ${lastTrigger.source}` : "语音键由 EasyInput 原生来源识别；普通键盘快捷键默认关闭"}</p><small>Codex 五灯状态：{!codexLed.supported ? "当前固件不支持" : codexLed.status === "acknowledged" ? `${codexLed.targetState} · 已写入` : codexLed.status === "failed" ? `失败 · ${codexLed.reason || "unknown"}` : "等待真实任务状态"}</small></div><StatusBadge tone={bridge.boardConnected ? "success" : "demo"}>{bridge.boardConnected ? "已连接" : bridge.process === "running" ? "监听中" : "桥未运行"}</StatusBadge></Card>
+        <Card className="link-diagnostics-card"><div className="connection-icon"><Robot size={28} /></div><div><strong>小智云台 / DeskMate Link</strong><p>状态来自 EasyInput 的冻结 Link 状态报告；EasyInput HID 已连接不等于小智已连接。</p></div><StatusBadge tone={sharedStatus.xiaozhi.tone}>{linkStateLabel}</StatusBadge><div className="link-diagnostics-grid">{[["接收帧", link.counters.rxFrames], ["发送帧", link.counters.txFrames], ["请求超时", link.counters.requestTimeouts], ["重试", link.counters.retries], ["对端重启", link.counters.peerRestarts], ["Agent accepted", link.counters.agentAccepted], ["Agent forwarded", link.counters.agentForwarded], ["断线丢弃", link.counters.agentDroppedDisconnected], ["队列丢弃", link.counters.agentQueueDrops]].map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div><div className="agent-delivery-line"><span>最近 Agent State</span><strong>{!xiaozhiHardware.enabled ? "小智硬件扩展已关闭" : agentDelivery.status === "acknowledged" ? "EasyInput 写入 ACK 成功" : agentDelivery.status === "failed" ? `失败 · ${agentDelivery.reason || "unknown"}` : agentDelivery.status === "sending" ? "请求中" : "尚未发送"}</strong><small>{!xiaozhiHardware.enabled ? "不会向小智发送或重放状态" : <>{agentDelivery.targetState}{agentDelivery.at ? ` · ${new Date(agentDelivery.at).toLocaleTimeString()}` : ""}</>}</small></div></Card>
         <Card interactive><div className="connection-icon"><Microphone2 size={28} /></div><div><strong>EasyInput 板载麦克风</strong><p>通过冻结的局域网 PCM 合同接收；原始音频只停留在 Electron 主进程内存</p></div><StatusBadge tone={sharedStatus.microphone.tone}>{audioStateLabel}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Brain size={28} /></div><div><strong>千问语音识别</strong><p>停止录音后调用 qwen3-asr-flash</p></div><StatusBadge tone={qwenReady ? "success" : "demo"}>{qwenReady ? "已启用" : "待配置"}</StatusBadge></Card>
         <Card interactive><div className="connection-icon"><Copy size={28} /></div><div><strong>文字输出</strong><p>先保存历史，再写入原窗口；失败时自动回退剪贴板</p></div><StatusBadge tone={outputReady ? "success" : "demo"}>{outputReady ? "就绪" : "Web 仅历史"}</StatusBadge></Card>
-      </div><ManualCalibrationPanel notify={notify} /><Card className="transport-readiness"><SectionTitle index="03" title="浏览器通信能力" description="这里只表示当前浏览器支持哪些接口，不代表硬件已经连接。" /><div className="chips">{transportCaps ? Object.entries(transportCaps).map(([name, supported]) => <span className={`chip chip--status ${supported ? "is-supported" : ""}`} key={name}>{name} · {supported ? "可用" : "不可用"}</span>) : <span>正在检测…</span>}</div></Card></>}
+      </div>{xiaozhiHardware.enabled ? <ManualCalibrationPanel notify={notify} /> : <Notice tone="info" title="当前为仅 EasyInput 模式">小智手动控制、表情和动作入口已停用；这不会关闭电脑上的 AI 陪伴和语音功能。</Notice>}<Card className="transport-readiness"><SectionTitle index="03" title="浏览器通信能力" description="这里只表示当前浏览器支持哪些接口，不代表硬件已经连接。" /><div className="chips">{transportCaps ? Object.entries(transportCaps).map(([name, supported]) => <span className={`chip chip--status ${supported ? "is-supported" : ""}`} key={name}>{name} · {supported ? "可用" : "不可用"}</span>) : <span>正在检测…</span>}</div></Card></>}
       {tab === "microphone" && <Card><SectionTitle index="01" title="EasyInput 板载麦克风" description="已接入的可选外部麦克风；诊断不会启动陪伴对话，也不会保存录音。" /><Notice tone={audioReady ? "success" : "warning"} title={audioStateLabel}>{audioStatus.micTest ? `实时音量 ${audioStatus.level || 0}% · 丢包 ${audioStatus.counters?.sequenceGaps || 0}` : audioStatus.setup?.configured ? "已配置局域网接收。测试时只把音量等级发送到页面，PCM 不离开主进程。" : "请先在 Wi-Fi 与蓝牙页完成 EasyInput 音频设置。"}</Notice><div className="audio-level" aria-label={`板载麦克风音量 ${audioStatus.level || 0}%`}><span style={{ width: `${Math.max(0, Math.min(100, audioStatus.level || 0))}%` }} /></div><div className="button-row"><Button icon={Microphone2} variant="primary" disabled={!audioStatus.setup?.configured} onClick={toggleMicTest}>{audioStatus.micTest ? "停止麦克风测试" : "测试板载麦克风"}</Button><span className="muted-copy">自动测试最长 30 秒，可提前停止。</span></div></Card>}
       {tab === "network" && <div className="two-column"><Card><SectionTitle index="01" title="网络与音频接收" description="只绑定你明确选择的非回环 IPv4 网卡，不扫描局域网。" /><Notice tone="info" title={networkSummary?.available ? "电脑网络可用" : "等待网络"}>{networkSummary?.available ? `检测到网络类别：${networkSummary.transports.join(" / ") || "unknown"}。` : "未检测到可用网络接口。"}</Notice><Notice tone={audioStatus.setup?.configured ? "success" : "warning"} title={audioStatus.setup?.configured ? "EasyInput 音频已配置" : "EasyInput 音频尚未配置"}>{audioStatus.setup?.configured ? `${audioStatus.setup.adapterLabel || "所选网卡"} · 端口 ${audioStatus.setup.port} · ${audioStateLabel}` : "在隔离设置窗口中填写网络信息；主页面不会接触 Wi-Fi 密码或真实 IP。"}</Notice><Button icon={Send} variant="primary" onClick={async () => { const result = await voiceAdapters.desktop.openEasyInputAudioSetup(); if (!result?.ok) notify(`无法打开音频设置：${result?.reason || "unknown-error"}`); }}>打开 EasyInput 音频设置</Button></Card><Card><SectionTitle index="02" title="蓝牙功能" /><SettingRow icon={Bluetooth} title="蓝牙 HID 输入" description="用于按键和旋钮，不用于传输麦克风音频"><Toggle checked onChange={() => notify("蓝牙状态为模拟能力")}/></SettingRow><Notice tone="info" title="隐私边界">页面只接收状态、音量等级和计数；不接收 PCM、密码、IP、SSID 或设备路径。</Notice></Card></div>}
       {tab === "sound" && <Card><SectionTitle index="03" title="开机提示音" description="选择内置音效或导入最长 8 秒的音频。" /><div className="sound-grid">{["WaytoAGI", "来 WaytoAGI 学 AI 硬件", "又来写 bug 了", "晶亮启动", "柔和启动", "极简启动"].map((name, index) => <button key={name} className={index === 0 ? "is-selected" : ""} onClick={() => notify(`已试听“${name}”`)}><Music size={22} /><strong>{name}</strong><small>{["1.7", "2.8", "2.1", "0.6", "0.8", "0.3"][index]} 秒</small></button>)}</div><SettingRow title="开机音效" description="完整开机时播放已选音效"><Toggle checked={startupSound} onChange={setStartupSound} /></SettingRow></Card>}
@@ -1731,6 +1743,7 @@ export function ExpressionEditorPage({ notify }) {
 
 export function MotionPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
+  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
   const { preset, repeatCount } = state.motion;
   const presetLabel = ({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[preset] || "动作";
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
@@ -1748,6 +1761,7 @@ export function MotionPage({ notify, embedded = false }) {
   }, []);
   const selectPreset = (nextPreset) => updateMotion({ preset: nextPreset, repeatCount: ["nod", "dance"].includes(nextPreset) ? 2 : 1 });
   const motionFailureCopy = (reason) => ({
+    "xiaozhi-hardware-disabled": "小智硬件扩展已关闭。",
     "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
     "motion-preset-interface-unavailable": "没有找到动作 HID 接口，请重新检测动作链。",
     "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经连接。",
@@ -1849,18 +1863,21 @@ export function MotionPage({ notify, embedded = false }) {
   const endpoint = motionStatus?.endpoint || {};
   const endpointState = String(endpoint.state || "unavailable").toLowerCase();
   const emergencyStopped = endpoint.emergencyStopped === true || endpoint.emergencyStopLatched === true;
-  const motionAvailable = motionStatus?.ok === true || motionStatus?.available === true;
+  const motionAvailable = xiaozhiHardwareEnabled && (motionStatus?.ok === true || motionStatus?.available === true);
   const unavailableMessage = ({
+    "xiaozhi-hardware-disabled": "小智硬件扩展已关闭；保存的动作配置仍会保留。",
     "easyinput-not-connected": "没有检测到 EasyInput，请确认设备已经重新上电并连接。",
     "motion-preset-interface-unavailable": "已检测到 EasyInput，但没有找到实体动作接口。请重新检测；若仍失败，需要核对当前固件。",
     "motion-hid-write-failed": "动作 HID 写入失败，请重新检测动作链。",
     "input-bridge-unavailable": "Windows 输入桥尚未就绪，请重新检测动作链。",
     "motion-status-unavailable": "软件暂时没有读到实体动作状态，请点击“重新检测动作链”。",
   })[motionStatus?.reason] || "实体动作状态暂时不可用，请重新检测动作链。";
-  const statusLabel = emergencyStopped ? "急停已锁存" : runningPreset || endpointState === "running" ? "实体动作运行中" : motionStatus?.endpointReportedComplete ? "端点已完成 · 待人眼确认" : motionAvailable ? "真实动作链已响应" : "真实动作链未就绪";
-  const statusTone = motionStatus?.endpointReportedComplete ? "success" : motionAvailable ? "info" : "warning";
-  const statusTitle = motionStatus?.endpointReportedComplete ? "端点报告本次动作已完成" : motionAvailable ? "真实动作控制待人工观察" : "真实动作链尚未就绪";
-  const statusDescription = motionStatus?.endpointReportedComplete
+  const statusLabel = !xiaozhiHardwareEnabled ? "小智硬件已关闭" : emergencyStopped ? "急停已锁存" : runningPreset || endpointState === "running" ? "实体动作运行中" : motionStatus?.endpointReportedComplete ? "端点已完成 · 待人眼确认" : motionAvailable ? "真实动作链已响应" : "真实动作链未就绪";
+  const statusTone = !xiaozhiHardwareEnabled ? "info" : motionStatus?.endpointReportedComplete ? "success" : motionAvailable ? "info" : "warning";
+  const statusTitle = !xiaozhiHardwareEnabled ? "仅 EasyInput 模式" : motionStatus?.endpointReportedComplete ? "端点报告本次动作已完成" : motionAvailable ? "真实动作控制待人工观察" : "真实动作链尚未就绪";
+  const statusDescription = !xiaozhiHardwareEnabled
+    ? "实体屏幕、表情和动作出口已关闭；AI 陪伴与语音功能不受影响。"
+    : motionStatus?.endpointReportedComplete
     ? "协议已确认循环结束并接受回中；实体结果仍以现场观察为准。"
     : motionAvailable
       ? "一次只执行一个动作，忙碌时不排队或补发。"
@@ -1870,8 +1887,9 @@ export function MotionPage({ notify, embedded = false }) {
   const displayedRepeat = activeCustomDance ? activeDance.repeat : repeatCount;
   return (
     <div className={embedded ? "companion-embedded" : "page"}>
-      {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
-      {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>选择动作和次数，再点击一次“开始执行”。正常结束后会自动回中。</p></div><span className="motion-heading-actions"><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} onClick={() => { void refreshStatus(); }}>重新检测动作链</Button></span></div>}
+      {!embedded && <PageIntro title="实体动作" description="通过 EasyInput 转发小智本地预设；软件不发送角度、PWM 或 GPIO。" actions={<><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} disabled={!xiaozhiHardwareEnabled} onClick={() => { void refreshStatus(); }}>刷新状态</Button></>} />}
+      {embedded && <div className="embedded-heading"><div><span>REAL MOTION PRESETS</span><h2>实体动作</h2><p>选择动作和次数，再点击一次“开始执行”。正常结束后会自动回中。</p></div><span className="motion-heading-actions"><StatusBadge tone={emergencyStopped ? "warning" : motionAvailable ? "success" : "demo"}>{statusLabel}</StatusBadge><Button icon={Refresh} disabled={!xiaozhiHardwareEnabled} onClick={() => { void refreshStatus(); }}>重新检测动作链</Button></span></div>}
+      {!xiaozhiHardwareEnabled && <Notice tone="info" title="当前为仅 EasyInput 模式">实体表情、舵机、跳舞、配乐和自动情境动作均已停用；保存过的动作配置没有被删除。</Notice>}
       <div id="motion-chain-status" className={`motion-status-strip motion-status-strip--${statusTone}`} role="status">
         <MotionStatusIcon size={17} stroke={1.8} />
         <strong>{statusTitle}</strong>
@@ -1889,22 +1907,22 @@ export function MotionPage({ notify, embedded = false }) {
           <p className="motion-default-summary"><strong>默认</strong>关注、寻找 1 次；点头、内置舞蹈 2 次。{activeDance.name ? ` 当前“跳舞”使用自定义动作：${activeDance.name}。` : " 当前“跳舞”使用内置默认舞蹈。"}</p>
           <div className="motion-action-bar">
             <Button icon={PlayerPlay} variant="primary" className="motion-run-button" aria-describedby="motion-chain-status" disabled={!motionAvailable || Boolean(runningPreset) || Boolean(safetyAction) || emergencyStopped} onClick={() => { void runPreset(preset); }}>{runningPreset ? `执行中 · ${presetLabel} × ${displayedRepeat}` : `开始 · ${presetLabel} × ${displayedRepeat}`}</Button>
-            <Button icon={PlayerPause} disabled={safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
-            <Button icon={AlertCircle} variant="danger" disabled={safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
+            <Button icon={PlayerPause} disabled={!xiaozhiHardwareEnabled || safetyAction === "stop"} onClick={() => { void runSafetyAction("stop"); }}>停止并回中</Button>
+            <Button icon={AlertCircle} variant="danger" disabled={!xiaozhiHardwareEnabled || safetyAction === "estop"} onClick={() => { void runSafetyAction("estop"); }}>立即急停</Button>
             {emergencyStopped && <Button icon={Refresh} disabled={Boolean(safetyAction)} onClick={() => { void runSafetyAction("clear"); }}>解除急停并回中</Button>}
           </div>
           <div className="motion-music-panel">
             <span className="motion-music-panel__copy"><Music size={20} /><span><strong>动作音效与跳舞配乐</strong><small>{danceMusic.configured ? `跳舞使用本地音乐：${danceMusic.label}${danceMusic.state === "playing" ? " · 正在播放" : ""}；其他动作使用内置轻音效。` : "无需准备歌曲：关注、点头、寻找有内置轻音效，跳舞使用内置电子节拍。"}</small></span></span>
-            <div className="motion-music-panel__actions"><Button icon={FolderOpen} variant="ghost" onClick={() => { void chooseDanceMusic(); }}>{danceMusic.configured ? "更换歌曲" : "选择歌曲"}</Button>{danceMusic.configured && <><Button icon={danceMusic.state === "playing" ? PlayerPause : PlayerPlay} variant="ghost" onClick={() => { void (danceMusic.state === "playing" ? voiceAdapters.desktop.stopDanceMusic() : previewDanceMusic()); }}>{danceMusic.state === "playing" ? "停止试听" : "试听"}</Button><Toggle label="跳舞同步播放音乐" checked={danceMusic.enabled} onChange={(enabled) => { void toggleDanceMusic(enabled); }} /></>}</div>
+            <div className="motion-music-panel__actions"><Button icon={FolderOpen} variant="ghost" disabled={!xiaozhiHardwareEnabled} onClick={() => { void chooseDanceMusic(); }}>{danceMusic.configured ? "更换歌曲" : "选择歌曲"}</Button>{danceMusic.configured && <><Button icon={danceMusic.state === "playing" ? PlayerPause : PlayerPlay} variant="ghost" disabled={!xiaozhiHardwareEnabled} onClick={() => { void (danceMusic.state === "playing" ? voiceAdapters.desktop.stopDanceMusic() : previewDanceMusic()); }}>{danceMusic.state === "playing" ? "停止试听" : "试听"}</Button><Toggle label="跳舞同步播放音乐" disabled={!xiaozhiHardwareEnabled} checked={xiaozhiHardwareEnabled && danceMusic.enabled} onChange={(enabled) => { void toggleDanceMusic(enabled); }} /></>}</div>
           </div>
           <div className="motion-automation-panel">
-            <div className="motion-automation-row"><span><strong>自动情境动作</strong><small>开始陪伴时关注；思考超过 {motionAutomation.thinkingDelaySeconds || 4} 秒时寻找；回答结束轻点头；Codex 等待确认或遇到问题时寻找，完成后点头。</small></span><Toggle label="自动情境动作总开关" checked={motionAutomation.policy.enabled} onChange={(enabled) => { void updateMotionAutomation({ enabled }); }} /></div>
-            <div className="motion-automation-row"><span><strong>空闲轻微环视</strong><small>连续空闲 {motionAutomation.idleDelaySeconds || 90} 秒后执行一次寻找；聆听、说话、手动或其他动作期间跳过且不补发。</small></span><Toggle label="空闲环视" disabled={!motionAutomation.policy.enabled} checked={motionAutomation.policy.enabled && motionAutomation.policy.idleEnabled} onChange={(idleEnabled) => { void updateMotionAutomation({ idleEnabled }); }} /></div>
+            <div className="motion-automation-row"><span><strong>自动情境动作</strong><small>开始陪伴时关注；思考超过 {motionAutomation.thinkingDelaySeconds || 4} 秒时寻找；回答结束轻点头；Codex 等待确认或遇到问题时寻找，完成后点头。</small></span><Toggle label="自动情境动作总开关" disabled={!xiaozhiHardwareEnabled} checked={xiaozhiHardwareEnabled && motionAutomation.policy.enabled} onChange={(enabled) => { void updateMotionAutomation({ enabled }); }} /></div>
+            <div className="motion-automation-row"><span><strong>空闲轻微环视</strong><small>连续空闲 {motionAutomation.idleDelaySeconds || 90} 秒后执行一次寻找；聆听、说话、手动或其他动作期间跳过且不补发。</small></span><Toggle label="空闲环视" disabled={!xiaozhiHardwareEnabled || !motionAutomation.policy.enabled} checked={xiaozhiHardwareEnabled && motionAutomation.policy.enabled && motionAutomation.policy.idleEnabled} onChange={(idleEnabled) => { void updateMotionAutomation({ idleEnabled }); }} /></div>
             <p>“跳舞”始终只由按钮、明确语音或已激活的自定义舞蹈触发。当前状态：{({ disabled: "已关闭", ready: "等待触发", "waiting-thinking": "等待持续思考", "waiting-confirmation": "等待确认回答结束", running: "正在执行", completed: "最近一次已完成", skipped: "最近一次已跳过", failed: "最近一次失败" })[motionAutomation.last?.state] || "等待状态"}{motionAutomation.last?.reason ? ` · ${motionAutomation.last.reason}` : ""}</p>
           </div>
         </Card>
       </div>
-      <ChoreographyEditor currentExpression={state.currentExpression} notify={notify} onDanceLibraryChange={syncDanceLibrary} />
+      <ChoreographyEditor currentExpression={state.currentExpression} notify={notify} onDanceLibraryChange={syncDanceLibrary} hardwareEnabled={xiaozhiHardwareEnabled} />
       <Card><SectionTitle index="03" title="本次协议状态" description="这里不显示原始设备路径、PWM、GPIO 或舵机脉宽。" /><div className="diagnostic-list"><div><span><Check size={18} /></span><strong>端点状态</strong><StatusBadge tone={motionStatus?.ok ? "success" : "demo"}>{endpointState}</StatusBadge></div><div><span><Check size={18} /></span><strong>循环进度</strong><StatusBadge tone="neutral">{Number(endpoint.completedRepeat) || 0} / {Number(endpoint.requestedRepeat) || 0}</StatusBadge></div><div><span><Check size={18} /></span><strong>逻辑回中命令</strong><StatusBadge tone={endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "success" : "neutral"}>{endpoint.logicalCenter === true || endpoint.logicalCenterAccepted === true ? "已接受" : "未确认"}</StatusBadge></div></div></Card>
     </div>
   );

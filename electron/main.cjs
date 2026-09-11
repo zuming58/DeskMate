@@ -47,7 +47,7 @@ const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWi
 const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capture.cjs");
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
 const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
-const { AgentStatePublisher } = require("./agent-state-hid.cjs");
+const { AgentStatePublisher, CodexLedStatePublisher, MANUAL_AGENT_SOURCE_HASH, createTransitionSequence, encodeAgentStateFeatureReport } = require("./agent-state-hid.cjs");
 const { LinkRecoveryGate } = require("./link-recovery.cjs");
 const { CodexHookStateServer } = require("./codex-hook-state.cjs");
 const { CodexTaskBriefServer, CodexTaskBriefStore } = require("./codex-task-brief.cjs");
@@ -61,6 +61,7 @@ const { MotionPresetService } = require("./motion-preset-service.cjs");
 const { ChoreographyStore } = require("./choreography-store.cjs");
 const { ChoreographyService } = require("./choreography-service.cjs");
 const { MotionAutomationCoordinator, MotionAutomationPolicyStore } = require("./motion-automation.cjs");
+const { XiaozhiHardwareCoordinator, XiaozhiHardwarePolicyStore } = require("./xiaozhi-hardware-policy.cjs");
 const { LocalDanceMusicStore } = require("./local-dance-music.cjs");
 const { normalizeHotwords, normalizeRules, normalizeTranscript } = require("./transcript-normalizer.cjs");
 
@@ -69,7 +70,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t22f-prompt-order-scene-actions";
+const DESKMATE_BUILD_ID = "t24-optional-xiaozhi-codex-led";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -150,6 +151,8 @@ let choreographyStore;
 let choreographyService;
 let motionAutomationPolicyStore;
 let motionAutomationCoordinator;
+let xiaozhiHardwarePolicyStore;
+let xiaozhiHardwareCoordinator;
 let localDanceMusicStore;
 let activeDanceMusicRequestId = "";
 let danceMusicSequence = 0;
@@ -158,6 +161,8 @@ let codexHookIntegrationStatus = { ok: false, installed: false, version: 1, reas
 let codexTaskBriefReceiver = "starting";
 let hermesHookStatus = { receiver: "starting", connected: false, state: "idle", event: "", toolName: "", outcome: "", updatedAt: "", delivery: "not-received" };
 let agentStateDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
+let codexLedDelivery = { status: "never", targetState: "idle", at: "", reason: "" };
+let codexLedCapabilityKnown = false;
 let linkStatusPollTimer = null;
 let linkStatusRefreshInFlight = false;
 const linkRecoveryGate = new LinkRecoveryGate();
@@ -168,15 +173,19 @@ const AGENT_STATE_NAMES = ["idle", "listening", "thinking", "working", "waiting"
 const agentStatePublisher = new AgentStatePublisher({
   send: (report) => sendAgentStateReport(report),
 });
+const codexLedStatePublisher = new CodexLedStatePublisher({
+  send: (report) => sendCodexLedStateReport(report),
+});
+const nextShutdownAgentTransition = createTransitionSequence();
 
-function safeAgentStateReason(value) {
-  const reason = typeof value === "string" ? value : "agent-state-send-failed";
-  return /^[a-z0-9-]{1,80}$/.test(reason) ? reason : "agent-state-send-failed";
+function safeAgentStateReason(value, fallback = "agent-state-send-failed") {
+  const reason = typeof value === "string" ? value : fallback;
+  return /^[a-z0-9-]{1,80}$/.test(reason) ? reason : fallback;
 }
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
   const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
-  return { ...bridge, agentStateDelivery: { ...agentStateDelivery }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" }, choreography: choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" } };
+  return { ...bridge, xiaozhiHardware: xiaozhiHardwareCoordinator?.snapshot?.(bridge.linkDiagnostics?.state || "unavailable") || { policy: { version: 1, enabled: true }, enabled: true, state: bridge.linkDiagnostics?.state === "connected" ? "connected" : "enabled-disconnected", transitioning: false, lastShutdown: { state: "not-run", attempted: false, confirmed: false, reason: "", at: "" } }, agentStateDelivery: { ...agentStateDelivery }, codexLedDelivery: { ...codexLedDelivery, supported: bridge.configCapabilities?.codex_led_status_v1 === true }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" }, choreography: choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" } };
 }
 
 function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
@@ -185,6 +194,11 @@ function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
 
 async function sendAgentStateReport(report) {
   const targetState = AGENT_STATE_NAMES[Number(report?.[2])] || "idle";
+  if (!xiaozhiHardwareEnabled()) {
+    agentStateDelivery = { status: "disabled", targetState, at: new Date().toISOString(), reason: "xiaozhi-hardware-disabled" };
+    emitInputBridgeStatus();
+    return { ok: false, skipped: true, reason: "xiaozhi-hardware-disabled" };
+  }
   agentStateDelivery = { status: "sending", targetState, at: new Date().toISOString(), reason: "" };
   emitInputBridgeStatus();
   const bridge = inputBridge?.snapshot();
@@ -201,6 +215,68 @@ async function sendAgentStateReport(report) {
   };
   emitInputBridgeStatus();
   return result;
+}
+
+function xiaozhiHardwareEnabled() {
+  return xiaozhiHardwareCoordinator?.enabled?.() !== false;
+}
+
+function xiaozhiHardwareDisabledResult(extra = {}) {
+  return Object.freeze({ ok: false, skipped: true, reason: "xiaozhi-hardware-disabled", ...extra });
+}
+
+async function sendCodexLedStateReport(report) {
+  const targetState = AGENT_STATE_NAMES[Number(report?.[2])] || "idle";
+  codexLedDelivery = { status: "sending", targetState, at: new Date().toISOString(), reason: "" };
+  emitInputBridgeStatus();
+  const bridge = inputBridge?.snapshot();
+  let result;
+  if (!bridge?.boardConnected) result = { ok: false, reason: "easyinput-not-connected" };
+  else if (bridge.configCapabilities?.codex_led_status_v1 !== true) result = { ok: false, reason: "codex-led-unsupported" };
+  else result = await inputBridge.sendAgentState(report);
+  codexLedDelivery = { status: result?.ok ? "acknowledged" : result?.reason === "codex-led-unsupported" ? "unsupported" : "failed", targetState, at: new Date().toISOString(), reason: result?.ok ? "" : safeAgentStateReason(result?.reason, "codex-led-send-failed") };
+  emitInputBridgeStatus();
+  return result;
+}
+
+async function sendXiaozhiShutdownIdle() {
+  const bridge = inputBridge?.snapshot();
+  if (!bridge?.boardConnected) return { ok: false, reason: "easyinput-not-connected" };
+  if (bridge.linkDiagnostics?.state !== "connected") return { ok: false, reason: `deskmatelink-${bridge.linkDiagnostics?.state || "unavailable"}` };
+  const report = encodeAgentStateFeatureReport({ state: "idle", transitionId: nextShutdownAgentTransition(), ttlMs: 0, sourceHash: MANUAL_AGENT_SOURCE_HASH });
+  return inputBridge.sendAgentState(report);
+}
+
+async function shutdownXiaozhiHardware() {
+  motionAutomationCoordinator?.setHardwareEnabled?.(false);
+  stopDanceMusic("xiaozhi-hardware-disabled");
+  const manualActive = manualControlCoordinator?.snapshot?.().active === true;
+  const motionBusy = motionPresetService?.snapshot?.().busy === true;
+  const choreographyBusy = choreographyService?.snapshot?.().busy === true || choreographyService?.snapshot?.().state === "running";
+  const displayActive = agentStateDelivery.status === "acknowledged" && agentStateDelivery.targetState !== "idle";
+  choreographyService?.close?.("xiaozhi-hardware-disabled");
+
+  if (manualActive) {
+    const requested = manualControlCoordinator.emergencyStop();
+    return { attempted: true, confirmed: false, reason: requested?.ok ? "manual-emergency-stop-requested" : requested?.reason || "manual-emergency-stop-unconfirmed" };
+  }
+
+  if (motionBusy || choreographyBusy) {
+    const stopped = await motionPresetService.stopAndCenter("UI");
+    if (!stopped?.ok || stopped.endpointReportedComplete !== true) return { attempted: true, confirmed: false, reason: stopped?.reason || "motion-stop-unconfirmed" };
+  } else {
+    motionPresetService?.close?.("xiaozhi-hardware-disabled");
+  }
+
+  if (!motionBusy && !choreographyBusy && !displayActive) {
+    return { attempted: false, confirmed: true, reason: "not-active" };
+  }
+
+  const neutral = await sendXiaozhiShutdownIdle();
+  if (!neutral?.ok) {
+    return { attempted: true, confirmed: false, reason: neutral?.reason || "agent-idle-unconfirmed" };
+  }
+  return { attempted: true, confirmed: true, reason: "" };
 }
 
 async function refreshLinkDiagnostics() {
@@ -536,6 +612,7 @@ function stopDanceMusic(reason = "dance-finished") {
 }
 
 async function runMotionPreset(value = {}) {
+  if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult({ endpointReportedComplete: false });
   const preset = String(value.preset || "");
   const source = String(value.source || "");
   const music = startDanceMusic({ preset });
@@ -551,6 +628,7 @@ async function runMotionPreset(value = {}) {
 }
 
 async function runCustomChoreography(value = {}) {
+  if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult();
   const music = startDanceMusic({ preset: "dance" });
   try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
   finally { if (music.ok) stopDanceMusic("dance-finished"); }
@@ -613,8 +691,12 @@ function emitAgentProviderStatus(provider) {
 async function handleAutomaticAgentHookState(provider, value) {
   motionAutomationCoordinator?.touchActivity();
   const updatedAt = new Date().toISOString();
-  let delivery = activeAgentProvider === provider ? "pending" : "not-selected";
-  if (activeAgentProvider === provider) {
+  if (provider === "codex") void codexLedStatePublisher.publish({ source: sourceVersionForProvider(provider), state: value.state });
+  // Codex lifecycle belongs to EasyInput's five local LEDs. It must never
+  // reuse the Xiaozhi face stream, even if an older preference still names
+  // Codex as the active Agent provider.
+  let delivery = provider === "codex" ? "easyinput-led-only" : activeAgentProvider === provider ? "pending" : "not-selected";
+  if (provider !== "codex" && activeAgentProvider === provider) {
     if (companionIsActive()) delivery = "companion-conversation-active";
     else if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) delivery = "voice-workflow-active";
     else {
@@ -951,7 +1033,10 @@ function startInputBridge() {
     choreographyService?.handleBridgeStatus(value);
     emitInputBridgeStatus(value);
     const linkAction = linkRecoveryGate.observe(value);
-    if (linkAction.recover) void agentStatePublisher.recoverCurrentState();
+    if (linkAction.recover && xiaozhiHardwareEnabled()) void agentStatePublisher.recoverCurrentState();
+    const codexLedSupported = value?.configCapabilities?.codex_led_status_v1 === true;
+    if (codexLedSupported && !codexLedCapabilityKnown) void codexLedStatePublisher.recoverCurrentState();
+    codexLedCapabilityKnown = codexLedSupported;
     const boardConnected = value?.boardConnected === true;
     const newlyConnected = boardConnected && !easyInputAudioBoardConnected;
     easyInputAudioBoardConnected = boardConnected;
@@ -1182,6 +1267,9 @@ app.whenReady().then(async () => {
   localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
   motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });
+  xiaozhiHardwarePolicyStore = new XiaozhiHardwarePolicyStore({ userDataPath: app.getPath("userData") });
+  xiaozhiHardwareCoordinator = new XiaozhiHardwareCoordinator({ store: xiaozhiHardwarePolicyStore, shutdown: shutdownXiaozhiHardware });
+  xiaozhiHardwareCoordinator.on("status", () => emitInputBridgeStatus());
   const manualCalibrationRequestIds = new ManualCalibrationRequestIdStore({ userDataPath: app.getPath("userData") });
   manualCalibrationController = new ManualCalibrationController({
     send: (report, options) => inputBridge?.sendManualCalibration?.(report, options) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
@@ -1223,6 +1311,7 @@ app.whenReady().then(async () => {
       };
     },
   });
+  motionAutomationCoordinator.setHardwareEnabled(xiaozhiHardwareEnabled());
   motionAutomationCoordinator.on("status", (value) => sendToMain("motion-automation-status", value));
   companionMemoryPipeline = new CompanionMemoryPipeline({ store: companionMemoryStore, loadSecret: () => loadTextModelSecret() });
   companionMemoryGenerationCoordinator = new CompanionMemoryGenerationCoordinator({ pipeline: companionMemoryPipeline, store: companionMemoryStore, knowledgeBaseSettings });
@@ -1388,25 +1477,32 @@ app.whenReady().then(async () => {
   });
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(permission === "media" && isAllowedAppUrl(webContents.getURL())));
   handleTrusted("desktop:get-capabilities", () => { const bridge = inputBridgeSnapshot(); return { supported: true, platform: process.platform, shortcut, globalShortcutsEnabled: globalKeyboardShortcutsEnabled, shortcutRegistered: globalShortcut.isRegistered(shortcut), editShortcut: DEFAULT_EDIT_SHORTCUT, editShortcutRegistered: globalShortcut.isRegistered(DEFAULT_EDIT_SHORTCUT), shortcutCaptureActive, keyboardConfigSync: { available: Boolean(bridge.configCapabilities), transport: "vendor-hid-0x10", read: "vendor-hid-0x13", config_read_v1: Boolean(bridge.configCapabilities?.config_read_v1), config_write_v1: Boolean(bridge.configCapabilities?.config_write_v1), host_action_v1: Boolean(bridge.configCapabilities?.host_action_v1), fixed_text_v1: Boolean(bridge.configCapabilities?.fixed_text_v1) }, inputBridge: bridge }; });
+  handleTrusted("desktop:get-xiaozhi-hardware-policy", () => ({ ok: true, ...xiaozhiHardwareCoordinator.snapshot(inputBridge?.snapshot?.().linkDiagnostics?.state || "unavailable") }));
+  handleTrusted("desktop:set-xiaozhi-hardware-policy", async (value = {}) => {
+    const result = await xiaozhiHardwareCoordinator.setEnabled(value.enabled, inputBridge?.snapshot?.().linkDiagnostics?.state || "unavailable");
+    motionAutomationCoordinator?.setHardwareEnabled?.(xiaozhiHardwareEnabled());
+    emitInputBridgeStatus();
+    return result;
+  });
   handleTrusted("desktop:refresh-link-diagnostics", () => refreshLinkDiagnostics());
   handleTrusted("desktop:get-manual-calibration-status", () => manualCalibrationController.snapshot());
-  handleTrusted("desktop:query-manual-calibration", () => manualCalibrationController.queryStatus());
-  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => motionPresetService?.snapshot?.().busy || choreographyService?.snapshot?.().busy ? { ok: false, reason: "motion-preset-active" } : manualCalibrationController.command(value));
+  handleTrusted("desktop:query-manual-calibration", () => xiaozhiHardwareEnabled() ? manualCalibrationController.queryStatus() : xiaozhiHardwareDisabledResult());
+  handleTrusted("desktop:send-manual-calibration-command", (value = {}) => !xiaozhiHardwareEnabled() ? xiaozhiHardwareDisabledResult() : motionPresetService?.snapshot?.().busy || choreographyService?.snapshot?.().busy ? { ok: false, reason: "motion-preset-active" } : manualCalibrationController.command(value));
   handleTrusted("desktop:get-manual-control-status", () => manualControlCoordinator.snapshot());
-  handleTrusted("desktop:start-manual-control", (value = {}) => { motionPresetService?.close("motion-operation-cancelled"); choreographyService?.close(); return manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }); });
-  handleTrusted("desktop:manual-control-establish-center", () => manualControlCoordinator.establishCenter());
-  handleTrusted("desktop:manual-control-press", (direction) => manualControlCoordinator.press(String(direction || "")));
-  handleTrusted("desktop:manual-control-release", (direction) => manualControlCoordinator.release(String(direction || "")));
-  handleTrusted("desktop:manual-control-recenter", () => manualControlCoordinator.recenter());
-  handleTrusted("desktop:manual-control-emergency-stop", () => manualControlCoordinator.emergencyStop());
+  handleTrusted("desktop:start-manual-control", (value = {}) => { if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult(); motionPresetService?.close("motion-operation-cancelled"); choreographyService?.close(); return manualControlCoordinator.begin({ environmentConfirmed: value.environmentConfirmed === true, recoverEmergencyStop: value.recoverEmergencyStop === true }); });
+  handleTrusted("desktop:manual-control-establish-center", () => xiaozhiHardwareEnabled() ? manualControlCoordinator.establishCenter() : xiaozhiHardwareDisabledResult());
+  handleTrusted("desktop:manual-control-press", (direction) => xiaozhiHardwareEnabled() ? manualControlCoordinator.press(String(direction || "")) : xiaozhiHardwareDisabledResult());
+  handleTrusted("desktop:manual-control-release", (direction) => xiaozhiHardwareEnabled() ? manualControlCoordinator.release(String(direction || "")) : xiaozhiHardwareDisabledResult());
+  handleTrusted("desktop:manual-control-recenter", () => xiaozhiHardwareEnabled() ? manualControlCoordinator.recenter() : xiaozhiHardwareDisabledResult());
+  handleTrusted("desktop:manual-control-emergency-stop", () => xiaozhiHardwareEnabled() ? manualControlCoordinator.emergencyStop() : xiaozhiHardwareDisabledResult());
   handleTrusted("desktop:end-manual-control", (reason) => manualControlCoordinator.end(["document-hidden", "page-leave"].includes(reason) ? reason : "page-leave"));
-  handleTrusted("desktop:get-motion-status", () => motionPresetService.getStatus());
+  handleTrusted("desktop:get-motion-status", () => xiaozhiHardwareEnabled() ? motionPresetService.getStatus() : xiaozhiHardwareDisabledResult({ endpointReportedComplete: false }));
   handleTrusted("desktop:run-motion-preset", (value = {}) => runMotionPreset(value));
-  handleTrusted("desktop:stop-motion-and-center", (source) => { stopDanceMusic("motion-stopped"); choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
-  handleTrusted("desktop:emergency-stop-motion", (source) => { stopDanceMusic("emergency-stop"); choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });
-  handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => { choreographyService.close(); return motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")); });
+  handleTrusted("desktop:stop-motion-and-center", (source) => { if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult({ endpointReportedComplete: false }); stopDanceMusic("motion-stopped"); choreographyService.close(); return motionPresetService.stopAndCenter(String(source || "UI")); });
+  handleTrusted("desktop:emergency-stop-motion", (source) => { if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult({ endpointReportedComplete: false }); stopDanceMusic("emergency-stop"); choreographyService.close(); return motionPresetService.emergencyStop(String(source || "UI")); });
+  handleTrusted("desktop:clear-motion-emergency-stop-and-center", (source) => { if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult({ endpointReportedComplete: false }); choreographyService.close(); return motionPresetService.clearEmergencyStopAndCenter(String(source || "UI")); });
   handleTrusted("desktop:list-choreographies", () => ({ ok: true, ...choreographyStore.snapshot() }));
-  handleTrusted("desktop:get-choreography-status", () => choreographyService.getStatus());
+  handleTrusted("desktop:get-choreography-status", () => xiaozhiHardwareEnabled() ? choreographyService.getStatus() : xiaozhiHardwareDisabledResult());
   handleTrusted("desktop:set-default-dance", (name) => {
     try { return choreographyStore.setDefaultDance(String(name || "")); }
     catch (error) { return { ok: false, reason: /^choreography-[a-z-]+$/.test(error?.message || "") ? error.message : "choreography-save-failed", ...choreographyStore.snapshot() }; }
@@ -1529,6 +1625,7 @@ app.whenReady().then(async () => {
     const agentId = typeof value.agentId === "string" && /^[a-z0-9-]{1,32}$/.test(value.agentId) ? value.agentId : "";
     const state = typeof value.state === "string" ? value.state : "";
     if (!agentId || !["idle", "listening", "thinking", "working", "waiting", "completed", "error"].includes(state)) return { ok: false, reason: "manual-agent-request-invalid" };
+    if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult();
     if (companionIsActive()) return { ok: false, reason: "companion-conversation-active" };
     if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state })) return { ok: false, reason: "voice-workflow-active" };
     const result = await agentStatePublisher.publishManualState({ source: "manual-agent-control", state });

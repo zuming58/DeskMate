@@ -73,6 +73,7 @@ class MotionAutomationCoordinator extends EventEmitter {
     this.companionState = "idle";
     this.confirmationPending = false;
     this.running = false;
+    this.hardwareEnabled = true;
     this.lastCodexCompletionAt = 0;
     this.lastCodexAttentionAt = 0;
     this.lastReplyMotionAt = 0;
@@ -81,7 +82,7 @@ class MotionAutomationCoordinator extends EventEmitter {
   }
 
   snapshot() {
-    return Object.freeze({ policy: this.policyStore.snapshot(), running: this.running, idleDelaySeconds: Math.round(this.idleDelayMs / 1_000), thinkingDelaySeconds: Math.round(this.thinkingDelayMs / 1_000), last: Object.freeze({ ...this.last }) });
+    return Object.freeze({ policy: this.policyStore.snapshot(), hardwareEnabled: this.hardwareEnabled, running: this.running, idleDelaySeconds: Math.round(this.idleDelayMs / 1_000), thinkingDelaySeconds: Math.round(this.thinkingDelayMs / 1_000), last: Object.freeze({ ...this.last }) });
   }
 
   publish() { const value = this.snapshot(); this.emit("status", value); return value; }
@@ -92,11 +93,26 @@ class MotionAutomationCoordinator extends EventEmitter {
       this._clearThinking();
       this._clearIdle();
       this.last = Object.freeze({ state: "disabled", trigger: "", preset: "", reason: "", ok: null, at: new Date(this.now()).toISOString() });
-    } else {
+    } else if (this.hardwareEnabled) {
       this.last = Object.freeze({ ...this.last, state: "ready", reason: "", at: new Date(this.now()).toISOString() });
       this._scheduleIdle();
     }
     return Object.freeze({ ok: true, ...this.publish() });
+  }
+
+  setHardwareEnabled(value) {
+    const enabled = value === true;
+    if (this.hardwareEnabled === enabled) return this.snapshot();
+    this.hardwareEnabled = enabled;
+    this._clearThinking();
+    this._clearIdle();
+    if (!enabled) {
+      this.last = Object.freeze({ state: "disabled", trigger: "", preset: "", reason: "xiaozhi-hardware-disabled", ok: false, at: new Date(this.now()).toISOString() });
+    } else if (this.policyStore.snapshot().enabled) {
+      this.last = Object.freeze({ state: "ready", trigger: "", preset: "", reason: "", ok: null, at: new Date(this.now()).toISOString() });
+      this._scheduleIdle();
+    }
+    return this.publish();
   }
 
   touchActivity() { this._scheduleIdle(); }
@@ -122,7 +138,7 @@ class MotionAutomationCoordinator extends EventEmitter {
         void this.trigger("companion-replied", "nod", 1, "context");
       }
     }
-    if (this.companionState !== "thinking" || !this.policyStore.snapshot().enabled) return this.snapshot();
+    if (this.companionState !== "thinking" || !this.policyStore.snapshot().enabled || !this.hardwareEnabled) return this.snapshot();
     this.last = Object.freeze({ ...this.last, state: "waiting-thinking", trigger: "companion-thinking", preset: "search", reason: "", ok: null, at: new Date(this.now()).toISOString() });
     this.thinkingTimer = this.schedule(() => {
       this.thinkingTimer = null;
@@ -168,6 +184,7 @@ class MotionAutomationCoordinator extends EventEmitter {
   async trigger(trigger, preset, repeat = 1, source = "context") {
     if (!TRIGGERS.has(trigger) || !PRESETS.has(preset) || !Number.isInteger(repeat) || repeat < 1 || repeat > 3 || !["context", "idle"].includes(source)) return this._skip("", "", "motion-automation-request-invalid");
     const policy = this.policyStore.snapshot();
+    if (!this.hardwareEnabled) return this._skip(trigger, preset, "xiaozhi-hardware-disabled");
     if (!policy.enabled || (source === "idle" && !policy.idleEnabled)) return this._skip(trigger, preset, "motion-automation-disabled");
     if (this.running) return this._skip(trigger, preset, "motion-automation-busy");
     let activity;
@@ -208,7 +225,7 @@ class MotionAutomationCoordinator extends EventEmitter {
   }
 
   _skip(trigger, preset, reason) {
-    this.last = Object.freeze({ state: this.policyStore.snapshot().enabled ? "skipped" : "disabled", trigger: TRIGGERS.has(trigger) ? trigger : "", preset: PRESETS.has(preset) ? preset : "", reason: safeReason(reason), ok: false, at: new Date(this.now()).toISOString() });
+    this.last = Object.freeze({ state: this.policyStore.snapshot().enabled && this.hardwareEnabled ? "skipped" : "disabled", trigger: TRIGGERS.has(trigger) ? trigger : "", preset: PRESETS.has(preset) ? preset : "", reason: safeReason(reason), ok: false, at: new Date(this.now()).toISOString() });
     const result = Object.freeze({ ok: false, skipped: true, reason: this.last.reason, automation: this.publish() });
     if (trigger === "idle-search") this._scheduleIdle();
     return result;
@@ -217,7 +234,7 @@ class MotionAutomationCoordinator extends EventEmitter {
   _scheduleIdle() {
     this._clearIdle();
     const policy = this.policyStore.snapshot();
-    if (!policy.enabled || !policy.idleEnabled) return;
+    if (!this.hardwareEnabled || !policy.enabled || !policy.idleEnabled) return;
     this.idleTimer = this.schedule(() => {
       this.idleTimer = null;
       void this.trigger("idle-search", "search", 1, "idle");
