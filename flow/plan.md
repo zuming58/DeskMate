@@ -2,6 +2,8 @@
 
 ## Current stage: T26 comprehensive workbench — software-only
 
+T26B：修复 Codex 自动项目名的退化路径。纯哈希/UUID 临时工作树名不再显示或播报；解析真实仓库/稳定标题前显示“Codex 临时任务”，后续自动改名。新项目仍随生命周期事件自动发现，不建立手工项目表。
+
 T26A：在已完成看板上落实用户选定的平面 D/M 品牌，并将实时陪伴与左下角软件脸改为浅蓝浅底、自然睁闭眼。仅 UI 和应用图标变更，语音、硬件和记忆行为不变；[设计与素材来源](../docs/design/deskmate-identity-t26a.md)。
 
 2026-09-11：用户远程操作、不能验收硬件，本轮只重做工作台首页。移除大幅桌宠预览和虚构任务进度，接入 SQLite 真实统计、连接/配置、日终与同步状态、当前场景和 Codex 项目上报。详见 [设计与数据口径](../docs/architecture/workbench-overview.md)。原功能、设置和实体硬件行为不变。

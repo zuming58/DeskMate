@@ -14,6 +14,9 @@ const {
   mapCodexHookEvent,
   sendCodexHookEvent,
   opaqueCodexTaskKey,
+  fallbackCodexTaskLabel,
+  isTransientCodexTaskLabel,
+  safeCodexTaskLabel,
 } = require("../electron/codex-hook-state.cjs");
 const { helperSource, refreshExistingCodexHookHelper } = require("../electron/codex-hook-integration.cjs");
 
@@ -43,6 +46,18 @@ test("hook v2 uses an opaque per-task identity and never sends prompt, raw id or
   const decoded = decodeCodexHookMessage(message.trim());
   assert.deepEqual(decoded, { event: "PermissionRequest", toolName: "Bash", state: "waiting", taskKey: opaqueCodexTaskKey(source.session_id), taskLabel: "DeskMate" });
   assert.doesNotMatch(message, /raw-secret-session|private prompt|C:\\\\private/);
+});
+
+test("generated worktree ids never become a visible or spoken project name", () => {
+  const generated = "2d468d2a6f48dd72";
+  assert.equal(isTransientCodexTaskLabel(generated), true);
+  assert.equal(isTransientCodexTaskLabel("DeskMate"), false);
+  assert.equal(fallbackCodexTaskLabel(`C:\\private\\${generated}`), "Codex 临时任务");
+  assert.equal(safeCodexTaskLabel("550e8400-e29b-41d4-a716-446655440000"), "Codex 临时任务");
+  const message = encodeCodexHookMessage({ hook_event_name: "Stop", session_id: "raw-session", cwd: `C:\\private\\${generated}` });
+  assert.equal(decodeCodexHookMessage(message.trim()).taskLabel, "Codex 临时任务");
+  assert.doesNotMatch(message, new RegExp(generated));
+  assert.match(helperSource(), /Codex 临时任务/);
 });
 
 test("existing global hook helper can be upgraded atomically but is never silently installed", () => {

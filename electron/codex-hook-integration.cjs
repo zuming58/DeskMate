@@ -28,7 +28,9 @@ function taskKey(value) {
 function taskLabel(value) {
   const cwd = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2048 ? value : "";
   const label = path.basename(cwd).normalize("NFKC").trim();
-  return label && [...label].length <= 60 && !/[\\u0000-\\u001f\\u007f]/.test(label) ? label : "Codex 任务";
+  const valid = label && [...label].length <= 60 && !/[\\u0000-\\u001f\\u007f]/.test(label);
+  const transient = /^(?:[0-9a-f]{12,64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(label);
+  return valid && !transient ? label : "Codex 临时任务";
 }
 function createMessage(value) {
   const event = typeof value?.hook_event_name === "string" ? value.hook_event_name : "";

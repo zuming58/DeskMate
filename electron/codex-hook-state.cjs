@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const CODEX_HOOK_PROTOCOL_VERSION = 2;
 const CODEX_PIPE_NAME = "deskmate-codex-status-v1";
 const MAX_MESSAGE_BYTES = 1024;
+const CODEX_TEMPORARY_TASK_LABEL = "Codex 临时任务";
 const CODEX_EVENTS = new Set([
   "SessionStart",
   "SessionEnd",
@@ -37,6 +38,17 @@ function normalizeTaskLabel(value) {
   return label;
 }
 
+function isTransientCodexTaskLabel(value) {
+  const label = normalizeTaskLabel(value);
+  if (!label) return false;
+  return /^(?:[0-9a-f]{12,64}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(label);
+}
+
+function safeCodexTaskLabel(value, { fallback = CODEX_TEMPORARY_TASK_LABEL } = {}) {
+  const label = normalizeTaskLabel(value);
+  return label && !isTransientCodexTaskLabel(label) ? label : fallback;
+}
+
 function opaqueCodexTaskKey(value) {
   const sessionId = typeof value === "string" ? value : "";
   if (!sessionId || Buffer.byteLength(sessionId, "utf8") > 256 || /[\u0000-\u001f\u007f]/.test(sessionId)) return "";
@@ -45,8 +57,7 @@ function opaqueCodexTaskKey(value) {
 
 function fallbackCodexTaskLabel(value) {
   const cwd = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 2048 ? value : "";
-  const label = normalizeTaskLabel(path.basename(cwd));
-  return label || "Codex 任务";
+  return safeCodexTaskLabel(path.basename(cwd));
 }
 
 function mapCodexHookEvent(value = {}) {
@@ -54,7 +65,8 @@ function mapCodexHookEvent(value = {}) {
   if (!CODEX_EVENTS.has(event)) return null;
   const toolName = normalizeToolName(value.tool_name);
   const taskKey = normalizeTaskKey(value.taskKey);
-  const taskLabel = taskKey ? normalizeTaskLabel(value.taskLabel) : "";
+  const normalizedTaskLabel = normalizeTaskLabel(value.taskLabel);
+  const taskLabel = taskKey && normalizedTaskLabel ? safeCodexTaskLabel(normalizedTaskLabel) : "";
   const metadata = taskKey && taskLabel ? { taskKey, taskLabel } : {};
   if (event === "SessionStart" || event === "SessionEnd") return { event, toolName: "", state: "idle", ...metadata };
   if (event === "UserPromptSubmit") return { event, toolName: "", state: "thinking", ...metadata };
@@ -146,6 +158,7 @@ class CodexHookStateServer {
 module.exports = {
   CODEX_HOOK_PROTOCOL_VERSION,
   CODEX_PIPE_NAME,
+  CODEX_TEMPORARY_TASK_LABEL,
   MAX_MESSAGE_BYTES,
   CodexHookStateServer,
   decodeCodexHookMessage,
@@ -153,8 +166,10 @@ module.exports = {
   mapCodexHookEvent,
   opaqueCodexTaskKey,
   fallbackCodexTaskLabel,
+  isTransientCodexTaskLabel,
   normalizeTaskKey,
   normalizeTaskLabel,
+  safeCodexTaskLabel,
   resolveCodexPipePath,
   sendCodexHookEvent,
 };

@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
-const { opaqueCodexTaskKey, normalizeTaskLabel } = require("./codex-hook-state.cjs");
+const { CODEX_TEMPORARY_TASK_LABEL, isTransientCodexTaskLabel, opaqueCodexTaskKey, normalizeTaskLabel } = require("./codex-hook-state.cjs");
 
 const DEFAULT_TIMEOUT_MS = 6000;
 const DEFAULT_REFRESH_MS = 30000;
@@ -27,7 +27,8 @@ function resolveCodexExecutable({ env = process.env, platform = process.platform
 
 function fallbackLabelFromCwd(value) {
   if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > 2048) return "";
-  return normalizeTaskLabel(path.basename(value));
+  const label = normalizeTaskLabel(path.basename(value));
+  return isTransientCodexTaskLabel(label) ? "" : label;
 }
 
 function fallbackLabelFromGitInfo(value) {
@@ -37,7 +38,8 @@ function fallbackLabelFromGitInfo(value) {
   const segment = normalized.split(/[\\/:]+/).filter(Boolean).pop() || "";
   let decoded = segment;
   try { decoded = decodeURIComponent(segment); } catch { /* retain the safe final segment */ }
-  return normalizeTaskLabel(decoded);
+  const label = normalizeTaskLabel(decoded);
+  return isTransientCodexTaskLabel(label) ? "" : label;
 }
 
 function parseThreadCatalog(result = {}) {
@@ -49,8 +51,11 @@ function parseThreadCatalog(result = {}) {
     // the sidebar title.  Project identity must stay stable across those turns,
     // so prefer the repository name, then the working-directory basename.  A
     // generated thread title is retained only for projectless compatibility.
-    const label = fallbackLabelFromGitInfo(thread?.gitInfo) || fallbackLabelFromCwd(thread?.cwd) || normalizeTaskLabel(thread?.name);
-    if (!label) continue;
+    const threadLabel = normalizeTaskLabel(thread?.name);
+    const label = fallbackLabelFromGitInfo(thread?.gitInfo)
+      || fallbackLabelFromCwd(thread?.cwd)
+      || (isTransientCodexTaskLabel(threadLabel) ? "" : threadLabel)
+      || CODEX_TEMPORARY_TASK_LABEL;
     entries.set(taskKey, label);
   }
   return entries;

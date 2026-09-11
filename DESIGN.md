@@ -2,6 +2,8 @@
 
 T26A (2026-09-11): 用户选定蓝青色折带 D/M、平整暖白圆角方形应用图标，不使用玻璃底座或额外黑框。品牌与陪伴形象分开：顶部品牌、工作台及原生图标统一 D/M；实时陪伴和左下角设备卡采用浅蓝柔和形象、浅色背景与深青眼睛，支持自然睁闭眼。仅改变软件视觉，不修改实体屏幕或声音。详见 [品牌与陪伴形象](docs/design/deskmate-identity-t26a.md)。
 
+T26B (2026-09-11): Codex 项目状态不显示或播报纯十六进制/UUID 临时工作树目录。优先自动解析 Git 仓库名，再采用稳定目录或任务标题；解析完成前统一称为“Codex 临时任务”，后续目录刷新可自动改为真实项目名。新项目仍由生命周期 Hook 自动发现，无需手工添加。
+
 T26 (2026-09-11): 工作台改为真实数据综合看板：相伴/今日使用/已确认记忆、连接服务、7 天使用、小时→日终→KnowledgeOS、当前场景与项目状态。大脸缩为小型标识，不再占用首页。详情和配置留在原页面，首页只读概览和导航；“已配置”不冒充“已连接”，无记录与读取失败明确区分。详见 [工作台设计与统计口径](docs/architecture/workbench-overview.md)。
 
 T22F (2026-09-11): keep prompt ordering explicit and local: adjacent up/down controls appear only in the unfiltered current-scene list. Scene KEY5–7 use direct common-action choices, plus custom shortcut, copy-only prompt, registered application and disabled. Opening an application must reuse the existing whitelist and never expose a raw command field.

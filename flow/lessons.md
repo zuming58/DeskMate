@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Filesystem basenames are not automatically safe project identity
+
+- A worktree directory may be an opaque hexadecimal or UUID token. Privacy-safe basename truncation alone does not make it meaningful for display or TTS.
+- Sanitize at producer, decoder/catalog and final store boundaries because an older installed helper or an explicit reporter may bypass any single layer. Keep the opaque task key for correlation while using a neutral temporary label until repository metadata resolves.
+- Start catalog enrichment before Hooks arrive, but never assume it wins the first-event race. Terminal speech must remain safe even when metadata refresh is slow or unavailable.
+
 ## Generated icon alpha and animated raster identity need separate checks
 
 - A pale checkerboard or gray presentation background is not transparency. Inspect the generated PNG alpha and native icon frames before packaging; preserve the approved tile while removing only its outside presentation background through the image tool. Near-opaque generated interior pixels need not be exactly alpha 255.

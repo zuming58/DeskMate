@@ -12,11 +12,15 @@ test("Codex App Server catalog keeps only opaque task keys and stable project la
     { id: "raw-thread-1", name: "临时生成的修复标题", cwd: "C:\\secret\\build-t10dc-work", gitInfo: { originUrl: "https://github.com/zuming58/DeskMate.git", branch: "private", sha: "private" }, preview: "private prompt", turns: [{ text: "private answer" }] },
     { id: "raw-thread-2", name: "", cwd: "C:\\work\\EasyInput" },
     { id: "raw-thread-3", name: "项目外临时任务", cwd: "" },
+    { id: "raw-thread-4", name: "修复数据导入", cwd: "C:\\worktrees\\2d468d2a6f48dd72" },
+    { id: "raw-thread-5", name: "550e8400-e29b-41d4-a716-446655440000", cwd: "C:\\worktrees\\2d468d2a6f48dd72" },
   ] });
   assert.deepEqual([...entries], [
     [opaqueCodexTaskKey("raw-thread-1"), "DeskMate"],
     [opaqueCodexTaskKey("raw-thread-2"), "EasyInput"],
     [opaqueCodexTaskKey("raw-thread-3"), "项目外临时任务"],
+    [opaqueCodexTaskKey("raw-thread-4"), "修复数据导入"],
+    [opaqueCodexTaskKey("raw-thread-5"), "Codex 临时任务"],
   ]);
   assert.doesNotMatch(JSON.stringify([...entries]), /raw-thread|private prompt|private answer|private|build-t10dc-work|C:\\\\secret/);
   assert.equal(fallbackLabelFromGitInfo({ originUrl: "git@github.com:zuming58/DeskMate.git" }), "DeskMate");

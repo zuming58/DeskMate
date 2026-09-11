@@ -1,5 +1,11 @@
 # Decisions
 
+## D126 - Generated Codex worktree identifiers are never project names
+
+- 2026-09-11 user report showed and heard `2d468d2a6f48dd72` as a project. A pure 12–64 digit hexadecimal basename or UUID-like basename is volatile infrastructure identity, not a user-facing project label.
+- Hook helper, receiver decoder, read-only App Server catalog and final task store all reject that shape as a visible label. Catalog resolution remains repository name, stable directory basename, then stable projectless thread title. While unresolved, UI and speech say `Codex 临时任务`; a later catalog refresh may relabel the existing opaque task.
+- New Codex projects remain automatically discovered only after a lifecycle event; no manual DeskMate project registry is introduced. The task key remains distinct even when multiple unresolved items share the safe temporary label. No raw session ID or full path enters UI, speech or diagnostics.
+
 ## D125 - Separate flat DM branding from the soft live companion
 
 - 2026-09-11 user approval: a medium blue/cyan folded D/M on a flat off-white rounded-square icon. No glass pedestal, extra black border or robot face in the static brand mark. Reuse its generated source for desktop UI, native window/tray and executable icons.

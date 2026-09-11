@@ -14,6 +14,10 @@ DeskMate Link, motion program or physical audio endpoint.
   identity is selected in this order: the final repository name from
   `gitInfo.originUrl`, the working-directory basename, and only then the
   generated thread name for a projectless compatibility case.
+- Pure hexadecimal/UUID-like generated worktree basenames are not user-facing
+  project identity. They are skipped while resolving repository/thread
+  metadata; if no stable label is available, UI and speech use `Codex 临时任务`
+  until a later catalog refresh can replace it.
 - Origin URL, branch, commit, complete path, thread title, preview and turns are
   discarded after the bounded project label is derived. None of them becomes
   live status evidence or diagnostic content.
@@ -64,4 +68,3 @@ User-present:
    session opens.
 3. Ask which Codex tasks are running. The answer gives the active count and
    stable project names, not generated conversation titles.
-

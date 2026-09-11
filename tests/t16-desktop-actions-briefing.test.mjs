@@ -20,6 +20,7 @@ test("codex-task-brief-v1 accepts only the exact privacy-safe schema", () => {
   assert.equal(decodeCodexTaskBrief(JSON.stringify(task({ milestone: "x".repeat(81) }))), null);
   assert.equal(decodeCodexTaskBrief(JSON.stringify(task({ taskKey: "short" }))), null);
   assert.equal(decodeCodexTaskBrief(JSON.stringify(task({ taskLabel: "https://example.com" }))), null);
+  assert.equal(decodeCodexTaskBrief(JSON.stringify(task({ taskLabel: "2d468d2a6f48dd72" }))).taskLabel, "Codex 临时任务");
   assert.equal(decodeCodexTaskBrief(JSON.stringify(task({ milestone: "password=secret" }))), null);
   const withoutMilestone = task(); delete withoutMilestone.milestone;
   assert.equal(decodeCodexTaskBrief(JSON.stringify(withoutMilestone)).milestone, "");

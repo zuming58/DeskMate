@@ -1,6 +1,7 @@
 const net = require("net");
 const os = require("os");
 const path = require("path");
+const { safeCodexTaskLabel } = require("./codex-hook-state.cjs");
 
 const CODEX_TASK_BRIEF_VERSION = "codex-task-brief-v1";
 const CODEX_TASK_BRIEF_PIPE_NAME = "deskmate-codex-task-brief-v1";
@@ -33,7 +34,8 @@ function normalizeCodexTaskBrief(value) {
   if (!["provider,sequence,state,taskKey,taskLabel,version", "milestone,provider,sequence,state,taskKey,taskLabel,version"].includes(keys)) return null;
   if (value.version !== CODEX_TASK_BRIEF_VERSION || value.provider !== "codex") return null;
   const taskKey = typeof value.taskKey === "string" && OPAQUE_KEY.test(value.taskKey) ? value.taskKey : "";
-  const taskLabel = boundedVisibleText(value.taskLabel, 60);
+  const visibleTaskLabel = boundedVisibleText(value.taskLabel, 60);
+  const taskLabel = visibleTaskLabel ? safeCodexTaskLabel(visibleTaskLabel) : "";
   const milestone = value.milestone === undefined || value.milestone === "" ? "" : boundedVisibleText(value.milestone, 80, { optional: true });
   const sequence = Number(value.sequence);
   if (!taskKey || !taskLabel || !STATES.has(value.state) || !Number.isInteger(sequence) || sequence < 1 || sequence > 0xffffffff || (value.milestone !== undefined && value.milestone !== "" && !milestone)) return null;
@@ -208,7 +210,8 @@ class CodexTaskBriefStore {
 
   relabel(taskKey, taskLabel) {
     const previous = this.tasks.get(String(taskKey || ""));
-    const label = boundedVisibleText(taskLabel, 60);
+    const visibleLabel = boundedVisibleText(taskLabel, 60);
+    const label = visibleLabel ? safeCodexTaskLabel(visibleLabel) : "";
     if (!previous || !label || previous.taskLabel === label) return { ok: false, changed: false };
     const updated = Object.freeze({ ...previous, taskLabel: label });
     this.tasks.set(previous.taskKey, updated);
