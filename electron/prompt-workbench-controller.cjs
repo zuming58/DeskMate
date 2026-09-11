@@ -62,7 +62,7 @@ class PromptWorkbenchController {
   async command(value = {}) {
     if (value.type === 'get') return this.snapshot();
     if (value.type === 'wheel') {
-      if (this.isForeground() && !this.editing && !this.busy) this.wheel.accept(value.step, value.source);
+      if (this.isForeground() && !this.editing && !this.busy) this.wheel.accept(value.step, value.source, value.domStep);
       return { ok: true };
     }
     if (value.type === 'move') {

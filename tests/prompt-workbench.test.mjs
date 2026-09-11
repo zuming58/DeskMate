@@ -179,12 +179,11 @@ test('T22 setup patch moves companion to KEY3, preserves first 2 keys and encode
   assert.equal(checkHostCapabilities(next, {}).ok, false); assert.equal(checkHostCapabilities(next, { host_action_v1: true }).ok, true);
 });
 
-test('T22 page-only wheel polarity supports the reported device without changing encoder settings', () => {
-  assert.equal(promptWheelStep({ deltaY: -120 }), 1);
-  assert.equal(promptWheelStep({ deltaY: 120 }), -1);
-  assert.equal(promptWheelStep({ deltaX: -120, deltaY: 0 }), 1);
-  assert.equal(promptWheelStep({ deltaX: 120, deltaY: 0 }), -1);
-  assert.equal(promptWheelStep({ deltaY: 120 }, false), 1);
+test('T22 mouse wheel follows Windows while board reversal remains a separate setting', () => {
+  assert.equal(promptWheelStep({ deltaY: -120 }), -1);
+  assert.equal(promptWheelStep({ deltaY: 120 }), 1);
+  assert.equal(promptWheelStep({ deltaX: -120, deltaY: 0 }), -1);
+  assert.equal(promptWheelStep({ deltaX: 120, deltaY: 0 }), 1);
   assert.equal(promptWheelStep({ deltaY: 0 }), 0);
   assert.equal(promptWheelStep({ deltaY: NaN }), 0);
   const store = new PromptWorkbenchStore();

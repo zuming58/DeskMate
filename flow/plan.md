@@ -2,6 +2,8 @@
 
 ## Current stage: T26 comprehensive workbench — software-only
 
+T26C：提示词页的鼠标滚轮恢复 Windows 常规方向；EasyInput 实体旋钮继续独立使用用户选择的反向选词设置。原生 Raw Input 与浏览器后备事件仍做同源去重，实体旋钮方向不再污染鼠标输入。
+
 T26B：修复 Codex 自动项目名的退化路径。纯哈希/UUID 临时工作树名不再显示或播报；解析真实仓库/稳定标题前显示“Codex 临时任务”，后续自动改名。新项目仍随生命周期事件自动发现，不建立手工项目表。
 
 T26A：在已完成看板上落实用户选定的平面 D/M 品牌，并将实时陪伴与左下角软件脸改为浅蓝浅底、自然睁闭眼。仅 UI 和应用图标变更，语音、硬件和记忆行为不变；[设计与素材来源](../docs/design/deskmate-identity-t26a.md)。

@@ -30,6 +30,14 @@ test('native wheel without any browser event works; duplicate DOM never selects 
   }
   const h = harness(); h.router.accept(-1,'native'); h.tick(); assert.deepEqual(h.moves,[-1]);
 });
+test('reversed board direction pairs with the opposite normal DOM wheel fallback', () => {
+  for (const order of ['native-first', 'dom-first']) {
+    const h = harness();
+    if (order === 'native-first') { h.router.accept(-1, 'native', 1); h.router.accept(1, 'dom'); }
+    else { h.router.accept(1, 'dom'); h.router.accept(-1, 'native', 1); }
+    h.tick(); assert.deepEqual(h.moves, [-1]);
+  }
+});
 test('rapid raw steps, reverse, coalesced DOM, mouse fallback and teardown', () => {
   const h = harness(); h.router.accept(1,'dom');
   h.router.accept(1,'native'); h.router.accept(1,'native'); h.router.accept(-1,'native');

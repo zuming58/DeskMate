@@ -64,14 +64,14 @@ export function PromptWorkbenchPage({ notify = () => {} }) {
     };
     const onWheel = event => {
       if (editing || event.ctrlKey || event.metaKey || !document.hasFocus() || event.target.closest?.('input,textarea,select,.prompt-preview-body')) return;
-      const step = promptWheelStep(event, latest.current?.reverseSelection);
+      const step = promptWheelStep(event);
       if (!step) return; event.preventDefault(); event.stopPropagation();
       if (performance.now() - wheelAt.current < 90) return;
       wheelAt.current = performance.now(); void command({ type: 'wheel', source: 'dom', step });
     };
     const offWheel = bridge()?.onPromptWheel?.(event => {
       if (editing || !document.hasFocus() || document.activeElement?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
-      void command({ type: 'wheel', source: 'native', step: event.step * (latest.current?.reverseSelection === false ? 1 : -1) });
+      void command({ type: 'wheel', source: 'native', step: event.step * (latest.current?.reverseSelection === false ? 1 : -1), domStep: event.step });
     });
     window.addEventListener('keydown', onKey, true); window.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => { offWheel?.(); window.removeEventListener('keydown', onKey, true); window.removeEventListener('wheel', onWheel, true); };
