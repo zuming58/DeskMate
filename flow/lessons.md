@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A local combined memory view is not a safe remote classification boundary
+
+- A single local daily page is useful for reading, but a receiving system should not be asked to infer work versus personal scope from mixed prose. Seal and submit one payload per explicit memory class.
+- Preserve provenance in the immutable payload itself (period, source counts and input digest), not only in transient model prompts. Keep inferred personal observations pending until a separate confirmation rule accepts them.
+- Local retention and remote retention are different authorities. Expiring DeskMate raw records can be gated on remote receipts, but must never be implemented as deletion of the receiver's Raw store.
+
 ## A shortcut value alone is not a stable action-picker identity
 
 - A custom shortcut initialized to `Ctrl+Z` was immediately reclassified as the common “撤销” preset, hiding the custom input. Identify a preset by both its standard label and chord (or an explicit persisted kind), so equal key sequences do not collapse distinct editor intent.

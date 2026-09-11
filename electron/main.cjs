@@ -17,6 +17,9 @@ const { CompanionMemoryStore } = require("./companion-memory.cjs");
 const { CompanionDialogueContext } = require("./companion-dialogue-context.cjs");
 const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
+const { createKnowledgeOsSettings } = require("./knowledgeos-settings.cjs");
+const { KnowledgeOsMcpClient } = require("./knowledgeos-mcp-client.cjs");
+const { KnowledgeOsMemoryGateway, MemoryJournalService } = require("./memory-journal-service.cjs");
 const { CompanionMemoryPipeline } = require("./companion-memory-pipeline.cjs");
 const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("./companion-memory-policy.cjs");
 const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
@@ -70,7 +73,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t24-optional-xiaozhi-codex-led";
+const DESKMATE_BUILD_ID = "t25-knowledgeos-memory-integration";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -108,6 +111,10 @@ let companionMemoryPolicyStore;
 let companionMemoryDigestScheduler;
 let memoryDigestTimer;
 let knowledgeBaseSettings;
+let knowledgeOsSettings;
+let knowledgeOsClient;
+let knowledgeOsMemoryGateway;
+let memoryJournalService;
 let companionConversationController;
 let companionPreferenceStore;
 let companionPersonaStore;
@@ -1262,6 +1269,9 @@ app.whenReady().then(async () => {
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
   companionMemoryPolicyStore = new CompanionMemoryPolicyStore({ userDataPath: app.getPath("userData") });
   knowledgeBaseSettings = createKnowledgeBaseSettings({ safeStorage, userDataPath: app.getPath("userData") });
+  knowledgeOsSettings = createKnowledgeOsSettings({ safeStorage, userDataPath: app.getPath("userData") });
+  knowledgeOsClient = new KnowledgeOsMcpClient({ settings: knowledgeOsSettings, timeoutMs: 5000 });
+  knowledgeOsMemoryGateway = new KnowledgeOsMemoryGateway({ settings: knowledgeOsSettings, client: knowledgeOsClient });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
   localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
@@ -1322,9 +1332,21 @@ app.whenReady().then(async () => {
     pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }),
     process: ({ source, day }) => companionMemoryGenerationCoordinator.processSourceDay({ source, day }),
   });
-  memoryDigestTimer = setInterval(() => { void companionMemoryDigestScheduler.tick(); }, 60_000);
+  memoryJournalService = new MemoryJournalService({
+    store: companionMemoryStore,
+    policyStore: companionMemoryPolicyStore,
+    knowledgeBaseProjection: () => companionMemoryGenerationCoordinator.projectIfConfigured(),
+    knowledgeOsSettings,
+    knowledgeOsClient,
+    loadSecret: () => loadTextModelSecret(),
+  });
+  const tickMemoryServices = async () => {
+    try { await memoryJournalService.tick(); } catch { /* persisted state will retry */ }
+    try { await companionMemoryDigestScheduler.tick(); } catch { /* per-source digest retries later */ }
+  };
+  memoryDigestTimer = setInterval(() => { void tickMemoryServices(); }, 60_000);
   memoryDigestTimer.unref?.();
-  setTimeout(() => { void companionMemoryDigestScheduler.tick(); }, 0);
+  setTimeout(() => { void tickMemoryServices(); }, 0);
   wakeWordAdapter = new SherpaKeywordWakeWordAdapter({
     onWake: () => { if (!companionIsActive() && !activeDictationSession) void callCompanionConversation("wake-word"); },
     onStatus: (status) => { if (companionConversationController) handleCompanionConversationEvent({ type: "wake-word.status", wakeWord: status }); },
@@ -1367,6 +1389,7 @@ app.whenReady().then(async () => {
         memoryContext: sessionMemoryContext,
         dialogueContext: companionDialogueContext,
         readMemoryContext: (text) => companionMemoryStore.reviewedContextForQuery(text),
+        readKnowledgeContext: (text) => knowledgeOsMemoryGateway.searchEvidence(text),
         readEarlierContext: (text, before) => companionMemoryStore.earlierCompanionContextForQuery(text, { before }),
       }),
       ttsFactory: () => new DoubaoStreamingTtsAdapter({
@@ -1694,6 +1717,18 @@ app.whenReady().then(async () => {
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
   handleTrusted("memory:update-candidate", (value = {}) => companionMemoryStore.updateCandidate(value));
   handleTrusted("memory:generate-pending", () => generateConfiguredMemories());
+  handleTrusted("memory:get-journal-status", () => memoryJournalService.status());
+  handleTrusted("memory:close-workday", () => memoryJournalService.closeCurrentWorkday({ manual: true }));
+  handleTrusted("memory:sync-knowledgeos", () => memoryJournalService.syncPending());
+  handleTrusted("memory:get-knowledgeos-status", () => knowledgeOsSettings.status());
+  handleTrusted("memory:set-knowledgeos-settings", (value = {}) => knowledgeOsSettings.save(value));
+  handleTrusted("memory:test-knowledgeos", () => knowledgeOsClient.testConnection());
+  handleTrusted("memory:choose-knowledgeos-adapter", async () => {
+    const selection = await dialog.showOpenDialog(mainWindow, { title: "选择 KnowledgeOS MCP 适配器", properties: ["openFile"], filters: [{ name: "KnowledgeOS MCP", extensions: ["exe"] }] });
+    if (selection.canceled || selection.filePaths.length !== 1) return { ok: false, cancelled: true, status: knowledgeOsSettings.status() };
+    try { return { ok: true, status: knowledgeOsSettings.saveCommand(selection.filePaths[0]) }; }
+    catch (error) { return { ok: false, reason: /^knowledgeos-[a-z-]+$/.test(String(error?.message || "")) ? error.message : "knowledgeos-adapter-invalid", status: knowledgeOsSettings.status() }; }
+  });
   handleTrusted("memory:rebuild-index", () => companionMemoryStore.rebuildLocalIndex());
   handleTrusted("memory:search-index", (value = {}) => companionMemoryStore.searchLongTermMemory(value));
   handleTrusted("memory:sync-knowledge-base", () => {
@@ -1726,7 +1761,7 @@ app.whenReady().then(async () => {
     const target = path.extname(selection.filePath).toLowerCase() === ".json" ? selection.filePath : `${selection.filePath}.json`;
     try { fs.writeFileSync(target, `${JSON.stringify(payload, null, 2)}\n`, "utf8"); }
     catch { return { ok: false, reason: "memory-export-write-failed" }; }
-    return { ok: true, dailySummaries: payload.dailySummaries.length, longTermMemories: payload.longTermMemories.length };
+    return { ok: true, dailySummaries: payload.dailySummaries.length, dailyJournals: payload.dailyJournals.length, longTermMemories: payload.longTermMemories.length };
   });
   handleTrusted("memory:get-knowledge-base-status", () => knowledgeBaseSettings.status());
   handleTrusted("memory:open-knowledge-base", async () => {

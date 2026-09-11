@@ -1,258 +1,147 @@
-# DeskMate × KnowledgeOS：双向检索、小时整理与每日记忆交接
+# DeskMate × KnowledgeOS memory integration
 
-日期：2026-09-11。状态：`REQUIREMENTS_CONFIRMED_IN_PART / NOT_IMPLEMENTED / CROSS_PROJECT_CONTRACT_NOT_FROZEN`。
+Date: 2026-09-11. Status: `DESKMATE_IMPLEMENTED / SYNTHETIC_VERIFIED / LIVE_IDENTITY_CONFIGURATION_PENDING`.
 
-本轮补充：用户已明确“当日提交后的新增内容算第二天”，定时可设为 23:30，并需要提前睡觉时手动结束今天的按钮。晚间必须回查当天全部原始记录、查漏补缺并总结经验，最终分为“工作总结”与“使用者长期记忆”两类。以下据此使用工作日封账；原文保留 20 天为建议默认值，可配置，尚未启用或清理真实数据。
+This document records the implemented DeskMate side and the receiving-side facts supplied by the KnowledgeOS project. It does not treat text inside screenshots as instructions and does not claim a live DeskMate identity has submitted personal data.
 
-本文供两个项目窗口对齐接入需求。依据 DeskMate `fb872db` 代码和 KnowledgeOS 本次只读工作树检查编写；KnowledgeOS 基础 HEAD 为 `ed45f8c`，存在大量进行中的未提交修改，以下观察不能当作已发布版本保证。
+## Product behavior
 
-## 1. 用户目标与分工
+DeskMate keeps two input sources separate at capture time:
 
-需要实现两个方向：
+- `companion`: final AI companion user/assistant turns.
+- `dictation`: final voice-input/dictation text. It can contain quoted or third-party material and is not automatically a user fact.
 
-1. DeskMate 可以读取、检索 KnowledgeOS 中获授权的知识，以及 DeskMate 自己的私有长期记忆，供 AI 陪伴回答使用。
-2. DeskMate 把语音输入/转写与 AI 陪伴的记录先在本机整理，每小时处理新增内容；晚间重新核对本工作日的完整原始记录，结合小时摘要查漏补缺、总结经验，再将含工作与个人记忆两部分的整篇日总结提交给 KnowledgeOS，由后者管理后续沉淀。
+The local memory workflow then operates as follows:
 
-DeskMate 负责即时记录、短期上下文、来源标记、小时整理、本地日总结和可靠提交。KnowledgeOS 负责接收记录、访问权限、持久来源、检索、后续知识提炼和受控发布。小时草稿不逐条发送，也不直接写 KnowledgeOS 的正式 Wiki 文件夹。
+1. Final records are persisted immediately in the local SQLite store and assigned to the active workday.
+2. An hourly job summarizes only records not covered by an earlier durable hourly checkpoint. Empty hours do not call the model or start recording.
+3. At the configured daily time, default 23:30, or when the user selects **提前结束今天并同步**, DeskMate seals a fixed cutoff.
+4. The daily job rereads every eligible raw final record in that workday in bounded chunks. Hourly summaries are only a cross-check, never a substitute for the raw-record review.
+5. The final result is split into work content and personal memory material. A local combined view is also written for convenient reading.
+6. KnowledgeOS synchronization creates two immutable, idempotent submissions. It never asks KnowledgeOS to guess the class of a mixed journal.
+7. New records after a manual cutoff belong to the next workday, while their real timestamps remain unchanged.
 
-## 2. 现有基础与缺口
+## Local files and durable state
 
-| 能力 | 本次查到的现状 | 下一步 |
-| --- | --- | --- |
-| 双来源保存 | DeskMate SQLite 已保存 `dictation` 与 `companion` 的最终记录 | 复用原记录；小时整理不保存录音和识别中的临时片段 |
-| 自设每日时间 | 已有 daily/manual 和 `dailyTime`，默认 23:30；运行时每分钟检查到期任务 | 扩展为小时检查点、手动/定时工作日封账，成功后切至下一工作日 |
-| 关机补跑 | 已有启动检查、旧日期补处理及手动多批次整理 | 增加小时水位、日封版和待同步队列的持久恢复 |
-| 日期 Markdown | 已有 `knowledge-base/DeskMate/daily/<source>/YYYY-MM-DD.md` | 保留分来源摘要，新增跨来源复核后的综合日记，正文分为工作与个人两类 |
-| 本地长期回忆 | 已审核记忆有本地哈希向量 + 关键词检索 | 新增 KnowledgeOS 证据检索，不替换近期对话上下文 |
-| KnowledgeOS 检索 | 有 search/get/get_context 的 REST/MCP 合同与实现 | 接入 DeskMate 主进程适配器；真实客户端效果待联调 |
-| KnowledgeOS 日记接收 | 有 `memory.submit_journal` 和封存流程 | 接收整篇日总结；完善权限、修订和后续提炼约定 |
-| 自动正式知识沉淀 | KnowledgeOS T09-I 暂不包含静默自动提炼/提升为正式知识 | 由 KnowledgeOS 窗口按用户目标补齐策略、来源链与验收 |
-| 原始记录保留期 | 本次查到现有合同为保留最终记录直到显式忘记 | 新增可配置到期清理，建议默认 20 天；覆盖失败保护与派生原文清理 |
-
-当前 DeskMate 的“同步双链”只是受管 Markdown 文件投影，没有连接 KnowledgeOS 的服务、身份或提交队列，不能作为双向接入完成的依据。
-
-## 3. 推荐记录与整理流程
+The managed Markdown projection contains:
 
 ```text
-语音输入最终文本 ─┐
-                 ├─→ 本地 SQLite 持久记录 ─→ 每小时增量摘要
-AI 陪伴最终对话 ──┘                              │
-                                               ▼
-                                 当天 YYYY-MM-DD.md 草稿
-                                               │
-                                 自设时间/手动：回查全天原记录
-                                               │
-                                  查漏补缺、去重、总结经验
-                                               │
-                                  以固定截止水位完成当天封账
-                                               │
-                              本地待同步队列 → KnowledgeOS
-                                                    │
-                              接收为私有记忆 → 后续受控知识沉淀
-                                                    │
-AI 陪伴 ← DeskMate 组织回答 ← 带来源的授权检索结果 ──────┘
+DeskMate/
+  daily/companion/YYYY-MM-DD.md
+  daily/dictation/YYYY-MM-DD.md
+  journal/YYYY-MM-DD.md
+  journal/work/YYYY-MM-DD.md
+  journal/personal/YYYY-MM-DD.md
 ```
 
-### 每小时处理新增内容
+`journal/YYYY-MM-DD.md` is a local combined preview only. `journal/work` and `journal/personal` are the authoritative class-specific payload sources. All three carry the workday interval, raw-record count, per-source counts and input digest. SQLite remains authoritative for workday state, hourly coverage, final journals, the two-entry delivery outbox and receipts.
 
-- 原始最终记录即时落 SQLite，定时整理只是加工它们。软件崩溃不应丢掉这一小时尚未总结的内容。
-- 按配置时区划分实际小时区间，保留来源、原记录 ID、覆盖范围和输入摘要哈希。模型响应成功且事务提交后才推进处理水位。
-- 两个来源分别处理，避免把听写内容误认为陪伴对话；完整日记再按主题合并，保留必要来源标签。
-- 有新内容才请求模型；无内容小时跳过，不生成空摘要，不自动录音或唤醒语音会话。
-- 小时结果保留主题、明确决定、待办和可追溯事实；过滤寒暄、麦克风测试、口误和重复。AI 建议、故事、转述、待办不写成“用户已经做完”。
-- 语音输入可能是替别人写的稿件或引用资料，不能仅凭第一人称就写进用户人设。沿用记忆来源开关，并为这些记录保留“听写材料”语义。
-- 每个小时摘要只覆盖其输入区间，不反复总结整个历史。模型忙于实时陪伴时，后台摘要排队让路。
+The daily synthesis contract distinguishes:
 
-### 每天一份综合文件
-
-建议在默认应用内部数据目录增加以下结构（相对路径为方案，不是已创建的数据目录）：
-
-```text
-knowledge-base/DeskMate/
-  daily/companion/YYYY-MM-DD.md      现有陪伴分来源摘要
-  daily/dictation/YYYY-MM-DD.md      现有听写分来源摘要
-  journal/YYYY-MM-DD.md              新增：当天合并日记
-```
-
-小时摘要、输入范围、任务状态和同步回执以 SQLite 为准；Markdown 为可查看、可恢复的输出。内部目录在安装目录/代码仓库之外，升级不覆盖。现有用户笔记不移动、不覆盖，外部修改冲突仍需保留。工作日日期用于日记命名，原始时间戳仍保留真实发生时间。
-
-白天更新 `journal/YYYY-MM-DD.md`，内容带“整理中”和截至时间，可以展示小时进展。晚间生成综合稿时重新核对本工作日原文，小时摘要仅作为线索；不直接把每小时摘要拼成长列表。
-
-### 晚间全量复核与经验整理
-
-本工作日指上次封账水位之后、此次封账水位之前的记录范围；并不要求恰好等于日历 00:00～24:00。两种来源所有启用且获准用于记忆的最终记录均参与复核，不受白天 processed 标志限制。
-
-1. 固定本工作日输入清单与水位，读取全部原始最终记录，保留来源、角色和真实时间。
-2. 内容较多时按完整对话/语义段分批复核，每批输出带来源 ID 的事实、决定、待办、工作问题、个人背景与遗漏项。不得静默截断到最近 N 条，也不得仅将小时摘要传给模型就宣称已复核原文。
-3. 将原文复核结果与小时摘要对照，补回遗漏、纠正误读，合并重复事项与跨小时持续项目；以较晚的明确更正更新结论，并保留冲突待确认项。
-4. 系统核对输入覆盖，确保全部记录在复核清单内；模型同时检查主要话题、决定、事件和待办的语义覆盖。记录覆盖检查只能证明流程读过，不能被包装为内容绝对无误。
-5. 对工作问题、尝试、结果进行归纳，形成可复用经验。只有结果有证据才写“已验证做法”；合理但尚未尝试的办法标为“建议/待验证”，AI 的回答或用户的想法不自动算完成的工作。
-6. 两类综合输出、本地原文覆盖清单和最终稿一并成功落盘后才完成封账。部分批次失败显示复核未完成，不能只拼已有片段就发送“全天总结”。
-
-该复核范围是 DeskMate 实际保存并允许整理的记录，不等同于自动监视用户电脑上的全部活动。用户没有讲到的项目进度不能凭空补写。
-
-### 最终分两类，同一日期一份完整文件
-
-| 类别 | 应保留内容 | 组织方式 |
+| Class | Content | Confirmation boundary |
 | --- | --- | --- |
-| 工作总结 | 做了哪些项目、实际进展/产出、遇到的问题、尝试与结果、决定、可复用经验、未完成/下一步 | 按项目归并，明确已做、进行中、计划中；不要只列临时窗口名 |
-| 使用者长期记忆 | 明确的个人经历与背景、性格/相处偏好、喜好、重要生活事件、长期关注与目标、对旧信息的明确更正 | 分稳定资料、日期事件和待确认观察；重大事件保留真实发生日期 |
+| Work | projects, actual progress, outputs, problems, attempts, evidence-backed results, decisions, reusable lessons and next steps | plans and suggestions are not completed work |
+| Personal | explicitly stated biography/experience, preferences, important events, long-term goals and corrections | inference stays marked as pending observation; it does not become confirmed profile data |
 
-这是**内容分类**，不是输入来源分类：陪伴对话和听写都可能包含工作或个人信息。听写中的代写、故事和引用材料只作为材料，不能当成用户亲身经历；两个来源标签仍用于追溯。
+Assistant suggestions, fictional stories and dictated third-party text cannot establish personal facts. Generated memory candidates remain pending for the existing DeskMate review flow.
 
-最终文件结构示例：
+## KnowledgeOS submission contract
 
-```markdown
-# YYYY-MM-DD 工作与个人记忆
+Every completed workday queues exactly two calls to `memory.submit_journal`.
 
-## 工作总结
-### 项目与实际进展
-### 问题、处理和结果
-### 经验与可复用做法
-### 决定及下一步
+Work submission:
 
-## 使用者长期记忆
-### 明确背景与经历
-### 性格、喜好与相处偏好
-### 重要事件与长期目标
-### 更正及待确认信息
+```json
+{
+  "memory_class": "work",
+  "project_id": "optional-authorized-project-uuid-or-null",
+  "is_open": false
+}
 ```
 
-无内容的子节可省略。性格与偏好只将用户明确表达或已经确认的内容写为稳定事实；从反复行为得到的观察标为待确认，不能由一次情绪、故事或 AI 推断自动生成确定人设。已保存的“关于我”和已审核记忆不被自动日记悄悄覆盖。
+Personal submission:
 
-“使用者长期记忆”是日报分类，并不意味着每条自动输出都已获用户审核。保留确认状态，沿用 DeskMate 的长期事实审核流程；KnowledgeOS 可在接收同一份私有日记后分别路由这两类内容，是否提升、共享和正式发布由它的策略决定。
+```json
+{
+  "memory_class": "personal",
+  "project_id": null,
+  "is_open": false
+}
+```
 
-一项事件可能同时影响项目和个人，正文可交叉引用但不复制多份当成多次发生。同一工作日仍只提交整篇日记，不因分两类拆成两个竞争同日身份的 journal 请求。
+Both payloads use the original workday as `journal_date`, a class-specific `source_path_alias`, the configured sensitivity and a stable idempotency key derived from day, class and sealed content. Their Markdown front matter preserves the period, total record count, per-source counts and source-input digest. The local outbox stores the fixed payload snapshot, retry state and KnowledgeOS submission receipt.
 
-本地元数据至少保留日期、时区、覆盖起止、状态、版本、来源数量、原记录水位和内容哈希。对外发送正文与必要来源标记，不包含绝对路径、录音或设备信息。
+The two submissions are separate even when the local UI displays one combined daily summary. One class may never be substituted for the other, and `personal` is rejected locally if a project ID is supplied.
 
-### 已确认：定时或手动结束当天，之后内容算第二天
+KnowledgeOS `accepted` means the private Raw journal was received. It does not mean the entry has become formal knowledge or a confirmed digital-person profile.
 
-用户选择以“工作日封账”划分日报。默认 23:30 自动执行，时间可修改；在记忆管理中提供同一流程的手动入口“提前结束今天并同步”。手动整理历史记录仍是另一个动作，不等于结束今天。
+## Retrieval into AI companion
 
-- 例如 9 月 11 日 21:00 手动结束今天，先固定截止时刻和原记录水位；生成 `2026-09-11.md` 的最终综合版本，保存成功后进入同步队列。
-- 截止水位之后的新内容归到 `2026-09-12.md`，但保留它们实际发生在 9 月 11 日的时间戳。日报展示“本工作记录周期”，避免把实际发生时间改掉。
-- 21:00 已手动结束的当天，23:30 自动任务不再封一次；重复点击也不能提前把次日封掉。次日的自动任务在次日设定时间再运行。
-- 手动/定时共用一次性工作日任务、固定输入快照和进度记录。模型生成期间又说的新话先暂存在下一周期，不能被漏掉或在两天中重复统计。
-- 日末必须重新读取截止水位前的全部本工作日原始记录，小时摘要仅辅助对照；即使小时任务已经把原记录标记 processed，也仍必须进行原文复核、经验整理并产生两类完整日综合。
-- 部分小时或综合失败时，原工作日保留可重试的关闭中状态和截止水位，不宣称成功封账；下一周期新记录继续保存。
-- 本地封账与远端已接收是两个状态。KnowledgeOS 未启动/断网时，显示“总结已保存，待同步”；恢复后发送固定整篇快照，不把等候期间的新内容重新塞回旧日记。
-- 若本机已休眠或完全退出，无法在那个时刻运行模型；下次启动补处理。尚未手动结束的旧日期按当时保存的日程划分，补跑日期不能覆盖原工作日日期。
-- 此按钮不执行系统关机/睡眠。界面显示正在整理、已保存待同步或已接收，用户可据此决定何时关机；提前退出后任务可以续跑。
+The main process can call `knowledge.search` with bounded query text, hybrid retrieval and scopes `wiki` plus `agent_memory`. Returned title, snippet, citation and timestamp are bounded and inserted as untrusted evidence into the companion model context. Evidence cannot extend application, device or filesystem permissions. If KnowledgeOS is unavailable or read access is disabled, conversation continues with local context.
 
-这样符合当前 KnowledgeOS 日记 sealed 后不再追加的合同。同日封账后的正常新增无需修订；用户后来纠正旧日记或需要撤回时，仍需对方提供受控修订/撤回机制。
+Retrieval and daily synchronization are separate settings. The renderer receives only narrow IPC operations. The official KnowledgeOS stdio MCP adapter path is encrypted with Electron safe storage; the adapter uses the configured Credential ID and KnowledgeOS dynamic Core discovery rather than a hard-coded port or network scan.
 
-### 原始文字保留与自动清理
+## Schedule, recovery and retention
 
-建议默认原始对话/转写记忆保留 **20 天**，支持改为 10 天、20 天、30 天或自定义天数。这是为回查和修正摘要保留余量的产品建议，不代表现有软件已开启该策略。
+- Default schedule: hourly incremental processing plus daily close at 23:30; both controls are user configurable.
+- Manual close: fixes the cutoff, runs the full daily review and attempts both submissions immediately.
+- Crash recovery: a `closing` journal, unsummarized historical day or pending delivery is resumed by the periodic service.
+- Repetition: one completed workday is immutable locally; stable outbox uniqueness and idempotency keys prevent duplicate remote submissions.
+- Raw retention: default 20 days, configurable from 1 to 365 days.
+- Cleanup eligibility: the local final journal must be completed. If synchronization is enabled, both `work` and `personal` receipts must be accepted first.
+- Cleanup scope: only DeskMate local raw conversation/dictation records and their local raw outbox copies. It does not delete KnowledgeOS Raw, exported files, daily journals or accepted long-term memory.
 
-- 清理对象是记忆模块的原始最终对话/转写文字、已完成的含原文中间队列及相关原文检索副本；“今天的内容做过总结”不等于今天立即删原文。
-- 到期以真实记录时间计算，按真实本地日期和配置时区判定，而非工作日文件名；不能因提前封账多扣一天。
-- 原文超过保留期，且覆盖它的最终日总结已成功本地保存，才可自动清理。若启用中枢同步，还须对应最终稿已由 KnowledgeOS 接收；没有启用同步则以本地完整输出成功为条件。
-- 总结失败、受管文件写入冲突、尚未完成的审核/更正需要原文、远端同步失败时，相关原文暂缓清理并显示原因。长时间阻塞超过保留目标时提醒处理，不静默无限积压，也不为了达到天数强删未整理内容。
-- 已到期但暂缓清理的记录，在依赖恢复后再次检查并清理；保留策略页面显示待清理与暂缓数量。
-- 日期总结和用户已确认的长期记忆不适用这 20 天规则，继续保存，以支持几个月后的回忆；用户可另行删除/设置总结归档策略。
-- 小时摘要只是中间结果：当天最终稿、必要审核与已启用的同步完成后，再按同样的短期保留规则清理，避免留下无限增长的小时碎片。
-- 清理时同步使原文索引、受管中间副本和原文 outbox 失效，保留不含正文的覆盖/哈希/删除状态。引用若已无原文，应明确说明“原文已到期，仅保留摘要”，不能伪装还能查看逐字记录。
-- 保留期不会擅自删除用户导出的文件、备份或独立“历史记录”中的语音输入结果；如要一并清理，必须在界面明确选中范围。也不能把本地清理描述成所有备份/磁盘介质上的安全擦除。
-- 第一次开启或缩短天数时显示受影响范围、数量及暂缓项，保存后按策略执行；不会在软件升级时无提示删除旧记录。
+Shortening retention never turns a failed or incomplete summary into an eligible deletion. KnowledgeOS deletion/retraction remains a separate remote operation and is not implied by local expiry.
 
-已存在的“彻底忘记”语义仍单独处理：若内容此前已交给 KnowledgeOS，应展示远端撤回是否完成。本地清理原文不等于远端日总结同步删除。
+## UI and current configuration state
 
-## 4. 两边的接口衔接
+The memory-management page now provides:
 
-### 检索方向
+- companion/dictation source controls;
+- hourly-summary switch;
+- daily/manual schedule and close time;
+- local raw retention days;
+- **提前结束今天并同步**;
+- completed/pending/synchronized journal status;
+- KnowledgeOS adapter selection, Credential ID, optional work Project ID and sensitivity;
+- independent AI-companion retrieval and daily-sync switches;
+- connection test and retry-pending actions.
 
-KnowledgeOS 本次工作树已有：
+The code path is implemented and covered by synthetic tests. Live KnowledgeOS use still requires the user to select the official adapter and enter the DeskMate Credential ID; the repository does not guess or extract those values.
 
-| MCP 能力 | REST 路径（基于 `/api/v1`） | DeskMate 用途 |
-| --- | --- | --- |
-| `knowledge.search` | `POST /search` | 查授权 Wiki 与自己的 `agent_memory`，获得片段和引用 |
-| `knowledge.get_context` | `POST /evidence/context` | 取带预算的完整证据块 |
-| `knowledge.get` | `GET /knowledge/{id}` | 按需要精读获授权知识页 |
-| `submission.get_status` | `GET /submissions/{id}` | 核实日记提交的处理结果 |
+## KnowledgeOS receiving-side status
 
-AI 陪伴先用现有人设和近期上下文；用户问到过去的事情、知识库资料或指定项目时检索中枢，再由 DeskMate 现有模型组织回答并用现有 TTS 播放。普通查询不自动调用 KnowledgeOS 的 `knowledge.answer`，避免串行再生成一次答案。
+The KnowledgeOS project reported the following as implemented and rebuilt on 2026-09-11:
 
-保留引用 ID、版本和来源时间；检索文字是证据，不能作为扩展应用/设备权限的命令。超时、服务未启动或权限失效应明确降级为本地上下文，不让语音一直卡在处理中，也不能说成“知识库没有记录”。听写写入流程不自动混入检索材料。
+- a new Agent automatically receives separate work-memory and personal-memory spaces;
+- the same Agent can continue its own memory across devices;
+- private memory remains isolated between different Agents;
+- the default integration identity can submit memory but cannot use that permission to write formal knowledge;
+- a memory dashboard is available;
+- personal-profile entries are sourced profile material, while automatic merge, confirmation and correction into a digital person remain a later phase;
+- Core status was `ready`; reported automatic verification was Core/MCP 69 passed, plus MCP supplemental 30 passed and 1 skipped.
 
-KnowledgeOS 自有私密记忆与共享正式知识的权限不同。DeskMate 默认可查自己的私有记忆和获授权 Wiki，不能假定能读到 Codex 等其他 Agent 的私有原始记忆；跨 Agent 复用由 KnowledgeOS 的显式共享/知识提升策略处理。
+These are receiving-project results supplied by its maintainer. DeskMate does not restate them as tests run in this repository.
 
-### 日总结提交方向
+## Implementation map
 
-采用 `memory.submit_journal`（REST 为 `POST /api/v1/memory/journals`），沿用现有字段：
+- `electron/companion-memory.cjs`: workday state, hourly/daily persistence, two-class outbox and retention gates.
+- `electron/memory-journal-service.cjs`: hourly processing, full daily synthesis, two submissions, retry and retrieval gateway.
+- `electron/knowledgeos-settings.cjs`: encrypted adapter location and validated identity/project settings.
+- `electron/knowledgeos-mcp-client.cjs`: bounded stdio MCP transport.
+- `electron/knowledge-base-projection.cjs`: combined/work/personal Markdown projection.
+- `electron/companion-model-adapter.cjs`: bounded KnowledgeOS evidence in companion context.
+- `electron/main.cjs`, `electron/preload.cjs`, `src/pages.jsx`: scheduler, narrow IPC and memory-management UI.
+- `tests/t25-knowledgeos-memory-integration.test.mjs`: policy migration, hour coverage, full close, two submissions, idempotency, provenance, retention and retrieval tests.
 
-- `journal_date`：已确定的本地工作日日期，补跑不改成上传日期；正文元数据保留实际覆盖时间范围。
-- `markdown`：当天最终综合全文；不逐小时调用提交。
-- `source_path_alias`：例如 `DeskMate/journal/YYYY-MM-DD.md` 的逻辑别名。
-- `is_open`：本方案仅提交成功封账的全天综合稿，使用 false；封账后新内容属于下一工作日，不再更新这份 Raw。
-- `sensitivity`：私有为默认，保留用户已有更严格级别。
-- `project_id`：仅使用 KnowledgeOS 提供且获授权的稳定 ID。跨项目全天总结可不绑定单个项目，正文列主题，不能伪造项目 ID。
-- `idempotency_key`（MCP）或 `Idempotency-Key`（REST）：同一版本重试使用完全相同的键和请求内容。
+## Remaining live acceptance
 
-本地待同步队列保存待提交的固定正文快照、日记日期/版本/哈希、尝试次数、下次重试时间与返回的 submission ID。断网后继续本地整理；恢复后限速重试，不能边重试边改变同一个请求的正文。
+1. Configure a dedicated DeskMate Credential ID and the official KnowledgeOS MCP adapter.
+2. Test `knowledge.search` against non-private fixture data and verify citations in a companion turn.
+3. Seal one synthetic workday and verify exactly one work Raw and one projectless personal Raw in the KnowledgeOS memory dashboard.
+4. Retry the identical payload and verify no duplicate Raw is created.
+5. Confirm that another Agent cannot read DeskMate private memory and the same Agent on another authorized device can.
+6. Verify an inferred preference remains sourced/pending and does not silently overwrite the confirmed profile.
+7. Verify local raw expiry does not remove either KnowledgeOS Raw submission.
 
-状态至少区分“整理中、综合稿、待同步、KnowledgeOS 已接收、失败待重试”。KnowledgeOS 返回 completed 也必须结合提交类型和阶段判断：当前日记接收的 `raw_sealed` 只证明记忆已封存，不能显示成“正式知识已发布”。
-
-读取中枢和提交日记可独立开关。自动同步在用户配置 DeskMate 身份、范围并启用后运行，凭据只由主进程或 KnowledgeOS 安全存储管理。连接使用 KnowledgeOS 交付的启动/发现方式，其服务是动态本机端口；不把端口写死，也不扫描端口或猜测数据根。
-
-首版优先对齐 KnowledgeOS 提供的通用 stdio MCP 接入教程。若选择直接 REST，则使用同一正式公共服务合同，并由 KnowledgeOS 说明动态地址发现、鉴权、重连与凭据轮换。
-
-## 5. KnowledgeOS 窗口需要补齐/确认的事项
-
-1. **权限端到端一致。** 本次工作树合同和 MCP 已写 `memory.submit`，但 `_submit_memory_journal_durable` 仍检查 `kb.submit`；该差异属于进行中源码观察。请用只有 `kb.read + memory.submit` 的 DeskMate 身份验证实际接收，不要求 DeskMate 为记日记额外获得正式知识提交权。
-2. **封版与修订。** 当前按 Agent 实例、项目和日期识别日记；sealed 后拒绝扩展。用户已确认正常新增进下一工作日，该规则可直接适配；后来纠正错误、删除或撤回仍需要受控机制，保持旧 Raw 不可变且修订可关联。不能为修正旧日记而伪造日期或更换 Agent 身份。
-3. **自动沉淀策略及两类路由。** T09-I 首版明确暂不做静默自动摘要与正式知识提升。用户期望“日总结接收后自动整理沉淀”，需作为后续策略实现，并保留 Reviewer/Publisher、来源链、费用和权限约束。同一日记中的工作总结可提炼项目知识/经验，使用者长期记忆继续按私有背景、偏好和事件管理；保留已确认与待确认区别，不默认把私人日记变成跨 Agent 共享知识。
-4. **私有记忆的精读。** search 支持 `agent_memory`，但 `knowledge.get` 和 get_context 的显式对象引用主要针对 knowledge/source_version。请给出日记命中后读取足够上下文的受控路径，不能只靠短片段假装理解整天。
-5. **稳定身份与多电脑。** 当前日记按实例分组，记忆读取按 owner 隔离；教程需说明 DeskMate 升级、凭据轮换、第二台电脑时如何保持身份、避免同日重复库或读不到自己旧记忆。
-6. **教程和验收夹具。** 提供可用版本/构建标识、配置导出示例、九项 MCP 中相关能力的准确输入输出、检索引用、提交回执、相同请求重试、封版冲突、服务重启与鉴权过期的例子。示例只用临时数据。
-
-## 6. DeskMate 侧准备与开发顺序
-
-这些是新增计划，不代表本轮已经修改运行代码：
-
-1. 先复用现有记忆 SQLite、来源开关、每日时间与 Markdown 投影，增加小时/原文全量复核/日综合/封版各自的任务记录和处理水位；日末输出工作与使用者记忆两部分，只需电脑即可做隔离验证。
-2. “记忆管理”加入小时整理开关、间隔（默认 60 分钟）、晚间封账时间（默认 23:30）、“提前结束今天并同步”、当天草稿/最终稿预览、补整理和重试；增加原文保留天数（建议 20 天）、清理范围、预览及暂缓原因。来源记录与隐私设置沿用原语义。
-3. 确保同日多次运行幂等，任务崩溃可续跑，系统睡眠/关机期间不假装处理；醒来按原日期补跑。时区改变不重分历史日期，夏令时重复小时靠 UTC 区间和稳定水位去重。
-4. 建立窄的 `KnowledgeOSAdapter`，先用模拟服务验证检索、日记提交和回执；按最终教程接入真实传输和身份。
-5. 接入 AI 陪伴有界检索与本地持久待同步队列。避免实时语音、小时摘要和日综合相互抢占；重连不重复播报/提交。
-6. 用一组无私人信息的样例完成“白天两来源 → 两小时整理 → 手动/晚间封账 → 新增转次日 → 故障重试 → 中枢检索回忆 → 原文到期清理”闭环，再做用户真实验收。
-
-小时摘要和自动日记不自动变成 DeskMate 已审核的长期事实；原有“审核后进入长期记忆”保持。日记可以自动交付到中枢私有空间，事实提升、共享和正式知识发布按各自规则处理。用户纠正或忘记时，本地待同步版本也要失效；已同步内容的远端撤回未成功时应如实显示。
-
-## 7. 验收重点
-
-- 空小时无模型调用；有内容小时仅处理新增数据。
-- 小时任务中断后重跑不重复；手动与自动整理并发不会重复消费。
-- 当天所有记录已被小时任务处理时，仍能正确产生完整日综合。
-- 在小时摘要故意遗漏一项重要决定或错误理解一项进展的夹具中，夜间重新读原文后能补全/更正；跨小时项目归并，不丢原文尾部。
-- 工作与使用者记忆分类正确，经历、偏好、重要事件保留来源与确认状态；建议、计划和未经验证经验不写成已完成事实。
-- 手动或定时封账后的新记录入次日稿且保留真实时间；跨午夜/关机补跑不改工作日。
-- 提前手动完成后，晚间自动任务和再次点击不重复封账、不提前封掉次日。
-- 部分小时失败时不封版；最终 Markdown 可打开且与队列正文哈希一致。
-- 相同提交超时重试只产生一个接收结果；已封版修订遵守对方合同。
-- 普通只读检索带来源；无匹配、服务故障、无权限能区分。
-- DeskMate 私有日记能由 DeskMate 召回，其他 Agent 的私有记忆不可越权读取。
-- 日总结不把 AI 故事、建议、引用稿、已取消待办写成用户做过的事实。
-- 日记接收与正式知识发布显示不同状态。
-- 20 天边界、失败暂缓、清理恢复、缩短保留期预览与关联原文索引清理正确；长期日总结仍可召回。
-
-## 8. 本次核对的源码与文档
-
-DeskMate（当前权威工作树）：
-
-- `electron/companion-memory-policy.cjs`：daily/manual、自设时间、启动补跑与来源状态。
-- `electron/companion-memory-pipeline.cjs`：分来源增量整理、既有日摘要合并、输入哈希去重。
-- `electron/companion-memory-generation.cjs`：手动补处理及 Markdown 输出协调。
-- `electron/knowledge-base-projection.cjs`：现有分来源日文件、受管写入和外部修改冲突。
-- `docs/contracts/t21j-dialogue-memory-continuity-v1.md`：上下文、已审核检索与默认本地目录边界。
-
-KnowledgeOS（`F:/Codex/KnowledgeOS`，只读查验）：
-
-- `docs/contracts/04-REST与MCP合同.md` 与 `packages/contracts/mcp/tools.json`。
-- `services/core/src/knowledgeos/application/pipeline.py`：日记持久接收、sealed 拒绝和私有索引。
-- `services/core/src/knowledgeos/infrastructure/agent_intake.py`：staging/Raw 日记分支。
-- `apps/desktop/src/integrationConfig.ts`：通用 MCP 配置导出。
-- `flow/tasks/T09-I-跨Agent长期记忆与统一看板.md`：私有空间、独立记忆权限及首版范围。
-
-本次未提交真实记忆、未读取个人知识正文、未调用生产模型、未修改 KnowledgeOS 工作树，也未配置定时任务。该文档是双方实现和教程对齐的起点。
+No hardware access, firmware write, personal-record upload or KnowledgeOS mutation was performed while implementing this side.

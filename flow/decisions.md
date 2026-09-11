@@ -1,10 +1,16 @@
 # Decisions
 
+## D122 - Local combined preview maps to two sealed KnowledgeOS memory classes
+
+- 2026-09-11 receiver clarification supersedes D121's single-remote-journal wording. DeskMate may keep one combined dated file for local reading, but KnowledgeOS receives exactly two immutable submissions: `memory_class=work` may carry an authorized `project_id`; `memory_class=personal` always carries `project_id=null`.
+- Both class payloads preserve workday interval, per-source counts and input digest. Pending observations remain sourced memory material and cannot silently become confirmed profile facts. An accepted memory submission is not formal-knowledge publication.
+- The configurable 20-day policy deletes only DeskMate local raw records after the final local journal is complete and, when sync is enabled, both class receipts exist. It never deletes KnowledgeOS Raw. Implementation and remaining live acceptance are recorded in the [T25 handoff](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md).
+
 ## D121 - Workday memory closes once and nightly synthesis rechecks raw records
 
 - 2026-09-11 user clarification: the configurable evening close (23:30 example) and “提前结束今天并同步” share one workday operation. Input after the fixed cutoff belongs to the next dated journal while retaining actual timestamps; a manual close suppresses that day's scheduled duplicate.
 - Nightly synthesis must re-examine all eligible raw final records in the workday, using hourly summaries only as supporting checkpoints. It repairs omissions, reconciles corrections and extracts evidence-backed lessons. One final daily Markdown contains work/project progress and user long-term-memory sections; source and confirmation state remain explicit.
-- KnowledgeOS receives the complete private journal. Its knowledge compilation/publication remains its responsibility. These are requirements for T25, not a claim that the adapter, scheduler or retention feature is implemented. Configurable 20-day raw retention is a proposed default; no deletion policy has been activated.
+- Superseded in part by D122: the combined journal remains a local preview, while KnowledgeOS receives separate work and personal journals. Knowledge compilation/publication remains its responsibility.
 - Proposal and receiving-side gaps: [T25 handoff](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md).
 
 ## D120 - Codex work state belongs on EasyInput LEDs, not Xiaozhi's face

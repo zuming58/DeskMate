@@ -623,8 +623,11 @@ export function MemoryManagementPage({ notify }) {
   const [forget, setForget] = useState(null);
   const [busy, setBusy] = useState(false);
   const [memoryStatus, setMemoryStatus] = useState({ ready: false, storage: "unavailable", turns: 0, dailySummaries: 0, pendingCandidates: 0, longTermMemories: 0, embeddings: 0, unprocessedTurns: 0, indexedChunks: 0 });
-  const [memoryPolicy, setMemoryPolicy] = useState({ version: 1, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", lastResults: {} });
+  const [memoryPolicy, setMemoryPolicy] = useState({ version: 2, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", hourlyEnabled: true, rawRetentionDays: 20, lastResults: {} });
   const [knowledgeBaseStatus, setKnowledgeBaseStatus] = useState({ configured: false, storage: "unavailable", label: "", projection: "markdown-double-link-v1", embedding: "deskmate-local-hash-embedding-v1" });
+  const [journalStatus, setJournalStatus] = useState({ active: { day: "" }, latest: null });
+  const [knowledgeOsStatus, setKnowledgeOsStatus] = useState({ configured: false, commandConfigured: false, commandLabel: "", credentialConfigured: false, credentialId: "", projectId: null, readEnabled: false, syncEnabled: false, sensitivity: "private" });
+  const [knowledgeOsDraft, setKnowledgeOsDraft] = useState({ credentialId: "", projectId: "", readEnabled: false, syncEnabled: false, sensitivity: "private" });
   const [memoryItems, setMemoryItems] = useState([]);
   const [indexResults, setIndexResults] = useState([]);
   const nextMemoryRunLabel = useMemo(() => {
@@ -646,11 +649,16 @@ export function MemoryManagementPage({ notify }) {
   };
   const refreshMemory = useCallback(async () => {
     try {
-      const [status, items, knowledgeBase, policy] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), filter === "turns" ? globalThis.desktopBridge?.listMemoryTurns?.({ source: sourceFilter, query, limit: 100 }) : globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.()]);
+      const [status, items, knowledgeBase, policy, journal, knowledgeOs] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), filter === "turns" ? globalThis.desktopBridge?.listMemoryTurns?.({ source: sourceFilter, query, limit: 100 }) : globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.(), globalThis.desktopBridge?.getMemoryJournalStatus?.(), globalThis.desktopBridge?.getKnowledgeOsStatus?.()]);
       if (status) setMemoryStatus(status);
       setMemoryItems(Array.isArray(items) ? items : []);
       if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
       if (policy) setMemoryPolicy(policy);
+      if (journal) setJournalStatus(journal);
+      if (knowledgeOs) {
+        setKnowledgeOsStatus(knowledgeOs);
+        setKnowledgeOsDraft((current) => current.credentialId || current.projectId ? current : { credentialId: knowledgeOs.credentialId || "", projectId: knowledgeOs.projectId || "", readEnabled: knowledgeOs.readEnabled === true, syncEnabled: knowledgeOs.syncEnabled === true, sensitivity: knowledgeOs.sensitivity || "private" });
+      }
     } catch { setMemoryStatus((current) => ({ ...current, ready: false, storage: "unavailable" })); }
   }, [filter, sourceFilter, query]);
   useEffect(() => { const timer = window.setTimeout(refreshMemory, 160); const poll = window.setInterval(refreshMemory, 30_000); return () => { window.clearTimeout(timer); window.clearInterval(poll); }; }, [refreshMemory]);
@@ -699,7 +707,7 @@ export function MemoryManagementPage({ notify }) {
       const result = await globalThis.desktopBridge?.exportReviewedMemories?.();
       if (result?.cancelled) return;
       if (!result?.ok) throw new Error(result?.reason || "memory-export-failed");
-      notify(`已导出 ${result.dailySummaries} 天摘要和 ${result.longTermMemories} 条长期记忆`);
+      notify(`已导出 ${result.dailySummaries} 份来源摘要、${result.dailyJournals || 0} 份日终综合和 ${result.longTermMemories} 条长期记忆`);
     } catch (error) { notify(`记忆导出失败：${error.message}`); }
   };
   const chooseKnowledgeBase = async () => {
@@ -756,39 +764,90 @@ export function MemoryManagementPage({ notify }) {
   const saveMemoryPolicy = async () => {
     setBusy(true);
     try {
-      const result = await globalThis.desktopBridge?.setMemoryPolicy?.({ version: 1, enabledSources: memoryPolicy.enabledSources, schedule: memoryPolicy.schedule, dailyTime: memoryPolicy.dailyTime });
+      const result = await globalThis.desktopBridge?.setMemoryPolicy?.({ version: 2, enabledSources: memoryPolicy.enabledSources, schedule: memoryPolicy.schedule, dailyTime: memoryPolicy.dailyTime, hourlyEnabled: memoryPolicy.hourlyEnabled !== false, rawRetentionDays: Number(memoryPolicy.rawRetentionDays) || 20 });
       if (!result?.version) throw new Error(result?.reason || "memory-policy-save-failed");
       setMemoryPolicy(result);
       notify(result.enabledSources.length ? `记忆来源与整理时间已保存：${result.schedule === "daily" ? `每天 ${result.dailyTime}` : "仅手动整理"}` : "记忆来源已全部关闭；不会自动整理新内容");
     } catch (error) { notify(`记忆策略保存失败：${error.message}`); }
     finally { setBusy(false); }
   };
+  const closeWorkday = async () => {
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.closeMemoryWorkday?.();
+      if (!result?.ok) throw new Error(result?.reason || "memory-workday-close-failed");
+      notify(result.skipped ? "今天已经提前收尾过，不会重复关闭下一工作日" : result.sync?.accepted === 2 ? `已完成 ${result.day} 日终总结，KnowledgeOS 已接收工作与个人两份日记` : result.sync?.reason === "knowledgeos-sync-disabled" ? `已完成 ${result.day} 本地日终总结；KnowledgeOS 同步当前未启用` : `已完成 ${result.day} 日终总结；KnowledgeOS 尚未接收的部分会自动重试`);
+      await refreshMemory();
+    } catch (error) { notify(`提前收尾失败：${error.message}`); }
+    finally { setBusy(false); }
+  };
+  const chooseKnowledgeOsAdapter = async () => {
+    const result = await globalThis.desktopBridge?.chooseKnowledgeOsAdapter?.();
+    if (result?.cancelled) return;
+    if (!result?.ok) { notify(`适配器配置失败：${result?.reason || "knowledgeos-adapter-invalid"}`); return; }
+    setKnowledgeOsStatus(result.status);
+    notify(`已选择 ${result.status.commandLabel}`);
+  };
+  const saveKnowledgeOs = async () => {
+    setBusy(true);
+    try {
+      const result = await globalThis.desktopBridge?.setKnowledgeOsSettings?.({ ...knowledgeOsDraft, projectId: knowledgeOsDraft.projectId || null });
+      if (!result) throw new Error("knowledgeos-settings-save-failed");
+      setKnowledgeOsStatus(result);
+      notify("KnowledgeOS 读取、同步与记忆分类设置已保存");
+    } catch (error) { notify(`KnowledgeOS 设置保存失败：${error.message}`); }
+    finally { setBusy(false); }
+  };
+  const testKnowledgeOs = async () => {
+    setBusy(true);
+    try { const result = await globalThis.desktopBridge?.testKnowledgeOsConnection?.(); notify(result?.ok ? "KnowledgeOS 连接与当前身份正常" : `KnowledgeOS 暂不可用：${result?.reason || "knowledgeos-request-failed"}`); }
+    finally { setBusy(false); }
+  };
+  const syncKnowledgeOs = async () => {
+    setBusy(true);
+    try { const result = await globalThis.desktopBridge?.syncKnowledgeOsMemory?.(); notify(result?.ok ? result.skipped ? "没有待提交的日记" : `KnowledgeOS 已接收 ${result.accepted} 份分类日记` : `仍有日记待重试：${result?.reason || "knowledgeos-submit-failed"}`); await refreshMemory(); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="companion-embedded memory-management">
       <div className="embedded-heading">
         <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话和成功的语音输入共用这条流水线。</p></div>
-        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>{busy ? "正在按日期整理…" : "整理待处理记录"}</Button><Button icon={FolderOpen} variant="soft" disabled={!memoryStatus.ready} onClick={async () => { const result = await globalThis.desktopBridge?.openKnowledgeBaseFolder?.(); if (!result?.ok) notify("笔记文件夹暂时无法打开"); }}>打开笔记文件夹</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
+        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.ready} onClick={() => { void closeWorkday(); }}>{busy ? "正在收尾…" : "提前结束今天并同步"}</Button><Button variant="soft" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理历史待处理记录</Button><Button icon={FolderOpen} variant="soft" disabled={!memoryStatus.ready} onClick={async () => { const result = await globalThis.desktopBridge?.openKnowledgeBaseFolder?.(); if (!result?.ok) notify("笔记文件夹暂时无法打开"); }}>打开笔记文件夹</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button><Button icon={Trash} variant="danger" disabled={!memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>彻底忘记全部</Button></div>
       </div>
       <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedDays || 0} 天、${memoryStatus.unprocessedTurns || 0} 条待整理。每日摘要可以直接查看；长期记忆候选须由你审核后，才供 AI 陪伴长期检索。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       <Card className="memory-policy-card">
         <Notice tone="info" title="当天接着聊 · 旧记录手动整理">陪伴会接续最近 24 小时的对话；换话题、结束监听、重新唤醒不等于清空上下文。更早的长期信息按当前问题检索已审核记忆。普通听写只输入文字，不用记忆生成回答。原始记录即时存本地，即使关机也保留；点击“整理待处理记录”可按日期补整理多天内容，无需软件全天开着。</Notice>
-        <SectionTitle index="01" title="来源与自动整理" description="两个来源默认开启且可独立关闭；每天 23:30 按本地时间整理，失败来源会单独重试。" />
+        <SectionTitle index="01" title="来源与自动整理" description="每小时整理新增内容；默认每天 23:30 重新读取全天原文并封账，失败可恢复重试。" />
         <div className="memory-policy-grid">
           <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
           <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
           <label className="field-label">整理方式<select value={memoryPolicy.schedule} onChange={(event) => setMemoryPolicy((current) => ({ ...current, schedule: event.target.value }))}><option value="daily">每天自动整理</option><option value="manual">仅手动整理</option></select></label>
           <label className="field-label">本地整理时间<input type="time" step="60" disabled={memoryPolicy.schedule !== "daily"} value={memoryPolicy.dailyTime} onChange={(event) => setMemoryPolicy((current) => ({ ...current, dailyTime: event.target.value }))} /></label>
+          <div className="memory-source-toggle"><div><strong>每小时增量摘要</strong><small>只处理新增最终文字，不启动录音</small></div><Toggle label="启用小时整理" checked={memoryPolicy.hourlyEnabled !== false} onChange={(hourlyEnabled) => setMemoryPolicy((current) => ({ ...current, hourlyEnabled }))} /></div>
+          <label className="field-label">原始文字保留天数<input type="number" min="1" max="365" value={memoryPolicy.rawRetentionDays || 20} onChange={(event) => setMemoryPolicy((current) => ({ ...current, rawRetentionDays: event.target.value }))} /><small>默认 20 天；仅在日终总结完成，且启用中枢时两份日记均被接收后清理。</small></label>
         </div>
         <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
         <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
-        <Notice tone="info" title="内置整理规则 · 无需填写提示词">原始文本原样保存在本地 SQLite。每日笔记按主要话题、做了什么、决定与待办整理，过滤口误、重复、寒暄和无关闲聊，不修改原文，也不把助手的故事或猜测当成你的事实。未选择外部目录时，日期命名的 Markdown 存在软件内置知识库的 DeskMate/daily/companion/ 与 DeskMate/daily/dictation/ 下。只有你确认保留的候选才进入长期记忆；AI 陪伴每轮按问题做本地向量＋关键词检索，修正和删除从下一轮生效。当前是本地哈希向量索引，不是神经语义 embedding。可以稍后更换知识库目录，不会扫描其他资料。</Notice>
+        <Notice tone="info" title="内置整理规则 · 无需填写提示词">原始文字原样保存在本地 SQLite；日终会重新读取截止水位前全部启用来源的原始记录，小时摘要只用于查漏补缺。软件在 DeskMate/journal/ 保存日期命名的合并预览，并在 work/ 与 personal/ 保存两份分类稿；助手故事、建议和听写中的第三方材料不会被冒充为你的事实。提前收尾后新记录归入下一工作日，但真实发生时间不变。已审核长期记忆继续使用本地向量＋关键词检索。</Notice>
       </Card>
       <Card className="memory-knowledge-base"><SettingRow icon={FolderOpen} title="知识库位置" description={knowledgeBaseStatus.configured ? `已选择文件夹：${knowledgeBaseStatus.label}。完整路径只保存在 Electron 主进程。` : "选择保存受管 Markdown 双链笔记的本地知识库；DeskMate 不扫描目录中的其他内容。"}><div className="memory-knowledge-base__action"><StatusBadge tone={knowledgeBaseStatus.configured ? "success" : "demo"}>{knowledgeBaseStatus.configured ? "已配置" : "尚未选择"}</StatusBadge><Button variant="soft" onClick={chooseKnowledgeBase}>{knowledgeBaseStatus.configured ? "重新选择" : "选择文件夹"}</Button><Button variant="soft" disabled={!knowledgeBaseStatus.configured || busy} onClick={() => { void syncKnowledgeBase(); }}>同步双链</Button></div></SettingRow><Notice tone="info" title="双链与索引边界">只在所选目录的 DeskMate/ 子目录写入带稳定 ID 的 Markdown 与 [[双向链接]]；外部修改发生冲突时保留用户版本。SQLite 始终是唯一真相源。</Notice></Card>
+      <Card className="memory-policy-card">
+        <SectionTitle index="02" title="连接 KnowledgeOS" description="读取授权知识与提交日终记忆相互独立；凭据仍由 KnowledgeOS 和 Windows 凭据管理器保管。" />
+        <div className="memory-policy-grid">
+          <div className="memory-source-toggle"><div><strong>MCP 适配器</strong><small>{knowledgeOsStatus.commandConfigured ? knowledgeOsStatus.commandLabel : "等待选择 KnowledgeOS 导出的适配器"}</small></div><Button variant="soft" onClick={() => { void chooseKnowledgeOsAdapter(); }}>{knowledgeOsStatus.commandConfigured ? "重新选择" : "选择适配器"}</Button></div>
+          <label className="field-label">Credential ID<input value={knowledgeOsDraft.credentialId} placeholder="KnowledgeOS 提供的 UUIDv7" onChange={(event) => setKnowledgeOsDraft((current) => ({ ...current, credentialId: event.target.value }))} /></label>
+          <label className="field-label">工作记忆 Project ID（可选）<input value={knowledgeOsDraft.projectId} placeholder="跨项目可留空；个人记忆始终不绑定项目" onChange={(event) => setKnowledgeOsDraft((current) => ({ ...current, projectId: event.target.value }))} /></label>
+          <label className="field-label">敏感等级<select value={knowledgeOsDraft.sensitivity} onChange={(event) => setKnowledgeOsDraft((current) => ({ ...current, sensitivity: event.target.value }))}><option value="private">私有</option><option value="sensitive">敏感</option><option value="restricted">严格限制</option></select></label>
+          <div className="memory-source-toggle"><div><strong>AI 陪伴检索</strong><small>查询正式知识和本 Agent 私有记忆</small></div><Toggle label="允许读取" checked={knowledgeOsDraft.readEnabled} onChange={(readEnabled) => setKnowledgeOsDraft((current) => ({ ...current, readEnabled }))} /></div>
+          <div className="memory-source-toggle"><div><strong>日终自动同步</strong><small>每天固定提交 work 与 personal 两份 sealed 日记</small></div><Toggle label="允许同步" checked={knowledgeOsDraft.syncEnabled} onChange={(syncEnabled) => setKnowledgeOsDraft((current) => ({ ...current, syncEnabled }))} /></div>
+        </div>
+        <div className="memory-policy-footer"><small>个人日记强制 project_id=null；同一内容使用稳定幂等键重试。已接收只表示 KnowledgeOS 封存成功，不表示发布成正式知识。</small><div className="button-row"><Button variant="soft" disabled={busy || !knowledgeOsStatus.configured} onClick={() => { void testKnowledgeOs(); }}>测试连接</Button><Button variant="soft" disabled={busy || !knowledgeOsStatus.syncEnabled} onClick={() => { void syncKnowledgeOs(); }}>重试待同步</Button><Button variant="primary" disabled={busy} onClick={() => { void saveKnowledgeOs(); }}>保存中枢设置</Button></div></div>
+      </Card>
       <div className="memory-metrics">
-        <Metric label="每日摘要" value={String(memoryStatus.dailySummaries)} unit="天" trend={memoryStatus.ready ? "本地数据库" : "尚未接入"} tone="blue" />
+        <Metric label="日终综合" value={String(journalStatus.completedJournals || 0)} unit="天" trend={journalStatus.active?.day ? `当前 ${journalStatus.active.day}` : "等待记录"} tone="blue" />
         <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />
         <Metric label="长期记忆" value={String(memoryStatus.longTermMemories)} unit="条" trend="可检索" tone="cyan" />
-        <Metric label="本地索引" value={String(memoryStatus.indexedChunks || memoryStatus.embeddings)} unit="切片" trend="可删除重建" tone="violet" />
+        <Metric label="待同步" value={String(journalStatus.pendingJournalSync || 0)} unit="份" trend={knowledgeOsStatus.syncEnabled ? "KnowledgeOS 队列" : "中枢同步未启用"} tone="violet" />
       </div>
       <Card className="memory-toolbar">
         <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "整理结果" }, { value: "turns", label: "逐句记录" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
@@ -798,7 +857,7 @@ export function MemoryManagementPage({ notify }) {
       {indexResults.length > 0 && <Card><SectionTitle index="R" title="检索预览" description="关键词与本地可重建 embedding 的有界结果；不会向 React 暴露向量。" /><div className="memory-item-list">{indexResults.map((item) => <article key={item.chunkId}><div><span>{item.kind}</span><time>{item.day} · {Math.round(item.score * 100)}%</time></div><p>{item.content}</p></article>)}</div></Card>}
       <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title={filter === "turns" ? "尚无逐句记录" : "尚无可管理的摘要或候选"} description={filter === "turns" ? "实时陪伴的你问我答、以及成功的普通语音输入，会原样写入本地 SQLite；这里不显示演示数据。" : "真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。"} action={filter === "turns" ? null : <Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "turn" ? item.source === "dictation" ? "语音输入原文" : item.role === "user" ? "你" : state.settings.companionName || "小智" : item.type === "daily" ? "每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.type === "turn" ? `${item.day} ${new Date(Number(item.createdAt)).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}{item.type !== "turn" && <div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div>}</article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title={filter === "turns" ? "尚无逐句记录" : "尚无可管理的摘要或候选"} description={filter === "turns" ? "实时陪伴的你问我答、以及成功的普通语音输入，会原样写入本地 SQLite；这里不显示演示数据。" : "真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。"} action={filter === "turns" ? null : <Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "turn" ? item.source === "dictation" ? "语音输入原文" : item.role === "user" ? "你" : state.settings.companionName || "小智" : item.type === "journal" ? "日终工作与个人综合" : item.type === "daily" ? "来源每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.type === "turn" ? `${item.day} ${new Date(Number(item.createdAt)).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}{["daily", "candidate"].includes(item.type) && <div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div>}</article>)}</div>}
         </Card>
         <Card>
           <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />

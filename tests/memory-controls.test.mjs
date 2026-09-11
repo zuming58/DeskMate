@@ -35,9 +35,10 @@ test("reviewed export excludes raw turns, pending/rejected candidates and vector
 
   const exported = store.exportReviewed({ exportedAt: "2026-09-01T12:00:00.000Z" });
   assert.deepEqual(exported, {
-    schema: "deskmate.memory.export.v1",
+    schema: "deskmate.memory.export.v2",
     exportedAt: "2026-09-01T12:00:00.000Z",
     dailySummaries: [{ day: "2026-09-01", source: "companion", summary: "reviewed day" }],
+    dailyJournals: [],
     longTermMemories: [{ day: "2026-09-01", source: "companion", kind: "preference", summary: "corrected preference" }],
   });
   const serialized = JSON.stringify(exported);

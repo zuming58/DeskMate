@@ -5,10 +5,12 @@ const MEMORY_SOURCES = Object.freeze(["companion", "dictation"]);
 const MEMORY_SCHEDULES = Object.freeze(["manual", "daily"]);
 const DEFAULT_RESULT = Object.freeze({ day: "", status: "never", inputDigest: "", at: "", reason: "" });
 const DEFAULT_POLICY = Object.freeze({
-  version: 1,
+  version: 2,
   enabledSources: Object.freeze(["companion", "dictation"]),
   schedule: "daily",
   dailyTime: "23:30",
+  hourlyEnabled: true,
+  rawRetentionDays: 20,
   lastResults: Object.freeze({ companion: DEFAULT_RESULT, dictation: DEFAULT_RESULT }),
 });
 
@@ -33,20 +35,23 @@ function normalizeResult(value = {}) {
 }
 
 function validateMemoryPolicy(value = {}, { allowRuntime = false } = {}) {
-  const allowed = new Set(["version", "enabledSources", "schedule", "dailyTime", ...(allowRuntime ? ["lastResults"] : [])]);
+  const allowed = new Set(["version", "enabledSources", "schedule", "dailyTime", "hourlyEnabled", "rawRetentionDays", ...(allowRuntime ? ["lastResults"] : [])]);
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((key) => !allowed.has(key))) throw new Error("memory-policy-invalid");
   const enabledSources = Array.isArray(value.enabledSources) ? [...new Set(value.enabledSources.map(String))] : [];
-  if (value.version !== 1 || enabledSources.some((source) => !MEMORY_SOURCES.includes(source))) throw new Error("memory-policy-sources-invalid");
+  if (![1, 2].includes(value.version) || enabledSources.some((source) => !MEMORY_SOURCES.includes(source))) throw new Error("memory-policy-sources-invalid");
   const schedule = String(value.schedule || "");
   if (!MEMORY_SCHEDULES.includes(schedule)) throw new Error("memory-policy-schedule-invalid");
   const dailyTime = String(value.dailyTime || "");
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(dailyTime)) throw new Error("memory-policy-time-invalid");
+  const hourlyEnabled = value.hourlyEnabled !== false;
+  const rawRetentionDays = Math.max(1, Math.min(365, Number(value.rawRetentionDays) || 20));
+  if (!Number.isInteger(rawRetentionDays)) throw new Error("memory-policy-retention-invalid");
   const lastResults = Object.freeze(Object.fromEntries(MEMORY_SOURCES.map((source) => [source, normalizeResult(allowRuntime ? value.lastResults?.[source] : null)])));
-  return Object.freeze({ version: 1, enabledSources: Object.freeze(enabledSources), schedule, dailyTime, lastResults });
+  return Object.freeze({ version: 2, enabledSources: Object.freeze(enabledSources), schedule, dailyTime, hourlyEnabled, rawRetentionDays, lastResults });
 }
 
 function normalizeMemoryPolicy(value = {}) {
-  try { return validateMemoryPolicy({ version: 1, enabledSources: value.enabledSources, schedule: value.schedule, dailyTime: value.dailyTime, lastResults: value.lastResults }, { allowRuntime: true }); }
+  try { return validateMemoryPolicy({ version: [1, 2].includes(value.version) ? value.version : 1, enabledSources: value.enabledSources, schedule: value.schedule, dailyTime: value.dailyTime, hourlyEnabled: value.hourlyEnabled, rawRetentionDays: value.rawRetentionDays, lastResults: value.lastResults }, { allowRuntime: true }); }
   catch { return DEFAULT_POLICY; }
 }
 

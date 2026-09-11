@@ -345,9 +345,9 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
   assert.equal(rejected.lastDialogErrorAdjacency, "none");
 });
 
-test("current package exposes the explicit T24 optional-hardware build identity", () => {
+test("current package exposes the explicit T25 KnowledgeOS memory build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t24-optional-xiaozhi-codex-led/);
+  assert.match(main, /t25-knowledgeos-memory-integration/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

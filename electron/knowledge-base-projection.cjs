@@ -22,6 +22,13 @@ function memoryDocument(item) {
   return `---\ndeskmate_schema: reviewed-memory-v1\nid: ${safeId(item.id)}\nday: ${safeDay(item.day)}\nsource: ${yamlText(source)}\nkind: ${yamlText(item.kind)}\n---\n\n# 已审核长期记忆\n\n${String(item.summary || "").trim()}\n\n## 来源\n\n- [[daily/${source}/${safeDay(item.day)}|${safeDay(item.day)} ${source === "dictation" ? "语音输入" : "陪伴对话"}摘要]]\n`;
 }
 
+function journalDocument(item, memoryClass) {
+  const kind = memoryClass === "personal" ? "personal" : memoryClass === "work" ? "work" : "combined";
+  const title = kind === "personal" ? "使用者长期记忆" : kind === "work" ? "工作总结" : "工作与个人记忆";
+  const body = kind === "personal" ? item.personalMarkdown : kind === "work" ? item.workMarkdown : item.combinedMarkdown;
+  return `---\ndeskmate_schema: workday-journal-v1\nday: ${safeDay(item.day)}\nclass: ${kind}\nstatus: completed\nperiod_start: ${new Date(Number(item.periodStart) || 0).toISOString()}\nperiod_end: ${new Date(Number(item.periodEnd) || 0).toISOString()}\nsource_turn_count: ${Math.max(0, Number(item.sourceTurnCount) || 0)}\nsource_counts: ${JSON.stringify(item.sourceCounts || {})}\ninput_digest: ${yamlText(item.inputDigest)}\n---\n\n# ${safeDay(item.day)} ${title}\n\n${String(body || "").trim()}\n`;
+}
+
 function writeAtomic(target, content) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const temporary = `${target}.tmp`;
@@ -45,11 +52,16 @@ class KnowledgeBaseProjection {
     } catch { return { version: MANIFEST_VERSION, files: {} }; }
   }
 
-  sync({ dailySummaries = [], memories = [] } = {}) {
+  sync({ dailySummaries = [], memories = [], journals = [] } = {}) {
     const previous = this.readManifest();
     const desired = new Map();
     for (const item of dailySummaries) desired.set(`daily/${safeSource(item.source)}/${safeDay(item.day)}.md`, dailyDocument(item, memories));
     for (const item of memories) desired.set(`memories/${safeId(item.id)}.md`, memoryDocument(item));
+    for (const item of journals) {
+      desired.set(`journal/${safeDay(item.day)}.md`, journalDocument(item, "combined"));
+      desired.set(`journal/work/${safeDay(item.day)}.md`, journalDocument(item, "work"));
+      desired.set(`journal/personal/${safeDay(item.day)}.md`, journalDocument(item, "personal"));
+    }
     const nextFiles = {};
     let written = 0;
     let removed = 0;
@@ -69,7 +81,7 @@ class KnowledgeBaseProjection {
       nextFiles[relative] = contentHash;
     }
     for (const [relative, previousHash] of Object.entries(previous.files)) {
-      if (!/^(daily\/(companion|dictation)\/\d{4}-\d{2}-\d{2}\.md|memories\/[a-f0-9-]{16,64}\.md)$/.test(relative)) { conflicts += 1; continue; }
+      if (!/^(daily\/(companion|dictation)\/\d{4}-\d{2}-\d{2}\.md|journal\/(?:work\/|personal\/)?\d{4}-\d{2}-\d{2}\.md|memories\/[a-f0-9-]{16,64}\.md)$/.test(relative)) { conflicts += 1; continue; }
       if (desired.has(relative)) continue;
       const target = path.join(this.base, ...relative.split("/"));
       try {
@@ -84,4 +96,4 @@ class KnowledgeBaseProjection {
   }
 }
 
-module.exports = { KnowledgeBaseProjection, ROOT_DIRECTORY, dailyDocument, memoryDocument };
+module.exports = { KnowledgeBaseProjection, ROOT_DIRECTORY, dailyDocument, journalDocument, memoryDocument };

@@ -1,8 +1,8 @@
 # Development plan
 
-## Next stage: T25 KnowledgeOS memory integration — design review
+## Current stage: T25 KnowledgeOS memory integration — implemented, live acceptance pending
 
-2026-09-11: 用户将原暂缓的第 2 项具体化为 KnowledgeOS 双向接入：读取/检索中枢知识，DeskMate 每小时整理语音输入与 AI 陪伴增量、按自设晚间时间生成日期命名的本地综合日记，最终只同步整天综合全文。用户补充确认默认可用 23:30，并提供“提前结束今天并同步”；封账后新增内容算下一工作日，保留真实时间，当天自动任务不重复执行。原文增加可配置保留期，建议默认 20 天，成功整理及已启用同步完成后才清理；日总结与已确认长期记忆单独保留。现有分来源 SQLite、每日时间、补跑和 Markdown 输出可复用，新增部分尚未实现。对方窗口负责接入与教程；本次为只读比对和需求准备。独立 memory.submit 权限、封版纠正/撤回、私密记忆精读和自动知识提升需对齐。任务：[T25](tasks/t25-knowledgeos-memory-integration.md)；方案：[双向记忆交接](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md)。
+2026-09-11: KnowledgeOS 双向接入的 DeskMate 侧已实现：AI 陪伴有界检索正式知识与本 Agent 私有记忆；语音输入和陪伴记录每小时增量整理；23:30 默认或手动封账时完整重读当天原文；本地写综合、work、personal 三份日期 Markdown。远端不提交混合 journal，而是固定提交 `memory_class=work`（可关联项目）与 `memory_class=personal`（强制 `project_id=null`）两份 sealed 日记，并保留来源计数、区间与摘要哈希。20 天默认原文清理仅作用于 DeskMate 本地，启用同步时等待两份回执，绝不删除 KnowledgeOS Raw。调度、同步、重试、清理和设置 UI 已启用；剩余是配置正式 Credential/MCP 适配器后的跨项目真联调。任务：[T25](tasks/t25-knowledgeos-memory-integration.md)；实现与验收：[双向记忆交接](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md)。
 
 T25 补充确认：晚间必须回查完整工作日原始最终记录，小时摘要只辅助查漏；分批完整复核后整理经验，最终同一日期 MD 分为“工作总结（项目、进展、问题、结果、经验与待办）”和“使用者长期记忆（明确经历、性格/喜好、重要事件与目标）”。保留来源与确认状态，不将自动猜测写为确定人设。
 
