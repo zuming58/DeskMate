@@ -24,7 +24,12 @@ if ($LASTEXITCODE -ne 0 -or $status) {
     throw 'Release manifests may only be generated from a clean worktree.'
 }
 
-$idfVersion = (& idf.py --version).Trim()
+$idfRoot = if ($env:IDF_PATH) { $env:IDF_PATH } else { '' }
+$idfTool = if ($idfRoot) { Join-Path $idfRoot 'tools\idf.py' } else { '' }
+if (-not $idfTool -or -not (Test-Path -LiteralPath $idfTool -PathType Leaf)) {
+    throw 'IDF_PATH does not point to an ESP-IDF installation.'
+}
+$idfVersion = (& python $idfTool --version).Trim()
 if ($LASTEXITCODE -ne 0 -or $idfVersion -ne 'ESP-IDF v5.5.5') {
     throw "Expected ESP-IDF v5.5.5, got '$idfVersion'."
 }
