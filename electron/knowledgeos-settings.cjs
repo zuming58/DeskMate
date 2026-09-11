@@ -47,14 +47,15 @@ function createKnowledgeOsSettings({ safeStorage, userDataPath } = {}) {
   };
   const save = (input = {}) => {
     const credentialId = String(input.credentialId || "").trim().toLowerCase();
-    const projectId = String(input.projectId || "").trim().toLowerCase() || null;
+    const requestedProjectId = String(input.projectId || "").trim().toLowerCase();
+    const projectIdIgnored = Boolean(requestedProjectId && !UUID_V7.test(requestedProjectId));
+    const projectId = projectIdIgnored ? null : requestedProjectId || null;
     if (credentialId && !UUID_V7.test(credentialId)) throw new Error("knowledgeos-credential-id-invalid");
-    if (projectId && !UUID_V7.test(projectId)) throw new Error("knowledgeos-project-id-invalid");
     const sensitivity = String(input.sensitivity || "private");
     if (!["private", "sensitive", "restricted"].includes(sensitivity)) throw new Error("knowledgeos-sensitivity-invalid");
     const next = { ...read(), version: 1, credentialId, projectId, sensitivity, readEnabled: input.readEnabled === true, syncEnabled: input.syncEnabled === true };
     write(next);
-    return status();
+    return Object.freeze({ ...status(), projectIdIgnored });
   };
   const loadConnection = () => {
     const value = read();

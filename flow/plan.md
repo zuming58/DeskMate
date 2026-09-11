@@ -4,7 +4,11 @@
 
 2026-09-11: KnowledgeOS 双向接入的 DeskMate 侧已实现：AI 陪伴有界检索正式知识与本 Agent 私有记忆；语音输入和陪伴记录每小时增量整理；23:30 默认或手动封账时完整重读当天原文；本地写综合、work、personal 三份日期 Markdown。远端不提交混合 journal，而是固定提交 `memory_class=work`（可关联项目）与 `memory_class=personal`（强制 `project_id=null`）两份 sealed 日记，并保留来源计数、区间与摘要哈希。20 天默认原文清理仅作用于 DeskMate 本地，启用同步时等待两份回执，绝不删除 KnowledgeOS Raw。调度、同步、重试、清理和设置 UI 已启用；剩余是配置正式 Credential/MCP 适配器后的跨项目真联调。任务：[T25](tasks/t25-knowledgeos-memory-integration.md)；实现与验收：[双向记忆交接](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md)。
 
+2026-09-11 设置修复：可选工作 Project ID 填写错误时安全清空并按“不关联项目”保存，不再阻塞适配器/Credential 设置；Credential ID 仍严格校验。连接测试不再因尚未配置而变成无反馈的禁用按钮，而会明确提示缺少的设置。代码与合成测试完成，等待在新包中保存正式身份并做 KnowledgeOS 真联调。
+
 T25 补充确认：晚间必须回查完整工作日原始最终记录，小时摘要只辅助查漏；分批完整复核后整理经验，最终同一日期 MD 分为“工作总结（项目、进展、问题、结果、经验与待办）”和“使用者长期记忆（明确经历、性格/喜好、重要事件与目标）”。保留来源与确认状态，不将自动猜测写为确定人设。
+
+通用音乐播放和流媒体控制已按 D123 取消。白名单应用打开继续保留；本地歌曲或内置电子节拍只作为舞蹈动作的有界配乐，不再扩展为独立音乐播放器。
 
 ## Current stage: T23 optional Xiaozhi mode + T24 Codex EasyInput LEDs
 

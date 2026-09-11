@@ -788,19 +788,30 @@ export function MemoryManagementPage({ notify }) {
     setKnowledgeOsStatus(result.status);
     notify(`已选择 ${result.status.commandLabel}`);
   };
+  const knowledgeOsReasonLabel = (reason) => ({
+    "knowledgeos-not-configured": "请先选择适配器，填写并保存 Credential ID",
+    "knowledgeos-credential-id-invalid": "Credential ID 格式不正确，请只填写 KnowledgeOS 导出的 UUIDv7",
+    "knowledgeos-secure-storage-unavailable": "Windows 安全存储当前不可用",
+    "knowledgeos-adapter-invalid": "请选择 KnowledgeOS 导出的 knowledgeos-mcp.exe",
+    "knowledgeos-adapter-start-failed": "MCP 适配器无法启动",
+    "knowledgeos-adapter-exited": "MCP 适配器意外退出",
+    "knowledgeos-request-timeout": "连接超时，请确认 KnowledgeOS Core 正在运行",
+  }[String(reason || "")] || String(reason || "KnowledgeOS 请求失败"));
   const saveKnowledgeOs = async () => {
     setBusy(true);
     try {
-      const result = await globalThis.desktopBridge?.setKnowledgeOsSettings?.({ ...knowledgeOsDraft, projectId: knowledgeOsDraft.projectId || null });
+      const result = await globalThis.desktopBridge?.setKnowledgeOsSettings?.({ ...knowledgeOsDraft, credentialId: knowledgeOsDraft.credentialId.trim(), projectId: knowledgeOsDraft.projectId.trim() || null });
       if (!result) throw new Error("knowledgeos-settings-save-failed");
       setKnowledgeOsStatus(result);
-      notify("KnowledgeOS 读取、同步与记忆分类设置已保存");
-    } catch (error) { notify(`KnowledgeOS 设置保存失败：${error.message}`); }
+      setKnowledgeOsDraft((current) => ({ ...current, credentialId: result.credentialId || "", projectId: result.projectId || "", readEnabled: result.readEnabled === true, syncEnabled: result.syncEnabled === true, sensitivity: result.sensitivity || "private" }));
+      notify(result.projectIdIgnored ? "KnowledgeOS 设置已保存；可选 Project ID 格式不正确，已安全清空并按不关联项目处理，现在可以测试连接" : "KnowledgeOS 读取、同步与记忆分类设置已保存");
+    } catch (error) { notify(`KnowledgeOS 设置保存失败：${knowledgeOsReasonLabel(error.message)}`); }
     finally { setBusy(false); }
   };
   const testKnowledgeOs = async () => {
     setBusy(true);
-    try { const result = await globalThis.desktopBridge?.testKnowledgeOsConnection?.(); notify(result?.ok ? "KnowledgeOS 连接与当前身份正常" : `KnowledgeOS 暂不可用：${result?.reason || "knowledgeos-request-failed"}`); }
+    try { const result = await globalThis.desktopBridge?.testKnowledgeOsConnection?.(); notify(result?.ok ? "KnowledgeOS 连接与当前身份正常" : `KnowledgeOS 暂不可用：${knowledgeOsReasonLabel(result?.reason)}`); }
+    catch (error) { notify(`KnowledgeOS 连接测试失败：${knowledgeOsReasonLabel(error.message)}`); }
     finally { setBusy(false); }
   };
   const syncKnowledgeOs = async () => {
@@ -841,7 +852,7 @@ export function MemoryManagementPage({ notify }) {
           <div className="memory-source-toggle"><div><strong>AI 陪伴检索</strong><small>查询正式知识和本 Agent 私有记忆</small></div><Toggle label="允许读取" checked={knowledgeOsDraft.readEnabled} onChange={(readEnabled) => setKnowledgeOsDraft((current) => ({ ...current, readEnabled }))} /></div>
           <div className="memory-source-toggle"><div><strong>日终自动同步</strong><small>每天固定提交 work 与 personal 两份 sealed 日记</small></div><Toggle label="允许同步" checked={knowledgeOsDraft.syncEnabled} onChange={(syncEnabled) => setKnowledgeOsDraft((current) => ({ ...current, syncEnabled }))} /></div>
         </div>
-        <div className="memory-policy-footer"><small>个人日记强制 project_id=null；同一内容使用稳定幂等键重试。已接收只表示 KnowledgeOS 封存成功，不表示发布成正式知识。</small><div className="button-row"><Button variant="soft" disabled={busy || !knowledgeOsStatus.configured} onClick={() => { void testKnowledgeOs(); }}>测试连接</Button><Button variant="soft" disabled={busy || !knowledgeOsStatus.syncEnabled} onClick={() => { void syncKnowledgeOs(); }}>重试待同步</Button><Button variant="primary" disabled={busy} onClick={() => { void saveKnowledgeOs(); }}>保存中枢设置</Button></div></div>
+        <div className="memory-policy-footer"><small>个人日记强制 project_id=null；工作 Project ID 填错时会安全清空，不影响凭据保存与连接测试。已接收只表示 KnowledgeOS 封存成功，不表示发布成正式知识。</small><div className="button-row"><Button variant="soft" disabled={busy} onClick={() => { void testKnowledgeOs(); }}>测试连接</Button><Button variant="soft" disabled={busy || !knowledgeOsStatus.syncEnabled} onClick={() => { void syncKnowledgeOs(); }}>重试待同步</Button><Button variant="primary" disabled={busy} onClick={() => { void saveKnowledgeOs(); }}>保存中枢设置</Button></div></div>
       </Card>
       <div className="memory-metrics">
         <Metric label="日终综合" value={String(journalStatus.completedJournals || 0)} unit="天" trend={journalStatus.active?.day ? `当前 ${journalStatus.active.day}` : "等待记录"} tone="blue" />

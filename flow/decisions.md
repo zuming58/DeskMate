@@ -1,5 +1,11 @@
 # Decisions
 
+## D123 - Generic music playback is cancelled; dance accompaniment remains
+
+- 2026-09-11 user decision: generic “play music”, streaming-service search, playlist and media-session control are removed from the active roadmap. Registered application launch remains available, including opening NetEase Cloud Music.
+- Existing bounded local-file/electronic audio remains only as dance accompaniment and short action feedback. It must stop with dance completion, stop or emergency stop and does not create a new EasyInput/Xiaozhi audio path.
+- This supersedes D094 only where it treated generic `播放音乐/停止音乐` as a product requirement. Reopening general music control requires a new explicit decision.
+
 ## D122 - Local combined preview maps to two sealed KnowledgeOS memory classes
 
 - 2026-09-11 receiver clarification supersedes D121's single-remote-journal wording. DeskMate may keep one combined dated file for local reading, but KnowledgeOS receives exactly two immutable submissions: `memory_class=work` may carry an authorized `project_id`; `memory_class=personal` always carries `project_id=null`.

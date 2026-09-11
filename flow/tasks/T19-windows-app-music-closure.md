@@ -10,7 +10,7 @@ Close two visible Windows-only gaps: make voice-enabled application registration
 - “打开网易云音乐” launches exactly that enabled registration without a language-model decision. Disabled, missing, negated and ambiguous targets fail closed.
 - The motion page can select, replace, enable, preview and stop one local audio file without exposing its full path to React.
 - Built-in dance, activated custom dance and voice dance start the selected track; normal completion, stop and emergency stop end it.
-- “播放音乐” and “停止音乐” control the same selected local file. Xiaozhi firmware is unchanged.
+- The selected local file and electronic fallback are dance accompaniment only. Generic “播放音乐/停止音乐” is no longer a product acceptance requirement (D123). Xiaozhi firmware is unchanged.
 
 ## Out of scope
 

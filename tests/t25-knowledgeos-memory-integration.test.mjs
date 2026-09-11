@@ -135,6 +135,13 @@ test("T25 KnowledgeOS settings encrypt the adapter path and the gateway returns 
   const status = settings.save({ credentialId, projectId: "", readEnabled: true, syncEnabled: false, sensitivity: "private" });
   assert.equal(status.configured, true);
   assert.doesNotMatch(fs.readFileSync(path.join(directory, "knowledgeos-settings.json"), "utf8"), new RegExp(directory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  const ignoredProject = settings.save({ credentialId, projectId: "project-name-is-not-a-uuid", readEnabled: true, syncEnabled: true, sensitivity: "private" });
+  assert.equal(ignoredProject.configured, true);
+  assert.equal(ignoredProject.projectIdIgnored, true);
+  assert.equal(ignoredProject.projectId, null);
+  assert.equal(settings.loadConnection().projectId, null);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory, "knowledgeos-settings.json"), "utf8")).projectId, null);
+  assert.throws(() => settings.save({ credentialId: "not-a-credential", projectId: "", readEnabled: true }), /knowledgeos-credential-id-invalid/);
   const gateway = new KnowledgeOsMemoryGateway({ settings, client: { callTool: async () => ({ ok: true, data: { results: [{ title: "项目说明", snippet: "有来源的知识片段", citation: "knowledge:1" }] } }) } });
   assert.deepEqual(await gateway.searchEvidence("DeskMate"), [{ title: "项目说明", snippet: "有来源的知识片段", citation: "knowledge:1", updatedAt: "" }]);
 }));

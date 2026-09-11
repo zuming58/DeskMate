@@ -22,6 +22,7 @@
 
 ## Removed from the product roadmap
 
+- Generic music playback and streaming-service control. Opening a registered music application remains available; dance-only local/electronic accompaniment remains part of the motion experience.
 - Hardware expansion, new sensors and face tracking.
 - Speaker identification, per-person voice profiles and automatic person dossiers.
 - Hermes, Claude Code, WorkBuddy and other Agent adapters; only Codex remains in active scope.

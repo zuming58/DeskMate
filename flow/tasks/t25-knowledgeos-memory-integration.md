@@ -1,6 +1,6 @@
 # T25 KnowledgeOS integration and hourly/daily memory
 
-- Status: `DESKMATE_IMPLEMENTED / SYNTHETIC_VERIFIED / LIVE_IDENTITY_CONFIGURATION_PENDING`.
+- Status: `DESKMATE_IMPLEMENTED / SETTINGS_REPAIR_SYNTHETIC_VERIFIED / LIVE_IDENTITY_CONFIGURATION_PENDING`.
 - User request: 2026-09-11; query KnowledgeOS and deliver complete daily memory, with local hourly processing and a configurable evening summary time.
 - Specification and cross-project handoff: [knowledgeos-memory-integration-2026-09-11.md](../../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md).
 
@@ -14,8 +14,8 @@ Nightly synthesis re-examines all eligible raw final records in that workday, in
 
 ## Open boundaries
 
-Live use requires selecting the official KnowledgeOS MCP adapter and configuring the dedicated DeskMate Credential ID. Remote correction/retraction and automatic sourced-material promotion into a confirmed digital person remain receiver-side follow-up work. Local raw retention is active with a default of 20 days and cannot delete KnowledgeOS Raw.
+Live use requires selecting the official KnowledgeOS MCP adapter and configuring the dedicated DeskMate Credential ID. The optional work Project ID may be left empty; an invalid value is now safely cleared and does not block saving the valid identity or running the connection test. Credential ID remains strict. Remote correction/retraction and automatic sourced-material promotion into a confirmed digital person remain receiver-side follow-up work. Local raw retention is active with a default of 20 days and cannot delete KnowledgeOS Raw.
 
 ## Verification
 
-Synthetic coverage verifies source separation, hour/day ownership, full raw reread, late records, exactly two immutable deliveries, personal project isolation, idempotency, encrypted adapter configuration, bounded retrieval and local-only cleanup gates. Live receiver/ACL and cross-device acceptance remain pending configuration. Existing voice/key/hardware state is outside this task.
+Synthetic coverage verifies source separation, hour/day ownership, full raw reread, late records, exactly two immutable deliveries, personal project isolation, idempotency, encrypted adapter configuration, invalid optional-project recovery, bounded retrieval and local-only cleanup gates. Live receiver/ACL and cross-device acceptance remain pending configuration. Existing voice/key/hardware state is outside this task.

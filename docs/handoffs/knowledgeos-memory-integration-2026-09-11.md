@@ -107,7 +107,7 @@ The memory-management page now provides:
 - independent AI-companion retrieval and daily-sync switches;
 - connection test and retry-pending actions.
 
-The code path is implemented and covered by synthetic tests. Live KnowledgeOS use still requires the user to select the official adapter and enter the DeskMate Credential ID; the repository does not guess or extract those values.
+The code path is implemented and covered by synthetic tests. Live KnowledgeOS use still requires the user to select the official adapter and enter the DeskMate Credential ID; the repository does not guess or extract those values. The work Project ID is optional: a malformed value is visibly cleared and saved as `null`, so it cannot block otherwise valid adapter/Credential settings or the connection test. The required Credential ID remains strictly validated.
 
 ## KnowledgeOS receiving-side status
 
