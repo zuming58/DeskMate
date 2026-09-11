@@ -1,5 +1,11 @@
 # Progress log
 
+# 2026-09-11 - Standalone prompt workbench and scene-key explainer
+
+- Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t23-optional-xiaozhi-led-status`, documentation HEAD `b7b1a108aef4d3b3b85e5b0acd683fc15bc8ed4c` on the T22F/T23/T24 code/build baseline. Added `docs/product/prompt-workbench-scene-key-switching-explainer.md` for the user to hand to another Codex window as course-work/product context.
+- Content: explains the limited-key problem, recommended KEY1～8/rotary ownership, KEY4 prompt capture/copy/hide/focus-return flow, Tab/Shift+Tab scene switching, global versus scene-local keys, 80-template workbench, ordering, persistence, native routing, safe app whitelist and explicit device preview/confirm/readback. Includes a compact assignment summary and exact source map.
+- Truth boundary: distinguishes implemented Windows behavior from physical acceptance. Existing user evidence for KEY3/KEY4 is retained; rotary, physical KEY8 paste and the intended KEY5～7 scene combinations remain a future connected-board regression. Verified all referenced source paths, the current prompt pack count (**80**) and `git diff --check`. Documentation only: no source/package rebuild, runtime restart, device/configuration access, firmware operation or user-data read.
+
 # 2026-09-11 - T23 optional Xiaozhi mode and T24 Codex LED state code/build closure
 
 - Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t23-optional-xiaozhi-led-status`, implementation HEAD `37a94e32435f0ebe4bcf804f8c037b968a94a7f0`, based on `f4a6f996c667a43b4559fba87461d9e510170da5`. The stale parent checkout remained untouched. User selected review items 1 and 3; external knowledge-base/document scanning (item 2) remains explicitly deferred.
