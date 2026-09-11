@@ -2,6 +2,8 @@
 
 ## Current stage: T26 comprehensive workbench — software-only
 
+T26A：在已完成看板上落实用户选定的平面 D/M 品牌，并将实时陪伴与左下角软件脸改为浅蓝浅底、自然睁闭眼。仅 UI 和应用图标变更，语音、硬件和记忆行为不变；[设计与素材来源](../docs/design/deskmate-identity-t26a.md)。
+
 2026-09-11：用户远程操作、不能验收硬件，本轮只重做工作台首页。移除大幅桌宠预览和虚构任务进度，接入 SQLite 真实统计、连接/配置、日终与同步状态、当前场景和 Codex 项目上报。详见 [设计与数据口径](../docs/architecture/workbench-overview.md)。原功能、设置和实体硬件行为不变。
 
 T25 验收更新：用户已提供“KnowledgeOS 连接与当前身份正常”的截图，并确认保存/连接没有问题；不再列为待重新测试。真实 AI 陪伴检索和最终 work/personal 双提交仍独立等待验收，不由该连接结果替代。

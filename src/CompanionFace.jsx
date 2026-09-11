@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { softCompanionClosed } from './domain/companionVisual.js';
 
 const BASE_ASSET_URL = `${import.meta.env.BASE_URL}assets/expressions`;
 
@@ -16,7 +17,7 @@ export function expressionAssetUrl(expressionId) {
   return companionExpressionAssets[expressionId] || companionExpressionAssets.focus;
 }
 
-export function CompanionFace({ expressionId = "focus", className = "", allowBlink = true, alt = "DeskMate 表情" }) {
+export function CompanionFace({ expressionId = "focus", className = "", allowBlink = true, appearance = "classic", alt = "DeskMate 表情" }) {
   const [blinking, setBlinking] = useState(false);
   const source = useMemo(
     () => expressionAssetUrl(blinking ? "sleep" : expressionId),
@@ -24,9 +25,15 @@ export function CompanionFace({ expressionId = "focus", className = "", allowBli
   );
 
   useEffect(() => {
-    if (!allowBlink || expressionId === "sleep" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+    setBlinking(false);
+    const motion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     let blinkTimer;
     let resetTimer;
+    const clear = () => {
+      window.clearTimeout(blinkTimer);
+      window.clearTimeout(resetTimer);
+      setBlinking(false);
+    };
     const schedule = () => {
       blinkTimer = window.setTimeout(() => {
         setBlinking(true);
@@ -36,12 +43,28 @@ export function CompanionFace({ expressionId = "focus", className = "", allowBli
         }, 150);
       }, 4200 + Math.round(Math.random() * 3600));
     };
-    schedule();
+    const restart = () => {
+      clear();
+      if (allowBlink && expressionId !== "sleep" && !motion?.matches && !document.hidden) schedule();
+    };
+    restart();
+    motion?.addEventListener?.('change', restart);
+    document.addEventListener('visibilitychange', restart);
     return () => {
       window.clearTimeout(blinkTimer);
       window.clearTimeout(resetTimer);
+      motion?.removeEventListener?.('change', restart);
+      document.removeEventListener('visibilitychange', restart);
     };
   }, [allowBlink, expressionId]);
+
+  if (appearance === 'soft') {
+    const closed = softCompanionClosed(expressionId, blinking);
+    return <span role="img" aria-label={alt} data-eye-state={closed ? 'closed' : 'open'} className={`companion-face companion-face--soft ${closed ? 'is-closed' : ''} ${blinking ? 'is-blinking' : ''} ${className}`.trim()}>
+      <img className="soft-face-open" src={`${BASE_ASSET_URL}/soft/open.png`} alt="" draggable="false" />
+      <img className="soft-face-closed" src={`${BASE_ASSET_URL}/soft/closed.png`} alt="" draggable="false" />
+    </span>;
+  }
 
   return (
     <span className={`companion-face ${blinking ? "is-blinking" : ""} ${className}`.trim()}>

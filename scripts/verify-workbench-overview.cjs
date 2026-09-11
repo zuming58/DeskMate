@@ -1,7 +1,7 @@
 // Native Electron QA with a temporary profile and synthetic data only.
 // Uses the real React build/preload and main-owned overview projection. Never
 // starts the production main, touches devices, captures audio or contacts APIs.
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -72,6 +72,35 @@ app.whenReady().then(async () => {
   record('project reports are grouped with actionable priority', await run(`document.querySelectorAll('.wb-project').length===2 && document.querySelector('.wb-project').textContent.includes('2 个任务') && document.querySelector('.wb-project').textContent.includes('等你确认')`));
   record('seven days have exact accessible chart values', await run(`document.querySelectorAll('.wb-chart-day').length===7 && document.querySelector('.wb-chart').getAttribute('aria-label').includes('听写8次，陪伴6条')`));
   await shot('overview-1440-synthetic');
+  record('DM brand loaded in header and sidebar without another shell', await run(`Array.from(document.querySelectorAll('.brand-logo')).length===2 && Array.from(document.querySelectorAll('.brand-logo')).every(i=>i.complete && i.naturalWidth===512) && getComputedStyle(document.querySelector('.wb-face')).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(document.querySelector('.brand-mark')).borderWidth==='0px'`));
+  const brandImage = nativeImage.createFromPath(path.join(root, 'public/assets/branding/deskmate-logo.png'));
+  const pixels = brandImage.toBitmap();
+  record('brand corners are truly transparent and body is near-opaque', pixels[3]===0 && pixels[(256*512+256)*4+3]>=250);
+  await click('AI 陪伴');
+  await waitFor(() => run(`document.querySelectorAll('.companion-face--soft').length===2 && Array.from(document.querySelectorAll('.companion-face--soft img')).every(i=>i.complete && i.naturalWidth===768)`), 'soft assets loaded');
+  record('both live companion surfaces have a light background and contained faces', await run(`Array.from(document.querySelectorAll('.companion-face--soft')).every(f=>getComputedStyle(f).backgroundColor==='rgb(244, 249, 252)' && getComputedStyle(f.querySelector('img')).objectFit==='contain')`));
+  await shot('companion-open-1440-synthetic');
+  await run(`window.__eyeStates=[]; window.__eyeObserver=new MutationObserver(()=>{for(const f of document.querySelectorAll('.companion-face--soft'))window.__eyeStates.push(f.dataset.eyeState);});document.querySelectorAll('.companion-face--soft').forEach(f=>window.__eyeObserver.observe(f,{attributes:true,attributeFilter:['data-eye-state']}));`);
+  await pause(8100);
+  record('natural blinking closes and reopens without a voice session', await run(`window.__eyeStates.includes('closed') && window.__eyeStates.includes('open')`));
+  window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await pause(180);
+  await run('window.__eyeStates=[]'); await pause(8000);
+  record('live reduced-motion change cancels blinking and restores open eyes', await run(`window.__eyeStates.length===0 && Array.from(document.querySelectorAll('.companion-face--soft')).every(f=>f.dataset.eyeState==='open')`));
+  const visualState = async state => { window.webContents.send('companion-conversation-event', { type: 'state', state, generation: 0 }); await pause(220); };
+  await visualState('completed');
+  record('both surfaces show friendly closed eyes after a reply', await run(`Array.from(document.querySelectorAll('.companion-face--soft')).every(f=>f.dataset.eyeState==='closed')`));
+  await shot('companion-closed-1440-synthetic');
+  await visualState('listening');
+  record('listening reopens both faces, with no scaling or glow loop', await run(`Array.from(document.querySelectorAll('.companion-face--soft')).every(f=>f.dataset.eyeState==='open' && getComputedStyle(f).animationName==='none')`));
+  window.setContentSize(960,680); await pause(400);
+  record('companion has no horizontal overflow at 960', await run(`document.documentElement.scrollWidth<=innerWidth`));
+  await shot('companion-960-synthetic');
+  await visualState('idle');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] });
+  window.webContents.debugger.detach();
+  window.setContentSize(1440,1024); await load();
   record('all primary panels visible at 1440x1024', await run(`document.querySelector('.wb-scene').getBoundingClientRect().bottom<=innerHeight && document.querySelector('.wb-projects').getBoundingClientRect().bottom<=innerHeight`));
   record('no horizontal overflow 1440', await run(`document.documentElement.scrollWidth<=innerWidth`));
   await shot('overview-1440-synthetic');

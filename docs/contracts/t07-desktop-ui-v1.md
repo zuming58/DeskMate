@@ -2,6 +2,10 @@
 
 Status: `T07_DESKTOP_UI_V1_FROZEN`
 
+## T26A explicit visual version amendment — 2026-09-11
+
+User-approved D125 supersedes only the original same-face-everywhere identity requirement below. Brand/header/favicon/native icons use the flat off-white blue/cyan D/M asset. Live companion and the sidebar device card use the light-blue soft face with a light background and open/closed eyes. The shared `CompanionFace` still retains the seven classic raster states for legacy previews; hardware IDs, transport and VoiceWorkflow are unchanged. Current navigation and capabilities follow subsequent stage decisions and `DESIGN.md`, not the historical T07 acceptance snapshot below. Full software regression and native visual checks are required. See [T26A identity](../design/deskmate-identity-t26a.md).
+
 This contract freezes the accepted DeskMate Windows shell that both the EasyInput and Xiaozhi firmware streams use as their common desktop baseline. Future firmware work may add capability/status data behind these surfaces, but must not independently redesign the primary shell.
 
 ## Frozen primary navigation

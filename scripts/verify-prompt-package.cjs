@@ -10,7 +10,7 @@ const source = JSON.parse(fs.readFileSync(path.join(root, 'electron/prompt-libra
 assert.deepEqual(bundled, source, 'packaged prompt data must match source including all original bodies');
 assert.equal(bundled.prompts.length, 80);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t26-workbench-overview'));
+assert(main.includes('t26a-brand-soft-companion'));
 assert(main.includes('--show-prompts'));
 for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
@@ -21,4 +21,10 @@ assert(packagedFile('electron/workbench-overview.cjs').equals(fs.readFileSync(pa
 assert(main.includes('workbench:get-overview'));
 assert(packagedFile('dist/client/index.html').equals(fs.readFileSync(path.join(root, 'dist/client/index.html'))));
 assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/input-bridge/DeskMate.InputBridge.exe')).equals(fs.readFileSync(path.join(root, 'native/DeskMate.InputBridge/publish/DeskMate.InputBridge.exe'))));
-console.log('T26 packaged resource check passed: live-data workbench, KnowledgeOS memory, prior hardware/key behavior, 80 prompts, current UI and native bridge.');
+for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png']) {
+  assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale brand asset: ${file}`);
+}
+for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
+  assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
+}
+console.log('T26A packaged resource check passed: DM branding and soft companion, live workbench, KnowledgeOS memory, 80 prompts and native bridge.');

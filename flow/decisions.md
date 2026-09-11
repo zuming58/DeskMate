@@ -1,5 +1,11 @@
 # Decisions
 
+## D125 - Separate flat DM branding from the soft live companion
+
+- 2026-09-11 user approval: a medium blue/cyan folded D/M on a flat off-white rounded-square icon. No glass pedestal, extra black border or robot face in the static brand mark. Reuse its generated source for desktop UI, native window/tray and executable icons.
+- The large live companion and bottom-left software face use the supplied friendly pale-blue direction with a light background, open eyes and closed smiling eyes. One `CompanionFace` component retains classic legacy assets and opts these two live surfaces into soft appearance. Do not alter physical Xiaozhi expressions or transport.
+- Drive live appearance from companion state, not Codex work state. Natural blinking is subtle and stops for hidden pages or reduced-motion preference. This is a visual-only version amendment to T07's shared brand/face source rule, not a second voice state machine. [Assets, provenance and reproduction](../docs/design/deskmate-identity-t26a.md).
+
 ## D124 - Workbench is a read-only comprehensive overview, not a pet showcase
 
 - 2026-09-11 user request: prioritize real software/hardware connections, daily usage, companionship and memory accumulation. Keep a small companion identity; remove the oversized expression preview, invented progress ring and irrelevant sensor placeholders from Home.

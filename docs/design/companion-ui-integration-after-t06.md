@@ -1,5 +1,7 @@
 # Companion UI integration after T06
 
+Historical T07 snapshot: current capabilities/navigation follow `DESIGN.md`. T26A/D125 replaces the shared dark brand/live-face presentation with separate flat D/M branding and a light-blue animated companion; the classic seven-state assets below remain for legacy previews and hardware compatibility. See [current identity](deskmate-identity-t26a.md).
+
 ## Scope
 
 This integration starts from the accepted T06 desktop baseline at `619d85347499545e9af11488bb5d141296ae1dd3`. It changes the information architecture and companion presentation only. T06 voice output, fixed text, application launch, key mapping, configuration readback, diagnostics and Electron security boundaries remain the functional baseline.

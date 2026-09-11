@@ -19,6 +19,8 @@ import {
 import { pageMeta } from "./appData.js";
 import { PromptWorkbenchPage } from './PromptWorkbenchPage.jsx';
 import { CompanionFace } from "./CompanionFace.jsx";
+import { BrandLogo } from './BrandLogo.jsx';
+import { companionVisualExpression } from './domain/companionVisual.js';
 import { AppStoreProvider, useAppStore } from "./store/appStore.js";
 import { mockAdapters } from "./adapters/index.js";
 import { voiceAdapters } from "./adapters/voiceAdapters.js";
@@ -57,7 +59,7 @@ const navigation = [
 ];
 
 function BrandMark() {
-  return <span className="brand-mark"><CompanionFace allowBlink={false} alt="DeskMate" /></span>;
+  return <span className="brand-mark"><BrandLogo /></span>;
 }
 
 function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, boardConnected, expressionId }) {
@@ -87,7 +89,7 @@ function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMo
       </nav>
       <button className="sidebar__collapse" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "展开侧栏" : "收起侧栏"}>{collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}<span>收起导航</span></button>
       <div className="device-card">
-        <div className="device-card__screen"><CompanionFace expressionId={expressionId} alt="DeskMate 设备表情" /></div>
+        <div className="device-card__screen"><CompanionFace appearance="soft" expressionId={expressionId} alt="DeskMate 陪伴表情" /></div>
         <div className={`device-card__status ${boardConnected ? "" : "device-card__status--pending"}`}><span />{boardConnected ? "EasyInput 已连接" : "等待 EasyInput 板子"}</div>
         <small>{boardConnected ? "USB HID · Ctrl+Shift+Space / F22 监听就绪" : "请通过 USB 连接开发板"}</small>
       </div>
@@ -312,7 +314,7 @@ function AppContent() {
   const CurrentPage = pages[current] || DashboardPage;
   return (
     <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""} ${current === 'prompts' ? 'is-prompt-workbench' : ''}`}>
-      <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} expressionId={state.currentExpression} />
+      <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} expressionId={companionVisualExpression(state.runtime?.companion?.state)} />
       {mobileOpen && <button className="mobile-scrim" aria-label="关闭菜单" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">
         <AppHeader current={current} setMobileOpen={setMobileOpen} />

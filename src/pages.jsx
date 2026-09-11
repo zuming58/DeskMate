@@ -50,6 +50,7 @@ import {
 } from "@tabler/icons-react";
 import { expressionPresets, historyItems } from "./appData.js";
 import { CompanionFace, expressionAssetUrl } from "./CompanionFace.jsx";
+import { companionVisualExpression } from './domain/companionVisual.js';
 import { ChoreographyEditor } from "./ChoreographyEditor.jsx";
 import { useAppStore } from "./store/appStore.js";
 import { useRecorder } from "./hooks/useRecorder.js";
@@ -364,8 +365,7 @@ export function CompanionPage({ notify, navigate, stopCompanion, initialSection 
   const preferredCompanionSource = normalizeMicrophoneSource(state.settings.microphoneSource);
   const activeCompanionSource = conversation.audioSelection?.activeSource || (sessionActive ? preferredCompanionSource : "");
   const companionSourceLabel = activeCompanionSource === "easyinput" ? "EasyInput 板载麦克风" : activeCompanionSource === "computer" ? "电脑麦克风" : preferredCompanionSource === "easyinput" ? "EasyInput（开始前可回退）" : "电脑麦克风";
-  const conversationExpression = { connecting: "listen", listening: "listen", thinking: "think", speaking: "focus", completed: "happy", error: "alert", stopping: "sleep" }[conversation.state];
-  const expression = conversationExpression || state.currentExpression;
+  const expression = companionVisualExpression(conversation.state);
   const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
   const serviceStatus = deviceServiceStatus({ inputBridge: state.runtime?.inputBridge, audioStatus: state.runtime?.easyInputAudio, preferredMicrophoneSource: state.settings.microphoneSource, companion: conversation, memory: state.runtime?.memory });
   const companionName = (sessionActive ? conversation.sessionPolicy?.sessionApplied?.name : state.settings.companionName) || state.settings.companionName || COMPANION_DEFAULTS.name;
@@ -518,7 +518,7 @@ export function CompanionPage({ notify, navigate, stopCompanion, initialSection 
         <div className="companion-primary-column">
           <Card className="companion-stage">
           <div className="card-heading"><div><strong>DeskMate 实时陪伴</strong><small>STREAMING ASR → DESKMATE MODEL → STREAMING TTS</small></div><StatusBadge tone={conversation.state === "error" ? "warning" : sessionActive ? "success" : "neutral"}>{sessionActive ? ({ connecting: "连接中", listening: "聆听中", thinking: "思考中", speaking: "回答中 · 可语音打断", completed: "本轮完成", stopping: "结束中" }[conversation.state] || "会话中") : selectedPreset.name}</StatusBadge></div>
-          <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} /></div>
+          <div className={`companion-stage__face ${conversation.state === "listening" ? "is-listening" : ""}`}><CompanionFace appearance="soft" expressionId={expression} alt="DeskMate 浅蓝陪伴表情" /></div>
           <div className="companion-stage__copy"><h2>{conversationCopy[0]}</h2><p>{conversationCopy[1]}</p></div>
           <div className="companion-session-controls">
             <div className="button-row companion-dialogue-actions"><Button icon={sessionActive ? PlayerPause : MessageCircle} variant="primary" className="companion-dialogue-button" disabled={conversation.stopLifecycle?.pending} onClick={toggleSession}>{conversation.stopLifecycle?.pending ? "正在结束…" : sessionActive ? conversation.stopLifecycle?.error ? "重试结束陪伴对话" : "结束陪伴对话" : conversation.state === "error" ? "重新开始陪伴对话" : "开始陪伴对话"}</Button>{sessionActive && ["thinking", "speaking", "completed"].includes(conversation.state) && <Button icon={PlayerPause} variant="ghost" onClick={interruptResponse}>打断回答并继续听</Button>}</div>

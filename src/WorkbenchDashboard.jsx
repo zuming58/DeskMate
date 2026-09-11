@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconArrowUpRight, IconActivity, IconBrain, IconCheck, IconChevronRight, IconCode, IconDatabase, IconDeviceDesktop, IconKeyboard, IconLink, IconMessageCircle2, IconMicrophone2, IconRefresh, IconRobot, IconSparkles } from '@tabler/icons-react';
-import { CompanionFace } from './CompanionFace.jsx';
+import { BrandLogo } from './BrandLogo.jsx';
 import { useAppStore } from './store/appStore.js';
 import { dashboardHardwareStatus } from './domain/dashboardStatus.js';
 import { workbenchProjects, workbenchSchedule, workbenchTime } from './domain/workbenchOverview.js';
@@ -61,7 +61,7 @@ export function DashboardPage({ navigate }) {
     { label: '已确认长期记忆', value: number(memory?.longTermMemories), unit: '条', icon: IconBrain, tone: 'green', caption: `${number(memory?.pendingCandidates)} 条候选等待审核`, title: '只统计你已经确认的本地长期记忆，候选不计入。' },
   ];
   return <div className="page page--dashboard wb-overview">
-    <div className="wb-intro"><div className="wb-greeting"><div className="wb-face"><CompanionFace expressionId="focus" allowBlink={false} alt="DeskMate 陪伴标识" /></div><div><div className="wb-eyebrow">DESKMATE / OVERVIEW</div><h1>工作台</h1><p>今天的工作、陪伴与记忆，都在这里。</p></div></div><div className="wb-refresh"><small>{overview ? `${workbenchTime(overview.updatedAt)} 更新` : loading ? '正在读取本地状态' : '状态未取得'}</small><Button icon={IconRefresh} variant="ghost" disabled={loading} onClick={() => void refresh()}>{loading ? '读取中' : '刷新'}</Button></div></div>
+    <div className="wb-intro"><div className="wb-greeting"><div className="wb-face"><BrandLogo alt="DeskMate 品牌标识" /></div><div><div className="wb-eyebrow">DESKMATE / OVERVIEW</div><h1>工作台</h1><p>今天的工作、陪伴与记忆，都在这里。</p></div></div><div className="wb-refresh"><small>{overview ? `${workbenchTime(overview.updatedAt)} 更新` : loading ? '正在读取本地状态' : '状态未取得'}</small><Button icon={IconRefresh} variant="ghost" disabled={loading} onClick={() => void refresh()}>{loading ? '读取中' : '刷新'}</Button></div></div>
     {error && <div className="wb-load-error" role="status">{error}</div>}
     <div className="wb-metrics">{metrics.map(item => <div className={`wb-metric wb-metric--${item.tone}`} key={item.label} title={item.title}><div><span>{item.label}</span><item.icon size={20} stroke={1.6} /></div><strong>{item.value}<small>{item.unit}</small></strong><p>{item.caption}</p></div>)}</div>
     <Card className="wb-connections-card"><PanelHeading icon={IconLink} title="连接与服务" link="设备与诊断" onClick={() => navigate('settings/diagnostics')} /><div className="wb-connections">

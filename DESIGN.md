@@ -1,5 +1,7 @@
 # DeskMate design direction
 
+T26A (2026-09-11): 用户选定蓝青色折带 D/M、平整暖白圆角方形应用图标，不使用玻璃底座或额外黑框。品牌与陪伴形象分开：顶部品牌、工作台及原生图标统一 D/M；实时陪伴和左下角设备卡采用浅蓝柔和形象、浅色背景与深青眼睛，支持自然睁闭眼。仅改变软件视觉，不修改实体屏幕或声音。详见 [品牌与陪伴形象](docs/design/deskmate-identity-t26a.md)。
+
 T26 (2026-09-11): 工作台改为真实数据综合看板：相伴/今日使用/已确认记忆、连接服务、7 天使用、小时→日终→KnowledgeOS、当前场景与项目状态。大脸缩为小型标识，不再占用首页。详情和配置留在原页面，首页只读概览和导航；“已配置”不冒充“已连接”，无记录与读取失败明确区分。详见 [工作台设计与统计口径](docs/architecture/workbench-overview.md)。
 
 T22F (2026-09-11): keep prompt ordering explicit and local: adjacent up/down controls appear only in the unfiltered current-scene list. Scene KEY5–7 use direct common-action choices, plus custom shortcut, copy-only prompt, registered application and disabled. Opening an application must reuse the existing whitelist and never expose a raw command field.
@@ -18,7 +20,7 @@ DeskMate 不是传统硬件调试器，而是一个安静、可信、带有生�
 - 卡片：少量圆角、轻边框和克制阴影，避免过度玻璃拟态。
 - 提示词：只在场景栏使用低透明度磨砂和细边框，正文列表与编辑器保持白底；复用现有导航、Tabler 图标和钴蓝选择态，不增加第二套应用外壳。
 - 字体：中文优先系统黑体或 Noto Sans SC，拉丁字符使用清晰的无衬线字体。
-- 机器人脸：深灰外壳、青蓝发光眼睛；小尺寸图标减少透明留白。
+- 品牌：暖白方形底、蓝青 D/M，不叠加黑色外框；软件陪伴：浅蓝柔和形象与浅色背景，深青眼睛，不用黑色机械外壳。
 
 ## Interaction priorities
 
@@ -67,6 +69,6 @@ Codex 工作状态默认显示在 EasyInput 的五颗灯上，不长期占用小
 
 AI 服务设置分为“语音转写”“文本大模型”和“实时语音”三块。文本大模型统一供应智能整理与可选语音编辑，并作为意图 Bridge、每日摘要和记忆候选提取的共享适配器；陪伴主链的具体供应商和三段式流式边界以当前阶段合同为准，不直接由语音供应商执行 Windows 动作。
 
-机器人脸使用同一套固定深色外壳与七种大眼睛图片：默认、眨眼、开心、难过、生气、思考、聆听。品牌图标、左下角设备脸、工作台、陪伴实时大脸和动作预览必须复用同一渲染源。
+T26A 将品牌与陪伴形象明确分离。`BrandLogo` 是静态 D/M；`CompanionFace` 保持一个渲染组件，通过 `appearance="soft"` 为实时陪伴和左下角设备脸提供浅蓝睁闭眼素材。默认 classic 七张历史图片保留给既有动作/表情预览，避免改变硬件表情标识。软件脸由陪伴会话状态驱动，不再将 Codex 工作状态或手工历史表情当成实时对话状态。自然眨眼在隐藏页面与减少动画偏好下停止。
 
 参考资产见 `design/`，仅借鉴信息结构与交互，不复制 EasyInput 品牌或视觉实现。

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Generated icon alpha and animated raster identity need separate checks
+
+- A pale checkerboard or gray presentation background is not transparency. Inspect the generated PNG alpha and native icon frames before packaging; preserve the approved tile while removing only its outside presentation background through the image tool. Near-opaque generated interior pixels need not be exactly alpha 255.
+- Keep approved high-resolution source art and a deterministic size/format conversion script. Do not reconstruct a selected logo with CSS or SVG merely to make icon sizes.
+- Preload both animation frames, cancel timers on unmount/hidden/reduced-motion changes, and test an actual close/reopen cycle in the native renderer. Static branding, software companionship and physical device state are distinct consumers.
+
 ## Home metrics must use the retained source of truth, not presentation fixtures
 
 - Renderer seed histories are useful for previews but cannot establish real usage. Aggregate final user records in the main-owned store, separating dictation from companion turns and excluding assistant replies and future timestamps.

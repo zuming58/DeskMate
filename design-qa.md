@@ -1,3 +1,21 @@
+# T26A brand and light companion QA — 2026-09-11
+
+Final result: passed
+
+- Source visual truth: `design/brand/t26a/dm-approved-preview.png`, `dm-icon-source.png`, `companion-open-source.png`, `companion-closed-source.png`; each 1254×1254. User reference `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-7461003f-c1cb-4f3c-99f1-1c48ed04068f.png` establishes the pale-blue soft closed-eye direction, not the old black-shell screenshot.
+- Implementation evidence: `C:/Users/ADMINI~1/AppData/Local/Temp/deskmate-workbench-qa-DVaerB/`: `overview-1440-synthetic.png`, `companion-open-1440-synthetic.png`, `companion-closed-1440-synthetic.png`, `companion-960-synthetic.png`, and `report.json`. Native Electron renders the production React build/preload. Full captures are 2160×1536 at CSS 1440×1024, and 1440×1020 at CSS 960×680 (Windows density 1.5). Source art is shown proportionately with `object-fit: contain`; compare the image region, not the source's square canvas against the whole page. No claim of pixel-level layout correspondence to an art-only reference.
+- Combined comparison input included the closed-eye source together with actual closed-state and compact listening screenshots. Large face and sidebar assets are sufficiently visible in these views for focused asset review; branding was also compared with the actual overview and approved source. This is an image-region comparison within the native captures, not a pixel-perfect full-page mockup match.
+- Fonts/typography: existing system/Noto fallback, page titles, labels and control hierarchy unchanged; no logo wordmark rendered as a substitute for the image. All scoped captions remain readable at both sizes.
+- Spacing/layout: existing companion 3:2 stage and compact sidebar card preserved; character remains centered and uncropped. Static DM uses the existing 42 px sidebar and 68 px overview brand slots without adding an outer shell. Compact view stacks content and retains vertical scrolling; no new horizontal overflow.
+- Colors/tokens: face backgrounds are pale gray-blue, no black mechanical border or neon frame. Deep-teal eyes contrast with aqua body. Existing graphite navigation and semantic connection colors deliberately remain unchanged.
+- Image fidelity: actual Image Gen raster assets, not SVG/CSS approximations. Two aligned frames preserve the friendly subject; near-opaque DM tile has genuine transparent outer corners. P3 follow-up only: the source's subtly varying pale background creates a faint square-canvas boundary inside the wider light stage; small taskbar sizes naturally lose fine folded-gradient detail. Neither crops the face, adds a black border nor prevents recognition.
+- Copy/content: production UI wording is unchanged. Synthetic test identity/connection counts are fixtures, not user or hardware claims. Existing state captions continue to distinguish readiness, listening and completion.
+- Interaction/console checks: **29/29** native assertions passed, covering natural closure/reopening, both state-driven faces, live reduced-motion cancellation, layout and original overview error/recovery/navigation tests. No unexpected renderer errors. The deliberate `isolated-ui-qa` handler exceptions cover failed reads; Electron's console-event deprecation remains non-blocking.
+- Comparison history: no actionable P0/P1/P2 visual mismatch in the final scoped comparison. The first automated run expected all center alpha pixels to be 255, although generated artwork is near-opaque; assertion corrected to >=250 while preserving the required transparent-corner check, then full QA rerun passed. This was an assertion correction, not a visual-fix iteration.
+- Checklist complete: source art preserved; static/live identity separated; light backgrounds on both requested surfaces; animation accessibility; native/package asset verification. No hardware or live microphone testing was performed.
+
+---
+
 # T22E rotary delivery and paste setup QA — 2026-09-11
 
 - Final isolated native Electron QA **61/61**, evidence `%TEMP%/deskmate-prompt-qa-6o3YOG/`. Production renderer/preload/controller, test clipboard/configuration sinks only. Inspected keymap-shared-1440 and prompts-960: KEY8 repair sits below the sole physical keyboard diagram, same rounded styling; prompt fixed 45/55 list/preview retained without outer scroll.
