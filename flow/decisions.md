@@ -1,5 +1,12 @@
 # Decisions
 
+## D121 - Workday memory closes once and nightly synthesis rechecks raw records
+
+- 2026-09-11 user clarification: the configurable evening close (23:30 example) and “提前结束今天并同步” share one workday operation. Input after the fixed cutoff belongs to the next dated journal while retaining actual timestamps; a manual close suppresses that day's scheduled duplicate.
+- Nightly synthesis must re-examine all eligible raw final records in the workday, using hourly summaries only as supporting checkpoints. It repairs omissions, reconciles corrections and extracts evidence-backed lessons. One final daily Markdown contains work/project progress and user long-term-memory sections; source and confirmation state remain explicit.
+- KnowledgeOS receives the complete private journal. Its knowledge compilation/publication remains its responsibility. These are requirements for T25, not a claim that the adapter, scheduler or retention feature is implemented. Configurable 20-day raw retention is a proposed default; no deletion policy has been activated.
+- Proposal and receiving-side gaps: [T25 handoff](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md).
+
 ## D120 - Codex work state belongs on EasyInput LEDs, not Xiaozhi's face
 
 - 2026-09-11: Real `codex-hook-v1` events use the existing T09 Feature report `0x12` with dedicated source `0x4c584443` (`CDXL`). EasyInput advertises `codex_led_status_v1`, consumes that source locally and never forwards it through DeskMate Link. Old firmware therefore receives nothing, and other T09 sources retain their frozen Xiaozhi behavior.
