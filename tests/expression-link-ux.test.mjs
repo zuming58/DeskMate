@@ -64,7 +64,7 @@ test("companion overview keeps the real face first and removes the conflicting s
     readFile(new URL("../src/pages.jsx", import.meta.url), "utf8"),
     readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
   ]);
-  const companion = pages.slice(pages.indexOf("function AgentStateTestPanel"), pages.indexOf("export function DashboardPage"));
+  const companion = pages.slice(pages.indexOf("function AgentStateTestPanel"), pages.indexOf("export function MemoryManagementPage"));
   const companionOverview = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
   const expressionLibrary = pages.slice(pages.indexOf("export function ExpressionsPage"), pages.indexOf("export function ExpressionEditorPage"));
   for (const label of ["小智工作状态测试", "EasyInput 写入", "小智 DeskMate Link", "EasyInput ACK 只证明写入被总控接受", "查看系统诊断"]) assert.match(companion, new RegExp(label));

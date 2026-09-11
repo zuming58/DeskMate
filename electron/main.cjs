@@ -14,6 +14,7 @@ const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
+const { createWorkbenchOverview } = require("./workbench-overview.cjs");
 const { CompanionDialogueContext } = require("./companion-dialogue-context.cjs");
 const { CompanionMemoryControl } = require("./companion-memory-control.cjs");
 const { createKnowledgeBaseSettings } = require("./knowledge-base-settings.cjs");
@@ -73,7 +74,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t25-knowledgeos-memory-integration";
+const DESKMATE_BUILD_ID = "t26-workbench-overview";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -1709,6 +1710,7 @@ app.whenReady().then(async () => {
   });
   onTrusted("companion:computer-audio-event", (value) => { if (!String(value?.type || "").startsWith("wake.source.")) computerCompanionAudio.handleRendererEvent(value); else handleWakeCaptureEvent(value); });
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
+  handleTrusted("workbench:get-overview", () => createWorkbenchOverview({ memoryStore: companionMemoryStore, policyStore: companionMemoryPolicyStore, knowledgeOsSettings, promptStore: promptWorkbench.store, serviceStatus: threeStageServiceStatus(), wakeStatus: wakeWordAdapter.status(), running: memoryJournalService.active }));
   handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
   handleTrusted("memory:set-policy", (value = {}) => companionMemoryPolicyStore.save(value));
   handleTrusted("memory:commit-dictation", (value = {}) => companionMemoryStore.commitConversationTurn({ ...value, role: "user", source: "dictation" }));

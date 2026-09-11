@@ -1,5 +1,12 @@
 # Lessons learned
 
+## Home metrics must use the retained source of truth, not presentation fixtures
+
+- Renderer seed histories are useful for previews but cannot establish real usage. Aggregate final user records in the main-owned store, separating dictation from companion turns and excluding assistant replies and future timestamps.
+- Calendar activity is not a sealed memory workday. Early daily close changes attribution of subsequent records, not their actual recording date. Document both counting scopes rather than silently mixing them.
+- Read-only status helpers must not call a convenience method that creates or advances the active workday. Test database change counts while generating a dashboard projection.
+- When moving a page out of a combined source file, update source-extraction test boundaries. An absent `indexOf` delimiter yields `-1` and silently makes tests inspect unrelated later components.
+
 ## A local combined memory view is not a safe remote classification boundary
 
 - A single local daily page is useful for reading, but a receiving system should not be asked to infer work versus personal scope from mixed prose. Seal and submit one payload per explicit memory class.

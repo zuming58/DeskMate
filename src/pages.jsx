@@ -335,10 +335,10 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
   );
 }
 
-export function CompanionPage({ notify, navigate, stopCompanion }) {
+export function CompanionPage({ notify, navigate, stopCompanion, initialSection }) {
   const { state, patch, updateCompanion } = useAppStore();
   const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
-  const [section, setSection] = useState("overview");
+  const [section, setSection] = useState(["overview", "motion", "agents"].includes(initialSection) ? initialSection : "overview");
   const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
   const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", ownerProfile: { occupation: "", currentFocus: "", ageStage: "", background: "" }, companionProfile: { ageStage: "" }, role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
@@ -885,63 +885,7 @@ export function MemoryManagementPage({ notify }) {
   );
 }
 
-export function DashboardPage({ navigate, notify }) {
-  const { state, patch } = useAppStore();
-  const expression = state.currentExpression;
-  const selectedPreset = expressionPresets.find((item) => item.id === expression) || expressionPresets[0];
-  const task = state.aiEvent;
-  const hardware = dashboardHardwareStatus(state.runtime?.inputBridge);
-  const progress = Math.max(0, Math.min(100, Number(task.progress) || 0));
-  const stateCopy = {
-    idle: { label: "待命", heading: "等待新任务", tone: "neutral" },
-    listening: { label: "倾听中", heading: "正在接收输入", tone: "success" },
-    thinking: { label: "思考中", heading: "正在分析任务", tone: "demo" },
-    working: { label: "运行中", heading: "正在工作", tone: "success" },
-    waiting_user: { label: "待确认", heading: "等待用户确认", tone: "warning" },
-    completed: { label: "已完成", heading: "任务已完成", tone: "success" },
-    error: { label: "异常", heading: "任务出现异常", tone: "warning" },
-  }[task.type] || { label: "未知", heading: "状态待确认", tone: "neutral" };
-  return (
-    <div className="page page--dashboard">
-      <PageIntro
-        title="工作台"
-        description="查看桌宠状态、AI 任务进度与设备运行情况"
-        actions={<Button icon={Sparkles} variant="soft" onClick={() => navigate("companion")}>查看 AI 联动</Button>}
-      />
-      <div className="dashboard-grid">
-        <Card className="pet-showcase">
-          <div className="card-heading">
-            <div><strong>桌宠软件预览</strong><small>DESKMATE · LOCAL PREVIEW</small></div>
-            <StatusBadge tone="demo">软件预览 · {selectedPreset.name}</StatusBadge>
-          </div>
-          <div className="pet-visual">
-            <CompanionFace expressionId={expression} alt={`DeskMate ${selectedPreset.name}表情`} />
-            <span className="pet-mode"><span />{expression.toUpperCase()} · {selectedPreset.name}软件模式</span>
-          </div>
-          <div className="pet-footer">
-            <div><small>设备姿态</small><strong>舵机未启用 · 待校准</strong></div>
-            <div className="sensor-mini"><span><strong>待接入</strong><small>温度待接入</small></span><span><strong>待接入</strong><small>湿度待接入</small></span><span><strong>待接入</strong><small>环境光待接入</small></span></div>
-          </div>
-        </Card>
-        <Card className="task-panel">
-          <div className="task-panel__top"><span className="agent-label">{task.agent || "AI"}</span><StatusBadge tone={stateCopy.tone}>{stateCopy.label}</StatusBadge></div>
-          <div><h2>{task.agent || "AI"} {stateCopy.heading}</h2><p>{task.detail || "等待状态适配器提供任务说明"}</p></div>
-          <div className="progress-block">
-            <div className="progress-ring" style={{ "--value": progress }}><strong>{progress}<span>%</span></strong><small>任务进度</small></div>
-            <div><span className="blue-kicker">当前状态</span><h3>{stateCopy.heading}</h3><p>{task.detail || "尚未收到任务详情"}</p></div>
-          </div>
-          <Button variant="primary" className="button--wide" onClick={() => navigate("companion")}>查看陪伴与联动 <ArrowRight size={18} /></Button>
-          <div className="task-divider" />
-          <div className="card-heading"><strong>软件表情预览</strong><button className="text-link" onClick={() => navigate("companion")}>管理预览 <ArrowRight size={14} /></button></div>
-          <div className="expression-row">
-            {expressionPresets.slice(0, 3).map((item) => <ExpressionTile key={item.id} compact preset={item} selected={expression === item.id} onClick={() => previewSoftwareExpression({ patch, notify, preset: item })} />)}
-          </div>
-          <div className={`sync-line sync-line--${hardware.tone}`}><span />{hardware.summary}<button className="text-link" onClick={() => navigate("settings/diagnostics")}>查看系统诊断</button></div>
-        </Card>
-      </div>
-    </div>
-  );
-}
+export { DashboardPage } from './WorkbenchDashboard.jsx';
 
 export function VoicePage({ notify }) {
   const { state, patch } = useAppStore();

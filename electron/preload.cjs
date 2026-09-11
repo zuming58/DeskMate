@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   sendCompanionComputerAudioEvent: (value) => ipcRenderer.send("companion:computer-audio-event", value),
   onCompanionComputerAudioCommand: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("companion-computer-audio-command", handler); return () => ipcRenderer.removeListener("companion-computer-audio-command", handler); },
   getMemoryStatus: () => ipcRenderer.invoke("memory:get-status"),
+  getWorkbenchOverview: () => ipcRenderer.invoke("workbench:get-overview"),
   getMemoryPolicy: () => ipcRenderer.invoke("memory:get-policy"),
   setMemoryPolicy: (value) => ipcRenderer.invoke("memory:set-policy", value),
   commitDictationMemory: (value) => ipcRenderer.invoke("memory:commit-dictation", value),

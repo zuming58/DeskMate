@@ -41,25 +41,14 @@ test("dashboard treats optional Xiaozhi disablement as a valid EasyInput-only mo
   assert.match(status.summary, /小智硬件扩展已关闭/);
 });
 
-test("workbench labels previews and pending hardware without fabricated readings", async () => {
-  const page = await readFile(new URL("../src/pages.jsx", import.meta.url), "utf8");
+test("workbench uses actual overview data without fabricated progress or sensor readings", async () => {
+  const dashboard = await readFile(new URL("../src/WorkbenchDashboard.jsx", import.meta.url), "utf8");
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-  const dashboard = page.slice(page.indexOf("export function DashboardPage"), page.indexOf("export function VoicePage"));
-
-  for (const copy of [
-    "桌宠软件预览",
-    "软件预览 ·",
-    "舵机未启用 · 待校准",
-    "温度待接入",
-    "湿度待接入",
-    "环境光待接入",
-    "查看系统诊断",
-  ]) assert.match(dashboard, new RegExp(copy));
-
-  for (const fabricated of ["24.6℃", "46%", "68%", "正对用户 · 0°", "状态同步正常 · 2 秒前", "智能联动模式已启用"]) {
+  for (const fabricated of ["24.6℃", "46%", "68%", "progress-ring", "state.aiEvent", "historyItems", "温度待接入", "舵机未启用 · 待校准"]) {
     assert.doesNotMatch(dashboard, new RegExp(fabricated.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(dashboard, /previewSoftwareExpression/);
+  assert.match(dashboard, /getWorkbenchOverview/);
+  assert.match(dashboard, /dashboardHardwareStatus/);
   assert.doesNotMatch(dashboard, /onClick=\{\(\) => event\(/);
   assert.match(app, /formatDashboardDate\(\)/);
   assert.doesNotMatch(app, /8月20日 · 周四/);

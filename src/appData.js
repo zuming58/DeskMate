@@ -1,6 +1,6 @@
 export const pageMeta = {
   prompts: { title: '提示词', subtitle: '选一句，继续工作；提示词与场景按键一起切换' },
-  dashboard: { title: "工作台", subtitle: "查看桌宠状态、AI 任务进度与设备运行情况" },
+  dashboard: { title: "工作台", subtitle: "今日使用、连接状态、工作场景与记忆进度" },
   voice: { title: "语音输入", subtitle: "专注录音、实时转写与智能整理" },
   companion: { title: "AI 陪伴", subtitle: "陪伴对话、人设、AI 联动、表情与动作的统一入口" },
   history: { title: "历史记录", subtitle: "管理、搜索和导出最近的语音输入" },

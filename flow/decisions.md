@@ -1,5 +1,11 @@
 # Decisions
 
+## D124 - Workbench is a read-only comprehensive overview, not a pet showcase
+
+- 2026-09-11 user request: prioritize real software/hardware connections, daily usage, companionship and memory accumulation. Keep a small companion identity; remove the oversized expression preview, invented progress ring and irrelevant sensor placeholders from Home.
+- Aggregate final saved user records in the existing SQLite store; never use renderer demo history. Accepted local memory and pending candidates remain separate. Companionship days are inclusive calendar days since the earliest retained companion record/summary, not uptime. All metric definitions are documented and visible in tooltips where needed.
+- Home reads main-owned projections and navigates to existing management pages. It does not open the microphone, write hardware, invoke models, submit memories or change settings. Configured services are not claimed connected; stale/failed reads and unconfirmed hardware stay explicit. Details: [T26 overview](../docs/architecture/workbench-overview.md).
+
 ## D123 - Generic music playback is cancelled; dance accompaniment remains
 
 - 2026-09-11 user decision: generic “play music”, streaming-service search, playlist and media-session control are removed from the active roadmap. Registered application launch remains available, including opening NetEase Cloud Music.

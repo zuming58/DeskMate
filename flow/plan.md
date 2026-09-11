@@ -1,6 +1,12 @@
 # Development plan
 
-## Current stage: T25 KnowledgeOS memory integration — implemented, live acceptance pending
+## Current stage: T26 comprehensive workbench — software-only
+
+2026-09-11：用户远程操作、不能验收硬件，本轮只重做工作台首页。移除大幅桌宠预览和虚构任务进度，接入 SQLite 真实统计、连接/配置、日终与同步状态、当前场景和 Codex 项目上报。详见 [设计与数据口径](../docs/architecture/workbench-overview.md)。原功能、设置和实体硬件行为不变。
+
+T25 验收更新：用户已提供“KnowledgeOS 连接与当前身份正常”的截图，并确认保存/连接没有问题；不再列为待重新测试。真实 AI 陪伴检索和最终 work/personal 双提交仍独立等待验收，不由该连接结果替代。
+
+## Previous stage: T25 KnowledgeOS memory integration — implemented, full live acceptance pending
 
 2026-09-11: KnowledgeOS 双向接入的 DeskMate 侧已实现：AI 陪伴有界检索正式知识与本 Agent 私有记忆；语音输入和陪伴记录每小时增量整理；23:30 默认或手动封账时完整重读当天原文；本地写综合、work、personal 三份日期 Markdown。远端不提交混合 journal，而是固定提交 `memory_class=work`（可关联项目）与 `memory_class=personal`（强制 `project_id=null`）两份 sealed 日记，并保留来源计数、区间与摘要哈希。20 天默认原文清理仅作用于 DeskMate 本地，启用同步时等待两份回执，绝不删除 KnowledgeOS Raw。调度、同步、重试、清理和设置 UI 已启用；剩余是配置正式 Credential/MCP 适配器后的跨项目真联调。任务：[T25](tasks/t25-knowledgeos-memory-integration.md)；实现与验收：[双向记忆交接](../docs/handoffs/knowledgeos-memory-integration-2026-09-11.md)。
 

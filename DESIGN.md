@@ -1,5 +1,7 @@
 # DeskMate design direction
 
+T26 (2026-09-11): 工作台改为真实数据综合看板：相伴/今日使用/已确认记忆、连接服务、7 天使用、小时→日终→KnowledgeOS、当前场景与项目状态。大脸缩为小型标识，不再占用首页。详情和配置留在原页面，首页只读概览和导航；“已配置”不冒充“已连接”，无记录与读取失败明确区分。详见 [工作台设计与统计口径](docs/architecture/workbench-overview.md)。
+
 T22F (2026-09-11): keep prompt ordering explicit and local: adjacent up/down controls appear only in the unfiltered current-scene list. Scene KEY5–7 use direct common-action choices, plus custom shortcut, copy-only prompt, registered application and disabled. Opening an application must reuse the existing whitelist and never expose a raw command field.
 
 T22E (2026-09-11): prompt rotary selection must not require hovering over the list. Keep the 45/55 fixed panes; source-identified wheel input only changes foreground selection. Key mapping shows a compact KEY8 paste repair when its assignment is not paste, leading to existing synchronization confirmation. Do not add a second keyboard editor to Prompts.
@@ -36,7 +38,7 @@ DeskMate 不是传统硬件调试器，而是一个安静、可信、带有生�
 
 ## Core surfaces
 
-- Workbench：桌宠脸、AI 工作状态、当前任务和设备摘要。
+- Workbench：真实使用与记忆概览、软硬件服务状态、当前场景和可信项目状态；小型陪伴标识，不放大脸、假任务百分比或未开发传感器占位。
 - Voice：录音、实时字幕、转写、整理和输出闭环。
 - Companion：实时大脸与陪伴/设备证据优先；实体动作和智能控制为后续分区。智能控制只维护明确授权的应用白名单与 Codex 可信状态，不展示其他 Agent 入口。
 - History：原始转写与整理结果、复制、导出和删除。

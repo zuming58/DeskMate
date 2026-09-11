@@ -740,6 +740,41 @@ class CompanionMemoryStore {
     return { schema: "deskmate.memory.export.v2", exportedAt: instant.toISOString(), dailySummaries, dailyJournals, longTermMemories };
   }
 
+  dashboardSummary() {
+    const now = this.now();
+    const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
+    const start = new Date(midnight); start.setDate(start.getDate() - 6);
+    // Aggregate in SQLite: the home screen never receives conversation text.
+    const rows = this.db.prepare(`SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day,
+      SUM(CASE WHEN source='dictation' THEN 1 ELSE 0 END) AS dictationCount,
+      SUM(CASE WHEN source='dictation' THEN length(content) ELSE 0 END) AS dictationCharacters,
+      SUM(CASE WHEN source='companion' THEN 1 ELSE 0 END) AS companionCount
+      FROM conversation_turns WHERE role='user' AND created_at>=? AND created_at<=? GROUP BY day`).all(start.getTime(), now);
+    const activity = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start); date.setDate(date.getDate() + index);
+      const day = localDayAt(date.getTime()); const row = rows.find(item => item.day === day);
+      return { day, dictationCount: Number(row?.dictationCount || 0), dictationCharacters: Number(row?.dictationCharacters || 0), companionCount: Number(row?.companionCount || 0) };
+    });
+    const first = this.db.prepare(`SELECT MIN(day) AS day FROM (
+      SELECT date(MIN(created_at) / 1000, 'unixepoch', 'localtime') AS day FROM conversation_turns WHERE source='companion' AND role='user' AND created_at<=?
+      UNION ALL SELECT MIN(day) AS day FROM daily_summaries WHERE source='companion' AND source_turn_count>0 AND day<=?
+    )`).get(now, localDayAt(now))?.day || null;
+    const calendarNumber = day => { const [y, m, d] = day.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+    const scalar = sql => Number(this.db.prepare(sql).get()?.value || 0);
+    return {
+      ready: true, today: activity.at(-1), activity, firstCompanionDay: first,
+      companionDays: first ? Math.max(1, Math.round((calendarNumber(localDayAt(now)) - calendarNumber(first)) / 86400000) + 1) : 0,
+      pendingCandidates: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='pending'"),
+      longTermMemories: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='accepted'"),
+      completedJournals: scalar("SELECT COUNT(*) AS value FROM memory_daily_journals WHERE status='completed'"),
+      pendingSync: scalar("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status IN ('pending','sending','failed')"),
+      acceptedSync: scalar("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status='accepted'"),
+      lastHourlyAt: this.db.prepare('SELECT MAX(period_end) AS at FROM memory_hourly_summaries').get()?.at || null,
+      latestJournal: this.db.prepare('SELECT day, status, completed_at AS completedAt FROM memory_daily_journals ORDER BY day DESC LIMIT 1').get() || null,
+      lastAcceptedAt: this.db.prepare("SELECT MAX(accepted_at) AS at FROM memory_journal_outbox WHERE status='accepted'").get()?.at || null,
+    };
+  }
+
   status() {
     const scalar = (sql) => Number(this.db.prepare(sql).get()?.value || 0);
     const sourceCounts = {};
