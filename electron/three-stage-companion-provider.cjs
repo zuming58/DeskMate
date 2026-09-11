@@ -77,7 +77,7 @@ class ThreeStageCompanionProvider {
     this.pendingBargeInTimer = null;
     this.settledBargeInItemId = "";
     this.settledBargeInTimer = null;
-    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, receivedStopAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
     this.counters = {
@@ -283,7 +283,10 @@ class ThreeStageCompanionProvider {
       return;
     }
     if (event.type === "speech.stopped") {
-      if (this.matchingSpeechEvidence(event.itemId)) this.speechEvidence.audioEndMs = Math.max(0, Number(event.audioEndMs) || 0);
+      if (this.matchingSpeechEvidence(event.itemId)) {
+        this.speechEvidence.audioEndMs = Math.max(0, Number(event.audioEndMs) || 0);
+        this.speechEvidence.receivedStopAt = this.now();
+      }
       return;
     }
     if (this.dropSettledBargeInEvent(event)) return;
@@ -353,6 +356,7 @@ class ThreeStageCompanionProvider {
         return;
       }
       this.lastFinal = { text, at };
+      const receivedStopAt = this.speechEvidence.receivedStopAt;
       this.resetSpeechEvidence();
       this.counters.asrFinals += 1;
       const hadPartial = this.utteranceStartedAt !== null;
@@ -362,6 +366,8 @@ class ThreeStageCompanionProvider {
         speechStarted: 0,
         firstAsrPartialMs: hadPartial ? this.lastTiming.firstAsrPartialMs : null,
         asrFinalMs: Math.max(0, at - utteranceStartedAt),
+        speechStopToFinalMs: receivedStopAt == null ? null : Math.max(0, at - receivedStopAt),
+        playbackQueuedMs: null,
         modelRequestStartedMs: null,
         firstAssistantDeltaMs: null,
         firstTtsRequestMs: null,
@@ -384,6 +390,7 @@ class ThreeStageCompanionProvider {
   }
 
   newTurn(kind = "model", startedAt = this.now()) {
+    this.lastTiming.playbackQueuedMs = null;
     const turn = {
       id: ++this.turnSequence,
       kind,
@@ -432,10 +439,11 @@ class ThreeStageCompanionProvider {
           if (firstAudio) {
             firstAudio = false;
             if (this.lastTiming.firstTtsAudioMs === null) this.lastTiming.firstTtsAudioMs = Math.max(0, this.now() - turn.startedAt);
-            if (this.lastTiming.playbackStartedMs === null) this.lastTiming.playbackStartedMs = this.lastTiming.firstTtsAudioMs;
+            // Receipt is not physical speaker playback. Keep playbackStartedMs
+            // unknown; the controller separately reports renderer queue receipt.
           }
           this.counters.ttsAudioChunks += 1;
-          this.emit({ type: "audio", audio: Buffer.from(audio || []) });
+          this.emit({ type: "audio", audio: Buffer.from(audio || []), turnId: turn.id });
         },
       });
     });
@@ -496,7 +504,7 @@ class ThreeStageCompanionProvider {
     turn.ttsEnded = true;
     this.lastTiming.turnCompletedMs = Math.max(0, this.now() - turn.startedAt);
     this.counters.turnsCompleted += 1;
-    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText, kind: turn.kind }) : null;
+    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText, kind: turn.kind, id: turn.id, startedAt: turn.startedAt }) : null;
     this.activeTurn = null;
     this.clearPendingBargeInFinal();
     this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
@@ -509,6 +517,13 @@ class ThreeStageCompanionProvider {
     this.playbackTail = null;
     this.resetSpeechEvidence();
     return hadTail;
+  }
+
+  playbackQueued(turnId) {
+    const turn = this.activeTurn || this.playbackTail;
+    if (this.closed || !turn || turn.id !== turnId || this.lastTiming.playbackQueuedMs != null) return false;
+    this.lastTiming.playbackQueuedMs = Math.max(0, this.now() - turn.startedAt);
+    return true;
   }
 
   speakText(value) {

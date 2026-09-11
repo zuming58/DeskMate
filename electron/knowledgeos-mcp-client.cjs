@@ -13,7 +13,8 @@ class KnowledgeOsMcpClient {
     this.timeoutMs = Math.max(2000, Math.min(60000, Number(timeoutMs) || 20000));
   }
 
-  async callTool(name, argumentsValue = {}) {
+  async callTool(name, argumentsValue = {}, { signal } = {}) {
+    if (signal?.aborted) return { ok: false, reason: 'knowledgeos-cancelled', retryable: true };
     let connection;
     try { connection = this.settings.loadConnection(); }
     catch { return { ok: false, reason: "knowledgeos-not-configured", retryable: false }; }
@@ -29,17 +30,23 @@ class KnowledgeOsMcpClient {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
         try { child.stdin.end(); } catch { /* already closed */ }
         try { child.kill(); } catch { /* already closed */ }
         resolve(value);
       };
       const timer = setTimeout(() => finish({ ok: false, reason: "knowledgeos-request-timeout", retryable: true }), this.timeoutMs);
+      const abort = () => finish({ ok: false, reason: 'knowledgeos-cancelled', retryable: true });
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) { abort(); return; }
       timer.unref?.();
       child.on("error", () => finish({ ok: false, reason: "knowledgeos-adapter-start-failed", retryable: true }));
       child.on("exit", () => { if (!settled) finish({ ok: false, reason: "knowledgeos-adapter-exited", retryable: true }); });
+      child.stdin.on?.('error', () => finish({ ok: false, reason: 'knowledgeos-adapter-write-failed', retryable: true }));
       child.stdout.setEncoding("utf8");
       child.stdout.on("data", (chunk) => {
         buffer += chunk;
+        if (buffer.length > 1024 * 1024) { finish({ ok: false, reason: 'knowledgeos-response-too-large', retryable: false }); return; }
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() || "";
         for (const line of lines) {

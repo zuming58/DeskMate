@@ -30,6 +30,12 @@ class CompanionSpeechSegmenter {
           end = index + 1;
           break;
         }
+        // Emit one complete first clause early, but not tiny fillers, numeric
+        // separators or every later comma. Keep all original text in order.
+        if (!this.emitted && index + 1 >= 12 && /[，,：:]/.test(this.pending[index]) && !/\d/.test(this.pending[index - 1] || '')) {
+          end = index + 1;
+          break;
+        }
       }
       if (end < 0 && this.pending.length >= this.maxCharacters) end = this.maxCharacters;
       if (end < 0 && flush) end = this.pending.length;

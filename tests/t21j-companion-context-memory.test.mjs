@@ -282,6 +282,6 @@ test("T21J main wires shared context, per-question retrieval and wake greeting w
   assert.match(main, /wakeGreeting: reason === "wake-word"/);
   assert.match(main, /companionDialogueContext.clear\(\)/);
   const report = createDiagnosticReport({ conversation: { pipeline: { version: 1, provider: "three-stage", context: { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, content: "私密对话" } } } });
-  assert.deepEqual(report.conversation.pipeline.context, { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true });
+  assert.deepEqual(report.conversation.pipeline.context, { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, retrieval: { route: 'unavailable', status: 'unavailable', localHits: 0, remoteHits: 0 }, timings: { localRecallMs: null, remoteRecallMs: null, contextPreparationMs: null, modelHttpStartedMs: null, modelFirstDeltaMs: null } });
   assert.doesNotMatch(JSON.stringify(report), /私密对话/);
 });

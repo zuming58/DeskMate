@@ -198,6 +198,30 @@ test("T21 recognized-speech barge-in rejects weak noise and spoken-answer echo",
   assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "祖名，这里是回答。"), { accepted: true, reason: "recognized-speech" });
 });
 
+test('T27 audio arrival and renderer queue acceptance are separate; stale acknowledgement is rejected', async () => {
+  let at = 1000;
+  const fixture = fakePipeline({ now: () => at });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: 'speech.started', itemId: 'timing', audioStartMs: 0 });
+  fixture.emitAsr({ type: 'partial', text: '测试接话' });
+  at = 1300;
+  fixture.emitAsr({ type: 'speech.stopped', itemId: 'timing', audioEndMs: 200 });
+  at = 1400;
+  fixture.emitAsr({ type: 'final', itemId: 'timing', text: '测试接话速度' });
+  await tick(); await tick();
+  const audio = fixture.events.find(event => event.type === 'audio');
+  const before = fixture.provider.diagnostics().lastTiming;
+  assert.equal(before.speechStopToFinalMs, 100);
+  assert.equal(before.playbackStartedMs, null);
+  assert.equal(before.playbackQueuedMs, null);
+  at = 1450;
+  assert.equal(fixture.provider.playbackQueued(audio.turnId), true);
+  assert.equal(fixture.provider.diagnostics().lastTiming.playbackQueuedMs, 450);
+  fixture.provider.interrupt();
+  assert.equal(fixture.provider.playbackQueued(audio.turnId), false);
+  fixture.provider.close();
+});
+
 test("T21 recognized partial interrupts current speech and its final opens exactly one replacement turn", async () => {
   let asrEvent;
   let modelCalls = 0;

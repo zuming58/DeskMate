@@ -2,6 +2,10 @@
 
 Status: `T21J_DIALOGUE_MEMORY_CONTINUITY_V1_FROZEN`
 
+The always-current reviewed memory and 24-hour context remain. Historical daily
+evidence, optional remote routing and endpoint defaults are amended by
+[T27](./t27-local-first-companion-latency-v1.md); summaries do not become approved facts.
+
 Windows-only amendment to the T21 context and T15E projection boundaries. ASR,
 Doubao caller-text speech, wake recognition, endpointing, noise rejection, motion
 and both firmware images remain unchanged.

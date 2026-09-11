@@ -77,6 +77,12 @@ KnowledgeOS `accepted` means the private Raw journal was received. It does not m
 
 ## Retrieval into AI companion
 
+T27 amendment: [local-first companion policy](../contracts/t27-local-first-companion-latency-v1.md).
+Ordinary chat no longer searches KnowledgeOS. Use current context and local memory
+first, then remote lookup for historical gaps or explicit knowledge-library
+requests. Connection failure is not an empty match. Local raw expiry does not
+delete daily journals/approved memories or impose a 20-day total memory boundary.
+
 The main process can call `knowledge.search` with bounded query text, hybrid retrieval and scopes `wiki` plus `agent_memory`. Returned title, snippet, citation and timestamp are bounded and inserted as untrusted evidence into the companion model context. Evidence cannot extend application, device or filesystem permissions. If KnowledgeOS is unavailable or read access is disabled, conversation continues with local context.
 
 Retrieval and daily synchronization are separate settings. The renderer receives only narrow IPC operations. The official KnowledgeOS stdio MCP adapter path is encrypted with Electron safe storage; the adapter uses the configured Credential ID and KnowledgeOS dynamic Core discovery rather than a hard-coded port or network scan.

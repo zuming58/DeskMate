@@ -74,7 +74,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t26f-scene-shortcut-capture";
+const DESKMATE_BUILD_ID = "t27-local-first-voice-latency";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -1390,8 +1390,8 @@ app.whenReady().then(async () => {
     providerLabel: "three-stage",
     providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
       onEvent,
-      postPlaybackEchoGraceMs: Math.max(3000, Math.min(12000, Number(sessionPreferences.endSmoothWindowMs) + 2000)),
-      bargeFinalRecoveryMs: Math.max(2000, Math.min(6000, Number(sessionPreferences.endSmoothWindowMs) + 1000)),
+      postPlaybackEchoGraceMs: Math.max(6000, Math.min(12000, Number(sessionPreferences.endSmoothWindowMs) + 2000)),
+      bargeFinalRecoveryMs: Math.max(5000, Math.min(6000, Number(sessionPreferences.endSmoothWindowMs) + 1000)),
       asrFactory: ({ onEvent: onAsrEvent }) => new BailianStreamingAsrAdapter({
         config: bailianStore.loadSecret(),
         silenceDurationMs: sessionPreferences.endSmoothWindowMs,
@@ -1404,7 +1404,8 @@ app.whenReady().then(async () => {
         memoryContext: sessionMemoryContext,
         dialogueContext: companionDialogueContext,
         readMemoryContext: (text) => companionMemoryStore.reviewedContextForQuery(text),
-        readKnowledgeContext: (text) => knowledgeOsMemoryGateway.searchEvidence(text),
+        readKnowledgeContext: (text, options) => knowledgeOsMemoryGateway.searchEvidence(text, options),
+        readLocalHistory: (text, plan) => companionMemoryStore.localHistoryForQuery(text, plan),
         readEarlierContext: (text, before) => companionMemoryStore.earlierCompanionContextForQuery(text, { before }),
       }),
       ttsFactory: () => new DoubaoStreamingTtsAdapter({

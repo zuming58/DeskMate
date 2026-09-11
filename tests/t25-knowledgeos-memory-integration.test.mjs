@@ -122,6 +122,8 @@ test("T25 raw cleanup waits for a completed local journal and, when enabled, bot
     }
     assert.equal(store.cleanupExpiredRaw({ retentionDays: 20, at: now, requireRemoteAccepted: true }).removed, 1);
     assert.equal(store.db.prepare("SELECT COUNT(*) AS value FROM companion_memory_outbox").get().value, 0);
+    assert.equal(store.dailyJournal('2026-09-01').workMarkdown, 'work');
+    assert.equal(store.db.prepare("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status='accepted'").get().value, 2);
   } finally { store.close(); }
 }));
 

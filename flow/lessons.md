@@ -1,5 +1,12 @@
 # Lessons learned
 
+## Optional memory outages must not tax every conversational turn
+
+- A per-turn remote lookup can add seconds even when it returns no usable evidence. In T27, the configured KnowledgeOS adapter spent about three seconds failing to connect to a stopped Core; the old gateway disguised that as an empty result.
+- Separate local retrieval, remote retrieval, model first-token and TTS timings before tuning providers. Time from first ASR partial is not time from mouth-stop; renderer queue receipt is not audible playback. Small sequential real-service samples cannot support a P95 or isolate every optimization's causal benefit.
+- Cancellation must cover context preparation, not just HTTP fetch. An aborted optional lookup must stop its child process and must not later add an empty/stale user turn to the shared context.
+- Serialize the final renderer/test build and Electron packaging. Editing a source or rebuilding dist while asar is being assembled can invalidate offsets/integrity; a failed packaged-resource verifier is a release blocker. Stabilize sources, rebuild sequentially and compare packaged bytes before launching.
+
 ## Filesystem basenames are not automatically safe project identity
 
 - A worktree directory may be an opaque hexadecimal or UUID token. Privacy-safe basename truncation alone does not make it meaningful for display or TTS.

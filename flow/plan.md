@@ -1,5 +1,9 @@
 # Development plan
 
+## Current slice: T27 local-first companion latency
+
+Voice companion recall is now local-first with bounded remote fallback for historical gaps or explicit KnowledgeOS requests. Daily notes remain unreviewed evidence, and local 20-day raw cleanup does not remove summaries or approved memory. New-profile pause default is 1.5 seconds, first complete clause can start TTS, and official DeepSeek V4 companionship uses non-thinking requests. Content-free per-stage measurements distinguish optional lookup, model and audio queueing. See [contract and live synthetic evidence](../docs/contracts/t27-local-first-companion-latency-v1.md). KnowledgeOS Core was not running during the probe, so successful live remote retrieval is still a separate gate; the delay/failure fallback itself was tested. Real microphone pause/echo/interruption acceptance remains user-present.
+
 ## Current stage: T26 comprehensive workbench — software-only
 
 T26C：提示词页的鼠标滚轮恢复 Windows 常规方向；EasyInput 实体旋钮继续独立使用用户选择的反向选词设置。原生 Raw Input 与浏览器后备事件仍做同源去重，实体旋钮方向不再污染鼠标输入。

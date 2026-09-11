@@ -258,9 +258,15 @@ export function createDiagnosticReport(input = {}) {
         personaSchemaVersion: Math.max(0, Math.min(20, Number(pipelineSource.context?.personaSchemaVersion) || 0)),
         ownerProfileConfiguredFields: Math.max(0, Math.min(4, Number(pipelineSource.context?.ownerProfileConfiguredFields) || 0)),
         companionAgeConfigured: pipelineSource.context?.companionAgeConfigured === true,
+        retrieval: {
+          route: ['conversation', 'current-dialogue', 'history-local-miss', 'explicit-knowledge', 'local-hit', 'user-local-only'].includes(pipelineSource.context?.retrieval?.route) ? pipelineSource.context.retrieval.route : 'unavailable',
+          status: ['skipped', 'found', 'empty', 'timeout', 'unavailable', 'cancelled'].includes(pipelineSource.context?.retrieval?.status) ? pipelineSource.context.retrieval.status : 'unavailable',
+          ...Object.fromEntries(['localHits', 'remoteHits'].map(key => [key, Math.max(0, Math.min(8, Number(pipelineSource.context?.retrieval?.[key]) || 0))])),
+        },
+        timings: Object.fromEntries(['localRecallMs', 'remoteRecallMs', 'contextPreparationMs', 'modelHttpStartedMs', 'modelFirstDeltaMs'].map(key => [key, typeof pipelineSource.context?.timings?.[key] === 'number' && Number.isFinite(pipelineSource.context.timings[key]) ? Math.max(0, Math.min(120000, pipelineSource.context.timings[key])) : null])),
       },
       counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsRejectedEcho", "bargeInsRejectedWeak", "bargeSpeechStarts", "bargeInsRejectedUnstable", "postPlaybackEchoDrops", "bargeFinalTimeouts", "bargeFinalRecoveries", "lateBargeFinalDrops"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
-      timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
+      timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "speechStopToFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "playbackQueuedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
     },
     wakeWord: {
       version: ["windows-speech-wake-v2", "windows-speech-wake-v3", "windows-speech-wake-v4", "windows-speech-wake-v5", "sherpa-onnx-kws-v1"].includes(wakeSource.version) ? wakeSource.version : "unavailable",

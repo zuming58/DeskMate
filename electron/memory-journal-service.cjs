@@ -209,11 +209,11 @@ class MemoryJournalService {
 
 class KnowledgeOsMemoryGateway {
   constructor({ settings, client } = {}) { this.settings = settings; this.client = client; }
-  async searchEvidence(query) {
+  async searchEvidence(query, { signal } = {}) {
     const status = this.settings.status();
-    if (!status.configured || !status.readEnabled) return [];
-    const result = await this.client.callTool("knowledge.search", { query: String(query || "").slice(0, 4096), retrieval_mode: "hybrid", scope: ["wiki", "agent_memory"], limit: 8, include_snippets: true });
-    if (!result.ok) return [];
+    if (!status.configured || !status.readEnabled) throw new Error('knowledgeos-search-disabled');
+    const result = await this.client.callTool("knowledge.search", { query: String(query || "").slice(0, 4096), retrieval_mode: "hybrid", scope: ["wiki", "agent_memory"], limit: 8, include_snippets: true }, { signal });
+    if (!result.ok) throw new Error('knowledgeos-search-unavailable');
     const rows = Array.isArray(result.data?.results) ? result.data.results : Array.isArray(result.data?.items) ? result.data.items : [];
     return rows.slice(0, 8).map((row) => ({ title: String(row.title || "").slice(0, 200), snippet: String(row.snippet || row.content || row.preview || "").slice(0, 1000), citation: String(row.citation || row.object_ref || row.knowledge_id || "").slice(0, 300), updatedAt: String(row.updated_at || "").slice(0, 40) })).filter((row) => row.snippet);
   }

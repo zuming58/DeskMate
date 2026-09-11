@@ -801,6 +801,7 @@ class CompanionConversationController {
         throw error;
       }
       if (written !== true) throw new Error("computer-audio-playback-write-failed");
+      if (this.isCurrent(token) && arrival.providerEpoch === this.providerEpoch && !this.discardResponseUntilTtsEnd) this.provider?.playbackQueued?.(event.turnId);
       if (this.trustedResponseActive) this.armTrustedSpeechTimer("", token, "audio-quiet");
       return { ok: true };
     }

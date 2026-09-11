@@ -1,5 +1,12 @@
 # Decisions
 
+## D129 - Local-first conversational recall and measured latency
+
+- Ordinary voice chats do not search KnowledgeOS. Preserve main-owned recent context and refreshed approved local memory; historical work/experience queries search local records and dated evidence before optional remote fallback. Explicit knowledge-library requests still query remotely; local-only instructions forbid it.
+- The 20-day setting expires only eligible original local records, not dated notes, reviewed memory or remote Raw. Generated summaries/personal observations stay evidence, not confirmed profiles. No “20 days means forget everything” policy.
+- Bound optional retrieval and make it cancellable before the model HTTP request. Report failure separately from empty evidence. Add content-free per-stage timings; do not call audio arrival actual speaker playback.
+- New-profile pause threshold is 1.5 seconds, with longer user values preserved. Keep existing acoustic safeguards. Use first complete clause for earlier TTS and official DeepSeek V4 non-thinking mode for companionship only. Full contract and live small-sample limits: [T27](../docs/contracts/t27-local-first-companion-latency-v1.md).
+
 ## D128 - Custom scene shortcuts use physical key capture
 
 - 2026-09-11 user correction: the “自定义快捷键” editor is a recorder, not a free-text field. Clicking it enters capture; a physical single key or combination such as `Ctrl+B` becomes a candidate and requires explicit confirmation before it changes the scene draft.
