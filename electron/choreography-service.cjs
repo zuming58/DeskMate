@@ -53,7 +53,7 @@ function builtInAction(preset, repeat = 1) {
 }
 
 class ChoreographyService extends EventEmitter {
-  constructor({ send, requestIdSequence = null, prepareCenter, settings = () => ({ ...DEFAULT_MOTION_SETTINGS }), defaultDance = () => null, isManualControlActive = () => false, now = () => Date.now(), schedule = setTimeout, pollIntervalMs = 150, operationTimeoutMs = 180000 } = {}) {
+  constructor({ send, requestIdSequence = null, prepareCenter, settings = () => ({ ...DEFAULT_MOTION_SETTINGS }), defaultDance = () => null, isManualControlActive = () => false, now = () => Date.now(), schedule = setTimeout, pollIntervalMs = 150, operationTimeoutMs = 180000, voicePriorityWaitMs = 5000 } = {}) {
     super();
     if (typeof send !== "function" || typeof prepareCenter !== "function") throw new Error("choreography-service-dependency-invalid");
     if (requestIdSequence !== null && typeof requestIdSequence?.next !== "function") throw new Error("choreography-request-id-sequence-invalid");
@@ -67,6 +67,7 @@ class ChoreographyService extends EventEmitter {
     this.schedule = schedule;
     this.pollIntervalMs = pollIntervalMs;
     this.operationTimeoutMs = operationTimeoutMs;
+    this.voicePriorityWaitMs = Math.max(0, Math.min(10000, Number(voicePriorityWaitMs) || 0));
     this.requestCounter = randomNonZero();
     this.boardConnected = false;
     this.motionCollectionWritable = false;
@@ -190,6 +191,12 @@ class ChoreographyService extends EventEmitter {
 
   async executePreset(preset, repeat, source = "UI") {
     if (!PRESETS.has(preset) || !SOURCES.has(source) || !Number.isInteger(repeat) || repeat < 1 || repeat > 3) return this.failure("choreography-report-invalid");
+    if (source === "voice" && ["context", "idle"].includes(this.active?.source)) {
+      const deadline = this.now() + this.voicePriorityWaitMs;
+      while (this.active && ["context", "idle"].includes(this.active.source) && this.now() < deadline) {
+        await new Promise((resolve) => this.schedule(resolve, Math.min(this.pollIntervalMs, Math.max(1, deadline - this.now()))));
+      }
+    }
     const saved = preset === "dance" ? this.defaultDance() : null;
     const action = saved ? validateChoreography(clone(saved)) : builtInAction(preset, repeat);
     return this.execute(action, { source });

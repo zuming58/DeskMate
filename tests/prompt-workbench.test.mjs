@@ -36,6 +36,27 @@ test('T22 pack has 80 original bodies, 10 categories, no fake usage', () => {
   assert.equal(s.rows({}).length, 16); assert.equal(s.rows({ scope: 'all' }).length, 80);
   assert.equal(s.rows({ filter: 'favorites' }).length, 0); assert.equal(s.snapshot().usage.length, 0);
 });
+test('T26E multimedia scene combines social production and video prompts while keeping editing keys', () => {
+  const s = fresh(); s.mutate({ type: 'scene', id: 'scene-video' });
+  const scene = s.data.scenes.find(item => item.id === 'scene-video');
+  const ids = new Set(s.rows({}).map(prompt => prompt.id));
+  assert.equal(scene.title, '多媒体制作');
+  assert.equal(scene.hint, '公众号 · 小红书 · 脚本生视频');
+  assert.equal(s.rows({}).length, 26);
+  for (const id of ['SOCIAL-004', 'SOCIAL-005', 'SOCIAL-006', 'VIDEO-001', 'EDITING-001']) assert(ids.has(id), id);
+  assert.deepEqual([scene.bindings[5].value, scene.bindings[6].value, scene.bindings[7].value], ['Space', 'Ctrl+K', 'Ctrl+Z']);
+});
+test('T26E stored built-in scene labels refresh without replacing user bindings', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'deskmate-prompts-scene-metadata-test-'));
+  const legacy = structuredClone(fresh().data);
+  const video = legacy.scenes.find(scene => scene.id === 'scene-video');
+  video.title = '视频剪辑'; video.hint = '旧说明'; video.bindings[5] = { type: 'hotkey', label: '自定义播放', value: 'P' };
+  writeFileSync(path.join(dir, 'prompt-workbench-v1.json'), JSON.stringify(legacy));
+  const loaded = new PromptWorkbenchStore({ userDataPath: dir });
+  const refreshed = loaded.data.scenes.find(scene => scene.id === 'scene-video');
+  assert.equal(refreshed.title, '多媒体制作'); assert.equal(refreshed.hint, '公众号 · 小红书 · 脚本生视频');
+  assert.deepEqual(refreshed.bindings[5], { type: 'hotkey', label: '自定义播放', value: 'P' });
+});
 test('T22 weighted search aliases and Unicode normalization', () => {
   const s = fresh(); assert.equal(normalize(' ＡＢＣ  Def '), 'abc def');
   for (const query of ['重启', '启动预览']) assert.equal(s.rows({ query })[0].id, 'CODING-002');

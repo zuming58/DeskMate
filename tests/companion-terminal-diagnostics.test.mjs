@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes the explicit T25 KnowledgeOS memory build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t26c-mouse-board-wheel-separation/);
+  assert.match(main, /t26e-multimedia-prompt-scene/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
@@ -380,7 +380,7 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
       transcript: "private user sentence",
       replyText: "private assistant sentence",
     },
-    intentBridge: { status: "ready", taskCount: 1, taskLabel: "private task label" },
+    intentBridge: { status: "ready", taskCount: 1, lastStatus: "failed", lastType: "run_motion_preset", lastReason: "choreography-active", taskLabel: "private task label" },
     sinkCancelReasons: { manual: 7, stop: 1, renderer: 2, provider: 3, "asr-final": 0, privateReason: 88 },
     lastSinkCancelReason: "manual",
     echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, phase: "listening", uplinkAllowed: true },
@@ -395,7 +395,7 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
   assert.equal(report.conversation.turnLifecycle.bridgeOwnedTurns, 2);
   assert.equal(report.conversation.turnLifecycle.bridgePassThroughTurns, 5);
   assert.deepEqual({ starts: report.conversation.turnLifecycle.listeningSpeechStarts, partials: report.conversation.turnLifecycle.listeningPartials, refreshes: report.conversation.turnLifecycle.idleTimerRefreshes }, { starts: 3, partials: 8, refreshes: 11 });
-  assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1 });
+  assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1, lastStatus: "failed", lastType: "run_motion_preset", lastReason: "choreography-active" });
   assert.deepEqual(report.codexTaskBrief, { receiver: "listening", taskCount: 1, announcementsEnabled: true });
   assert.equal(report.conversation.sinkCancellation.reasons.manual, 7);
   assert.equal(report.conversation.sinkCancellation.reasons["asr-final"], 0);

@@ -74,7 +74,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t26c-mouse-board-wheel-separation";
+const DESKMATE_BUILD_ID = "t26e-multimedia-prompt-scene";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -393,11 +393,25 @@ function updateCompanionOverlay(event = {}) {
   }
 }
 
+function companionIntentBridgePublicStatus() {
+  if (!companionIntentBridge) return { status: "unavailable", taskCount: 0, lastStatus: "unavailable", lastType: "none", lastReason: "" };
+  const current = companionIntentBridge.status?.() || {};
+  const lastStatuses = new Set(["idle", "none", "completed", "failed", "expired", "rejected"]);
+  const lastTypes = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "run_motion_preset", "control_local_media"]);
+  return {
+    status: "ready",
+    taskCount: Math.min(8, Math.max(0, Number(current.taskCount) || 0)),
+    lastStatus: lastStatuses.has(current.status) ? current.status : "unavailable",
+    lastType: lastTypes.has(current.type) ? current.type : "none",
+    lastReason: /^[a-z0-9-]{0,80}$/.test(String(current.reason || "")) ? String(current.reason || "") : "intent-bridge-failed",
+  };
+}
+
 function handleCompanionConversationEvent(event = {}) {
   const snapshot = companionConversationController?.snapshot?.();
   const eventSequence = ++companionEventSequence;
   const saved = companionPreferenceStore?.snapshot?.() || { revision: 0, preferences: companionPreferenceStore?.get?.() };
-  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, asrTiming: snapshot?.asrTiming, pipeline: snapshot?.pipeline, intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, preferences: saved.preferences, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
+  const lifecycle = { providerLifecycle: snapshot?.providerLifecycle, turnLifecycle: snapshot?.turnLifecycle, stopLifecycle: snapshot?.stopLifecycle, sessionPolicy: snapshot?.sessionPolicy, asrTiming: snapshot?.asrTiming, pipeline: snapshot?.pipeline, intentBridge: companionIntentBridgePublicStatus(), preferences: saved.preferences, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), mainState: { active: Boolean(snapshot?.active), state: snapshot?.state || "idle", generation: Number(snapshot?.generation) || 0 }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() } };
   const visibleEvent = ["reply.partial", "turn.assistant-final"].includes(event.type) ? { ...event, text: "" } : event;
   const payload = event.type === "state" ? { ...visibleEvent, audioSource: snapshot?.audioSource, audioSink: snapshot?.audioSink, audioSelection: snapshot?.audioSelection, echoGuard: snapshot?.echoGuard, computerAudio: computerCompanionAudio?.diagnostics?.(), ...lifecycle, eventSequence } : { ...visibleEvent, ...lifecycle, eventSequence };
   sendToMain("companion-conversation-event", payload);
@@ -1162,7 +1176,7 @@ function companionConversationStatus() {
   const snapshot = companionConversationController?.snapshot?.() || { active: false, state: "idle", provider: "three-stage", pipeline: null, audioSource: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, echoGuard: { policy: "computer-speaker-echo-guard-v1", active: false, counters: { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 } }, error: "" };
   const service = threeStageServiceStatus();
   const saved = companionPreferenceStore?.snapshot?.() || { revision: 0, preferences: companionPreferenceStore?.get?.() };
-  return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), preferences: saved.preferences, persona: companionPersonaStore?.snapshot?.(), intent: companionIntentBridge?.status?.(), intentBridge: { status: companionIntentBridge ? "ready" : "unavailable", taskCount: Math.min(8, companionIntentBridge?.status?.().taskCount || 0) }, savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
+  return { type: "status", ...snapshot, service, serviceConfigured: Boolean(service.configured), preferences: saved.preferences, persona: companionPersonaStore?.snapshot?.(), intent: companionIntentBridge?.status?.(), intentBridge: companionIntentBridgePublicStatus(), savedPreferences: { revision: saved.revision, endSmoothWindowMs: saved.preferences?.endSmoothWindowMs, idleTimeoutMs: saved.preferences?.idleTimeoutMs }, wakeWord: wakeWordAdapter?.status?.(), foregroundMode: foregroundSessionState.active?.mode || null, computerAudio: computerCompanionAudio?.diagnostics?.() || { ready: false, sourceActive: false, sinkActive: false, counters: {} }, easyInputSpeaker: { available: false, reason: "easyinput-speaker-contract-not-frozen" }, build: { id: DESKMATE_BUILD_ID, version: app.getVersion() }, mainState: { active: Boolean(snapshot.active), state: snapshot.state || "idle", generation: Number(snapshot.generation) || 0 }, eventSequence: companionEventSequence };
 }
 
 function normalizeCompanionStartOptions(value = {}) {

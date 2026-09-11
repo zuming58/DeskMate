@@ -13,6 +13,8 @@ const DIALOG_ERROR_ADJACENCY = new Set(["none", "adjacent-tts-end", "non-adjacen
 const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "draining", "stopping", "reconnecting", "completed", "error"]);
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "recognized-speech", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
+const INTENT_BRIDGE_LAST_STATUSES = new Set(["unavailable", "idle", "none", "completed", "failed", "expired", "rejected"]);
+const INTENT_BRIDGE_LAST_TYPES = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "run_motion_preset", "control_local_media"]);
 const MANUAL_CALIBRATION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "unavailable"]);
 const MANUAL_CALIBRATION_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
 const MANUAL_CALIBRATION_ENDPOINT_RESULTS = new Set(["completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed"]);
@@ -278,6 +280,9 @@ export function createDiagnosticReport(input = {}) {
     intentBridge: {
       status: intentBridgeSource.status === "ready" ? "ready" : "unavailable",
       taskCount: Math.max(0, Math.min(8, Number(intentBridgeSource.taskCount) || 0)),
+      lastStatus: INTENT_BRIDGE_LAST_STATUSES.has(intentBridgeSource.lastStatus) ? intentBridgeSource.lastStatus : "unavailable",
+      lastType: INTENT_BRIDGE_LAST_TYPES.has(intentBridgeSource.lastType) ? intentBridgeSource.lastType : "none",
+      lastReason: /^[a-z0-9-]{0,80}$/.test(String(intentBridgeSource.lastReason || "")) ? String(intentBridgeSource.lastReason || "") : "intent-bridge-failed",
     },
     sinkCancellation: {
       reasons: Object.fromEntries(SINK_CANCEL_REASONS.map((reason) => [reason, Math.max(0, Number(sinkCancelSource[reason]) || 0)])),

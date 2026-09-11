@@ -233,6 +233,18 @@ test("explicit motion phrases bypass the model and run only a frozen preset", as
   assert.equal(modelCalls, 0);
 });
 
+test("an explicit motion exception is retained as a safe Bridge failure", async () => {
+  const bridge = new CompanionIntentBridge({
+    appActions: { listRegistered: () => [] },
+    codexTasks: new CodexTaskBriefStore(),
+    motionAction: async () => { throw new Error("choreography-active"); },
+  });
+  const result = await bridge.analyze("给我跳个舞吧");
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "choreography-active");
+  assert.deepEqual({ status: bridge.status().status, type: bridge.status().type, reason: bridge.status().reason }, { status: "failed", type: "run_motion_preset", reason: "choreography-active" });
+});
+
 test("a received Codex report gives the realtime Bridge a bounded conversational follow-up context", async () => {
   let now = 5_000;
   let modelCalls = 0;

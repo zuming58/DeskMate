@@ -257,7 +257,9 @@ class CompanionIntentBridge {
       this.last = { status: "failed", type, label: "动作控制暂不可用", reason: "motion-action-unavailable", expiresAt: 0 };
       return { ok: false, reason: "motion-action-unavailable", proposal: null, result: { type, ok: false, reason: "motion-action-unavailable", preset } };
     }
-    const result = await this.motionAction(preset);
+    let result;
+    try { result = await this.motionAction(preset); }
+    catch (error) { result = { ok: false, reason: safeReason(error?.message) }; }
     const label = ({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[preset];
     this.last = { status: result?.ok ? "completed" : "failed", type, label: result?.ok ? `已完成${label}动作` : `${label}动作未完成`, reason: result?.ok ? "" : safeReason(result?.reason), expiresAt: 0 };
     const answer = result?.ok ? `已经执行${label}动作` : `${label}动作暂时无法执行`;

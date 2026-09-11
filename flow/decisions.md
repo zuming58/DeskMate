@@ -1,5 +1,11 @@
 # Decisions
 
+## D127 - Multimedia production scene unifies content prompts and editing controls
+
+- 2026-09-11 user decision: rename the built-in `scene-video` display label from “视频剪辑” to “多媒体制作”. Its prompt scope includes official-account articles, Xiaohongshu, spoken-video scripts, cross-platform adaptation, covers, publishing workflow and script/image-to-video generation.
+- Keep the stable `scene-video` ID, the editing icon and the default KEY5/6/7 bindings for play/pause, split and undo. Existing favorites, per-scene ordering, personal forks and hardware mappings therefore remain valid.
+- Built-in scene titles and hints are product metadata. On load DeskMate refreshes those fields by stable ID while preserving the user's bindings and every custom scene; this prevents an older local store from masking renamed product scenes.
+
 ## D126 - Generated Codex worktree identifiers are never project names
 
 - 2026-09-11 user report showed and heard `2d468d2a6f48dd72` as a project. A pure 12–64 digit hexadecimal basename or UUID-like basename is volatile infrastructure identity, not a user-facing project label.

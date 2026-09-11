@@ -142,6 +142,30 @@ test("real choreography service sends one bounded program and waits for terminal
   assert.equal(service.snapshot().lastOutcome.legacyFallback, false);
 });
 
+test("an explicit voice motion waits for a bounded automatic choreography to finish", async () => {
+  let now = 1000;
+  let executed = null;
+  const service = new ChoreographyService({
+    send: async () => ({ ok: false }),
+    prepareCenter: async () => ({ ok: true }),
+    now: () => now,
+    schedule: (callback, delay) => {
+      now += delay;
+      service.active = null;
+      queueMicrotask(callback);
+    },
+    voicePriorityWaitMs: 5000,
+  });
+  service.active = { name: "automatic-search", source: "context" };
+  service.execute = async (value, options) => {
+    executed = { name: value.name, source: options.source };
+    return { ok: true, endpointReportedComplete: true };
+  };
+  const result = await service.executePreset("dance", 2, "voice");
+  assert.equal(result.ok, true);
+  assert.deepEqual(executed, { name: "内置默认舞蹈", source: "voice" });
+});
+
 test("native bridge rejection and legacy quick-action fallback stay explicit", () => {
   const rejected = parseBridgeLine(JSON.stringify({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: "dance-12345678", ok: false, reason: "invalid-choreography-report", time: "2026-09-03T10:00:00.000Z", sequence: 1 }));
   assert.equal(rejected.reason, "choreography-native-report-rejected");

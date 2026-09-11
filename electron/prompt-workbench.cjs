@@ -39,6 +39,13 @@ const defaultBindings = id => id === 'scene-video'
 const initial = () => ({ schema: 'deskmate.prompt-workbench', schemaVersion: 1, revision: 0,
   scenes: library.primaryScenes.map(scene => ({ ...scene, bindings: defaultBindings(scene.id) })),
   activeScene: 'coding', selected: {}, orders: {}, personal: [], favorites: [], usage: [], history: [], announcements: true, reverseSelection: true });
+const refreshBuiltinSceneMetadata = state => {
+  const metadata = new Map(library.primaryScenes.map(scene => [scene.id, scene]));
+  return {
+    ...state,
+    scenes: state.scenes.map(scene => metadata.has(scene.id) ? { ...scene, ...metadata.get(scene.id), bindings: scene.bindings } : scene),
+  };
+};
 
 function validateState(raw) {
   if (raw?.schema !== 'deskmate.prompt-workbench' || raw.schemaVersion !== 1 || !Number.isSafeInteger(raw.revision) || raw.revision < 0) fail('提示词备份版本不受支持');
@@ -102,7 +109,7 @@ class PromptWorkbenchStore {
   constructor({ userDataPath, fileSystem = fs } = {}) {
     this.fs = fileSystem; this.file = userDataPath ? path.join(userDataPath, 'prompt-workbench-v1.json') : null; this.data = initial(); this.error = '';
     if (this.file && this.fs.existsSync(this.file)) {
-      try { this.data = validateState(JSON.parse(this.fs.readFileSync(this.file, 'utf8'))); }
+      try { this.data = refreshBuiltinSceneMetadata(validateState(JSON.parse(this.fs.readFileSync(this.file, 'utf8')))); }
       catch { this.error = '提示词数据损坏，原文件已保留；请先导出备份并检查，未覆盖任何数据'; }
     }
   }
@@ -112,7 +119,7 @@ class PromptWorkbenchStore {
   commit(next, expected = this.data.revision) {
     if (this.error) fail(this.error);
     if (expected !== this.data.revision) fail('内容已更新，请刷新后再保存');
-    const data = validateState({ ...next, revision: this.data.revision + 1 });
+    const data = refreshBuiltinSceneMetadata(validateState({ ...next, revision: this.data.revision + 1 }));
     if (this.file) {
       this.fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const temp = `${this.file}.${randomUUID()}.tmp`;

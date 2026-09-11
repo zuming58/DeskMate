@@ -130,10 +130,10 @@ app.whenReady().then(async () => {
   await press('Tab'); await waitFor(() => store.data.activeScene==='coding', 'keymap Tab returns coding');
   await shot('keymap-shared-1440');
   const sceneClick = async title => { await run(`Array.from(document.querySelectorAll('.keymap-scene')).find(b=>b.querySelector('strong').textContent===${JSON.stringify(title)})?.click()`); await pause(180); };
-  await sceneClick('视频剪辑');
+  await sceneClick('多媒体制作');
   record('scene button activates real routing and diagram', store.data.activeScene==='scene-video' && await run(`document.querySelector('[data-key="5"]').textContent.includes('Space')`));
   await run(`document.querySelector('[data-key="5"]').click()`); await pause(180);
-  record('clicking key 5 edits only that scene in right panel', await run(`document.querySelector('.key-scope-badge').textContent.includes('视频剪辑') && !!document.querySelector('.key-editor [aria-label="场景快捷键"]')`));
+  record('clicking key 5 edits only that scene in right panel', await run(`document.querySelector('.key-scope-badge').textContent.includes('多媒体制作') && !!document.querySelector('.key-editor [aria-label="场景快捷键"]')`));
   record('scene action menu exposes common choices plus custom, prompt, app and disabled', await run(`Array.from(document.querySelector('[aria-label="场景按键动作"]').options).map(o=>o.textContent).join('|')==='全选|复制|粘贴|撤销|保存|自定义快捷键|复制提示词|打开应用|禁用'`));
   record('right editor inputs use the rounded app styling', await run(`parseFloat(getComputedStyle(document.querySelector('[aria-label="场景按键名称"]')).borderRadius)>=10 && document.querySelector('[aria-label="场景快捷键"]').getBoundingClientRect().height>=40`));
   await run(`document.querySelector('[aria-label="场景按键名称"]').focus()`); await press('Tab');
@@ -146,7 +146,7 @@ app.whenReady().then(async () => {
   record('coding key 5 retains its own action', await run(`document.querySelector('[data-key="5"]').textContent.includes('Ctrl+A')`));
   await run(`document.querySelector('[data-key="1"]').click()`); await pause(180);
   await run(`(() => { const select=document.querySelector('.key-editor [aria-label="按键动作"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'copy'); select.dispatchEvent(new Event('change',{bubbles:true})); })()`); await pause(160);
-  await sceneClick('视频剪辑');
+  await sceneClick('多媒体制作');
   record('shared key edit follows all scenes, scene key stays separate', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制' && document.querySelector('[data-key="5"] strong').textContent==='保存'`));
   await run(`document.querySelector('[data-key="2"]').click()`); await pause(150);
   await run(`document.querySelector('.shortcut-recorder__field').click()`); await pause(150); await press('Tab');
@@ -182,7 +182,7 @@ app.whenReady().then(async () => {
   await run(`document.querySelector('.prompt-workbench').focus()`); await press('Tab');
   await waitFor(() => store.data.activeScene === 'scene-video', 'prompt Tab scene committed');
   await run(`Array.from(document.querySelectorAll('.sidebar__nav button')).find(b=>b.textContent.trim()==='按键配置').click()`); await pause(300);
-  record('prompt Tab and keymap use same scene across navigation', store.data.activeScene==='scene-video' && await run(`document.querySelector('.keymap-scene.is-active strong').textContent==='视频剪辑' && document.querySelector('[data-key="5"] strong').textContent==='保存'`));
+  record('prompt Tab and keymap use same scene across navigation', store.data.activeScene==='scene-video' && await run(`document.querySelector('.keymap-scene.is-active strong').textContent==='多媒体制作' && document.querySelector('[data-key="5"] strong').textContent==='保存'`));
   record('pending shared edit survives page navigation', await run(`document.querySelector('[data-key="1"] strong').textContent==='复制'`));
   const acceptedKeys = await run(`JSON.stringify(JSON.parse(localStorage.getItem('deskmate.app-state')).keymap.slice(2,4))`);
   qaConfigEnabled = true;
