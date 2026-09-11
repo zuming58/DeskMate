@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconPlus, IconCode, IconScissors, IconBriefcase, IconX, IconAppWindow, IconFolderOpen } from '@tabler/icons-react';
 import { COMMON_SCENE_ACTIONS, sceneBindingForMode, sceneBindingMode } from './domain/sceneKeyActions.js';
+import { ShortcutRecorder } from './ShortcutRecorder.jsx';
 
 const bridge = () => window.desktopBridge;
 export const isSceneKey = index => index >= 4 && index <= 6;
@@ -150,7 +151,7 @@ export function SceneKeyEditor({ binding, onChange, notify }) {
   return <>
     <label>按键名称<input aria-label="场景按键名称" maxLength={50} value={binding.label} onChange={event => onChange({ label: event.target.value })} /></label>
     <label>按下动作<select aria-label="场景按键动作" value={mode} onChange={event => changeMode(event.target.value)}>{COMMON_SCENE_ACTIONS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}<option value="hotkey">自定义快捷键</option><option value="prompt">复制提示词</option><option value="app">打开应用</option><option value="disabled">禁用</option></select></label>
-    {mode === 'hotkey' && <label>快捷键<input aria-label="场景快捷键" placeholder="例如 Ctrl+K 或 Space" maxLength={64} value={binding.value} onChange={event => onChange({ value: event.target.value })} /></label>}
+    {mode === 'hotkey' && <label>快捷键<ShortcutRecorder allowSingle value={binding.value} onConfirm={shortcut => onChange({ value: shortcut })} /></label>}
     {binding.type === 'prompt' && <label>提示词正文<textarea aria-label="场景固定提示词" rows={4} maxLength={30000} value={binding.value} onChange={event => onChange({ value: event.target.value })} /><small>只复制到剪贴板，不自动粘贴或发送。</small></label>}
     {binding.type === 'app' && <SceneApplicationPicker binding={binding} onChange={onChange} notify={notify} />}
   </>;

@@ -12,7 +12,7 @@ assert.equal(bundled.prompts.length, 80);
 assert.equal(bundled.primaryScenes.find(scene => scene.id === 'scene-video')?.title, '多媒体制作');
 assert.equal(bundled.prompts.filter(prompt => prompt.primarySceneId === 'scene-video').length, 26);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t26e-multimedia-prompt-scene'));
+assert(main.includes('t26f-scene-shortcut-capture'));
 assert(main.includes('--show-prompts'));
 for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/codex-hook-state.cjs', 'electron/codex-hook-integration.cjs', 'electron/codex-app-server-catalog.cjs', 'electron/codex-task-brief.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
@@ -30,4 +30,4 @@ for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/sof
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T26E packaged resource check passed: multimedia prompt scene, voice motion priority, separate mouse/board wheel polarity, safe Codex project labels, DM branding, live workbench, 80 prompts and native bridge.');
+console.log('T26F packaged resource check passed: captured scene shortcuts, multimedia prompt scene, voice motion priority, separate mouse/board wheel polarity, safe Codex project labels, DM branding, live workbench, 80 prompts and native bridge.');

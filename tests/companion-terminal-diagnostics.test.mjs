@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes the explicit T25 KnowledgeOS memory build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t26e-multimedia-prompt-scene/);
+  assert.match(main, /t26f-scene-shortcut-capture/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

@@ -1,5 +1,12 @@
 # Progress log
 
+# 2026-09-11 - T26F captured custom scene shortcuts
+
+- User evidence showed the scene-specific “自定义快捷键” control was still a free-text input, so clicking it did not capture `Ctrl+B`. Root cause was direct `<input onChange>` wiring in `PromptKeySettings`, separate from the already working physical shortcut recorder used elsewhere.
+- Extracted one shared `ShortcutRecorder` and reused it for both existing global shortcut settings and scene KEY5/6/7 editing. Scene capture accepts the bounded single-key/combination set, captures before page-level handlers, presents a candidate and requires explicit confirmation. Tab cannot switch scenes while capture is active, and the shortcut is not executed inside settings. The scene draft still requires “保存当前按键”; device write still requires the existing separate sync action.
+- Verification: focused shortcut/prompt/diagnostic tests **62/62**; complete `npm test` **545/545**; renderer build, `git diff --check`, `npm run build:desktop` and exact package verifier passed. Exact build ID `t26f-scene-shortcut-capture`: `DeskMate.exe` 202732544 bytes / SHA-256 `9074416923D38225E0771E97C4F744A643C126DA1ACE4F3F9A22A27A589659E1`; `resources/app.asar` 116283165 / `6EF9524BC2F9EC24FC445C9C26FBCD4A5D22A5B30D92A7C21CF87CCFDA789083`.
+- Only the exact prior DeskMate package process tree was stopped. T26F is running from the exact release path with main PID `44592`, visible and responding. No firmware or hardware write occurred. Live user acceptance remains: click custom shortcut, press `Ctrl+B`, confirm, save current key, then separately sync when desired. Classification: `T26F_CODE_TEST_PACKAGE_CONFIRMED / EXACT_PACKAGE_RUNNING / UI_USER_REVIEW_PENDING / NO_HARDWARE_CHANGE`.
+
 # 2026-09-11 - T26E multimedia prompt scene
 
 - Authority/source of truth: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t26-workbench-overview`. The built-in stable scene `scene-video` is now displayed as “多媒体制作”, with the concise hint “公众号 · 小红书 · 脚本生视频”. Its ten existing social-production prompts now join the sixteen existing video/editing prompts, so the scene covers account positioning, Xiaohongshu, official-account articles, spoken-video scripts, covers, cross-platform adaptation, scheduling/review, script/image-to-video and editing QA without duplicating or rewriting the original 80 prompt bodies.

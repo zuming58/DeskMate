@@ -1,5 +1,10 @@
 # Decisions
 
+## D128 - Custom scene shortcuts use physical key capture
+
+- 2026-09-11 user correction: the “自定义快捷键” editor is a recorder, not a free-text field. Clicking it enters capture; a physical single key or combination such as `Ctrl+B` becomes a candidate and requires explicit confirmation before it changes the scene draft.
+- Reuse one shared recorder for global shortcuts and scene bindings. Scene capture allows the bounded single-key set needed by editing tools; capture owns the key event so Tab does not switch scenes and the shortcut is not executed in the settings window. Saving and later hardware synchronization remain separate explicit steps.
+
 ## D127 - Multimedia production scene unifies content prompts and editing controls
 
 - 2026-09-11 user decision: rename the built-in `scene-video` display label from “视频剪辑” to “多媒体制作”. Its prompt scope includes official-account articles, Xiaohongshu, spoken-video scripts, cross-platform adaptation, covers, publishing workflow and script/image-to-video generation.

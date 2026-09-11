@@ -17,6 +17,8 @@ const { ACTIONS, setupPatch, library, PromptWorkbenchStore, validateState, chord
 const { PromptWorkbenchController } = require('../electron/prompt-workbench-controller.cjs');
 const { mergeKeyboardPatch, sanitizeKeyboardConfig, checkHostCapabilities } = require('../electron/config-merge.cjs');
 const { InputBridgeManager } = require('../electron/input-bridge.cjs');
+const keySettingsSource = readFileSync(new URL('../src/PromptKeySettings.jsx', import.meta.url), 'utf8');
+const shortcutRecorderSource = readFileSync(new URL('../src/ShortcutRecorder.jsx', import.meta.url), 'utf8');
 const fresh = () => new PromptWorkbenchStore();
 const edit = (s, fields = {}) => s.mutate({ type: 'save', id: 'CODING-002', prompt: { title: '我的启动', description: '个人版', body: '  {{不要解析}} $&\n正文  ', primarySceneId: 'coding', ...fields } });
 const harness = () => {
@@ -171,6 +173,12 @@ test('T22F scene action presets are direct choices and retain custom shortcut mo
   assert.equal(sceneBindingMode({ type: 'hotkey', label: '分割', value: 'Ctrl+K' }), 'hotkey');
   assert.equal(sceneBindingMode({ type: 'hotkey', label: '快捷键', value: 'Ctrl+Z' }), 'hotkey');
   assert.deepEqual(sceneBindingForMode('app'), { type: 'app', label: '打开应用', value: '', appActionId: '', appName: '' });
+});
+test('T26F custom scene hotkey uses physical key capture instead of free text', () => {
+  assert.match(keySettingsSource, /<ShortcutRecorder allowSingle value=\{binding\.value\}/);
+  assert.doesNotMatch(keySettingsSource, /aria-label="场景快捷键"/);
+  assert.match(shortcutRecorderSource, /shortcutFromKeyboardEvent\(event, \{ allowSingle \}\)/);
+  assert.match(shortcutRecorderSource, /window\.addEventListener\('keydown', capture, true\)/);
 });
 test('T22F scene app action accepts only registered IDs and executes via whitelist store', async () => {
   const id = '11111111-2222-4333-8444-555555555555';
