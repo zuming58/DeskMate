@@ -1,5 +1,14 @@
 # Progress log
 
+# 2026-09-11 - T25 KnowledgeOS settings recovery and generic-music cancellation
+
+- Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t25-knowledgeos-memory-integration`, implementation HEAD `059f0d53b4b3d1befb32bc674b17130f45dae8a9` based on `4ed57db`. The stale dirty root checkout remained untouched.
+- Fixed the in-app KnowledgeOS setup dead end reported by the user. The work Project ID is optional: a malformed value is now visibly cleared and persisted as `null`, while valid adapter/Credential/read/sync settings still save. Credential ID remains strict. The connection-test button is usable before configuration and now reports the exact missing/invalid setup in Chinese instead of appearing to do nothing.
+- Product scope decision D123 removes generic music playback, streaming search, playlists and media-session control. Registered application launch remains; existing local-file/electronic sound is retained only as dance accompaniment and short action feedback, with the existing stop/emergency lifecycle.
+- Verification: focused T25 test **6/6**; complete `npm test` **530/530**; `npm run build:desktop`; packaged T25 resource check; `git diff --check`. The rebuilt `release/win-unpacked/DeskMate.exe` was launched as main PID `5876` for user-visible settings testing.
+- Exact Windows package: `DeskMate.exe` 202690560 bytes / SHA-256 `6D5C585D21B33476EE492617530CC498947C852245D13949D16221605A67923F`; `resources/app.asar` 114527365 bytes / `9BB666DB6A1EF658EA7795DAB7719262CC2A0BFE4775572ECBE4127FACDE017B`; packaged InputBridge 153533321 bytes / `298D0F9E08D73769635BF5D169A338A89FECD632FD7E71704507E3AA53FB59C0`.
+- No firmware, hardware, user-memory submission, remote KnowledgeOS mutation or local record cleanup was performed. Remaining gate: select the official adapter, save the real DeskMate Credential ID, leave Project ID empty unless a valid authorized UUIDv7 is available, then run the visible connection test. Classification: `SETTINGS_REPAIR_CODE_BUILD_CONFIRMED / EXACT_PACKAGE_RUNNING / LIVE_IDENTITY_RETEST_PENDING / GENERIC_MUSIC_CANCELLED / NO_HARDWARE_CHANGE`.
+
 # 2026-09-11 - T25 DeskMate KnowledgeOS memory implementation and package
 
 - Authority: `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t25-knowledgeos-memory-integration`, base HEAD `3809964`. The earlier T25 design-only record below is superseded by this implementation record. KnowledgeOS receiving-side status (Core `ready`, Core/MCP 69 passed, supplemental MCP 30 passed and 1 skipped) was supplied by that project and was not rerun or represented as DeskMate evidence.
