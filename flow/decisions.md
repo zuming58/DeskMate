@@ -1,5 +1,11 @@
 # Decisions
 
+## D118 - Prompt order is canonical per scene; application keys reuse the whitelist
+
+- 2026-09-11: Persist one explicit prompt order per scene and edit it only from the full, unfiltered current-scene list. Search, favorites, recent, personal, trash, category and all-scene views are projections and cannot define canonical order. Use adjacent up/down controls instead of drag-and-drop so the action is stable with mouse, keyboard and the fixed-height scrolling list.
+- KEY5–7 common choices compile to the existing safe chord contract. Custom chords and copy-only prompts remain local. An “open application” scene action stores only an opaque registered-action UUID and display label; the main process resolves and executes through `AppActionStore`. No raw path, command or arguments enter the scene editor or renderer state.
+- Scene order and action changes do not change firmware or write the board. The already-installed host routes dispatch current main-owned scene state.
+
 ## D117 - Physical prompt rotary uses read-only source-identified wheel input
 
 - 2026-09-11: DOM hover-dependent wheel delivery is insufficient for a hardware shortcut workbench. Read the known EasyInput standard mouse collection without suppressing global input; forward only bounded wheel direction to the focused prompts page. Preserve firmware configuration and normal other-app behavior.

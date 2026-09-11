@@ -21,8 +21,14 @@ const chord = value => {
   if (new Set(parts).size !== parts.length || parts.some(p => !['Ctrl', 'Alt', 'Shift', 'Win'].includes(p)) || !/^(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|Space|Enter|Tab|Escape|Backspace|Delete|Left|Right|Up|Down|Home|End|PageUp|PageDown)$/.test(key)) fail('快捷键格式如 Ctrl+Z、Space');
   return value;
 };
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const orderId = prompt => prompt.forked_from || prompt.id;
 const binding = value => {
-  if (!value || !['hotkey', 'prompt', 'disabled'].includes(value.type)) fail('按键类型无效');
+  if (!value || !['hotkey', 'prompt', 'app', 'disabled'].includes(value.type)) fail('按键类型无效');
+  if (value.type === 'app') {
+    if (!UUID_PATTERN.test(value.appActionId)) fail('请选择已登记的应用');
+    return { type: 'app', label: text(value.label || value.appName || '', 50, true), value: '', appActionId: value.appActionId, appName: text(value.appName || value.label || '', 120, true) };
+  }
   return { type: value.type, label: text(value.label || '', 50), value: value.type === 'hotkey' ? chord(value.value) : text(value.value || '', value.type === 'prompt' ? 30000 : 0, value.type === 'prompt') };
 };
 const hotkey = (label, value) => ({ type: 'hotkey', label, value });
@@ -32,7 +38,7 @@ const defaultBindings = id => id === 'scene-video'
     : { 5: hotkey('全选', 'Ctrl+A'), 6: hotkey('撤销', 'Ctrl+Z'), 7: hotkey('复制', 'Ctrl+C') };
 const initial = () => ({ schema: 'deskmate.prompt-workbench', schemaVersion: 1, revision: 0,
   scenes: library.primaryScenes.map(scene => ({ ...scene, bindings: defaultBindings(scene.id) })),
-  activeScene: 'coding', selected: {}, personal: [], favorites: [], usage: [], history: [], announcements: true, reverseSelection: true });
+  activeScene: 'coding', selected: {}, orders: {}, personal: [], favorites: [], usage: [], history: [], announcements: true, reverseSelection: true });
 
 function validateState(raw) {
   if (raw?.schema !== 'deskmate.prompt-workbench' || raw.schemaVersion !== 1 || !Number.isSafeInteger(raw.revision) || raw.revision < 0) fail('提示词备份版本不受支持');
@@ -56,13 +62,19 @@ function validateState(raw) {
   const forks = personal.filter(p => p.forked_from && !p.deleted).map(p => p.forked_from);
   if (new Set(forks).size !== forks.length) fail('同一内置提示词只能有一个生效的个人版本');
   const ids = new Set([...library.prompts, ...personal].map(p => p.id));
+  const orderIds = new Set([...library.prompts.map(p => p.id), ...personal.map(orderId)]);
+  const orders = Object.fromEntries(scenes.map(scene => {
+    const rawOrder = raw.orders?.[scene.id];
+    if (rawOrder !== undefined && (!Array.isArray(rawOrder) || rawOrder.length > 1080)) fail('提示词顺序无效');
+    return [scene.id, [...new Set((Array.isArray(rawOrder) ? rawOrder : []).filter(id => typeof id === 'string' && orderIds.has(id)))]];
+  }));
   if (!Array.isArray(raw.favorites) || raw.favorites.length > 1080 || !Array.isArray(raw.usage) || raw.usage.length > 200) fail('使用记录无效');
   const favorites = [...new Set(raw.favorites.filter(id => ids.has(id)))];
   const usage = raw.usage.map(u => { if (!ids.has(u.id) || !Number.isSafeInteger(u.at) || u.at < 0) fail('使用记录无效'); return { id: u.id, at: u.at }; });
   const selected = Object.fromEntries(scenes.map(s => [s.id, ids.has(raw.selected?.[s.id]) ? raw.selected[s.id] : '']));
   // Revision history is bounded and validated as plain snapshots, never interpreted.
   const history = (Array.isArray(raw.history) ? raw.history : []).slice(-100).map(h => ({ id: text(h.id, 80), title: text(h.title, 120), body: text(h.body, 30000), revision: Number.isSafeInteger(h.revision) ? h.revision : 1 }));
-  return { schema: raw.schema, schemaVersion: 1, revision: raw.revision, scenes, activeScene: raw.activeScene, selected, personal, favorites, usage, history, announcements: raw.announcements !== false, reverseSelection: raw.reverseSelection !== false };
+  return { schema: raw.schema, schemaVersion: 1, revision: raw.revision, scenes, activeScene: raw.activeScene, selected, orders, personal, favorites, usage, history, announcements: raw.announcements !== false, reverseSelection: raw.reverseSelection !== false };
 }
 
 function rowsFor(state, { query = '', filter = 'all', scope = 'scene', category = '' } = {}) {
@@ -80,8 +92,10 @@ function rowsFor(state, { query = '', filter = 'all', scope = 'scene', category 
     const rest = normalize([p.description, p.body, p.id, ...(p.tags || [])].join(' '));
     return { p, score: terms.every(t => (title + ' ' + aliases + ' ' + rest).includes(t)) ? terms.reduce((n, t) => n + (title.includes(t) ? 100 : aliases.includes(t) ? 60 : 10), 0) : -1 };
   }).filter(x => x.score >= 0);
-  const order = id => { const i = library.featuredIds.indexOf(id); return i < 0 ? 999 : i; };
-  return weighted.sort((a, b) => b.score - a.score || (filter === 'recent' ? (state.usage.find(u => u.id === b.p.id)?.at || 0) - (state.usage.find(u => u.id === a.p.id)?.at || 0) : order(a.p.forked_from || a.p.id) - order(b.p.forked_from || b.p.id))).map(x => x.p);
+  const custom = state.orders?.[state.activeScene] || [];
+  const natural = id => { const featured = library.featuredIds.indexOf(id); if (featured >= 0) return featured; const builtin = library.prompts.findIndex(p => p.id === id); return builtin >= 0 ? 1000 + builtin : 100000 + state.personal.findIndex(p => p.id === id); };
+  const order = prompt => { const id = orderId(prompt); const placed = custom.indexOf(id); return placed >= 0 ? placed : custom.length + natural(id); };
+  return weighted.sort((a, b) => b.score - a.score || (filter === 'recent' ? (state.usage.find(u => u.id === b.p.id)?.at || 0) - (state.usage.find(u => u.id === a.p.id)?.at || 0) : order(a.p) - order(b.p))).map(x => x.p);
 }
 
 class PromptWorkbenchStore {
@@ -122,6 +136,17 @@ class PromptWorkbenchStore {
       case 'select': d.selected[d.activeScene] = command.id; break;
       case 'used': d.selected[d.activeScene] = command.id; d.usage = [{ id: command.id, at: Date.now() }, ...d.usage.filter(u => u.id !== command.id)].slice(0, 200); break;
       case 'favorite': d.favorites = d.favorites.includes(command.id) ? d.favorites.filter(id => id !== command.id) : [...d.favorites, command.id]; break;
+      case 'reorder': {
+        if (![-1, 1].includes(command.direction)) fail('排序方向无效');
+        const rows = rowsFor(d, { query: '', filter: 'all', scope: 'scene', category: '' });
+        const index = rows.findIndex(p => p.id === command.id);
+        const target = index + command.direction;
+        if (index < 0 || target < 0 || target >= rows.length) fail('提示词已经到边界');
+        [rows[index], rows[target]] = [rows[target], rows[index]];
+        d.orders = { ...(d.orders || {}), [d.activeScene]: rows.map(orderId) };
+        d.selected[d.activeScene] = command.id;
+        break;
+      }
       case 'save': {
         const source = command.id ? this.get(command.id) : null;
         if (command.id && !source) fail('提示词不存在');
@@ -139,7 +164,7 @@ class PromptWorkbenchStore {
       case 'save-scene': {
         const scene = command.scene; const old = d.scenes.find(s => s.id === scene.id);
         const next = { ...old, ...scene, id: old?.id || `scene-${randomUUID()}`, bindings: scene.bindings || defaultBindings('coding') };
-        d.scenes = [...d.scenes.filter(s => s.id !== next.id), next];
+        d.scenes = [...d.scenes.filter(s => s.id !== next.id), next]; d.orders ||= {}; d.orders[next.id] ||= [];
         if (old) d.scenes.sort((a, b) => this.data.scenes.findIndex(s => s.id === a.id) - this.data.scenes.findIndex(s => s.id === b.id));
         if (command.activate !== false) d.activeScene = next.id; break;
       }

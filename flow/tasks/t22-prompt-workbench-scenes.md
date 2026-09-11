@@ -10,13 +10,13 @@ Make the eight-key EasyInput board useful for daily work without adding firmware
 - KEY4: show the existing main window at the last prompt scene; again copy selected text, hide to background and return to the work window. Enter also confirms.
 - Tab / Shift+Tab: next / previous scene on both Prompts and Key mapping; list and KEY5–7 change together, optionally one short Doubao announcement. Keymap's right editor, shortcut recording and modal dialogs retain normal Tab behavior.
 - Knob: select a prompt while that page is foreground, without changing the board's encoder configuration outside the page.
-- KEY5–7: editable per-scene shortcut or copy-only fixed prompt.
+- KEY5–7: editable per-scene common action, custom shortcut, copy-only fixed prompt, registered application or disabled action.
 - KEY8: recommended firmware paste, never a contextual scene switch; any explicit reassignment is global.
 - Escape: cancel transient invocation without copying. Do not hide normal main-window browsing or the main window during shared voice cancellation. Close an editor before leaving the page.
 
 ## Scope and boundary
 
-80 user-supplied original templates; immutable builtin/fork/save-as, search, favorites, recent, personal/trash, scene editing and local backup import/export. Main-owned versioned store, validated native chords and main-window ownership. No user-controlled shell/executable, auto-submit, prompt execution, firmware update or new HID protocol.
+80 user-supplied original templates; immutable builtin/fork/save-as, search, favorites, recent, personal/trash, per-scene adjacent ordering, scene editing and local backup import/export. Main-owned versioned store, validated native chords and main-window ownership. Application actions resolve through the existing registered whitelist; no user-controlled shell/command, auto-submit, prompt execution, firmware update or new HID protocol.
 
 Read/preview/confirm/readback configuration patches from the existing Key mapping page. Preserve untouched shared keys, encoder and unknown device fields. Install only host routes for KEY5–7; scene text/chords stay local and switching never rewrites NVS. The page starts with large scene buttons, then the original eight-key/rotary diagram and one contextual right-hand editor. No separate scene dropdown or three duplicate binding forms. Scene selection and prompt Tab share activeScene; global pending edits survive navigation/restart/device reads. Announcement/polarity/recommendation/diagnostics are collapsed below. The prompt page keeps its fixed-height 45/55 quick-list/reading layout.
 

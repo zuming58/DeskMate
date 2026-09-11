@@ -1,5 +1,7 @@
 # DeskMate design direction
 
+T22F (2026-09-11): keep prompt ordering explicit and local: adjacent up/down controls appear only in the unfiltered current-scene list. Scene KEY5–7 use direct common-action choices, plus custom shortcut, copy-only prompt, registered application and disabled. Opening an application must reuse the existing whitelist and never expose a raw command field.
+
 T22E (2026-09-11): prompt rotary selection must not require hovering over the list. Keep the 45/55 fixed panes; source-identified wheel input only changes foreground selection. Key mapping shows a compact KEY8 paste repair when its assignment is not paste, leading to existing synchronization confirmation. Do not add a second keyboard editor to Prompts.
 
 ## Product feeling
@@ -40,7 +42,7 @@ DeskMate 不是传统硬件调试器，而是一个安静、可信、带有生�
 - History：原始转写与整理结果、复制、导出和删除。
 - Vocabulary：热词、专业名词和确定性替换规则。
 - Prompts：统一提示词场景与第 5～7 键映射；Tab/Shift+Tab 切换场景并短句播报。推荐第 4 键调出主窗口提示词页，再次按下复制选中内容并收起，第 8 键粘贴；共用键允许用户重新配置，提示标明默认。Esc 只收起快捷调出的临时页，手动浏览和语音取消不隐藏主窗口。
-- Key mapping：顶部大号场景按钮，紧接八键与旋钮实物图，右侧仅一个所选按键编辑器。1、2、3、4、8 全局共用，5～7 按场景独立；场景按钮与提示词页 Tab 共用当前场景。不得再增加平行的场景下拉框和三组按键表单。同步入口明确可见，播报、选词方向、推荐方案和诊断收进底部折叠区。
+- Key mapping：顶部大号场景按钮，紧接八键与旋钮实物图，右侧仅一个所选按键编辑器。1、2、3、4、8 全局共用，5～7 按场景独立；常用动作直接选择，自定义快捷键仍可录入，打开应用只选已登记白名单。场景按钮与提示词页 Tab 共用当前场景。不得再增加平行的场景下拉框和三组按键表单。同步入口明确可见，播报、选词方向、推荐方案和诊断收进底部折叠区。
 - Memory：作为左侧独立页面统一管理陪伴对话与语音输入，SQLite 原文、审核候选、摘要、搜索与知识库投影各自有明确边界。
 - Device：HID、麦克风、网络和已有固件能力，作为“设备与诊断”内的设备连接子页。
 - Settings and diagnostics：设备连接、快捷键、输出、外观、AI 服务、安全和脱敏诊断。
@@ -52,6 +54,8 @@ DeskMate 不是传统硬件调试器，而是一个安静、可信、带有生�
 动作声音由电脑扬声器播放，小智只执行已验收语义动作。关注、点头、寻找使用短小的内置合成音效；跳舞在没有本地歌曲时使用内置电子节拍，用户也可显式选择一首本地歌曲覆盖。文件路径在 Electron 主进程使用 Windows 加密存储，渲染层只看到文件名和有界音频字节；结束、停止或急停必须停止配乐。播放音乐不是小智板唱歌，也不引入新的固件或音频下行。
 
 提示词页固定在可用窗口高度内，左侧约 45% 为标题与简短说明的快选，右侧约 55% 为完整正文阅读。正文使用清晰对比与较大字号，两栏独立框内滚动；选词不带动顶部场景栏或外层页面。推荐第 3 键呼叫语音助手、第 4 键用于提示词、第 8 键粘贴；这些共用键一处修改、所有场景共用，不随场景切换。旧版第 3/4 键布局首次升级时自动填入上述两项本机修改，键帽明确标为“待同步”；后续自定义不重复覆盖。硬件更改仍需在按键配置预览并确认；本机未同步修改不得被重新读取的板上旧配置覆盖。
+
+提示词顺序属于每个工作场景的本地资料布局。只在“当前场景 + 全部 + 无搜索/分类”的稳定列表显示相邻上移/下移；搜索、收藏、最近、我的、回收站和跨场景浏览不显示排序，避免把临时结果顺序误写成主顺序。排序后继续选中被移动项，并在重启及备份导入导出后保留。
 
 按键配置页也使用 Tab/Shift+Tab 正向/反向循环场景，不逐个跳到八个实体键或工具按钮；当前选中的实体键保持不变。右侧编辑区、快捷键录制、输入法组字和弹窗保留正常键盘操作。异步切场景期间按钮可能临时禁用，焦点恢复必须等按钮真正重新启用，避免下一次 Tab 退回原生遍历。
 

@@ -69,7 +69,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t22e-native-prompt-wheel";
+const DESKMATE_BUILD_ID = "t22f-prompt-order-scene-actions";
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -1336,7 +1336,7 @@ app.whenReady().then(async () => {
     writeClipboard: text => {
       clipboard.writeText(text);
       if (clipboard.readText() !== text) throw new Error('clipboard-verification-failed');
-    }, publish: value => sendToMain('prompt-workbench-state', value),
+    }, appActions: appActionStore, publish: value => sendToMain('prompt-workbench-state', value),
     isVoiceActive: () => Date.now() - lastActiveVoiceCancelAt < 500 || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || companionIsActive(),
     announce: text => {
       clearTimeout(promptAnnouncementTimer);

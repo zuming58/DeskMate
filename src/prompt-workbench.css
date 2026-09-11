@@ -47,8 +47,10 @@ html:has(.is-prompt-workbench), body:has(.is-prompt-workbench) { height:100%; ov
 .prompt-row strong { font-size:13px; font-weight:600; display:block; }
 .prompt-row small { font-size:11px; line-height:1.6; color:#8a99ad; display:block; margin-top:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .prompt-row-tools { display:flex; align-items:center; padding-right:8px; }
+.prompt-order-tools { display:flex; align-items:center; border-right:1px solid #e4eaf3; margin-right:2px; padding-right:2px; }
 .prompt-row-tools button, .prompt-card-heading button, .prompt-modal-title button { width:30px; height:32px; display:grid; place-items:center; border:0; color:#8a9cb8; background:transparent; cursor:pointer; border-radius:8px; }
 .prompt-row-tools button:hover, .prompt-row-tools button[aria-pressed=true] { color:#4376e4; background:#e4edff; }
+.prompt-row-tools button:disabled { color:#cbd3df; background:transparent; cursor:default; }
 .prompt-library-footer { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:16px 0; margin-top:10px; border-top:1px solid #edf1f7; font-size:9px; color:#90a0b5; }
 .prompt-library-footer > div { display:flex; gap:8px; flex-shrink:0; }
 .prompt-library-footer button { display:flex; align-items:center; gap:4px; border:0; background:none; color:#7188a7; font-size:10px; cursor:pointer; }

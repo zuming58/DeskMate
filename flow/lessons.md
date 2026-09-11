@@ -1,5 +1,10 @@
 # Lessons learned
 
+## A shortcut value alone is not a stable action-picker identity
+
+- A custom shortcut initialized to `Ctrl+Z` was immediately reclassified as the common “撤销” preset, hiding the custom input. Identify a preset by both its standard label and chord (or an explicit persisted kind), so equal key sequences do not collapse distinct editor intent.
+- Reordering a main-owned list also needs the controller's current selection updated. Persisted selection alone can be shadowed by a still-valid in-memory pointer; exercise the actual renderer after domain tests.
+
 ## A DOM wheel test does not prove hardware rotary delivery
 
 - A synthetic WheelEvent dispatched to the list bypasses Windows routing and the native bridge. Cover Raw Input parsing, main/preload forwarding without any DOM wheel, raw/legacy duplicate orders, burst direction changes, field ownership and exact-copy behavior separately.

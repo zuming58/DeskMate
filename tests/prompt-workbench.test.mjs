@@ -8,6 +8,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import { actionLabel, keycapLabel, createKeyboardConfig, firmwareAction, normalizeKeyBinding } from '../src/domain/keymap.js';
 import { promptWheelStep, revealPromptRow } from '../src/domain/promptNavigation.js';
+import { COMMON_SCENE_ACTIONS, sceneBindingForMode, sceneBindingMode } from '../src/domain/sceneKeyActions.js';
 import { keyboardSyncFeedback, normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from '../src/domain/keymapWorkspace.js';
 import { DEFAULT_KEYMAP, DEFAULT_ENCODER } from '../src/domain/keymap.js';
 import { validateConfig } from '../src/store/appStore.js';
@@ -62,6 +63,27 @@ test('T22 scene persists with user prompts, favorites and previous snapshot', ()
   const loaded = new PromptWorkbenchStore({ userDataPath: dir }); assert.equal(loaded.data.activeScene, 'office');
   assert(loaded.rows({ filter: 'favorites' }).some(p => p.id === 'OFFICE-003')); assert(existsSync(s.file + '.previous'));
   assert.equal(JSON.parse(readFileSync(s.file + '.previous')).revision, 1);
+});
+test('T22F prompt order moves one row, stays per scene and survives reload', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'deskmate-prompts-order-test-'));
+  const store = new PromptWorkbenchStore({ userDataPath: dir });
+  const before = store.rows({});
+  store.mutate({ type: 'reorder', id: before[1].id, direction: -1 });
+  assert.deepEqual(store.rows({}).slice(0, 2).map(prompt => prompt.id), [before[1].id, before[0].id]);
+  assert.equal(store.data.selected.coding, before[1].id);
+  store.mutate({ type: 'scene', id: 'office' });
+  assert.equal(store.rows({})[0].id, library.featuredIds.find(id => id.startsWith('OFFICE-')));
+  store.mutate({ type: 'scene', id: 'coding' });
+  assert.deepEqual(new PromptWorkbenchStore({ userDataPath: dir }).rows({}).slice(0, 2).map(prompt => prompt.id), [before[1].id, before[0].id]);
+  const imported = fresh(); imported.import(store.export(), imported.data.revision);
+  assert.deepEqual(imported.rows({}).slice(0, 2).map(prompt => prompt.id), [before[1].id, before[0].id]);
+  assert.throws(() => store.mutate({ type: 'reorder', id: before[1].id, direction: -1 }), /边界/);
+});
+test('T22F filtered prompt projections cannot reorder the canonical scene list', async () => {
+  const h = harness(); const before = h.store.rows({}).map(prompt => prompt.id);
+  await h.controller.command({ type: 'view', query: '重启' });
+  assert.deepEqual(await h.controller.command({ type: 'reorder', id: before[1], direction: -1 }), { ok: false, reason: '请先回到当前场景的全部列表再排序' });
+  assert.deepEqual(h.store.rows({}).map(prompt => prompt.id), before);
 });
 test('T22 corrupt store never overwritten; invalid import never changes original', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'deskmate-prompts-test-')); const file = path.join(dir, 'prompt-workbench-v1.json');
@@ -120,6 +142,30 @@ test('T22 Tab cycles forwards/backwards, updates shortcuts, optional speech', as
 test('T22 scene fixed prompt copies but never auto-pastes or submits', async () => {
   const h = harness(); const scene = structuredClone(h.store.data.scenes[0]); scene.bindings[5] = { type: 'prompt', label: '自定', value: '安全正文' };
   h.store.mutate({ type: 'save-scene', scene }); await h.controller.key(5); assert.deepEqual(h.calls, [['copy', '安全正文']]);
+});
+test('T22F scene action presets are direct choices and retain custom shortcut mode', () => {
+  assert.deepEqual(COMMON_SCENE_ACTIONS.map(item => item.label), ['全选', '复制', '粘贴', '撤销', '保存']);
+  assert.deepEqual(sceneBindingForMode('copy'), { type: 'hotkey', label: '复制', value: 'Ctrl+C' });
+  assert.equal(sceneBindingMode(sceneBindingForMode('save')), 'save');
+  assert.equal(sceneBindingMode({ type: 'hotkey', label: '分割', value: 'Ctrl+K' }), 'hotkey');
+  assert.equal(sceneBindingMode({ type: 'hotkey', label: '快捷键', value: 'Ctrl+Z' }), 'hotkey');
+  assert.deepEqual(sceneBindingForMode('app'), { type: 'app', label: '打开应用', value: '', appActionId: '', appName: '' });
+});
+test('T22F scene app action accepts only registered IDs and executes via whitelist store', async () => {
+  const id = '11111111-2222-4333-8444-555555555555';
+  const store = fresh();
+  const scene = structuredClone(store.data.scenes[0]);
+  scene.bindings[5] = { type: 'app', label: 'Codex', value: '', appActionId: id, appName: 'Codex' };
+  store.mutate({ type: 'save-scene', scene });
+  assert.throws(() => {
+    const invalid = structuredClone(scene);
+    invalid.bindings[5].appActionId = 'powershell.exe';
+    store.mutate({ type: 'save-scene', scene: invalid });
+  }, /已登记的应用/);
+  const calls = [];
+  const controller = new PromptWorkbenchController({ store, isForeground: () => false, input: async () => ({ ok: true }), writeClipboard: async () => {}, appActions: { execute: async actionId => { calls.push(actionId); return { ok: true, label: 'Codex' }; } } });
+  assert.deepEqual(await controller.key(5), { ok: true, label: 'Codex' });
+  assert.deepEqual(calls, [id]);
 });
 test('T22 setup patch moves companion to KEY3, preserves first 2 keys and encoder', () => {
   const raw = { schema: 'ai_keyboard.v1', unknown: { preserved: true }, profiles: [{ id: 'default', keys: Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`KEY${i + 1}`, { press: 'copy', release: 'keep' }])), encoder: { scroll: { axis: 'horizontal', mode: 'scroll', speed: 4 }, press: 'scroll_axis_toggle' } }] };

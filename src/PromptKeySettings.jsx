@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconCheck, IconPlus, IconCode, IconScissors, IconBriefcase, IconX } from '@tabler/icons-react';
+import { IconCheck, IconPlus, IconCode, IconScissors, IconBriefcase, IconX, IconAppWindow, IconFolderOpen } from '@tabler/icons-react';
+import { COMMON_SCENE_ACTIONS, sceneBindingForMode, sceneBindingMode } from './domain/sceneKeyActions.js';
 
 const bridge = () => window.desktopBridge;
 export const isSceneKey = index => index >= 4 && index <= 6;
@@ -118,12 +119,39 @@ export function KeymapSceneRail({ scenes, disabled }) {
   </>;
 }
 
-export function SceneKeyEditor({ binding, onChange }) {
+function SceneApplicationPicker({ binding, onChange, notify }) {
+  const [apps, setApps] = useState([]);
+  const load = async () => {
+    try { setApps(await bridge()?.listRegisteredApplications?.() || []); }
+    catch { notify?.('暂时无法读取应用白名单'); }
+  };
+  useEffect(() => { void load(); }, []);
+  const choose = async () => {
+    try {
+      const result = await bridge()?.chooseApplication?.();
+      if (!result || result.cancelled) return;
+      if (!result.id) throw Error(result.reason || '应用登记失败');
+      onChange({ type: 'app', value: '', label: result.label.slice(0, 50), appActionId: result.id, appName: result.label });
+      await load();
+    } catch (error) { notify?.(`应用未加入：${error.message || 'unknown'}`); }
+  };
+  const selectedKnown = apps.some(app => app.id === binding.appActionId);
+  return <div className="scene-application-picker">
+    <label>打开应用<select aria-label="场景打开应用" value={binding.appActionId || ''} onChange={event => { const app = apps.find(item => item.id === event.target.value); if (app) onChange({ type: 'app', value: '', label: app.label.slice(0, 50), appActionId: app.id, appName: app.label }); }}><option value="">选择已登记应用</option>{!selectedKnown && binding.appActionId && <option value={binding.appActionId}>{binding.appName || binding.label}</option>}{apps.map(app => <option key={app.id} value={app.id}>{app.label}</option>)}</select></label>
+    <button type="button" onClick={() => void choose()}><IconFolderOpen size={16} />选择其他应用</button>
+    <small><IconAppWindow size={14} />只允许已登记的 Windows 应用或快捷方式，不接受命令和参数。</small>
+  </div>;
+}
+
+export function SceneKeyEditor({ binding, onChange, notify }) {
   if (!binding) return <p>正在读取场景按键…</p>;
+  const mode = sceneBindingMode(binding);
+  const changeMode = value => onChange(sceneBindingForMode(value));
   return <>
     <label>按键名称<input aria-label="场景按键名称" maxLength={50} value={binding.label} onChange={event => onChange({ label: event.target.value })} /></label>
-    <label>按下动作<select aria-label="场景按键动作" value={binding.type} onChange={event => onChange({ type: event.target.value, value: event.target.value === 'hotkey' ? 'Ctrl+Z' : '' })}><option value="hotkey">快捷键</option><option value="prompt">复制提示词</option><option value="disabled">禁用</option></select></label>
-    {binding.type === 'hotkey' && <label>快捷键<input aria-label="场景快捷键" placeholder="例如 Ctrl+K 或 Space" maxLength={64} value={binding.value} onChange={event => onChange({ value: event.target.value })} /></label>}
+    <label>按下动作<select aria-label="场景按键动作" value={mode} onChange={event => changeMode(event.target.value)}>{COMMON_SCENE_ACTIONS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}<option value="hotkey">自定义快捷键</option><option value="prompt">复制提示词</option><option value="app">打开应用</option><option value="disabled">禁用</option></select></label>
+    {mode === 'hotkey' && <label>快捷键<input aria-label="场景快捷键" placeholder="例如 Ctrl+K 或 Space" maxLength={64} value={binding.value} onChange={event => onChange({ value: event.target.value })} /></label>}
     {binding.type === 'prompt' && <label>提示词正文<textarea aria-label="场景固定提示词" rows={4} maxLength={30000} value={binding.value} onChange={event => onChange({ value: event.target.value })} /><small>只复制到剪贴板，不自动粘贴或发送。</small></label>}
+    {binding.type === 'app' && <SceneApplicationPicker binding={binding} onChange={onChange} notify={notify} />}
   </>;
 }

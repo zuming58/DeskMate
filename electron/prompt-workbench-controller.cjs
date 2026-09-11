@@ -2,8 +2,8 @@ const { ACTIONS } = require('./prompt-workbench.cjs');
 const { PromptWheelRouter } = require('./prompt-wheel-router.cjs');
 
 class PromptWorkbenchController {
-  constructor({ store, isForeground, isSettingsForeground = () => false, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive = () => false }) {
-    Object.assign(this, { store, isForeground, isSettingsForeground, show, hide, capture, restore, input, writeClipboard, announce, publish, isVoiceActive });
+  constructor({ store, isForeground, isSettingsForeground = () => false, show, hide, capture, restore, input, writeClipboard, appActions, announce, publish, isVoiceActive = () => false }) {
+    Object.assign(this, { store, isForeground, isSettingsForeground, show, hide, capture, restore, input, writeClipboard, appActions, announce, publish, isVoiceActive });
     this.view = { query: '', filter: 'all', scope: 'scene', category: '' };
     this.selected = ''; this.editing = false; this.transient = false; this.busy = false; this.openSequence = 0;
     this.wheel = new PromptWheelRouter(step => this.move(step));
@@ -54,6 +54,7 @@ class PromptWorkbenchController {
         // Explicit fixed text key copies only. KEY8 pastes; never auto-send.
         await this.writeClipboard(action.value); return { ok: true, copied: true };
       }
+      if (action.type === 'app') return await (this.appActions?.execute(action.appActionId) || { ok: false, reason: '应用白名单不可用' });
       return await this.input(action.value);
     } catch { return { ok: false, reason: '提示词快捷操作失败，请检查桌面输入桥' }; }
     finally { this.busy = false; }
@@ -97,7 +98,12 @@ class PromptWorkbenchController {
       if (d.announcements) void Promise.resolve(this.announce(`切换到${result.scenes.find(s => s.id === id).title}模式`)).catch(() => {});
       return result;
     }
-    this.store.mutate(value); return this.changed();
+    if (value.type === 'reorder' && (this.view.scope !== 'scene' || this.view.filter !== 'all' || this.view.query || this.view.category)) {
+      return { ok: false, reason: '请先回到当前场景的全部列表再排序' };
+    }
+    this.store.mutate(value);
+    if (value.type === 'reorder') this.selected = String(value.id || '');
+    return this.changed();
   }
   reservedActions() { return new Map(Object.entries(ACTIONS).map(([key, a]) => [a.id, () => this.key(Number(key))])); }
 }

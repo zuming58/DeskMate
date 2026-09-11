@@ -1,5 +1,14 @@
 # T22 Prompt workbench and scene routing
 
+## T22F prompt ordering and scene action presets (2026-09-11)
+
+- Prompt order is a main-process-owned list per scene. The UI exposes adjacent up/down buttons only for the complete, unfiltered current-scene list. Search, favorites, recent, personal, trash, category and cross-scene projections cannot mutate canonical order. A move retains the moved selection; order survives restart and JSON backup roundtrip. Built-in forks retain the built-in ordering identity, and restored personal prompts can return to their saved position.
+- KEY5–7 keep one contextual editor but now expose direct choices for select all, copy, paste, undo and save. Each compiles to the existing validated chord; custom chords, copy-only fixed prompt and disabled remain available. Selecting a common choice supplies both name and chord, so no manual syntax entry is required.
+- A scene key can open an application only through the existing `AppActionStore` whitelist. The renderer receives an opaque UUID and display name, never an executable path, command or arguments. Execution resolves the current registered record in the main process. Invalid/non-UUID action IDs fail validation. This expands local scene routing only; KEY5–7 board routes and firmware contracts are unchanged.
+- Stable choice identity includes both the common chord and its standard label. A custom shortcut that happens to use `Ctrl+Z` remains editable as a custom shortcut instead of collapsing into the “撤销” preset.
+
+Acceptance: reorder adjacent rows and restart; verify other scenes and filtered views retain their own semantics; choose each common action without typing; register/select a benign app such as Codex and execute from a work window. Automated app launch tests use an opaque whitelist stub and do not start a real program.
+
 ## T22E physical wheel delivery and paste setup (2026-09-11)
 
 The user confirms KEY3 companion and KEY4 opening/return now work; rotary selection and physical KEY8 paste remain unaccepted. The new diagnostic is T22D and has no wheel/clipboard trace. The previous actual KEY8 readback was Codex; the user explicitly identified KEY8, not Ctrl+V, as the unsuccessful paste action. Do not claim the current clipboard is broken or a device write failed without evidence.
@@ -22,7 +31,7 @@ Late arrival refinement: retain applied DOM fallback credits for up to 500 ms, s
 
 With the recommended assignment, KEY4 opens **the existing DeskMate main window** on `#/prompts`, not a separate popup. A second press copies the selected prompt, hides DeskMate and returns focus to the captured work window. Enter confirms. **Tab/Shift+Tab cycles scenes; KEY8 defaults to the existing firmware paste action, with no contextual second role. T22B allows the user to reassign shared keys explicitly; the defaults are not immutable bindings.** Escape cancels without touching clipboard and hides only a shortcut-invoked transient page; ordinary browsing stays visible. During voice activity (including its cancellation transition), Escape remains voice-only. In a prompt editor Escape closes the editor first. KEY5–7 route locally by active scene. **The recommended KEY3 assignment is the existing companion-call action, replacing voice editing; filling the recommendation preserves KEY1–2 and encoder settings.** Encoder wheel/cursor events are consumed by the foreground prompt page only, never by a background hook. Editing and IME composition suspend page shortcuts. Clipboard copy never sends Enter.
 
-Switching scenes does not rewrite device NVS. An explicitly previewed and confirmed `easyinput-config-v1` patch installs reserved UUID host routes on KEY5–7 under the existing `HOST_ACTION_V1_FROZEN` slice and only the shared-key/encoder changes the user made. The optional recommendation fills KEY3 `companion-call`, KEY4 `prompt-key-4` and KEY8 `paste` locally before confirmation. Its entry lives only in the existing Key mapping page. No firmware/protocol change or flash operation. KEY5–7 can be validated keyboard chords, copy-only fixed prompts or disabled actions.
+Switching scenes does not rewrite device NVS. An explicitly previewed and confirmed `easyinput-config-v1` patch installs reserved UUID host routes on KEY5–7 under the existing `HOST_ACTION_V1_FROZEN` slice and only the shared-key/encoder changes the user made. The optional recommendation fills KEY3 `companion-call`, KEY4 `prompt-key-4` and KEY8 `paste` locally before confirmation. Its entry lives only in the existing Key mapping page. No firmware/protocol change or flash operation. KEY5–7 can be validated keyboard chords, copy-only fixed prompts, registered application actions or disabled actions.
 
 ## T22D compact keycaps and truthful sync feedback (current)
 
