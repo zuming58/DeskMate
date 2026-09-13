@@ -81,6 +81,10 @@ The T35 visible isolated renderer displayed default 小言, disconnected service
 - A provider accepting audio does not prove the microphone is forwarded during model thinking. T28 found the controller allowed three-stage uplink in speaking/draining but blocked thinking, losing mid-computation continuation. Test source-to-provider forwarding in each phase, not just the provider method.
 - Speculative candidate equivalence must preserve internal punctuation: stripping all punctuation equates `1.5` with `15`. Only harmless terminal punctuation/case is normalized; words, negations, numeric separators and item ownership remain significant.
 - A single overwritten last-timing object hides previous successful requests and can be corrupted by rejected playback partials. Own timings per turn, keep a bounded history, separate queued from audible, and label HTTP/network/timeout without exporting error bodies or user content.
+## T37 — Separate the worktree before building a parallel visual module
+
+Both windows initially shared a dirty worktree. Stop without deletion/revert, enumerate exact owned hunks, migrate to an independent branch/worktree, then resume. Never attribute carried historical App.jsx differences to the new module or stage whole dirty shared files. Native hidden UI checks caught arc overflow that static build/tests missed; code review caught overlapping imports and late print modal races. Bound imports and freeze busy-state navigation before declaring the local UI tested.
+
 
 ## Optional memory outages must not tax every conversational turn
 
