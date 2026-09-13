@@ -1,4 +1,5 @@
 export const pageMeta = {
+  'style-studio': { title: '风格映像', subtitle: '放入照片，转动灵感；素材、风格与作品的创作空间' },
   prompts: { title: '提示词', subtitle: '选一句，继续工作；提示词与场景按键一起切换' },
   dashboard: { title: "工作台", subtitle: "今日使用、连接状态、工作场景与记忆进度" },
   voice: { title: "语音输入", subtitle: "专注录音、实时转写与智能整理" },

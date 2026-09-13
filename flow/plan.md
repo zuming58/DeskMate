@@ -1,5 +1,10 @@
 # Development plan
 
+## T37 independent UI slice — Style Studio
+
+Approved: insert 风格映像 directly below AI 陪伴, retain existing shell and other pages. Isolated branch/worktree only. Deliver the selected white printer layout and local sample interactions first, then separately integrate real AI, managed media and page-scoped hardware ownership. See `docs/design/style-studio-t37.md`. No live T36 replacement or real hardware acceptance in this slice.
+
+
 ## Current slice: T27 local-first companion latency
 
 Voice companion recall is now local-first with bounded remote fallback for historical gaps or explicit KnowledgeOS requests. Daily notes remain unreviewed evidence, and local 20-day raw cleanup does not remove summaries or approved memory. New-profile pause default is 1.5 seconds, first complete clause can start TTS, and official DeepSeek V4 companionship uses non-thinking requests. Content-free per-stage measurements distinguish optional lookup, model and audio queueing. See [contract and live synthetic evidence](../docs/contracts/t27-local-first-companion-latency-v1.md). KnowledgeOS Core was not running during the probe, so successful live remote retrieval is still a separate gate; the delay/failure fallback itself was tested. Real microphone pause/echo/interruption acceptance remains user-present.

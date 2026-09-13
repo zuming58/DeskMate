@@ -1,3 +1,35 @@
+# T37 Style Studio UI — 2026-09-14
+
+final result: passed
+
+Scope: selected visual implemented as an integrated **UI-only local sample slice**, not full teacher functionality, real AI or hardware capture. See `docs/design/style-studio-t37.md` for explicit gaps.
+
+- Source visual truth: supplied `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-5246aa38-a287-4225-8426-72989bf0106b.png` (1487×1058), with later pure-white/existing-shell/strength-above-dial corrections. Existing D/M branding, navigation and header override the mock's replacement shell.
+- Final source render: `%TEMP%/deskmate-t37-qa-ibVpRC/generate-1440.png`; final packaged render: `%TEMP%/deskmate-t37-qa-jJ84Qo/generate-1440.png`, also retained in `docs/reviews/assets/t37/generate-1440.png`. Reveal screenshot retained alongside it.
+- Viewports: 1440×1024, 1024×768, 800×768 CSS. Windows 1.5× native capture was normalized to CSS-width PNG, yielding 1440×1024 etc. Source artwork proportional to the target; compare right-page composition, allowing preserved app header and 184px original sidebar. State: generation, paper style, 65%, initial material and three labeled samples. Source and actual screenshot opened in one comparison tool input; smaller-width and reveal captures inspected separately. Main/control typography is readable at this resolution; a separate crop is not required for this slice.
+
+## Comparison history and fixes
+
+1. First native capture (`12mcjN` / `qlSAGO`) exposed rightmost arc overflow and footer keys below the main viewport. P2: narrowed/realigned arc to fit, moved key pad into available output-side space. Native assertions now cover overflow at all three widths.
+2. `IBXizJ` / `WxkOye` comparison exposed crowding and selected-card caption touching machine edge. P2: redistributed arc angles, lifted arc 20px (43px at smaller viewport), recaptured. `ibVpRC` source and `jJ84Qo` packaged captures have visible selected caption, contained cards and intact navigation.
+3. Independent same-model code review found overlapping async imports, unguarded custom brief and late print modal interrupting mode changes. Serial import guard, brief dirty protection and busy mode gating applied. Actual hidden upload of overlapping batches stayed at 8, custom uploads never produced fake samples. Attempted cross-model reviewer spawn was unavailable due to agent slot limit; formal cross-model signoff remains a process follow-up, not claimed.
+
+## Required fidelity surfaces
+
+- Typography: reuses app Inter/system Chinese fallbacks, Tabler icons, heading/body hierarchy. Existing Google Fonts request is blocked by the app CSP; tracked as baseline warning, no new font loading introduced. Local fallback renders legibly.
+- Spacing: upper materials and inlet, central horizontal panel, lower output photos, card arc/dial relationship retained. Responsive vertical scrolling is intentional at smaller heights; no horizontal overflow or inaccessible primary controls.
+- Tokens: pure white workspace, existing graphite shell, cobalt primary actions, pale machine surface and bounded shadows. Removed environment plants/books outside photo assets as requested.
+- Assets: seven inspected raster assets from built-in imagegen with hashes, no fake CSS image placeholders, original D/M logo unchanged. Rounded panel is a GUI container, dial is a true-alpha raster inside a button; style thumbnails are coherent generated robot material variants.
+- Copy: 本地演示/预制样片/硬件接管待接入 throughout. Own-photo output refuses a false transformation. S6 local template and parameter-only intensity are documented. No connected AI/device claim.
+
+## Interaction verification
+
+Hidden stock Electron renderer, temporary isolated profile, no product main/preload, network and permissions denied. Tested: route order/reentry and existing companion/keymap/prompts navigation, all image loads, next style, S1 strength/confirm, print and enlarged result, sample download into QA temp folder, original compare, all six reveal effects, prompt dialog, synthetic local keys, three widths, concurrent upload cap and navigation guard, own-photo refusal. Console: zero new runtime errors; one existing Google Fonts CSP warning recorded explicitly. Source and final ASAR probes passed.
+
+Residual P3: stronger spring drag physics and orbit overlap tuning can follow user feedback; full free-position drag, persistent library, camera, actual AI and hardware lease are future functional slices, not included in this UI acceptance. No formal running-app or physical-device acceptance performed.
+
+<!-- T37-END -->
+
 # T26A brand and light companion QA — 2026-09-11
 
 Final result: passed

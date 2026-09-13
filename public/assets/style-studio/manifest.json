@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "created": "2026-09-14",
+  "provenance": "Generated with built-in imagegen for this user-requested DeskMate UI; originals copied byte-identically, no third-party course assets.",
+  "dimensions": { "width": 1254, "height": 1254 },
+  "use": "Pre-generated UI samples, never a claimed transformation of an uploaded photo. Dial is a genuine-alpha raster used by an accessible interactive control.",
+  "files": [
+    { "file": "source.png", "original": "exec-2f679b3c-5868-4807-9c16-b87210db5182.png", "sha256": "38549545DAD4D04665C20FE6F088388FACE8D8A42882336BF61C4438E8035606", "prompt": "Cute teal rounded-square desktop robot, dark vertical eyes, small torso and arms, warm wooden home-office desk, blurred plant, natural light, no UI/text/frame." },
+    { "file": "paper.png", "original": "exec-fa807914-ec20-46a9-b3fc-bca11c6b743b.png", "reference": "source.png", "sha256": "768F5BFD4FF67EEDC6CE04851B08C706ADEBCAF434472736D03C944A893FEF2A", "prompt": "Same robot as layered teal paper-cut sculpture, cobalt botanical leaves, cream paper background, fine fibers and soft shadows, no UI/text/frame." },
+    { "file": "yarn.png", "original": "exec-dc3e3f32-4b03-4d18-bcf4-c8f7268e56c7.png", "reference": "source.png", "sha256": "29BD926C97000367BF6BDFCB2A609A3F4B9EE5912883B6DD9694954BE97E9173", "prompt": "Same robot as cream wool sculpture with teal knitted face, visible yarn loops, cream/taupe cozy macro backdrop, no UI/text/frame." },
+    { "file": "glass.png", "original": "exec-f4431f28-2bb2-4ad9-8b5c-337b25eeb352.png", "reference": "source.png", "sha256": "7C9124C66FAB51136A3AB15682170A53A2713D9C1F96A54C601C4441A3F2BA53", "prompt": "Same robot inside clear glass terrarium dome, delicate moss and leaves, pale wooden desk, warm miniature product photo, no UI/text/frame." },
+    { "file": "clay.png", "original": "exec-a4e184f1-d3a4-421f-8ad7-777f4178bf3d.png", "reference": "source.png", "sha256": "957741994BA77EE5C5849EFFC27131E63AF6AA294FBC632513F64EDEEF166D9D", "prompt": "Same teal robot in handmade matte clay, warm cream/apricot pebbles and botanical sculptures, soft macro light, no UI/text/frame." },
+    { "file": "pixel.png", "original": "exec-aac5cca6-bf61-4653-8eef-d6899a06e9e2.png", "reference": "source.png", "sha256": "F6AD6F4E0CF1D85AC2E0276EF4F70E1C9178C912650E4B863287E35E489619E3", "prompt": "Same robot as polished 3D voxel art, cubic teal head, dark pixel eyes, green block plants, pale yellow/blue cubes, cream backdrop, no UI/text/frame." },
+    { "file": "dial.png", "original": "exec-c13c4eec-d5d7-4e05-9931-64949bbf4fa7.png", "sha256": "A3C6FCB500337F6908AD82FE79AB0FBB2B5FCC232A6939CCD5B35344A1AAD40F", "prompt": "Front-on circular glossy cobalt/cyan rotary knob, pale blue outer ring, one white indicator dot, true transparent background, no labels/numbers/ticks." }
+  ]
+}

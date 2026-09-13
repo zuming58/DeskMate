@@ -1,5 +1,10 @@
 # Decisions
 
+## T37 — One isolated creative route, honest preview before adapters
+
+2026-09-14: User explicitly places 风格映像 after AI 陪伴. Keep all existing shell and page styles; scope new white printer UI to its route. Generated thumbnails are UI samples only; uploaded photos cannot receive canned outputs pretending to be transformations. Compact intensity above dial plus S1 adjustment; styles move around the rotary. No firmware remap or partial voice-shortcut unregister disguised as full hardware capture. Implement the main-process input ownership lease in a separate coordinated slice. During T36 acceptance only isolated hidden renderer QA is permitted.
+
+
 ## D129 - Local-first conversational recall and measured latency
 
 - Ordinary voice chats do not search KnowledgeOS. Preserve main-owned recent context and refreshed approved local memory; historical work/experience queries search local records and dated evidence before optional remote fallback. Explicit knowledge-library requests still query remotely; local-only instructions forbid it.

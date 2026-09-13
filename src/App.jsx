@@ -14,10 +14,12 @@ import {
   IconMicrophone2 as Microphone2,
   IconSettings2 as Settings2,
   IconSparkles as Sparkles,
+  IconPalette as Palette,
   IconX as X,
 } from "@tabler/icons-react";
 import { pageMeta } from "./appData.js";
 import { PromptWorkbenchPage } from './PromptWorkbenchPage.jsx';
+import { StyleStudioPage } from './StyleStudioPage.jsx';
 import { CompanionFace } from "./CompanionFace.jsx";
 import { BrandLogo } from './BrandLogo.jsx';
 import { companionVisualExpression } from './domain/companionVisual.js';
@@ -50,6 +52,7 @@ const navigation = [
   { id: "dashboard", label: "工作台", icon: LayoutDashboard },
   { id: "voice", label: "语音输入", icon: Microphone2 },
   { id: "companion", label: "AI 陪伴", icon: MessageCircle },
+  { id: "style-studio", label: "风格映像", icon: Palette },
   { id: "history", label: "历史记录", icon: BookOpen },
   { id: "vocabulary", label: "词库", icon: Brain },
   { id: "prompts", label: "提示词", icon: Sparkles },
@@ -113,6 +116,7 @@ function AppHeader({ current, setMobileOpen }) {
 }
 
 const pages = {
+  'style-studio': StyleStudioPage,
   prompts: PromptWorkbenchPage,
   dashboard: DashboardPage,
   voice: VoicePage,
@@ -313,7 +317,7 @@ function AppContent() {
   };
   const CurrentPage = pages[current] || DashboardPage;
   return (
-    <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""} ${current === 'prompts' ? 'is-prompt-workbench' : ''}`}>
+    <div className={`app-shell ${collapsed ? "has-collapsed-sidebar" : ""} ${current === 'prompts' ? 'is-prompt-workbench' : ''} ${current === 'style-studio' ? 'is-style-studio' : ''}`}>
       <Sidebar current={current} navigate={navigate} collapsed={collapsed} setCollapsed={setCollapsed} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} boardConnected={Boolean(state.runtime?.inputBridge?.boardConnected)} expressionId={companionVisualExpression(state.runtime?.companion?.state)} />
       {mobileOpen && <button className="mobile-scrim" aria-label="关闭菜单" onClick={() => setMobileOpen(false)} />}
       <main className="app-main">

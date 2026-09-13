@@ -1,5 +1,16 @@
 # Progress log
 
+# 2026-09-14 — T37 isolated Style Studio UI ready for review, not adopted
+
+- Scope: user selected the light printer concept and explicitly requested exactly one 风格映像 sidebar entry after AI 陪伴; existing sidebar/D/M/header/other pages preserved. Work isolated to `F:/Codex/deskmate-t37-style-studio`, branch `codex/t37-style-studio`, based on `644d366275d1295fda5b2c091c5291c35a83a65d` plus carried T28–T36 working baseline. Initial shared-tree writes were paused and migrated by coordination; no subsequent old-tree changes. Only T37-owned hunks/files belong to this delivery, not the carried dirty baseline.
+- Output: `src/StyleStudioPage.jsx`, `src/style-studio.css`, `src/domain/styleStudio.js`; seven generated/provenanced samples under `public/assets/style-studio/`; App/appData minimal wiring and navigation assertion. Functional local UI: white printer layout, orbital style cards, compact strength + S1, bounded uploads/inlet, honest sample print/enlarge/compare/save, prompt editing/copy, six local reveal modes. `docs/design/style-studio-t37.md` lists reference differences and next slices. Uploaded images never get canned AI results; hardware routing untouched and labeled pending.
+- Validation: independent `npm ci --include=dev`; final full suite **691/691**, no failures/skips; native bridge publish, Vite, isolated Windows directory packaging and exact baseline/T37 ASAR asset checks passed. Stock Electron 36.9.5 cached ZIP validated against package SHA256 before use because npm extraction left an incomplete runtime. Hidden source QA `%TEMP%/deskmate-t37-qa-ibVpRC/`, final ASAR QA `%TEMP%/deskmate-t37-qa-jJ84Qo/`: actual assets/navigation/keys/strength/print/save/compare/reveal/upload cap/leave guard, 1440×1024 / 1024×768 / 800×768. Zero new console errors; existing Google Fonts CSP warning recorded. Root `design-qa.md` passes the scoped visual gate; durable screenshots in `docs/reviews/assets/t37/`.
+- Package (not launched/adopted): `release-t37/win-unpacked`, EXE SHA256 `09202082B5749DF757241895478BEF41CC8D54DA892BD9ED71FCA1BFC4722DC7`, ASAR `E390291163FCEC0796F4E6323ACC04F320B204DF91A9CDCD070109C5EADFA744`. Main build ID remains carried T36 because main process was deliberately untouched; this is an integration/QA artifact, not a new promoted release. No retained profile, microphone, global shortcuts, firmware, hardware or cloud used.
+- Review caught and fixed concurrent imports, unsaved brief loss and busy-mode modal race; actual renderer caught arc overflow/caption clipping. Cross-model reviewer spawn hit the session agent limit; independent same-model review completed, formal cross-model signoff remains pending. Next: user reviews static screenshot / isolated UI at an authorized idle moment; coordinate commit onto final T36 base, then real AI adapter, managed media and main-process hardware ownership lease. Do not merge into or replace T36 during current regression acceptance.
+
+<!-- T37-END -->
+
+
 # 2026-09-11 - T27 local-first voice recall and latency optimization
 
 - Authority: user explicitly requested actual service testing and optimizing response delay, with local/current memory ahead of KnowledgeOS. Worktree `F:/Codex/deskmate/build-t10dc-work`, branch `codex/t26-workbench-overview`, base `443b4a8`. Stale root worktree untouched; Windows-only, no firmware or hardware tests/writes.

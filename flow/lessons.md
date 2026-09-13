@@ -1,5 +1,10 @@
 # Lessons learned
 
+## T37 — Separate the worktree before building a parallel visual module
+
+Both windows initially shared a dirty worktree. Stop without deletion/revert, enumerate exact owned hunks, migrate to an independent branch/worktree, then resume. Never attribute carried historical App.jsx differences to the new module or stage whole dirty shared files. Native hidden UI checks caught arc overflow that static build/tests missed; code review caught overlapping imports and late print modal races. Bound imports and freeze busy-state navigation before declaring the local UI tested.
+
+
 ## Optional memory outages must not tax every conversational turn
 
 - A per-turn remote lookup can add seconds even when it returns no usable evidence. In T27, the configured KnowledgeOS adapter spent about three seconds failing to connect to a stopped Core; the old gateway disguised that as an empty result.
