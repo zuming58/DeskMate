@@ -60,13 +60,44 @@ export function clampStudioPosition(value = {}) {
     tilt: Math.max(-12, Math.min(12, Number(value.tilt) || 0)),
   };
 }
-export function studioKey(event) {
-  if (event.isComposing || event.altKey || event.metaKey || event.shiftKey) return null;
+const STUDIO_PAGE_COMMANDS = ['strength', 'view', 'save', 'close', 'compare', 'inspiration', 'reset', 'mode'];
+const KEYBOARD_ACTION_SHORTCUTS = { 'select-all': 'Ctrl+A', copy: 'Ctrl+C', paste: 'Ctrl+V', undo: 'Ctrl+Z', enter: 'Enter', backspace: 'Backspace' };
+const SHORTCUT_CODES = { Return: 'Enter', Enter: 'Enter', Space: 'Space', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown' };
+function matchesStudioBinding(event, binding) {
+  const shortcut = binding?.action === 'hotkey' ? binding.shortcut : KEYBOARD_ACTION_SHORTCUTS[binding?.action];
+  if (typeof shortcut !== 'string' || !shortcut) return false;
+  const parts = shortcut.split('+');
+  const key = parts.pop();
+  const expectedCode = SHORTCUT_CODES[key] || (/^[A-Z]$/.test(key) ? `Key${key}` : /^[0-9]$/.test(key) ? `Digit${key}` : /^F(?:[1-9]|1[0-2])$/.test(key) ? key : '');
+  return Boolean(expectedCode)
+    && event.code === expectedCode
+    && Boolean(event.ctrlKey) === parts.includes('Ctrl')
+    && Boolean(event.altKey) === parts.includes('Alt')
+    && Boolean(event.shiftKey) === parts.includes('Shift')
+    && Boolean(event.metaKey) === parts.includes('Win');
+}
+export function studioKey(event, keymap) {
+  if (event.isComposing) return null;
   if (event.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return null;
-  if (event.ctrlKey) return ({ KeyA: 'compare', KeyC: 'inspiration', KeyV: 'reset', KeyZ: 'mode' })[event.code] || null;
   const key = event.code;
   if (event.repeat && !['ArrowLeft', 'ArrowRight'].includes(key)) return null;
-  return ({ ArrowLeft: 'previous', ArrowRight: 'next', Enter: 'view', Backspace: 'close', Digit1: 'strength', Digit2: 'view', Digit3: 'save', Digit4: 'close', Digit5: 'compare', Digit6: 'inspiration', Digit7: 'reset', Digit8: 'mode', Escape: 'close' })[key] || null;
+  if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+    const direct = ({ ArrowLeft: 'previous', ArrowRight: 'next', Escape: 'close' })[key];
+    if (direct) return direct;
+  }
+  const hasKeymap = Array.isArray(keymap) && keymap.length === STUDIO_PAGE_COMMANDS.length;
+  if (hasKeymap) {
+    const matches = keymap.map((binding, index) => matchesStudioBinding(event, binding) ? STUDIO_PAGE_COMMANDS[index] : null).filter(Boolean);
+    if (matches.length) return matches.length === 1 ? matches[0] : null;
+  }
+  if (!event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+    const direct = ({ Digit1: 'strength', Digit2: 'view', Digit3: 'save', Digit4: 'close', Digit5: 'compare', Digit6: 'inspiration', Digit7: 'reset', Digit8: 'mode' })[key];
+    if (direct) return direct;
+  }
+  if (hasKeymap) return null;
+  if (event.altKey || event.metaKey || event.shiftKey) return null;
+  if (event.ctrlKey) return ({ KeyA: 'compare', KeyC: 'inspiration', KeyV: 'reset', KeyZ: 'mode' })[event.code] || null;
+  return ({ Enter: 'view', Backspace: 'close' })[key] || null;
 }
 export function validStudioUpload(file) {
   return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) && file.size > 0 && file.size <= 10 * 1024 * 1024;

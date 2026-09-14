@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A physical key label is a position, not a permanent shortcut
+
+- Page-specific S1-S8 semantics must be resolved against the configuration currently stored on the board. A static Ctrl+A/C/V/Z table becomes wrong as soon as the product keymap assigns Host Actions or moves paste.
+- Host Action IDs describe ordinary business actions, not physical buttons. During a focused page lease, bind only IDs observed at exact KEY1-KEY8 positions; reject duplicates instead of guessing. Keyboard-emulated keys need the same positional lookup from the sanitized projection.
+- Read current configuration without writing it, keep raw fields in Electron, and release all temporary interpretation on blur/route teardown so existing global behavior remains intact.
+
 ## Verify the exact ESP-IDF entry point, not only the command name
 
 - On Windows, an `idf.py.exe` supplied by an unrelated helper can precede the frozen ESP-IDF checkout on `PATH` and print its own version even after a previous terminal activated ESP-IDF.

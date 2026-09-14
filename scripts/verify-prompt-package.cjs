@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t43-style-studio-encoder-press-lease'));
+assert(main.includes('t45-style-studio-save-stays'));
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
 for (const name of ['store', 'worker', 'service']) {
@@ -53,4 +53,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T43 packaged resource check passed: volatile encoder-press lease, hardware capability gate, material/result trash drop, S1/S2 routing, machine drop, pointer-following eject, staged Reveal controls, ten Style Studio presets, Image 2 adapter/secure store/journal, renderer, companion videos, recovery, voice resources and exact native bridge.');
+console.log('T45 packaged resource check passed: S3 save stays in Style Studio, adaptive S1-S8 routing, volatile encoder-press lease, hardware capability gate, material/result trash drop, machine drop, pointer-following eject, staged Reveal controls, ten Style Studio presets, Image 2 adapter/secure store/journal, renderer, companion videos, recovery, voice resources and exact native bridge.');

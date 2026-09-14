@@ -12,6 +12,8 @@ const { StyleStudioService } = require('../electron/style-studio-service.cjs');
 const { StyleStudioInputLease } = require('../electron/style-studio-input-lease.cjs');
 const { STYLE_STUDIO_ENCODER_ACTION_ID, encodeStyleStudioLeaseReport, decodeStyleStudioLeaseReport } = require('../electron/style-studio-lease-hid.cjs');
 const { STYLE_STUDIO_PRESETS, buildStyleStudioPrompt } = require('../electron/style-studio-presets.cjs');
+const { COMPANION_CALL_ACTION } = require('../electron/companion-call.cjs');
+const { ACTIONS: PROMPT_ACTIONS } = require('../electron/prompt-workbench.cjs');
 
 function png(width = 32, height = 24, tail = '') {
   const bytes = Buffer.alloc(24 + Buffer.byteLength(tail));
@@ -135,6 +137,45 @@ test('T42 input lease maps current Maker semantics to Studio only while leased',
   assert.deepEqual(events.map(item => item.command).filter(command => command !== 'hardware-lease-status'), ['next','strength','confirm','save']);
   foreground = false; assert.equal(lease.routeWheel({ action: 'negative' }), false);
   foreground = true; lease.release('studio-12345678'); assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceInput' }), false);
+});
+
+test('T44 input lease resolves physical S3-S7 from the active product keymap', () => {
+  const events = [];
+  const lease = new StyleStudioInputLease({ isForeground: () => true, publish: value => events.push(value) });
+  const raw = {
+    schema: 'ai_keyboard.v1',
+    profiles: [{ keys: {
+      KEY1: { press: 'voice_ptt_hold' },
+      KEY2: { press: { hotkey: 'Return' } },
+      KEY3: { press: `host_action:${COMPANION_CALL_ACTION.id}` },
+      KEY4: { press: `host_action:${PROMPT_ACTIONS[4].id}` },
+      KEY5: { press: `host_action:${PROMPT_ACTIONS[5].id}` },
+      KEY6: { press: `host_action:${PROMPT_ACTIONS[6].id}` },
+      KEY7: { press: `host_action:${PROMPT_ACTIONS[7].id}` },
+      KEY8: { press: 'paste' },
+    } }],
+  };
+  assert.deepEqual(lease.configureBindings(raw), { ok: true, triggerCount: 1, hostActionCount: 5 });
+  lease.acquire('studio-current-map');
+  assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceInput' }), true);
+  for (const id of [COMPANION_CALL_ACTION.id, PROMPT_ACTIONS[4].id, PROMPT_ACTIONS[5].id, PROMPT_ACTIONS[6].id, PROMPT_ACTIONS[7].id]) {
+    assert.equal(lease.routeHostAction({ hostActionId: id }), true);
+  }
+  assert.deepEqual(events.map(item => item.command).filter(command => command !== 'hardware-lease-status'), ['strength', 'save', 'close', 'compare', 'inspiration', 'reset']);
+  assert.equal(lease.routeHostAction({ hostActionId: '00000000-0000-0000-0000-000000000001' }), true);
+  assert.equal(events.at(-1).command, 'blocked-host-action');
+  lease.release('studio-current-map');
+});
+
+test('T44 duplicate host actions fail closed instead of guessing a physical key', () => {
+  const events = [];
+  const id = COMPANION_CALL_ACTION.id;
+  const lease = new StyleStudioInputLease({ isForeground: () => true, publish: value => events.push(value) });
+  lease.configureBindings({ schema: 'ai_keyboard.v1', profiles: [{ keys: { KEY3: { press: `host_action:${id}` }, KEY4: { press: `host_action:${id}` } } }] });
+  lease.acquire('studio-duplicate-map');
+  assert.equal(lease.routeHostAction({ hostActionId: id }), true);
+  assert.equal(events.at(-1).command, 'blocked-host-action');
+  lease.release('studio-duplicate-map');
 });
 
 test('T43 Studio lease HID encoder matches the frozen golden vectors', () => {

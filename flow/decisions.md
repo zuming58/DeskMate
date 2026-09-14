@@ -1,5 +1,13 @@
 # Decisions
 
+## D152 — S3 saves in place; only S4 leaves Style Studio
+
+2026-09-14: In Style Studio, S3 exports the current result or Reveal canvas without changing route, closing the result view, resetting controls, or discarding the current editing context. Closing either the native Save dialog or a browser download flow returns to the same Style Studio state. S4 remains the only hardware key that closes the current overlay or leaves the page. This page-scoped navigation rule does not change the user's persistent keymap, firmware, or any S3 behavior outside Style Studio.
+
+## D151 — Studio resolves physical S positions from the live sanitized keymap
+
+2026-09-14: A page-scoped legend cannot assume the factory or compiled-safe shortcuts still occupy S1-S8. On Studio acquisition, read the current `ai_keyboard.v1` config through the existing main-process boundary and map each emitted trigger, Host Action, or keyboard chord back to its physical index before applying the Studio command for that index. Keep raw config and Host Action IDs out of React, reject ambiguous duplicate event identities, retain the old chord map only as a read-failure fallback, and never rewrite the user's persistent keymap. Unknown Host Actions remain blocked while Studio owns input; blur/leave restores ordinary voice, companion, prompt and paste behavior.
+
 ## D150 — Style Studio borrows encoder press through an expiring firmware lease
 
 2026-09-14: Do not overwrite the user's persisted encoder action merely to support one page. Add frozen Feature report `0x1C` on the existing FF00:0009 runtime-control collection. The focused Style Studio page renews a RAM-only 2.5-second lease; while it is valid, encoder GPIO18 press/release is owned by a reserved canonical Host Action and cannot toggle the scroll axis. Windows consumes that reserved action only as Studio confirm/generate; all other Host Actions remain blocked by the page lease. Release on blur/route/reload/quit, clear on USB epoch change, and let TTL recover from a crashed host. Capability `style_studio_input_lease_v1` must be explicit before Windows writes the report. No NVS/config change, replay, arbitrary action ID or renderer HID access is allowed. Build evidence does not replace a separately authorized firmware write and physical acceptance.

@@ -18,7 +18,7 @@ This slice completes the camera-like interaction and the course S1–S8 state mo
 
 - S1 toggles the current intensity editor: generation strength in Generate, display blend in Reveal. Rotate changes by five points; press confirms.
 - S2 first opens the current result. Pressing S2 again while enlarged closes the result view and enters Reveal.
-- S3 exports the current result, or the current 1000×1000 Reveal canvas, then returns to the workbench.
+- S3 exports the current result, or the current 1000×1000 Reveal canvas, and stays in Style Studio with the current state intact. S4 is the only close/return key. This sentence was corrected by T45 after physical observation clarified the intended interaction.
 - S4 closes the active transient state. From an enlarged result it returns to the workbench; otherwise it leaves Style Studio.
 - S5 compares original and result side-by-side in the enlarged view. In Reveal it exchanges the circular inside/outside sources.
 - S6 supplies one editable local inspiration sentence. It never submits a provider request by itself.
@@ -42,4 +42,3 @@ This slice completes the camera-like interaction and the course S1–S8 state mo
 
 - Existing `gpt-image-2`, explicit per-generation consent, encrypted main-process credential, bounded wait, immediate local result persistence and no uncertain retry remain unchanged.
 - Automated UI verification uses repository-generated samples or a synthetic provider in isolated profiles. It must not send a paid request or access retained private images/keys.
-

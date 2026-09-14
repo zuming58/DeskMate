@@ -94,7 +94,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true), [hardwareLease, setHardwareLease] = useState('checking');
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
   const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), insertTimer = useRef(null), settleTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
-  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null);
+  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null), keyboardKeymap = useRef(null);
   const style = STUDIO_STYLES[wrapStudioIndex(cursor)];
   const importing = useRef(false);
   useUnsavedChanges((!provider.available && materials.some(item => !item.sample)) || Boolean(brief.trim()) || busy.current);
@@ -149,8 +149,14 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   }, [modal]);
   useEffect(() => {
     const api = bridge();
-    const acquire = () => { setFocused(true); setHardwareLease('checking'); void api?.acquireStyleStudioInput?.(leaseToken.current); };
-    const blur = () => { setFocused(false); setHardwareLease('idle'); setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
+    const acquire = async () => {
+      setFocused(true); setHardwareLease('checking');
+      const response = await api?.acquireStyleStudioInput?.(leaseToken.current);
+      if (!alive.current) return;
+      keyboardKeymap.current = Array.isArray(response?.config?.keymap) && response.config.keymap.length === 8 ? response.config.keymap : null;
+      if (response?.keymapConfigured === false) setStatus('实体按键映射读取失败；旋钮仍可用，S 键暂用页面数字键测试。');
+    };
+    const blur = () => { setFocused(false); setHardwareLease('idle'); keyboardKeymap.current = null; setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
     acquire();
     const unsubscribe = api?.onStyleStudioInput?.(event => {
       if (!document.hasFocus()) return;
@@ -390,7 +396,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     setOrganized(false);
     setStatus(payload.kind === 'ejected' ? '作品已拔出并放入作品区；可继续自由摆放。' : '作品已自由摆放；按“整理”可再次排齐。');
   }
-  async function save(returnHome = false) {
+  async function save() {
     if (!activeResult) return;
     try {
       let blob;
@@ -403,7 +409,6 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       }
       const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       setStatus(mode === 'reveal' ? '已请求保存当前显影画面，请查看下载目录或保存对话框。' : `已请求保存${activeResult.sample ? '样片' : '作品'}，请查看下载目录或保存对话框。`);
-      if (returnHome) navigate('dashboard');
     }
     catch { setStatus('保存未完成，请重试。'); }
   }
@@ -481,7 +486,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       else if (mode === 'reveal') { setModal('result'); setStatus('作品已放大；再按 S2 返回显影。'); }
       else { setCompare(false); setModal('result'); setStatus('作品已放大；再按 S2 缩小并进入显影。'); }
     }
-    if (name === 'save') void save(true);
+    if (name === 'save') void save();
     if (name === 'compare') {
       if (!activeResult) return;
       if (mode === 'reveal') { setCompare(value => !value); setStatus('S5 已交换圆窗内外的原图与作品。'); }
@@ -494,7 +499,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const actions = useRef(action); actions.current = action;
   if (!wheelRouter.current) wheelRouter.current = new StyleStudioWheelRouter(step => actions.current(step > 0 ? 'next' : 'previous'));
   useEffect(() => {
-    const key = e => { const command = studioKey(e); if (!command || !document.hasFocus()) return; e.preventDefault(); actions.current(command); };
+    const key = e => { const command = studioKey(e, keyboardKeymap.current); if (!command || !document.hasFocus()) return; e.preventDefault(); actions.current(command); };
     window.addEventListener('keydown', key);
     return () => { window.removeEventListener('keydown', key); };
   }, []);
@@ -585,7 +590,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
           {modal === 'result' && compare ? <div className="ss-compare-pair"><figure><img src={activeResult.source.image} alt={`${activeResult.source.name}原图`} /><figcaption>原图</figcaption></figure><figure><img src={activeResult.image} alt={`${activeResult.name}作品`} /><figcaption>作品</figcaption></figure></div> : modal === 'result' ? <button type="button" className="ss-enlarged-action" aria-label={`进入“${activeResult.name}”显影编辑`} title="再次点击进入显影" onClick={showReveal}><img className="ss-enlarged" src={activeResult.image} alt={activeResult.name} /></button> : <img className="ss-enlarged" src={source.image} alt={source.name} />}
           <h3>{modal === 'source' ? source.name : `${activeResult.name} · ${activeResult.sample ? '预制样片' : '本地生成作品'}`}</h3>
           {modal === 'source' && source.kind === 'source' && <div className="ss-dialog-actions"><button className="ss-soft" onClick={() => { setDeleteTarget(source); setModal('delete'); }}>从本地库删除</button></div>}
-          {modal === 'result' && <div className="ss-dialog-actions"><button className="ss-primary" onClick={() => void save(false)}><IconDownload size={18} />保存{activeResult.sample ? '样片' : '作品'}</button><button className="ss-soft" onClick={() => setCompare(v => !v)}>{compare ? '收起对比' : '并排对比原图'}</button><button className="ss-soft" onClick={showReveal}>进入显影</button>{activeResult.kind === 'result' && <button className="ss-soft" onClick={() => { setDeleteTarget(activeResult); setModal('delete'); }}>从本地库删除</button>}</div>}
+          {modal === 'result' && <div className="ss-dialog-actions"><button className="ss-primary" onClick={() => void save()}><IconDownload size={18} />保存{activeResult.sample ? '样片' : '作品'}</button><button className="ss-soft" onClick={() => setCompare(v => !v)}>{compare ? '收起对比' : '并排对比原图'}</button><button className="ss-soft" onClick={showReveal}>进入显影</button>{activeResult.kind === 'result' && <button className="ss-soft" onClick={() => { setDeleteTarget(activeResult); setModal('delete'); }}>从本地库删除</button>}</div>}
         </>}
       </div>
     </div>}

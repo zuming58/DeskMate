@@ -50,6 +50,26 @@ test('T42 page keyboard preserves editors and maps the existing Maker chords onl
   assert.equal(studioKey({code:'Digit1',target:{closest:()=>true}}), null);
   assert.equal(studioKey({code:'F22'}), null);
 });
+test('T44 page keyboard resolves keyboard-emulated keys by their current physical S position', () => {
+  const currentKeymap = [
+    {action:'voice-input'}, {action:'hotkey',shortcut:'Return'}, {action:'companion-call'},
+    {action:'prompt-key-4'}, {action:'prompt-key-5'}, {action:'prompt-key-6'}, {action:'prompt-key-7'}, {action:'paste'},
+  ];
+  assert.equal(studioKey({code:'Enter'}, currentKeymap), 'view');
+  assert.equal(studioKey({code:'KeyV',ctrlKey:true}, currentKeymap), 'mode');
+  assert.equal(studioKey({code:'KeyA',ctrlKey:true}, currentKeymap), null);
+  assert.equal(studioKey({code:'Digit5'}, currentKeymap), 'compare', 'number keys remain a direct QA fallback');
+  assert.equal(studioKey({code:'Digit3'}, [{action:'hotkey',shortcut:'3'}, ...currentKeymap.slice(1)]), 'strength', 'an actual configured binding wins over the QA fallback');
+  const compiledSafeKeymap = [
+    {action:'voice-input'}, {action:'hotkey',shortcut:'Return'}, {action:'voice-edit'}, {action:'hotkey',shortcut:'Backspace'},
+    {action:'select-all'}, {action:'copy'}, {action:'paste'}, {action:'undo'},
+  ];
+  assert.equal(studioKey({code:'Backspace'}, compiledSafeKeymap), 'close');
+  assert.equal(studioKey({code:'KeyA',ctrlKey:true}, compiledSafeKeymap), 'compare');
+  assert.equal(studioKey({code:'KeyC',ctrlKey:true}, compiledSafeKeymap), 'inspiration');
+  assert.equal(studioKey({code:'KeyV',ctrlKey:true}, compiledSafeKeymap), 'reset');
+  assert.equal(studioKey({code:'KeyZ',ctrlKey:true}, compiledSafeKeymap), 'mode');
+});
 test('T37 upload types and limits exclude SVG, executables and empty files', () => {
   assert(validStudioUpload({type:'image/png',size:1024}));
   assert(!validStudioUpload({type:'image/svg+xml',size:100}));
@@ -85,7 +105,11 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/并排对比原图/);
   assert.match(source,/className="ss-enlarged-action"[^>]+onClick=\{showReveal\}/);
   assert.match(source,/passive: false, capture: true/);
+  assert.match(source,/studioKey\(e, keyboardKeymap\.current\)/);
+  assert.match(source,/if \(name === 'save'\) void save\(\);/);
+  assert.doesNotMatch(source,/save\(returnHome/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);
   assert.match(main,/hash: '\/style-studio'/);
+  assert.match(main,/styleStudioInputLease\.configureBindings\(raw\)/);
 });

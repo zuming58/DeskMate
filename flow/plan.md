@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T45 Style Studio save stays in context — packaged candidate
+
+S3 now exports the current work without navigating away from Style Studio; after the native Save dialog closes, the selected result, Generate/Reveal mode and parameters remain available. S4 is the sole close/leave key. The change is route-scoped and does not write the board keymap or alter ordinary keys outside Style Studio. See `docs/contracts/t45-style-studio-save-stays-v1.md`.
+
 ## Current delivery: T43 Style Studio physical encoder press lease — built, hardware write pending
 
 风格映像 now has a frozen, volatile host/firmware lease for the physical encoder press. While the focused page renews the lease, GPIO18 press emits one reserved Host Action that the desktop consumes as confirm/generate instead of the persisted `scroll_axis_toggle`; route leave, blur, reload, USB epoch change and a 2.5-second expiry restore the ordinary axis-toggle behavior without changing NVS configuration. EasyInput Host tests 17/17, Windows native bridge build/self-test, exact ESP-IDF 5.5.5 full build and desktop regression pass. The new firmware has not been flashed and therefore the currently connected board still keeps its old press behavior until a separate app-only write is explicitly authorized. See `docs/design/style-studio-t43.md` and `contracts/deskmate-host/easyinput-style-studio-lease-v1.md`.
