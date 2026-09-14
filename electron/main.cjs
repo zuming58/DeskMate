@@ -81,7 +81,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t42-style-studio-trash-key-routing";
+const DESKMATE_BUILD_ID = "t43-style-studio-encoder-press-lease";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1128,10 +1128,7 @@ function startInputBridge() {
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
     if (restoreMaintenance) return;
-    if (styleStudioInputLease?.active()) {
-      sendToMain("style-studio-input", { command: "blocked-host-action", source: "easyinput-host-action" });
-      return;
-    }
+    if (styleStudioInputLease?.routeHostAction(event)) return;
     const result = await hostActionExecutor.execute(event.hostActionId);
     const kind = Object.values(PROMPT_ACTIONS).some(a => a.id === event.hostActionId) ? 'prompt-workbench' : event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app";
     sendToMain("host-action-result", { kind, ...result, at: new Date().toISOString() });
@@ -1402,7 +1399,11 @@ app.whenReady().then(async () => {
   image2Store = createSecureImage2Store({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   styleStudioService = new StyleStudioService({ store: new StyleStudioStore({ userDataPath: app.getPath("userData") }), credentialStore: image2Store, journal: new StyleStudioJournal({ userDataPath: app.getPath("userData") }) });
-  styleStudioInputLease = new StyleStudioInputLease({ isForeground: isStyleStudioForeground, publish: value => sendToMain("style-studio-input", value) });
+  styleStudioInputLease = new StyleStudioInputLease({
+    isForeground: isStyleStudioForeground,
+    publish: value => sendToMain("style-studio-input", value),
+    sendHardwareLease: value => inputBridge?.sendStyleStudioLease?.(value) || Promise.resolve({ ok: false, reason: "input-bridge-unavailable" }),
+  });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   companionDialogueContext = new CompanionDialogueContext({ seed: companionMemoryStore.recentCompanionContext() });
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });

@@ -7,6 +7,7 @@ const { encodeKeyboardConfig, encodeConfigReadRequest, parseConfigSnapshot } = r
 const { decodeManualCalibrationFeatureReport } = require("./manual-calibration-hid.cjs");
 const { decodeMotionPresetFeatureReport } = require("./motion-presets-hid.cjs");
 const { decodeChoreographyFeatureReport } = require("./choreography-hid.cjs");
+const { encodeStyleStudioLeaseReport, decodeStyleStudioLeaseReport } = require("./style-studio-lease-hid.cjs");
 
 class InputBridgeManager extends EventEmitter {
   constructor({ executable, spawnImpl = spawn, now = () => Date.now(), setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
@@ -30,6 +31,7 @@ class InputBridgeManager extends EventEmitter {
     this.pendingManualCalibration = null;
     this.pendingMotionPreset = null;
     this.pendingChoreography = null;
+    this.pendingStyleStudioLease = null;
     this.status = { available: false, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, restarts: 0, error: "", configCapabilities: null, linkDiagnostics: null };
   }
 
@@ -86,6 +88,7 @@ class InputBridgeManager extends EventEmitter {
         this.finishManualCalibration({ ok: false, reason: "easyinput-disconnected" });
         this.finishMotionPreset({ ok: false, reason: "easyinput-disconnected" });
         this.finishChoreography({ ok: false, reason: "easyinput-disconnected" });
+        this.finishStyleStudioLease({ ok: false, reason: "easyinput-disconnected" });
       } else {
         if (configCollectionWritable === false) {
           this.finishConfig({ ok: false, reason: "config-interface-unavailable" });
@@ -96,6 +99,7 @@ class InputBridgeManager extends EventEmitter {
         if (motionCollectionWritable === false) {
           this.finishMotionPreset({ ok: false, reason: "motion-preset-interface-unavailable" });
           this.finishChoreography({ ok: false, reason: "choreography-interface-unavailable" });
+          this.finishStyleStudioLease({ ok: false, reason: "style-studio-lease-interface-unavailable" });
         }
       }
     }
@@ -110,7 +114,7 @@ class InputBridgeManager extends EventEmitter {
       this.finishRead(snapshot ? { ok: true, ...snapshot } : { ok: false, reason: "config-snapshot-invalid" });
     }
     if (result.kind === "config-capabilities" && this.pendingRead?.requestId === event.requestId) {
-      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1, ...(event.deskMateLinkV1 === undefined ? {} : { deskmate_link_v1: event.deskMateLinkV1, agent_state_bridge_v1: event.agentStateBridgeV1, codex_led_status_v1: event.codexLedStatusV1 === true }) };
+      const capabilities = { config_read_v1: event.configReadV1, config_write_v1: event.configWriteV1, host_action_v1: event.hostActionV1, fixed_text_v1: event.fixedTextV1, style_studio_input_lease_v1: event.styleStudioInputLeaseV1 === true, ...(event.deskMateLinkV1 === undefined ? {} : { deskmate_link_v1: event.deskMateLinkV1, agent_state_bridge_v1: event.agentStateBridgeV1, codex_led_status_v1: event.codexLedStatusV1 === true }) };
       const linkDiagnostics = event.linkState === undefined ? null : {
         state: event.linkState,
         rxFrames: event.linkRxFrames,
@@ -175,6 +179,7 @@ class InputBridgeManager extends EventEmitter {
       }
     }
     if (result.kind === "choreography-write" && this.pendingChoreography?.bridgeRequestId === event.requestId && !event.ok) this.finishChoreography({ ok: false, reason: event.reason || "choreography-write-failed" });
+    if (result.kind === "style-studio-lease-write" && this.pendingStyleStudioLease?.requestId === event.requestId) this.finishStyleStudioLease(event.ok ? { ok: true } : { ok: false, reason: event.reason || "style-studio-lease-write-failed" });
     if (result.kind === "choreography-report" && this.pendingChoreography?.numericRequestId === event.choreography.requestId) {
       const pending = this.pendingChoreography;
       const response = event.choreography;
@@ -379,6 +384,36 @@ class InputBridgeManager extends EventEmitter {
     pending.resolve(result);
   }
 
+  async sendStyleStudioLease(value) {
+    let report;
+    try { report = encodeStyleStudioLeaseReport(value); decodeStyleStudioLeaseReport(report); }
+    catch { return { ok: false, reason: "style-studio-lease-report-invalid" }; }
+    if (this.pendingStyleStudioLease) return { ok: false, reason: "style-studio-lease-busy" };
+    if (!this.child?.stdin?.writable) return { ok: false, reason: "input-bridge-unavailable" };
+    if (!this.status.boardConnected) return { ok: false, reason: "easyinput-not-connected" };
+    if (this.status.motionCollectionWritable !== true) return { ok: false, reason: "style-studio-lease-interface-unavailable" };
+    if (!this.status.configCapabilities) {
+      const checked = await this.readCapabilities();
+      if (!checked.ok) return checked;
+    }
+    if (!this.status.configCapabilities?.style_studio_input_lease_v1) return { ok: false, reason: "style-studio-input-lease-v1-unsupported" };
+    if (this.pendingStyleStudioLease) return { ok: false, reason: "style-studio-lease-busy" };
+    const requestId = `studio-lease-${randomUUID()}`;
+    return new Promise((resolve) => {
+      const timeout = this.setTimer(() => this.finishStyleStudioLease({ ok: false, reason: "style-studio-lease-write-timeout" }), 1200);
+      this.pendingStyleStudioLease = { requestId, timeout, resolve };
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "style-studio-lease", requestId, report: report.toString("base64") })}\n`, (error) => { if (error) this.finishStyleStudioLease({ ok: false, reason: "input-bridge-write-failed" }); });
+    });
+  }
+
+  finishStyleStudioLease(result) {
+    const pending = this.pendingStyleStudioLease;
+    if (!pending) return;
+    this.pendingStyleStudioLease = null;
+    this.clearTimer(pending.timeout);
+    pending.resolve(result);
+  }
+
   dispatchAgentState(entry) {
     if (!this.child?.stdin?.writable || !this.status.boardConnected || this.status.configCollectionWritable === false) {
       entry.resolve({ ok: false, reason: !this.status.boardConnected ? "easyinput-not-connected" : this.status.configCollectionWritable === false ? "config-interface-unavailable" : "input-bridge-unavailable" });
@@ -493,6 +528,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishManualCalibration({ ok: false, reason: "input-bridge-exited" });
     this.finishMotionPreset({ ok: false, reason: "input-bridge-exited" });
     this.finishChoreography({ ok: false, reason: "input-bridge-exited" });
+    this.finishStyleStudioLease({ ok: false, reason: "input-bridge-exited" });
     this.filter.reset();
     this.status = { ...this.status, process: this.stopping ? "stopped" : "restarting", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null, error: error?.message || "" };
     this.emit("status", this.snapshot());
@@ -518,6 +554,7 @@ class InputBridgeManager extends EventEmitter {
     this.finishManualCalibration({ ok: false, reason: "input-bridge-stopped" });
     this.finishMotionPreset({ ok: false, reason: "input-bridge-stopped" });
     this.finishChoreography({ ok: false, reason: "input-bridge-stopped" });
+    this.finishStyleStudioLease({ ok: false, reason: "input-bridge-stopped" });
     child?.kill?.();
     this.filter.reset();
     this.status = { ...this.status, process: "stopped", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };

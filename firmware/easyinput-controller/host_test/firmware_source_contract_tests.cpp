@@ -83,6 +83,9 @@ int main() {
     const std::string config_store_header = read_all(CONFIG_STORE_HEADER_PATH);
     const std::string config_core_header = read_all(CONFIG_CORE_HEADER_PATH);
     const std::string config_core_source = read_all(CONFIG_CORE_SOURCE_PATH);
+    const std::string style_studio_lease_header = read_all(STYLE_STUDIO_LEASE_HEADER_PATH);
+    const std::string style_studio_lease_source = read_all(STYLE_STUDIO_LEASE_SOURCE_PATH);
+    const std::string style_studio_lease_contract = read_all(STYLE_STUDIO_LEASE_CONTRACT_PATH);
     const std::string link_core_header = read_all(LINK_CORE_HEADER_PATH);
     const std::string link_core_source = read_all(LINK_CORE_SOURCE_PATH);
     const std::string link_uart_source = read_all(LINK_UART_SOURCE_PATH);
@@ -199,12 +202,21 @@ int main() {
     CHECK(contains(main_source, "kUsbStringDescriptors.data()"));
     CHECK(!contains(main_source, "TUD_HID_DESCRIPTOR"));
     CHECK(contains(main_source, "normalize_agent_state_feature_report("));
+    CHECK(contains(main_source, "normalize_style_studio_lease_feature_report("));
+    CHECK(contains(main_source, "style_studio_lease_command_queue"));
+    CHECK(contains(main_source, "runtime.set_style_studio_lease("));
     CHECK(contains(main_source, "normalize_config_feature_report("));
     CHECK(contains(main_source, "xQueueOverwrite(destination, &command)"));
     CHECK(contains(main_source, "config_read ? kConfigReadRequestPayloadBytes : feature.length"));
     CHECK(contains(main_source, "request.flag == ConfigReadFlag::CompleteConfig"));
     CHECK(contains(main_source, "ConfigStatusStream config_status_stream"));
     CHECK(contains(main_source, "config_save_in_flight"));
+    CHECK(contains(runtime_source, "kStyleStudioConfirmHostActionId"));
+    CHECK(contains(runtime_header, "style_studio_lease_active_"));
+    CHECK(contains(style_studio_lease_header, "kStyleStudioLeaseReportId = 0x1c"));
+    CHECK(contains(style_studio_lease_source, "usb_epoch == usb_epoch_"));
+    CHECK(contains(style_studio_lease_contract, "STYLE_STUDIO_INPUT_LEASE_V1_FROZEN"));
+    CHECK(contains(config_core_source, "style_studio_input_lease_v1"));
     CHECK(!contains(config_store, "nvs_flash_erase"));
     CHECK(contains(config_store, "storage_failed_=true"));
 

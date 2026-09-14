@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T43 Style Studio physical encoder press lease — built, hardware write pending
+
+风格映像 now has a frozen, volatile host/firmware lease for the physical encoder press. While the focused page renews the lease, GPIO18 press emits one reserved Host Action that the desktop consumes as confirm/generate instead of the persisted `scroll_axis_toggle`; route leave, blur, reload, USB epoch change and a 2.5-second expiry restore the ordinary axis-toggle behavior without changing NVS configuration. EasyInput Host tests 17/17, Windows native bridge build/self-test, exact ESP-IDF 5.5.5 full build and desktop regression pass. The new firmware has not been flashed and therefore the currently connected board still keeps its old press behavior until a separate app-only write is explicitly authorized. See `docs/design/style-studio-t43.md` and `contracts/deskmate-host/easyinput-style-studio-lease-v1.md`.
+
 ## Current delivery: T42 Style Studio deletion and S1/S2 correction — packaged
 
 风格映像 now has separate drag-to-delete targets for Materials and Works, with valid-target feedback, managed-store deletion, linked-source protection and immutable samples. The page maps the current Maker semantics correctly: S1 opens strength, S2/Return performs result view then Reveal even when a button owns focus, S3 saves, and source-identified F22 remains confirm. Full suite 709/709, native build, source functional probes, final-ASAR probe and exact package verification passed. Physical encoder press remains pending because the default internal `scroll_axis_toggle` emits no Windows-visible event; no board configuration was written. See `docs/design/style-studio-t42.md` and `docs/contracts/t42-style-studio-delete-key-routing-v1.md`.

@@ -25,10 +25,12 @@
 - T03～T06 已锁定，T07 桌面基线已冻结。T08 EasyInput DeskMate Link 总控端已完成代码、Host 与构建门，状态为 `HIL_NOT_AUTHORIZED`；后续只能做审计、可恢复烧录准备和获授权的只读双板验收。不得开发 BLE、音频或小智固件，不得修改 T07 桌面。
 - T09 EasyInput 状态桥只接收冻结的 HID Feature `0x12`：业务 payload 固定 16 字节，同时兼容 Windows 顶层集合 64 字节报告产生的全零 transport padding；任何非零 padding 均拒绝。状态经独立最新状态邮箱、TTL/epoch/能力门转发既有 Link `SET_AGENT_STATE`；不得在本模块渲染 OLED、驱动舵机或补写桌面发送器。T09 代码、Host 和构建通过不等于可烧录或真机通过。
 - T15B/T15D 已实现并完成用户真机验收：HID Feature/Input `0x18/0x19` 负责固定动作，`0x1A/0x1B` 负责有界可调动作与编舞；本板只做单槽校验、DeskMate Link 转发和双板 boot/action 关联。MOTION bit 3 是已知可选能力，T09 状态桥与 T10D 手动控制在该 bit 存在时必须继续工作；AUDIO bit 4 仍禁止。EasyInput 不展开轨迹，也不含 PWM、脉宽、GPIO 或绝对轴角。已验收基线不授权任何后续新镜像。
+- T43 只增加冻结的 HID Feature `0x1C` 风格映像页临时输入租约：租约必须是 RAM-only、token/TTL/USB epoch 约束且不写 NVS；有效租约内编码器按压改发专用 Host Action，原 `scroll_axis_toggle` 持久动作不得执行，租约失效后自动恢复。代码、Host 和构建通过不等于已烧录或真机验收。
 - T10E 只实现冻结的 EasyInput 板载麦克风 LAN 上行：I2S0 `GPIO9/10/11`、既有 `KeyboardMic` 电源租约、64 帧 PSRAM 有界队列和 Maker 兼容 `EIHB/EICC/EICA/EIAU`。S1/S3 只能准备 Wi-Fi，合法 `EICC start` 才能启用 I2S；配置、网络或音频失败不得影响输入、灯效、Host Action、Agent 状态或 DeskMate Link。扬声器、BLE、小智音频和桌面改动不属于 T10E。
 - T11E-A 只实现冻结的本地扬声器输出：I2S1 `GPIO14/13/15`、48 kHz/16-bit/mono-left、既有 `Speaker` 电源租约、一次合成开机探针和麦克风绝对优先仲裁。不得猜测实时音频下行协议，不得读取或写入 sound bank，不得修改桌面、小智、BLE、深度睡眠或舵机；扬声器失败必须 fail-soft。
 - T03 冷启动、mount 全释放、transfer identity、GPIO40 生命周期和 DCD 重连候选均被真实 Ctrl 粘连证据否决。最终 `5c09880` 参考固定 Maker synthetic tap 结构清晰重实现：S1/S3 保持 held PTT，S2/S4/S5～S8 使用原子 press→restore tap；连续五次 Ctrl 断线矩阵、Host、ESP-IDF 构建和桌面组合回归均通过，原主电脑独立审计已确认，状态为 `T03_LOCKED`。当前实板 S8 仍为烧录前已知的单板硬件阻断，固件继续保留 S8/GPIO48。
 - T04 已锁定：5 颗 WS2812 使用 GPIO12，GPIO8 继续由唯一共享电源控制器写入，配置读写不得阻塞或重置输入灯效。已验收固件源码 HEAD 为 `75c65788524523325a4526718ad865ddf9f7a072`；当前样机 S8 仍是既有硬件阻断，健康板补测前不改 GPIO48/八键合同。
+- T24 只扩展现有 LED owner：专用 `CDXL` 来源仍使用 T09 `0x12` v2 payload，但必须在 EasyInput 本机消费且绝不转发小智；5 灯使用冻结的低亮度状态底色，T04 输入灯效短暂覆盖后恢复。GPIO12、GRB 和 GPIO8 单一共享电源 owner 不变；代码/构建不等于烧录或真机验收。
 - T06 必须固定读取 Maker `7619bd13f9ddfd6e2d80e2b8e022ef0acf32ce01` 的 Host Action、固定文字和唯一 USB endpoint owner 实现及 Host tests，并逐项核对 T06 reference audit。固件只发送规范 UUID 或有界固定文字；应用路径和文字注入只归 Windows 主进程/原生桥所有，renderer 不得获得路径或固定文字原文。
 - 不自动执行 flash、erase、monitor、端口扫描或设备发现。补刷前必须展示最终分支 HEAD、app SHA-256 和 app-only 精确写入范围，并取得用户新的明确授权。
 - 从 `F:\Codex\easyinput-wzm\easy-input-maker` 复制或派生前必须记录来源提交、许可证、源文件、修改和目标路径；优先依据合同做清晰的重新实现。
@@ -43,8 +45,11 @@
 - T10E 冻结合同：`../../docs/contracts/easyinput-audio-capture-v1.md`
 - T10E Maker 参考审计：`../../docs/provenance/t10e-easyinput-audio-capture-reference-audit.md`
 - T09 冻结合同：`../../docs/contracts/t09-agent-state-display-v1.md`
+- T24 Codex 五灯合同：`../../docs/contracts/t24-codex-led-status-v1.md`
+- T24 任务卡：`../../flow/tasks/t24-codex-led-status.md`
 - T09 EasyInput 交接：`../../docs/handoffs/t09-easyinput-agent-state-bridge-2026-08-30.md`
 - T15B Host 合同：`../../contracts/deskmate-host/easyinput-motion-presets-v1.md`
+- T43 风格映像页输入租约合同：`../../contracts/deskmate-host/easyinput-style-studio-lease-v1.md`
 - T15 Link 合同：`../../contracts/deskmate-link/t15-motion-presets-v1.md`
 - T15 Host/Link 黄金向量：`../../contracts/deskmate-host/golden-vectors-easyinput-motion-presets-v1.json`、`../../contracts/deskmate-link/golden-vectors-t15-motion-presets-v1.json`
 - T08 并行分工：`../../docs/handoffs/t08-parallel-firmware-split-2026-08-29.md`

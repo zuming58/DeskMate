@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Page ownership of an internal hardware action needs a volatile lease
+
+- A renderer cannot intercept a control the firmware consumes internally. Reconfigure it at the firmware routing boundary, not with another browser key guess.
+- Temporary page semantics should not rewrite persistent board configuration. Use an opaque-token lease tied to USB epoch, renew it while focused, release it on normal teardown and add a short TTL so host crashes fail back to the user's ordinary mapping.
+- Consume the reserved release with the same temporary owner even if the lease expires while the switch is held; otherwise one physical gesture can leak into two action systems. Require an explicit capability bit before sending the new Feature report, so older firmware fails closed.
+
 ## Physical labels are not host event identities
 
 - Keyboard-emulation controls arrive as their configured semantic output. If S2 emits Return, mapping Return to “confirm” both steals S2 and makes its documented behavior fail.

@@ -206,6 +206,14 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
             else result.wheel.horizontal = ((event.value > 0) ^ reverse_horizontal_) ? amount : -amount;
         }
     } else if (event.type == InputEventType::EncoderPressed) {
+        if (style_studio_lease_active_) {
+            ConfigAction action{};
+            action.kind = ConfigActionKind::HostAction;
+            action.value = kStyleStudioConfirmHostActionId;
+            style_studio_press_owned_ = true;
+            return apply_command_source(InputSourceId::EncoderPress, true,
+                                        action);
+        }
         if (configured_ &&
             (encoder_press_action_.kind == ConfigActionKind::FixedText ||
              encoder_press_action_.kind == ConfigActionKind::HostAction)) {
@@ -221,6 +229,14 @@ RoutedAction InputActionRouter::apply(const InputEvent& event) {
             text_caret_select_ = !text_caret_select_;
         }
     } else if (event.type == InputEventType::EncoderReleased) {
+        if (style_studio_press_owned_) {
+            ConfigAction action{};
+            action.kind = ConfigActionKind::HostAction;
+            action.value = kStyleStudioConfirmHostActionId;
+            style_studio_press_owned_ = false;
+            return apply_command_source(InputSourceId::EncoderPress, false,
+                                        action);
+        }
         if (configured_ &&
             (encoder_press_action_.kind == ConfigActionKind::FixedText ||
              encoder_press_action_.kind == ConfigActionKind::HostAction)) {
@@ -342,6 +358,7 @@ RoutedAction InputActionRouter::apply_command_source(
 void InputActionRouter::release_all() {
     owned_ = {};
     tap_pressed_ = {};
+    style_studio_press_owned_ = false;
     text_caret_select_ = false;
 }
 KeyboardSnapshot InputActionRouter::keyboard() const { return compose(); }
@@ -382,6 +399,7 @@ void UsbInputRuntime::on_mount(uint32_t epoch) {
     diagnostics_.usb_mount_epoch = epoch == 0 ? 1 : epoch;
     clear_queue();
     router_.release_all();
+    router_.set_style_studio_lease(false);
     release_barrier_pending_ = true;
     release_confirmation_enqueued_ = false;
     mount_release_completed_ = false;
@@ -408,6 +426,7 @@ void UsbInputRuntime::on_unmount() {
     release_reassert_active_ = false;
     release_reassert_started_ = false;
     router_.release_all();
+    router_.set_style_studio_lease(false);
 }
 
 void UsbInputRuntime::on_resume() {}
@@ -998,7 +1017,8 @@ const uint8_t kHidReportDescriptor[] = {
     0x85,0x18,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x09,0xb1,0x02,
     0x85,0x19,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0a,0x81,0x02,
     0x85,0x1a,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0b,0xb1,0x02,
-    0x85,0x1b,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0c,0x81,0x02,0xc0,
+    0x85,0x1b,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0c,0x81,0x02,
+    0x85,0x1c,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0d,0xb1,0x02,0xc0,
 };
 const size_t kHidReportDescriptorSize = sizeof(kHidReportDescriptor);
 

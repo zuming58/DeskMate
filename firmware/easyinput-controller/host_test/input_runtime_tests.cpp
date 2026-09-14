@@ -226,6 +226,26 @@ void encoder_axis_vectors() {
     CHECK(router.axis() == ScrollAxis::Vertical);
 }
 
+void style_studio_lease_owns_press_without_axis_toggle() {
+    InputActionRouter router;
+    router.set_style_studio_lease(true);
+    const auto press = router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(press.host_command_kind == HostCommandKind::HostAction);
+    CHECK(press.host_command_value == kStyleStudioConfirmHostActionId);
+    CHECK(router.axis() == ScrollAxis::Vertical);
+
+    // Expiry while held still gives the release to the temporary owner. It
+    // must not execute the persisted axis action on that release.
+    router.set_style_studio_lease(false);
+    const auto release = router.apply({InputEventType::EncoderReleased, 0, 0});
+    CHECK(release.host_command_kind == HostCommandKind::None);
+    CHECK(router.axis() == ScrollAxis::Vertical);
+
+    router.apply({InputEventType::EncoderPressed, 0, 0});
+    CHECK(router.axis() == ScrollAxis::Horizontal);
+    router.apply({InputEventType::EncoderReleased, 0, 0});
+}
+
 void configured_encoder_actions_follow_maker_semantics() {
     InputActionRouter router;
     ConfigProjection projection{};
@@ -1302,7 +1322,7 @@ void descriptor_and_vendor_fail_closed() {
         9, 0x02, 34, 0, 1, 1, 0, 0xa0, 50,
         9, 0x04, 0, 0, 1, 0x03, 0, 0, 0,
         9, 0x21, 0x11, 0x01, 0, 1, 0x22,
-        0x54, 0x01,
+        0x63, 0x01,
         7, 0x05, 0x81, 0x03, 64, 0, 10};
     CHECK(kUsbConfigurationDescriptor == expected_configuration);
     const std::array<uint8_t, 2> expected_language{0x09, 0x04};
@@ -1342,7 +1362,8 @@ void descriptor_and_vendor_fail_closed() {
         0x85,0x18,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x09,0xb1,0x02,
         0x85,0x19,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0a,0x81,0x02,
         0x85,0x1a,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0b,0xb1,0x02,
-        0x85,0x1b,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0c,0x81,0x02,0xc0,
+        0x85,0x1b,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0c,0x81,0x02,
+        0x85,0x1c,0x15,0x00,0x26,0xff,0x00,0x75,0x08,0x95,0x3f,0x09,0x0d,0xb1,0x02,0xc0,
     };
     CHECK(expected_report.size() == kHidReportDescriptorSize);
     CHECK(std::equal(expected_report.begin(), expected_report.end(), kHidReportDescriptor));
@@ -1363,9 +1384,10 @@ void descriptor_and_vendor_fail_closed() {
     CHECK(reports.input_bits[0x19] == 63 * 8);
     CHECK(reports.feature_bits[0x1a] == 63 * 8);
     CHECK(reports.input_bits[0x1b] == 63 * 8);
+    CHECK(reports.feature_bits[0x1c] == 63 * 8);
     for (uint16_t id = 0; id < 256; ++id) {
         const bool expected = id == 0x01 || id == 0x02 ||
-                              (id >= 0x10 && id <= 0x1b);
+                              (id >= 0x10 && id <= 0x1c);
         if (!expected) {
             CHECK(reports.input_bits[id] == 0);
             CHECK(reports.output_bits[id] == 0);
@@ -1401,7 +1423,7 @@ void descriptor_and_vendor_fail_closed() {
     UsbInputRuntime runtime;
     const auto before = runtime.diagnostics();
     const uint8_t payload[2]{1, 2};
-    for (uint8_t id = 0x10; id <= 0x1b; ++id) CHECK(!runtime.reject_vendor_feature(id, payload, 2));
+    for (uint8_t id = 0x10; id <= 0x1c; ++id) CHECK(!runtime.reject_vendor_feature(id, payload, 2));
     const auto after = runtime.diagnostics();
     CHECK(before.raw_edge_drops == after.raw_edge_drops);
     CHECK(before.hid_report_drops == after.hid_report_drops);
@@ -1658,6 +1680,7 @@ int main() {
     loaded_safe_configuration_preserves_voice_shortcuts();
     physical_source_ownership_and_overflow();
     encoder_axis_vectors();
+    style_studio_lease_owns_press_without_axis_toggle();
     configured_encoder_actions_follow_maker_semantics();
     tap_actions_restore_without_waiting_for_physical_release();
     tap_actions_restore_concurrent_held_voice_snapshot();

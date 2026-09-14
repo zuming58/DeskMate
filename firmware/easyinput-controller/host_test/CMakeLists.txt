@@ -31,6 +31,16 @@ add_executable(host_action_core_tests
 target_include_directories(host_action_core_tests PRIVATE ../components/input_core/include)
 add_test(NAME host_action_core_tests COMMAND host_action_core_tests)
 
+add_executable(style_studio_lease_core_tests
+    style_studio_lease_core_tests.cpp
+    ../components/input_core/src/style_studio_lease_core.cpp
+)
+target_include_directories(style_studio_lease_core_tests PRIVATE ../components/input_core/include)
+target_compile_definitions(style_studio_lease_core_tests PRIVATE
+    STYLE_STUDIO_LEASE_VECTORS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-host/golden-vectors-easyinput-style-studio-lease-v1.json"
+)
+add_test(NAME style_studio_lease_core_tests COMMAND style_studio_lease_core_tests)
+
 add_executable(deskmate_link_core_tests
     deskmate_link_core_tests.cpp
     ../components/input_core/src/deskmate_link_core.cpp
@@ -98,6 +108,7 @@ add_executable(input_runtime_tests
     ../components/input_core/src/config_core.cpp
     ../components/input_core/src/audio_capture_core.cpp
     ../components/input_core/src/host_action_core.cpp
+    ../components/input_core/src/style_studio_lease_core.cpp
     ../components/input_core/src/deskmate_link_core.cpp
     ../components/input_core/src/speaker_output_core.cpp
 )
@@ -111,6 +122,7 @@ add_executable(led_feedback_tests
     ../components/input_core/src/input_core.cpp
     ../components/input_core/src/hid_report.cpp
     ../components/input_core/src/host_action_core.cpp
+    ../components/input_core/src/style_studio_lease_core.cpp
 )
 target_include_directories(led_feedback_tests PRIVATE ../components/input_core/include)
 add_test(NAME led_feedback_tests COMMAND led_feedback_tests)
@@ -150,6 +162,9 @@ target_compile_definitions(firmware_source_contract_tests PRIVATE
     CONFIG_STORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/config_store.h"
     CONFIG_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/config_core.h"
     CONFIG_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/config_core.cpp"
+    STYLE_STUDIO_LEASE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/style_studio_lease_core.h"
+    STYLE_STUDIO_LEASE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/style_studio_lease_core.cpp"
+    STYLE_STUDIO_LEASE_CONTRACT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../../contracts/deskmate-host/easyinput-style-studio-lease-v1.md"
     LINK_CORE_HEADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/include/deskmate_link_core.h"
     LINK_CORE_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../components/input_core/src/deskmate_link_core.cpp"
     LINK_UART_SOURCE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../main/deskmate_link_uart.cpp"

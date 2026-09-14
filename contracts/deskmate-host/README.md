@@ -11,6 +11,7 @@
 - [`easyinput-motion-presets-v1.md`](easyinput-motion-presets-v1.md) 与[黄金向量](golden-vectors-easyinput-motion-presets-v1.json)：`EASYINPUT_MOTION_PRESETS_HOST_V1_FROZEN`，冻结 HID `0x18/0x19` 语义动作传输、1～3 次重复、单请求转发和断线不重放；不含角度、PWM、脉宽或 GPIO。
 - [`easyinput-choreography-v1.md`](easyinput-choreography-v1.md) 与[黄金向量](golden-vectors-easyinput-choreography-v1.json)：`EASYINPUT_CHOREOGRAPHY_HOST_V1_FROZEN`，冻结 HID `0x1A/0x1B` 的 2～8 拍语义动作、表情同步与三档强度/速度；仍不开放原始舵机参数。
 - [`easyinput-choreography-v2.md`](easyinput-choreography-v2.md) 与[黄金向量](golden-vectors-easyinput-choreography-v2.json)：`EASYINPUT_CHOREOGRAPHY_HOST_V2_FROZEN`，保持 HID `0x1A/0x1B`，改为左右/上下独立的有界角度与速度语义；Windows 只发 V2，EasyInput 为回退兼容继续接收 V1。
+- [`easyinput-style-studio-lease-v1.md`](easyinput-style-studio-lease-v1.md) 与[黄金向量](golden-vectors-easyinput-style-studio-lease-v1.json)：`STYLE_STUDIO_INPUT_LEASE_V1_FROZEN`，冻结 HID Feature `0x1C` 的风格映像页临时输入租约；租约只驻留 RAM，旋钮按压在有效租约内改发专用 Host Action，离页、失焦、USB epoch 变化或 TTL 到期即恢复原持久映射。
 
 现有 Maker `ai_keyboard.v1`、厂商 HID 和 Host Action 证据仍以 [`docs/contracts/easyinput-maker-protocol.md`](../../docs/contracts/easyinput-maker-protocol.md) 为来源合同。切片冻结不等于整份 Host Contract 已冻结。
 

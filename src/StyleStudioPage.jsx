@@ -91,7 +91,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [ejectedResult, setEjectedResult] = useState(null), [progressSeconds, setProgressSeconds] = useState(0);
   const [insertPulse, setInsertPulse] = useState(false), [pullVisual, setPullVisual] = useState(null), [justPlacedId, setJustPlacedId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null), [trashOver, setTrashOver] = useState('');
-  const [status, setStatus] = useState(''), [focused, setFocused] = useState(true);
+  const [status, setStatus] = useState(''), [focused, setFocused] = useState(true), [hardwareLease, setHardwareLease] = useState('checking');
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
   const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), insertTimer = useRef(null), settleTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
   const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null);
@@ -149,11 +149,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   }, [modal]);
   useEffect(() => {
     const api = bridge();
-    const acquire = () => { setFocused(true); void api?.acquireStyleStudioInput?.(leaseToken.current); };
-    const blur = () => { setFocused(false); setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
+    const acquire = () => { setFocused(true); setHardwareLease('checking'); void api?.acquireStyleStudioInput?.(leaseToken.current); };
+    const blur = () => { setFocused(false); setHardwareLease('idle'); setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
     acquire();
     const unsubscribe = api?.onStyleStudioInput?.(event => {
       if (!document.hasFocus()) return;
+      if (event?.command === 'hardware-lease-status') { setHardwareLease(event.state || 'checking'); return; }
       if (event?.command === 'blocked-host-action') { setStatus('本页已暂停原场景按键动作；离开后自动恢复。'); return; }
       if (event?.source === 'easyinput-wheel' && ['previous', 'next'].includes(event.command)) { wheelRouter.current?.accept(event.command === 'next' ? 1 : -1, 'native'); return; }
       if (event?.command) actions.current(event.command);
@@ -524,7 +525,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   }, []);
   const keyItems = [['strength','强度'],['view','查看/显影'],['save','保存'],['close','收起'],['compare','对比'],['inspiration','灵感'],['reset','重置'],['mode','模式']];
   return <section className="style-studio" aria-label="风格映像">
-    <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className={`ss-tabs ${modeSelecting ? 'is-choosing' : ''}`} role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={(modeSelecting ? modeChoice : mode) === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) { setMode(id); setModeChoice(id); setModeSelecting(false); setAdjusting(false); if (id === 'reveal') { setRevealConfirmed(false); setRevealControl('effect'); } } }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? 'Image 2 已配置' : provider.available ? 'Image 2 未配置' : '浏览器预览'}</span></div></header>
+    <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className={`ss-tabs ${modeSelecting ? 'is-choosing' : ''}`} role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={(modeSelecting ? modeChoice : mode) === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) { setMode(id); setModeChoice(id); setModeSelecting(false); setAdjusting(false); if (id === 'reveal') { setRevealConfirmed(false); setRevealControl('effect'); } } }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{!focused ? '回到本页重新接管' : hardwareLease === 'active' ? '旋钮按压＝确认/生图 · 离开或失焦自动恢复' : hardwareLease === 'unsupported' ? '旋钮按压需新版固件 · 离开或失焦自动恢复' : '正在连接旋钮按压 · 离开或失焦自动恢复'}</small></span><span className="ss-badge">{provider.configured ? 'Image 2 已配置' : provider.available ? 'Image 2 未配置' : '浏览器预览'}</span></div></header>
     {mode === 'generate' ? <div className={`ss-stage ${phase}`}>
       <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><div className="ss-heading-actions"><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><button className={`ss-trash ${trashOver === 'material' ? 'is-over' : ''}`} aria-label="删除素材" onClick={() => setStatus('把不需要的素材拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'material')} onDragOver={e => dragOverTrash(e, 'material')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'material')}><IconTrash size={17} /><span>删除素材</span></button></div><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />

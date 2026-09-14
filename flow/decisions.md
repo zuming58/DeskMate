@@ -1,5 +1,9 @@
 # Decisions
 
+## D150 — Style Studio borrows encoder press through an expiring firmware lease
+
+2026-09-14: Do not overwrite the user's persisted encoder action merely to support one page. Add frozen Feature report `0x1C` on the existing FF00:0009 runtime-control collection. The focused Style Studio page renews a RAM-only 2.5-second lease; while it is valid, encoder GPIO18 press/release is owned by a reserved canonical Host Action and cannot toggle the scroll axis. Windows consumes that reserved action only as Studio confirm/generate; all other Host Actions remain blocked by the page lease. Release on blur/route/reload/quit, clear on USB epoch change, and let TTL recover from a crashed host. Capability `style_studio_input_lease_v1` must be explicit before Windows writes the report. No NVS/config change, replay, arbitrary action ID or renderer HID access is allowed. Build evidence does not replace a separately authorized firmware write and physical acceptance.
+
 ## D149 — Page-scoped mappings follow emitted semantics; cleanup is a direct spatial gesture
 
 2026-09-14: Style Studio must map the event the current Maker configuration actually emits, not the physical label we wish it represented. Default S1 `VoiceInput` becomes strength, S2 `Return` becomes view then Reveal even with focused buttons, S3 `VoiceEdit` remains save, and only a source-identified host-visible F22 can confirm. A physical GPIO18 press configured as internal `scroll_axis_toggle` is not observable by Windows and cannot be claimed as fixed in React. Materials and Works each get a type-specific trash target; a valid drop is already an explicit delete instruction, while the main-process store still protects linked sources and built-in samples. No device write is implicit in page entry.

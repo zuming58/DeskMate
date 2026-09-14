@@ -10,6 +10,7 @@ const { StyleStudioStore, SOURCE_LIMIT, sniffImage } = require('../electron/styl
 const { buildImageRequest, endpointForImageWorkspace, generateQwenImage, validateResultUrl } = require('../electron/qwen-image-adapter.cjs');
 const { StyleStudioService } = require('../electron/style-studio-service.cjs');
 const { StyleStudioInputLease } = require('../electron/style-studio-input-lease.cjs');
+const { STYLE_STUDIO_ENCODER_ACTION_ID, encodeStyleStudioLeaseReport, decodeStyleStudioLeaseReport } = require('../electron/style-studio-lease-hid.cjs');
 const { STYLE_STUDIO_PRESETS, buildStyleStudioPrompt } = require('../electron/style-studio-presets.cjs');
 
 function png(width = 32, height = 24, tail = '') {
@@ -131,7 +132,43 @@ test('T42 input lease maps current Maker semantics to Studio only while leased',
   assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'F22' }), true);
   assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceEdit' }), true);
   assert.equal(lease.routeTrigger({ source: 'keyboard', key: 'VoiceInput' }), false);
-  assert.deepEqual(events.map(item => item.command), ['next','strength','confirm','save']);
+  assert.deepEqual(events.map(item => item.command).filter(command => command !== 'hardware-lease-status'), ['next','strength','confirm','save']);
   foreground = false; assert.equal(lease.routeWheel({ action: 'negative' }), false);
   foreground = true; lease.release('studio-12345678'); assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceInput' }), false);
+});
+
+test('T43 Studio lease HID encoder matches the frozen golden vectors', () => {
+  const acquire = encodeStyleStudioLeaseReport({ operation: 'acquire', token: 0x12345678, ttlMs: 2500 });
+  const release = encodeStyleStudioLeaseReport({ operation: 'release', token: 0x12345678 });
+  assert.equal(acquire.toString('hex'), '1c444d534c0101010078563412c409000013b5000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000');
+  assert.equal(release.toString('hex'), '1c444d534c0102010078563412000000002d2a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000');
+  assert.deepEqual(decodeStyleStudioLeaseReport(acquire), { operation: 'acquire', token: 0x12345678, ttlMs: 2500 });
+  assert.throws(() => decodeStyleStudioLeaseReport(Buffer.from(acquire).fill(1, 63)), /style-studio-lease-report-invalid/);
+});
+
+test('T43 Studio owns encoder press only while its volatile hardware lease is active', async () => {
+  let foreground = true; const events = []; const writes = []; const intervals = [];
+  const lease = new StyleStudioInputLease({
+    isForeground: () => foreground,
+    publish: value => events.push(value),
+    sendHardwareLease: async value => { writes.push(value); return { ok: true }; },
+    makeHardwareToken: () => 0x12345678,
+    setIntervalImpl: callback => { intervals.push(callback); return callback; },
+    clearIntervalImpl: callback => { const index = intervals.indexOf(callback); if (index >= 0) intervals.splice(index, 1); },
+  });
+  lease.acquire('studio-hardware-1');
+  assert.equal(lease.routeHostAction({ hostActionId: STYLE_STUDIO_ENCODER_ACTION_ID }), true);
+  assert.equal(events.some(value => value.command === 'confirm'), false, 'press stays fail-closed until hardware acquisition is acknowledged');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(lease.routeHostAction({ hostActionId: STYLE_STUDIO_ENCODER_ACTION_ID }), true);
+  assert.equal(lease.routeHostAction({ hostActionId: '00000000-0000-0000-0000-000000000001' }), true);
+  intervals[0](); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(writes.slice(0, 2).map(value => value.operation), ['acquire', 'renew']);
+  assert.deepEqual(events.map(value => value.command).filter(command => command !== 'hardware-lease-status'), ['confirm', 'blocked-host-action']);
+  foreground = false;
+  assert.equal(lease.routeHostAction({ hostActionId: STYLE_STUDIO_ENCODER_ACTION_ID }), true, 'reserved action is discarded outside the focused lease');
+  foreground = true;
+  lease.release('studio-hardware-1'); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes.at(-1).operation, 'release');
+  assert.equal(lease.routeHostAction({ hostActionId: '00000000-0000-0000-0000-000000000001' }), false);
 });

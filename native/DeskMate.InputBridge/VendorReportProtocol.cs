@@ -75,6 +75,12 @@ internal static class VendorReportProtocol
         var invalidAgentPadding = agentState.ToArray();
         invalidAgentPadding[17] = 1;
         var invalidAgentTtl = MakeAgentStateReport(0, 1, 1, 0);
+        var styleStudioAcquire = PrependReportId(0x1c, "444d534c0101010078563412c409000013b5000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+        var styleStudioRelease = PrependReportId(0x1c, "444d534c0102010078563412000000002d2a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+        var invalidStyleStudioCrc = styleStudioAcquire.ToArray();
+        invalidStyleStudioCrc[17] ^= 1;
+        var invalidStyleStudioPadding = styleStudioAcquire.ToArray();
+        invalidStyleStudioPadding[63] = 1;
         var motionRun = PrependReportId(0x18, "444d5251010101010403020102020000d366000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
         var motionAccepted = PrependReportId(0x19, "444d52530101010004030201000000002200000000000000000000000000000000000000000000000100000000000000443322118877665501010202e3fd00");
         var motionTerminal = PrependReportId(0x19, "444d525301020100040302011000000022020014443322110403020100000000000301020200011101000000010000004433221188776655010102029c7d00");
@@ -149,6 +155,10 @@ internal static class VendorReportProtocol
                IsValidAgentStateReport(agentState) &&
                !IsValidAgentStateReport(invalidAgentPadding) &&
                !IsValidAgentStateReport(invalidAgentTtl) &&
+               IsValidStyleStudioLeaseReport(styleStudioAcquire) &&
+               IsValidStyleStudioLeaseReport(styleStudioRelease) &&
+               !IsValidStyleStudioLeaseReport(invalidStyleStudioCrc) &&
+               !IsValidStyleStudioLeaseReport(invalidStyleStudioPadding) &&
                IsValidMotionPresetRequest(motionRun) &&
                IsValidMotionPresetResponse(motionAccepted) &&
                IsValidMotionPresetResponse(motionTerminal) &&
@@ -183,6 +193,18 @@ internal static class VendorReportProtocol
         var ttlMs = BitConverter.ToUInt32(report.Slice(9, 4));
         if (transitionId == 0) return false;
         return report[2] == 0 ? ttlMs == 0 : ttlMs is >= 1 and <= 600000;
+    }
+
+    public static bool IsValidStyleStudioLeaseReport(ReadOnlySpan<byte> report)
+    {
+        if (report.Length != 64 || report[0] != 0x1c ||
+            !report.Slice(1, 4).SequenceEqual("DMSL"u8) || report[5] != 1 ||
+            report[6] is < 1 or > 2 || report[7] != 1 || report[8] != 0 ||
+            BitConverter.ToUInt32(report.Slice(9, 4)) == 0 ||
+            report.Slice(19).ContainsAnyExcept((byte)0) ||
+            BitConverter.ToUInt16(report.Slice(17, 2)) != Crc16Ccitt(report.Slice(1, 16))) return false;
+        var ttlMs = BitConverter.ToUInt32(report.Slice(13, 4));
+        return report[6] == 1 ? ttlMs is >= 1000 and <= 5000 : ttlMs == 0;
     }
 
     public static bool IsValidManualCalibrationRequest(ReadOnlySpan<byte> report)

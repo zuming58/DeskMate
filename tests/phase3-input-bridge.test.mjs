@@ -35,6 +35,14 @@ test("agent-state write acknowledgements expose metadata only", () => {
   assert.equal(parseBridgeLine(JSON.stringify({ ...event, requestId: "short" })), null);
 });
 
+test("T43 style-studio lease acknowledgements are bounded and privacy-safe", () => {
+  const base = { version: 1, type: "style-studio-lease-write", source: "easyinput-hid", requestId: "studio-lease-12345678", ok: false, reason: "hid-set-feature-5", report: "private", time: "2026-08-21T10:00:00.000Z", sequence: 5 };
+  assert.deepEqual(parseBridgeLine(JSON.stringify(base)), {
+    version: 1, type: "style-studio-lease-write", source: "easyinput-hid", requestId: "studio-lease-12345678", ok: false, reason: "style-studio-lease-hid-write-failed", time: base.time, sequence: 5,
+  });
+  assert.equal(new InputTriggerFilter().accept(parseBridgeLine(JSON.stringify(base))).kind, "style-studio-lease-write");
+});
+
 test("agent-state bridge is latest-wins and never replays after disconnect", async () => {
   const writes = [];
   const child = new EventEmitter();
@@ -196,8 +204,24 @@ test("config snapshots remain control events through the trigger filter", () => 
 
 test("T06 capabilities are explicit and fail closed when absent", () => {
   const base = { version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: "read-12345678", configReadV1: true, configWriteV1: true, hostActionV1: true, fixedTextV1: true, time: "2026-08-21T10:00:00.000Z", sequence: 4 };
-  assert.deepEqual(parseBridgeLine(JSON.stringify(base)), base);
-  assert.deepEqual(parseBridgeLine(JSON.stringify(({ ...base, fixedTextV1: undefined }))), { ...base, fixedTextV1: false });
+  assert.deepEqual(parseBridgeLine(JSON.stringify(base)), { ...base, styleStudioInputLeaseV1: false });
+  assert.deepEqual(parseBridgeLine(JSON.stringify(({ ...base, fixedTextV1: undefined }))), { ...base, fixedTextV1: false, styleStudioInputLeaseV1: false });
+});
+
+test("T43 InputBridge writes a single volatile Studio lease report after capability discovery", async () => {
+  const writes = [];
+  const child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => {};
+  child.stdin = { writable: true, write: (line, callback) => { writes.push(JSON.parse(line)); callback?.(); } };
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl: () => child });
+  manager.start();
+  manager.handleLine(JSON.stringify({ version: 1, type: "status", source: "easyinput-hid", key: "Device", action: "connected", boardConnected: true, configCollectionWritable: true, calibrationCollectionWritable: true, motionCollectionWritable: true, time: "2026-08-21T10:00:00.000Z", sequence: 1 }));
+  manager.status.configCapabilities = { style_studio_input_lease_v1: true };
+  const pending = manager.sendStyleStudioLease({ operation: "acquire", token: 0x12345678, ttlMs: 2500 });
+  assert.equal(writes[0].type, "style-studio-lease");
+  assert.equal(Buffer.from(writes[0].report, "base64").toString("hex"), "1c444d534c0101010078563412c409000013b5000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+  manager.handleLine(JSON.stringify({ version: 1, type: "style-studio-lease-write", source: "easyinput-hid", requestId: writes[0].requestId, ok: true, reason: "", time: "2026-08-21T10:00:00.100Z", sequence: 2 }));
+  assert.deepEqual(await pending, { ok: true });
+  manager.stop();
 });
 
 test("T09 Link diagnostics are privacy-safe, bounded and fail closed", () => {
@@ -211,7 +235,7 @@ test("T09 Link diagnostics are privacy-safe, bounded and fail closed", () => {
     agentDroppedDisconnected: 6, agentForwarded: 0, agentQueueDrops: 0,
     time: "2026-08-30T14:00:00.000Z", sequence: 8,
   };
-  assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, devicePath: "private", payload: "private" })), base);
+  assert.deepEqual(parseBridgeLine(JSON.stringify({ ...base, devicePath: "private", payload: "private" })), { ...base, styleStudioInputLeaseV1: false });
   assert.equal(parseBridgeLine(JSON.stringify({ ...base, codexLedStatusV1: "yes" })), null);
   assert.equal(parseBridgeLine(JSON.stringify({ ...base, linkState: "private" })), null);
   assert.equal(parseBridgeLine(JSON.stringify({ ...base, linkRxFrames: -1 })), null);

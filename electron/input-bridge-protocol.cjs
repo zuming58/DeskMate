@@ -26,6 +26,15 @@ function sanitizeChoreographyWriteReason(value) {
   return "choreography-write-failed";
 }
 
+function sanitizeStyleStudioLeaseWriteReason(value) {
+  const reason = String(value || "");
+  if (/^hid-set-feature-\d+$/.test(reason)) return "style-studio-lease-hid-write-failed";
+  if (reason === "compatible-vendor-hid-not-found") return "style-studio-lease-interface-unavailable";
+  if (reason === "invalid-style-studio-lease-report") return "style-studio-lease-report-invalid";
+  if (reason === "input-bridge-write-failed") return reason;
+  return "style-studio-lease-write-failed";
+}
+
 function isUInt32(value) {
   return Number.isSafeInteger(value) && value >= 0 && value <= 0xffffffff;
 }
@@ -50,6 +59,10 @@ function parseBridgeLine(line) {
   if (value.type === "choreography-write") {
     if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     return Object.freeze({ version: 1, type: "choreography-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : sanitizeChoreographyWriteReason(value.reason), time: value.time, sequence: value.sequence });
+  }
+  if (value.type === "style-studio-lease-write") {
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.ok !== "boolean" || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    return Object.freeze({ version: 1, type: "style-studio-lease-write", source: "easyinput-hid", requestId: value.requestId, ok: value.ok, reason: value.ok ? "" : sanitizeStyleStudioLeaseWriteReason(value.reason), time: value.time, sequence: value.sequence });
   }
   if (value.type === "motion-preset-report") {
     if (value.source !== "easyinput-hid" || typeof value.reportBase64 !== "string" || value.reportBase64.length !== 88 || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
@@ -116,7 +129,7 @@ function parseBridgeLine(line) {
     return Object.freeze({ version: 1, type: "config-progress", source: "easyinput-hid", requestId: value.requestId, chunk: value.chunk, total: value.total, time: value.time, sequence: value.sequence });
   }
   if (value.type === "config-capabilities") {
-    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.configReadV1 !== "boolean" || typeof value.configWriteV1 !== "boolean" || (value.hostActionV1 !== undefined && typeof value.hostActionV1 !== "boolean") || (value.fixedTextV1 !== undefined && typeof value.fixedTextV1 !== "boolean") || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
+    if (value.source !== "easyinput-hid" || !REQUEST_PATTERN.test(value.requestId) || typeof value.configReadV1 !== "boolean" || typeof value.configWriteV1 !== "boolean" || (value.hostActionV1 !== undefined && typeof value.hostActionV1 !== "boolean") || (value.fixedTextV1 !== undefined && typeof value.fixedTextV1 !== "boolean") || (value.styleStudioInputLeaseV1 !== undefined && typeof value.styleStudioInputLeaseV1 !== "boolean") || !Number.isSafeInteger(value.sequence) || value.sequence < 1 || Number.isNaN(Date.parse(value.time))) return null;
     const diagnosticsFields = ["deskMateLinkV1", "agentStateBridgeV1", "codexLedStatusV1", "linkState", "linkRxFrames", "linkTxFrames", "linkRequestTimeouts", "linkRetries", "linkPeerRestarts", "agentAccepted", "agentMalformed", "agentDroppedDisconnected", "agentForwarded", "agentQueueDrops"];
     const hasDiagnostics = diagnosticsFields.some((field) => value[field] !== undefined);
     if (hasDiagnostics &&
@@ -128,6 +141,7 @@ function parseBridgeLine(line) {
       version: 1, type: "config-capabilities", source: "easyinput-hid", requestId: value.requestId,
       configReadV1: value.configReadV1, configWriteV1: value.configWriteV1,
       hostActionV1: value.hostActionV1 === true, fixedTextV1: value.fixedTextV1 === true,
+      styleStudioInputLeaseV1: value.styleStudioInputLeaseV1 === true,
       ...(hasDiagnostics ? Object.fromEntries(diagnosticsFields.map((field) => [field, value[field]])) : {}),
       time: value.time, sequence: value.sequence,
     });
@@ -187,7 +201,7 @@ class InputTriggerFilter {
   accept(event) {
     if (!event) return { kind: "ignored" };
     if (event.type === "board-wheel") return { kind: "board-wheel", event };
-    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "choreography-write", "choreography-report", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
+    if (["host-action", "fixed-text", "fixed-text-result", "desktop-output-result", "desktop-window-result", "config-write", "agent-state-write", "manual-calibration-write", "manual-calibration-report", "motion-preset-write", "motion-preset-report", "choreography-write", "choreography-report", "style-studio-lease-write", "config-ack", "config-snapshot", "config-progress", "config-capabilities"].includes(event.type)) return { kind: event.type, event };
     if (event.type === "status") {
       if (!event.boardConnected) {
         this.reset("easyinput-hid", "F22");

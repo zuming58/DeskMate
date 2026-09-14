@@ -12,6 +12,7 @@
 #include "motion_preset_bridge_core.h"
 #include "peripheral_power.h"
 #include "speaker_output_service.h"
+#include "style_studio_lease_core.h"
 #include "config_store.h"
 #include "deskmate_link_uart.h"
 
@@ -78,6 +79,10 @@ std::array<uint8_t, kChoreographyCommandQueueCapacity *
                         sizeof(ConfigFeatureCommand)>
     choreography_command_queue_storage{};
 QueueHandle_t choreography_command_queue = nullptr;
+StaticQueue_t style_studio_lease_command_queue_control{};
+std::array<uint8_t, sizeof(ConfigFeatureCommand)>
+    style_studio_lease_command_queue_storage{};
+QueueHandle_t style_studio_lease_command_queue = nullptr;
 QueueHandle_t config_save_queue = nullptr;
 QueueHandle_t config_result_queue = nullptr;
 StaticQueue_t config_save_queue_control{}, config_result_queue_control{};
@@ -116,6 +121,7 @@ CodexLedStatusController codex_led_status;
 ManualCalibrationBridge manual_calibration_bridge;
 MotionPresetBridge motion_preset_bridge;
 ChoreographyBridge choreography_bridge;
+StyleStudioLeaseCore style_studio_lease;
 AudioCaptureService audio_capture_service;
 SpeakerOutputService speaker_output_service;
 bool config_save_in_flight = false;
@@ -336,6 +342,20 @@ void input_owner_task(void*) {
 
         const uint32_t now_ms = monotonic_milliseconds(
             static_cast<uint64_t>(esp_timer_get_time()));
+        const uint32_t current_usb_epoch =
+            runtime.diagnostics().usb_mount_epoch;
+        style_studio_lease.clear_for_usb_epoch(current_usb_epoch);
+        while (xQueueReceive(style_studio_lease_command_queue,
+                             &input_owner_config_command, 0) == pdTRUE) {
+            if (input_owner_config_command.epoch == current_usb_epoch) {
+                (void)style_studio_lease.accept(
+                    input_owner_config_command.payload.data(),
+                    input_owner_config_command.length,
+                    input_owner_config_command.epoch, now_ms);
+            }
+        }
+        runtime.set_style_studio_lease(
+            style_studio_lease.active(current_usb_epoch, now_ms));
         const bool raw_usb_present = usb_physical_presence_present();
         runtime.observe_raw_physical_presence(raw_usb_present);
         if (usb_physical_presence.update(raw_usb_present, now_ms)) {
@@ -822,6 +842,13 @@ extern "C" void app_main(void) {
         &choreography_command_queue_control);
     ESP_ERROR_CHECK(choreography_command_queue == nullptr ? ESP_ERR_NO_MEM
                                                           : ESP_OK);
+    style_studio_lease_command_queue = xQueueCreateStatic(
+        1, sizeof(ConfigFeatureCommand),
+        style_studio_lease_command_queue_storage.data(),
+        &style_studio_lease_command_queue_control);
+    ESP_ERROR_CHECK(style_studio_lease_command_queue == nullptr
+                        ? ESP_ERR_NO_MEM
+                        : ESP_OK);
     config_save_queue = xQueueCreateStatic(2, sizeof(ConfigSaveCommand), config_save_queue_storage.data(), &config_save_queue_control);
     config_result_queue = xQueueCreateStatic(2, sizeof(ConfigSaveResult), config_result_queue_storage.data(), &config_result_queue_control);
     ESP_ERROR_CHECK(config_save_queue == nullptr || config_result_queue == nullptr ? ESP_ERR_NO_MEM : ESP_OK);
@@ -948,7 +975,13 @@ extern "C" void tud_hid_set_report_cb(
     ManualCalibrationFeatureReportView manual_feature{};
     MotionPresetFeatureReportView motion_feature{};
     ChoreographyFeatureReportView choreography_feature{};
-    if (normalize_choreography_feature_report(
+    StyleStudioLeaseFeatureReportView style_studio_feature{};
+    if (normalize_style_studio_lease_feature_report(
+            report_id, buffer, length, style_studio_feature)) {
+        feature.report_id = kStyleStudioLeaseReportId;
+        feature.payload = style_studio_feature.payload;
+        feature.length = style_studio_feature.length;
+    } else if (normalize_choreography_feature_report(
             report_id, buffer, length, choreography_feature)) {
         feature.report_id = kChoreographyRequestReportId;
         feature.payload = choreography_feature.payload;
@@ -987,8 +1020,12 @@ extern "C" void tud_hid_set_report_cb(
         destination = motion_preset_command_queue;
     } else if (feature.report_id == kChoreographyRequestReportId) {
         destination = choreography_command_queue;
+    } else if (feature.report_id == kStyleStudioLeaseReportId) {
+        destination = style_studio_lease_command_queue;
     }
-    const BaseType_t queued = feature.report_id == kAgentStateReportId
+    const BaseType_t queued =
+        feature.report_id == kAgentStateReportId ||
+                feature.report_id == kStyleStudioLeaseReportId
         ? (destination == nullptr ? pdFALSE
                                   : xQueueOverwrite(destination, &command))
         : (destination == nullptr ? pdFALSE

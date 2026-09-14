@@ -9,6 +9,7 @@
 #include "input_core.h"
 #include "config_core.h"
 #include "host_action_core.h"
+#include "style_studio_lease_core.h"
 
 namespace deskmate::easyinput {
 
@@ -164,6 +165,9 @@ public:
     struct Chord { HidUsage usage; uint8_t modifiers; };
     RoutedAction apply(const InputEvent& event);
     void set_configuration(const ConfigProjection& projection);
+    void set_style_studio_lease(bool active) {
+        style_studio_lease_active_ = active;
+    }
     RoutedAction apply_key_source(InputSourceId source, bool pressed, Chord chord);
     RoutedAction apply_tap_source(InputSourceId source, bool pressed, Chord chord);
     RoutedAction apply_command_source(InputSourceId source, bool pressed,
@@ -189,6 +193,8 @@ private:
     bool reverse_horizontal_{false};
     uint8_t encoder_speed_{3};
     bool configured_{false};
+    bool style_studio_lease_active_{false};
+    bool style_studio_press_owned_{false};
     ScrollAxis axis_{ScrollAxis::Vertical};
     KeyboardSnapshot compose() const;
     static bool compose_tap(const KeyboardSnapshot& held, Chord chord,
@@ -267,6 +273,9 @@ struct ConfigTransferState {
 class UsbInputRuntime {
 public:
     void set_configuration(const ConfigProjection& projection);
+    void set_style_studio_lease(bool active) {
+        router_.set_style_studio_lease(active);
+    }
     void on_mount();
     void on_mount(uint32_t epoch);
     void on_unmount();

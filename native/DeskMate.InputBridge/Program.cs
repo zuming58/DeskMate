@@ -114,6 +114,11 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, ok: ok, reason: reason));
 
+    public void StyleStudioLeaseWrite(string requestId, bool ok, string reason = "") => Write(new BridgeEvent(
+        1, "style-studio-lease-write", "easyinput-hid", "StyleStudioLease", ok ? "written" : "failed",
+        DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
+        requestId: requestId, ok: ok, reason: reason));
+
     public void ChoreographyReport(ReadOnlySpan<byte> report) => Write(new BridgeEvent(
         1, "choreography-report", "easyinput-hid", "Choreography", "report",
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
@@ -135,7 +140,7 @@ internal sealed class EventWriter
         requestId: requestId, chunk: chunk, total: total));
 
     public void ConfigCapabilities(
-        string requestId, bool read, bool write, bool hostAction, bool fixedText,
+        string requestId, bool read, bool write, bool hostAction, bool fixedText, bool styleStudioInputLease,
         bool deskMateLink, bool agentStateBridge, bool codexLedStatus, string linkState,
         uint linkRxFrames, uint linkTxFrames, uint linkRequestTimeouts,
         uint linkRetries, uint linkPeerRestarts,
@@ -145,6 +150,7 @@ internal sealed class EventWriter
         DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence), null,
         requestId: requestId, configReadV1: read, configWriteV1: write,
         hostActionV1: hostAction, fixedTextV1: fixedText,
+        styleStudioInputLeaseV1: styleStudioInputLease,
         deskMateLinkV1: deskMateLink, agentStateBridgeV1: agentStateBridge,
         codexLedStatusV1: codexLedStatus,
         linkState: linkState, linkRxFrames: linkRxFrames,
@@ -192,6 +198,7 @@ internal sealed record BridgeEvent(
     bool? configWriteV1 = null,
     bool? hostActionV1 = null,
     bool? fixedTextV1 = null,
+    bool? styleStudioInputLeaseV1 = null,
     bool? deskMateLinkV1 = null,
     bool? agentStateBridgeV1 = null,
     bool? codexLedStatusV1 = null,
@@ -241,11 +248,20 @@ internal sealed class ConfigCommandListener : IDisposable
             var root = document.RootElement;
             if (!root.TryGetProperty("version", out var version) || version.GetInt32() != 1 ||
                 !root.TryGetProperty("type", out var type) ||
-                (type.GetString() != "workbench-input" && type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request" && type.GetString() != "choreography-request") ||
+                (type.GetString() != "workbench-input" && type.GetString() != "sync-config" && type.GetString() != "read-config" && type.GetString() != "inject-fixed-text" && type.GetString() != "paste-active-window" && type.GetString() != "capture-active-window" && type.GetString() != "set-agent-state" && type.GetString() != "manual-calibration-request" && type.GetString() != "motion-preset-request" && type.GetString() != "choreography-request" && type.GetString() != "style-studio-lease") ||
                 !root.TryGetProperty("requestId", out var request) ||
                 !IsRequestId(request.GetString())) throw new InvalidOperationException("invalid-command");
             requestId = request.GetString()!;
             commandType = type.GetString()!;
+            if (commandType == "style-studio-lease")
+            {
+                if (!root.TryGetProperty("report", out var reportValue)) throw new InvalidOperationException("invalid-style-studio-lease-report");
+                var report = Convert.FromBase64String(reportValue.GetString() ?? "");
+                if (!VendorReportProtocol.IsValidStyleStudioLeaseReport(report)) throw new InvalidOperationException("invalid-style-studio-lease-report");
+                var leaseResult = HidFeatureDevice.WriteStyleStudioLeaseReport(report);
+                _writer.StyleStudioLeaseWrite(requestId, leaseResult.ok, leaseResult.reason);
+                return Task.CompletedTask;
+            }
             if (commandType == "workbench-input")
             {
                 var operation = root.GetProperty("operation").GetString() ?? "";
@@ -356,6 +372,7 @@ internal sealed class ConfigCommandListener : IDisposable
             else if (commandType == "manual-calibration-request") _writer.ManualCalibrationWrite(requestId, false, reason);
             else if (commandType == "motion-preset-request") _writer.MotionPresetWrite(requestId, false, reason);
             else if (commandType == "choreography-request") _writer.ChoreographyWrite(requestId, false, reason);
+            else if (commandType == "style-studio-lease") _writer.StyleStudioLeaseWrite(requestId, false, reason);
             else _writer.ConfigWrite(requestId, false, reason);
         }
         return Task.CompletedTask;
@@ -404,7 +421,7 @@ internal static class HidCollectionContracts
 {
     // Frozen EasyInput descriptor: reports 0x10..0x15 share FF00:0002;
     // manual calibration 0x16/0x17 lives on FF00:0007; runtime motion
-    // 0x18..0x1b live on the FF00:0009 runtime motion collection.
+    // 0x18..0x1c live on the FF00:0009 runtime-control collection.
     public static readonly HidCollectionContract Config = new(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64);
     public static readonly HidCollectionContract ManualCalibration = new(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64);
     public static readonly HidCollectionContract MotionPresets = new(0x303A, 0x1006, 0xFF00, 0x0009, 64, 64);
@@ -415,6 +432,7 @@ internal static class HidCollectionContracts
         0x16 => ManualCalibration,
         0x18 => MotionPresets,
         0x1a => MotionPresets,
+        0x1c => MotionPresets,
         _ => throw new ArgumentOutOfRangeException(nameof(reportId), "unsupported-feature-report"),
     };
 
@@ -423,6 +441,7 @@ internal static class HidCollectionContracts
         ForFeatureReport(0x16) == ManualCalibration &&
         ForFeatureReport(0x18) == MotionPresets &&
         ForFeatureReport(0x1a) == MotionPresets &&
+        ForFeatureReport(0x1c) == MotionPresets &&
         Config.Matches(0x303A, 0x1006, 0xFF00, 0x0002, 64, 64) &&
         !Config.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
         ManualCalibration.Matches(0x303A, 0x1006, 0xFF00, 0x0007, 64, 64) &&
@@ -499,6 +518,16 @@ internal static class HidFeatureDevice
     public static (bool ok, string reason) WriteChoreographyRequest(byte[] report)
     {
         if (!VendorReportProtocol.IsValidChoreographyRequest(report)) return (false, "invalid-choreography-report");
+        using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
+        if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
+        return HidD_SetFeature(handle, report, report.Length)
+            ? (true, "")
+            : (false, $"hid-set-feature-{Marshal.GetLastWin32Error()}");
+    }
+
+    public static (bool ok, string reason) WriteStyleStudioLeaseReport(byte[] report)
+    {
+        if (!VendorReportProtocol.IsValidStyleStudioLeaseReport(report)) return (false, "invalid-style-studio-lease-report");
         using var handle = OpenInterface(HidCollectionContracts.ForFeatureReport(report[0]));
         if (handle is null || handle.IsInvalid) return (false, "compatible-vendor-hid-not-found");
         return HidD_SetFeature(handle, report, report.Length)
@@ -1057,6 +1086,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
                         capabilities.TryGetProperty("config_write_v1",out var write)&&write.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("host_action_v1",out var hostAction)&&hostAction.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("fixed_text_v1",out var fixedText)&&fixedText.ValueKind==JsonValueKind.True,
+                        capabilities.TryGetProperty("style_studio_input_lease_v1",out var styleStudioInputLease)&&styleStudioInputLease.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("deskmate_link_v1",out var deskMateLink)&&deskMateLink.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("agent_state_bridge_v1",out var agentStateBridge)&&agentStateBridge.ValueKind==JsonValueKind.True,
                         capabilities.TryGetProperty("codex_led_status_v1",out var codexLedStatus)&&codexLedStatus.ValueKind==JsonValueKind.True,
