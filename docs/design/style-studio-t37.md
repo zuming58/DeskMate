@@ -39,10 +39,10 @@ Do not claim real image-to-image, teacher-complete functionality or hardware acc
 - `public/assets/style-studio/manifest.json` records all generated raster assets; original course/user photos are not copied into the repository.
 - `tests/t37-style-studio.test.mjs` and `scripts/probe-style-studio.cjs`.
 
-Work only in `F:/Codex/deskmate-t37-style-studio`, branch `codex/t37-style-studio`. T28–T36 carried dirty files are integration context, not T37-owned changes. Do not stage whole shared files or merge into T36 while its acceptance is running. Hidden QA uses a fresh temp profile, no product main/preload, no microphone, shortcuts, retained data, network or hardware.
+The UI was developed in `F:/Codex/deskmate-t37-style-studio`, branch `codex/t37-style-studio`, then integrated after the user paused T36 acceptance. The formal integration branch is `codex/t37-integrated-style-studio`: commit `1625e45` is the recoverable T36 checkpoint, `367621f` is the T37 UI merge, and `fe82db3` promotes build `t37-style-studio-integrated`. Hidden QA still uses a fresh temp profile with no microphone, shortcuts, retained data, network or hardware; the final executable was separately launched with the retained profile only after package verification.
 
 ## Verification
 
 `npm ci --include=dev`; `npm test`; native bridge publish; directory packaging with checksum-verified stock Electron 36.9.5 in ignored `build-qa-runtime`; `scripts/verify-prompt-package.cjs release-t37`; hidden renderer probe. The latter captures at CSS 1440×1024, 1024×768 and 800×768; capture density is normalized to CSS pixels. Only known existing Google Fonts CSP refusal is tracked as a baseline warning, not suppressed as a new runtime error. Full review details and evidence live in root `design-qa.md` and `flow/progress.md`.
 
-The npm-installed Electron directory was incomplete; cached stock ZIP SHA256 was checked against the package checksum table before extracting an isolated runtime. No running product binary/profile was replaced.
+The npm-installed Electron directory was incomplete; cached stock Electron 36.9.5 was extracted only for hidden renderer QA. Formal package `release-t37/win-unpacked` passed exact resource verification and was launched with `--show-style-studio` after the old T36 process was stopped at the user's request. The same retained DeskMate profile was reused; no settings or user data were reset.

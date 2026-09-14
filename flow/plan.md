@@ -53,9 +53,9 @@ User-authorized repair after real T28 testing: preserve proven recording-start t
 ## Current slice: T28 preemptive companion preparation
 
 User-approved Windows-only optimization: isolated ordinary-chat drafts after 500 ms text stability, ASR-final/context equivalence before speech and memory commit, bounded cancellation, continuous three-stage microphone uplink during thinking, transient pre-speech model recovery and per-turn diagnostic history. Existing ASR silence preference, Doubao voice, local-first memory and accepted echo/barge-in gates stay intact. No firmware change. [Frozen contract and deferred semantic endpointing](../docs/contracts/t28-preemptive-companion-v1.md); exact build/test and remaining live acceptance are recorded in the latest progress entry.
-## T37 independent UI slice — Style Studio
+## T37 integrated UI slice — Style Studio
 
-Approved: insert 风格映像 directly below AI 陪伴, retain existing shell and other pages. Isolated branch/worktree only. Deliver the selected white printer layout and local sample interactions first, then separately integrate real AI, managed media and page-scoped hardware ownership. See `docs/design/style-studio-t37.md`. No live T36 replacement or real hardware acceptance in this slice.
+Integrated and adopted on 2026-09-14: 风格映像 sits directly below AI 陪伴 while the existing shell and other pages remain intact. The selected white printer layout and local sample interactions are in the formal T37 desktop package. Real AI, managed media and page-scoped hardware ownership remain separate follow-up slices. See `docs/design/style-studio-t37.md`; no hardware acceptance is claimed.
 
 
 ## Current slice: T27 local-first companion latency

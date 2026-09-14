@@ -27,7 +27,7 @@ final result: passed
 Scope: selected visual implemented as an integrated **UI-only local sample slice**, not full teacher functionality, real AI or hardware capture. See `docs/design/style-studio-t37.md` for explicit gaps.
 
 - Source visual truth: supplied `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-5246aa38-a287-4225-8426-72989bf0106b.png` (1487×1058), with later pure-white/existing-shell/strength-above-dial corrections. Existing D/M branding, navigation and header override the mock's replacement shell.
-- Final source render: `%TEMP%/deskmate-t37-qa-ibVpRC/generate-1440.png`; final packaged render: `%TEMP%/deskmate-t37-qa-jJ84Qo/generate-1440.png`, also retained in `docs/reviews/assets/t37/generate-1440.png`. Reveal screenshot retained alongside it.
+- Final source render: `%TEMP%/deskmate-t37-qa-ibVpRC/generate-1440.png`; final integrated packaged render: `%TEMP%/deskmate-t37-qa-wtbs65/generate-1440.png`, byte-identical to `docs/reviews/assets/t37/generate-1440.png`. Reveal screenshot is retained alongside it. Formal retained-profile launch was captured at `%TEMP%/deskmate-t37-live.png`.
 - Viewports: 1440×1024, 1024×768, 800×768 CSS. Windows 1.5× native capture was normalized to CSS-width PNG, yielding 1440×1024 etc. Source artwork proportional to the target; compare right-page composition, allowing preserved app header and 184px original sidebar. State: generation, paper style, 65%, initial material and three labeled samples. Source and actual screenshot opened in one comparison tool input; smaller-width and reveal captures inspected separately. Main/control typography is readable at this resolution; a separate crop is not required for this slice.
 
 ## Comparison history and fixes
@@ -46,9 +46,9 @@ Scope: selected visual implemented as an integrated **UI-only local sample slice
 
 ## Interaction verification
 
-Hidden stock Electron renderer, temporary isolated profile, no product main/preload, network and permissions denied. Tested: route order/reentry and existing companion/keymap/prompts navigation, all image loads, next style, S1 strength/confirm, print and enlarged result, sample download into QA temp folder, original compare, all six reveal effects, prompt dialog, synthetic local keys, three widths, concurrent upload cap and navigation guard, own-photo refusal. Console: zero new runtime errors; one existing Google Fonts CSP warning recorded explicitly. Source and final ASAR probes passed.
+Hidden stock Electron renderer, temporary isolated profile, no product main/preload, network and permissions denied. Tested: route order/reentry and existing companion/keymap/prompts navigation, all image loads, next style, S1 strength/confirm, print and enlarged result, sample download into QA temp folder, original compare, all six reveal effects, prompt dialog, synthetic local keys, three widths, concurrent upload cap and navigation guard, own-photo refusal. Console: zero new runtime errors; one existing Google Fonts CSP warning recorded explicitly. Source and final integrated ASAR probes passed; the formal T37 process was then launched against the retained profile and visibly opened the 风格映像 route with the existing D/M shell.
 
-Residual P3: stronger spring drag physics and orbit overlap tuning can follow user feedback; full free-position drag, persistent library, camera, actual AI and hardware lease are future functional slices, not included in this UI acceptance. No formal running-app or physical-device acceptance performed.
+Residual P3: stronger spring drag physics and orbit overlap tuning can follow user feedback; full free-position drag, persistent library, camera, actual AI and hardware lease are future functional slices, not included in this UI acceptance. Formal running-app route adoption passed; physical-device acceptance was not performed.
 
 <!-- T37-END -->
 
