@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t39-style-studio-interactions'));
+assert(main.includes('t40-style-studio-image2-eject'));
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
 for (const name of ['store', 'worker', 'service']) {
@@ -26,7 +26,7 @@ for (const name of ['store', 'worker', 'service']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale local-history resource: ${file}`);
 }
 assert(main.includes('--show-prompts'));
-for (const file of ['electron/main.cjs', 'electron/companion-model-transport.cjs', 'electron/voice-overlay-presenter.cjs', 'electron/overlay-preload.cjs', 'electron/three-stage-companion-provider.cjs', 'electron/companion-conversation.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/codex-hook-state.cjs', 'electron/codex-hook-integration.cjs', 'electron/codex-app-server-catalog.cjs', 'electron/codex-task-brief.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs', 'electron/style-studio-store.cjs', 'electron/style-studio-service.cjs', 'electron/style-studio-presets.cjs', 'electron/style-studio-input-lease.cjs', 'electron/qwen-image-adapter.cjs']) {
+for (const file of ['electron/main.cjs', 'electron/companion-model-transport.cjs', 'electron/voice-overlay-presenter.cjs', 'electron/overlay-preload.cjs', 'electron/three-stage-companion-provider.cjs', 'electron/companion-conversation.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/codex-hook-state.cjs', 'electron/codex-hook-integration.cjs', 'electron/codex-app-server-catalog.cjs', 'electron/codex-task-brief.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs', 'electron/style-studio-store.cjs', 'electron/style-studio-service.cjs', 'electron/style-studio-presets.cjs', 'electron/style-studio-input-lease.cjs', 'electron/qwen-image-adapter.cjs', 'electron/image2-adapter.cjs', 'electron/secure-image2.cjs', 'electron/style-studio-journal.cjs']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
 }
 assert(packagedFile('electron/codex-hook-state.cjs').toString('utf8').includes('Codex 临时任务'));
@@ -46,11 +46,11 @@ assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources
 for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png', 'assets/expressions/soft/transparent-open.png', 'assets/expressions/soft/transparent-closed.png', 'assets/companion/home-desk/open.png', 'assets/companion/home-desk/blink.png']) {
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale brand asset: ${file}`);
 }
-for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'clay.png', 'pixel.png', 'dial.png', 'manifest.json']) {
+for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'clay.png', 'pixel.png', 'ink.png', 'chrome.png', 'storybook.png', 'jelly.png', 'dial.png', 'manifest.json']) {
   const file = `assets/style-studio/${filename}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale style-studio asset: ${filename}`);
 }
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T39 packaged resource check passed: Style Studio free-canvas/transient-orbit renderer, functional adapter/store/input lease, assets, companion videos, sidebar images, recovery, voice resources and exact native bridge.');
+console.log('T40 packaged resource check passed: Image 2 adapter/secure store/journal, eject interaction, nine Style Studio presets, renderer, companion videos, sidebar images, recovery, voice resources and exact native bridge.');

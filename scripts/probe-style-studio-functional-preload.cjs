@@ -9,7 +9,7 @@ const state = { acquired: 0, released: 0, generated: [], removed: [] };
 const sourceRecord = { id: 'source-0123456789abcdef01234567', kind: 'source', name: '我的本地照片', mime: 'image/png', size: source.length, width: 1024, height: 1024, createdAt: '2026-09-14T10:00:00.000Z' };
 
 contextBridge.exposeInMainWorld('desktopBridge', {
-  getStyleStudioStatus: async () => ({ ok: true, configured: true, active: false, provider: '百炼 · 千问图像 3.0', model: 'qwen-image-3.0', library: { ok: true, revision: 1, items: [sourceRecord] } }),
+  getStyleStudioStatus: async () => ({ ok: true, configured: true, active: false, provider: 'MetaJing · Image 2', model: 'gpt-image-2', timeoutSeconds: 1200, library: { ok: true, revision: 1, items: [sourceRecord] } }),
   readStyleStudioMedia: async ({ id }) => id === sourceRecord.id ? { ok: true, record: sourceRecord, bytes: new Uint8Array(source) } : { ok: false, reason: 'missing' },
   importStyleStudioSource: async () => ({ ok: false, reason: 'probe-import-disabled' }),
   removeStyleStudioMedia: async ({ id }) => { state.removed.push(id); return { ok: true, removed: { id }, revision: 3 }; },

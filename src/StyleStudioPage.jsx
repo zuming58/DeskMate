@@ -12,6 +12,10 @@ function mediaUrl(bytes, mime, urls) {
   urls.current.add(url);
   return url;
 }
+function formatElapsed(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+}
 function Photo({ item, className = '', onClick, onDragStart, onDragEnd, style, selected, caption }) {
   return <button type="button" className={`ss-photo ${className} ${selected ? 'is-selected' : ''}`} style={style} onClick={onClick} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onDragEnd={onDragEnd} aria-label={caption || item.name}>
     <img src={item.image} alt={item.name} draggable="false" /><span>{caption || item.name}</span>
@@ -68,8 +72,9 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [mode, setMode] = useState('generate'), [modal, setModal] = useState(null), [activeResult, setActiveResult] = useState(exampleResults[1]);
   const [phase, setPhase] = useState('idle'), [compare, setCompare] = useState(false), [effect, setEffect] = useState(0), [radius, setRadius] = useState(42);
   const [organized, setOrganized] = useState(false), [brief, setBrief] = useState(''), [dragOver, setDragOver] = useState(false);
-  const [orbitOpen, setOrbitOpen] = useState(false), [materialDrop, setMaterialDrop] = useState(false);
+  const [orbitOpen, setOrbitOpen] = useState(false), [materialDrop, setMaterialDrop] = useState(false), [resultDrop, setResultDrop] = useState(false);
   const [materialPositions, setMaterialPositions] = useState({}), [resultPositions, setResultPositions] = useState({});
+  const [ejectedResult, setEjectedResult] = useState(null), [progressSeconds, setProgressSeconds] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true);
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
@@ -117,6 +122,14 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     };
   }, []);
   useEffect(() => {
+    if (modal !== 'progress') { setProgressSeconds(0); return undefined; }
+    const startedAt = Date.now();
+    const update = () => setProgressSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [modal]);
+  useEffect(() => {
     const api = bridge();
     const acquire = () => { setFocused(true); void api?.acquireStyleStudioInput?.(leaseToken.current); };
     const blur = () => { setFocused(false); setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
@@ -144,19 +157,20 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   function choose(index) { if (busy.current) return; setCursor(index); setAdjusting(false); hideOrbit(); setStatus(`已选择“${STUDIO_STYLES[index].name}”。`); }
   function generate() {
     if (busy.current) return;
+    if (ejectedResult) { setStatus('请先把刚出片的作品拔出并拖到下方作品区。'); return; }
     hideOrbit();
     if (adjusting) { setAdjusting(false); return; }
     if (!source.sample) {
       if (!provider.available) { setStatus('当前是浏览器预览，需在 DeskMate 桌面软件中生成。'); return; }
-      if (!provider.configured) { setStatus('请先在设置页保存百炼 API Key，再返回生成。'); return; }
+      if (!provider.configured) { setStatus('请先在设置页保存 Image 2 API Key，再返回生成。'); return; }
       setModal('consent');
       return;
     }
     busy.current = true; setPhase('feeding'); setStatus('本地样片演示：进片、出片与查看流程');
-    const result = { ...style, id: `result-${Date.now()}`, sample: true, source, strength };
+    const result = { ...style, id: `result-${Date.now()}`, kind: 'sample-result', sample: true, source, strength };
     timer.current = setTimeout(() => {
-      setPhase('printing'); setResults(items => [...items, result]); setActiveResult(result);
-      timer.current = setTimeout(() => { setPhase('idle'); busy.current = false; setModal('result'); }, 1000);
+      setPhase('printing'); setEjectedResult(result); setActiveResult(result);
+      timer.current = setTimeout(() => { setPhase('idle'); busy.current = false; setStatus('样片已从出片口推出；向下拔出后拖到作品区。'); }, 1000);
     }, 650);
   }
   async function generateReal() {
@@ -167,16 +181,15 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     let completed = false;
     activeRequest.current = requestId;
     busy.current = true; setModal('progress'); setPhase('feeding'); setProvider(value => ({ ...value, active: true }));
-    setStatus(`正在用“${frozen.style.name}”生成，本次照片将发送到已配置的百炼。`);
+    setStatus(`正在用“${frozen.style.name}”生成，本次照片将发送到已配置的 Image 2。`);
     try {
       const response = await api.generateStyleStudioImage({ requestId, sourceId: frozen.source.id, styleId: frozen.style.id, strength: frozen.strength, brief: frozen.brief, consent: true });
       if (!alive.current) return;
       if (!response.ok) { setStatus(response.reason || '风格作品生成失败，请稍后重试。'); setModal(null); return; }
       const result = { ...response.record, name: response.record.styleName || frozen.style.name, image: mediaUrl(response.bytes, response.record.mime, urls), source: frozen.source, sample: false };
-      setResults(items => [...items, result]); setActiveResult(result); setPhase('printing');
+      setEjectedResult(result); setActiveResult(result); setPhase('printing'); setModal(null);
       completed = true;
-      timer.current = setTimeout(() => { if (!alive.current) return; setPhase('idle'); setModal('result'); }, 650);
-      setStatus('作品已生成并保存到本地作品库。');
+      timer.current = setTimeout(() => { if (!alive.current) return; setPhase('idle'); setStatus('作品已保存，并从出片口推出；向下拔出后拖到作品区。'); }, 900);
     } catch { if (alive.current) { setStatus('生成没有完成，请稍后重试。'); setModal(null); } }
     finally {
       if (alive.current) { busy.current = false; setProvider(value => ({ ...value, active: false })); if (!completed) setPhase('idle'); }
@@ -212,7 +225,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       setMaterials(items => [...items, item]); setSource(item); remaining--;
       if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) }));
       placementIndex++;
-      setStatus('素材已保存到本地素材库；只有确认生成后才会上传百炼。');
+      setStatus('素材已保存到本地素材库；只有确认生成后才会上传到已配置的 Image 2 接口。');
     }
     } finally { importing.current = false; }
   }
@@ -249,14 +262,18 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     setStatus('素材位置已调整；拖到中间进片口即可设为当前原图。');
   }
   function dropOnResults(event) {
-    event.preventDefault();
+    event.preventDefault(); setResultDrop(false);
     const payload = readDraggedCard(event);
     if (!payload) return;
-    if (payload.kind !== 'result') { dragOffset.current = null; setStatus('原图仍保留在上方素材区；作品区只摆放生成结果。'); return; }
+    if (!['result', 'ejected'].includes(payload.kind)) { dragOffset.current = null; setStatus('原图仍保留在上方素材区；作品区只摆放生成结果。'); return; }
     const point = dropPosition(event); dragOffset.current = null;
+    if (payload.kind === 'ejected' && ejectedResult?.id === payload.id) {
+      setResults(items => items.some(item => item.id === payload.id) ? items : [...items, ejectedResult]);
+      setEjectedResult(null);
+    }
     setResultPositions(items => ({ ...items, [payload.id]: point }));
     setOrganized(false);
-    setStatus('作品已自由摆放；按“整理”可再次排齐。');
+    setStatus(payload.kind === 'ejected' ? '作品已拔出并放入作品区；可继续自由摆放。' : '作品已自由摆放；按“整理”可再次排齐。');
   }
   async function save() {
     if (!activeResult) return;
@@ -273,6 +290,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       if (source.id === deleteTarget.id) setSource(starter);
     } else {
       setResults(items => items.filter(item => item.id !== deleteTarget.id));
+      if (ejectedResult?.id === deleteTarget.id) setEjectedResult(null);
       if (activeResult.id === deleteTarget.id) setActiveResult(exampleResults[1]);
     }
     if (deleteTarget.image) { URL.revokeObjectURL(deleteTarget.image); urls.current.delete(deleteTarget.image); }
@@ -302,7 +320,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const keyItems = [['strength','强度'],['view','查看'],['save','保存'],['close','收起'],['compare','对比'],['inspiration','灵感'],['reset','重置'],['mode','模式']];
   const wheel = e => { e.preventDefault(); if (Math.abs(e.deltaY) < 2 || Date.now() - wheelAt.current < 110) return; wheelAt.current = Date.now(); move(e.deltaY > 0 ? 1 : -1); };
   return <section className="style-studio" aria-label="风格映像">
-    <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className="ss-tabs" role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={mode === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) setMode(id); }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? '百炼已配置' : provider.available ? '百炼未配置' : '浏览器预览'}</span></div></header>
+    <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className="ss-tabs" role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={mode === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) setMode(id); }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? 'Image 2 已配置' : provider.available ? 'Image 2 未配置' : '浏览器预览'}</span></div></header>
     {mode === 'generate' ? <div className={`ss-stage ${phase}`}>
       <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
@@ -321,12 +339,16 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
             {STUDIO_STYLES.map((item,index) => { const pos = studioOrbit(index, cursor); return <Photo key={item.id} item={item} selected={item.id === style.id} onClick={() => choose(index)} style={{ '--ox': `${pos.x}px`, '--oy': `${pos.y}px`, '--scale': pos.scale, '--opacity': pos.opacity, '--tilt': `${pos.angle}deg`, '--delay': `${index * 24}ms`, zIndex: pos.z }} />; })}
           </div>}
           <div className="ss-dial-row"><button aria-label="上一个风格" className="ss-step" onClick={() => move(-1)}><IconChevronLeft size={17} /></button><button className="ss-dial" aria-label={adjusting ? '确认强度' : orbitOpen ? '确认当前风格' : '旋转选择风格，按下生成'} disabled={phase !== 'idle'} onClick={() => action('confirm')} onWheel={wheel} onPointerDown={e => { dialStart.current = { start: e.clientX, last: e.clientX, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={e => { const drag = dialStart.current; if (!drag || Math.abs(e.clientX - drag.last) < 22) return; drag.moved = true; showOrbit(false); move(e.clientX > drag.last ? 1 : -1); drag.last = e.clientX; }} onPointerUp={() => { if (dialStart.current?.moved) { dialStart.current = 'dragged'; showOrbit(); } else dialStart.current = null; }} onClickCapture={e => { if (dialStart.current === 'dragged') { e.stopPropagation(); dialStart.current = null; } }}><img src={STUDIO_DIAL} alt="" draggable="false" style={{ transform: `rotate(${adjusting ? strength * 2.7 : cursor * 36}deg)` }} /></button><button aria-label="下一个风格" className="ss-step" onClick={() => move(1)}><IconChevronRight size={17} /></button></div>
-          <button className="ss-primary" disabled={phase !== 'idle'} onClick={generate}>{phase !== 'idle' ? '正在出片…' : adjusting ? '确认强度' : source.sample ? '演示出片' : provider.configured ? '生成作品' : '配置百炼后生成'}</button>
+          <button className="ss-primary" disabled={phase !== 'idle'} onClick={generate}>{phase !== 'idle' ? '正在出片…' : adjusting ? '确认强度' : ejectedResult ? '请先拔出作品' : source.sample ? '演示出片' : provider.configured ? '生成作品' : '配置 Image 2 后生成'}</button>
         </div>
       </div>
-      <div className="ss-output-heading"><div><h2>作品</h2><p>可自由摆放，按整理后自动排齐</p></div><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div>
-      <div className={`ss-results ${organized ? 'is-organized' : ''}`} aria-label="作品自由摆放区" onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'material' ? 'none' : 'move'; }} onDrop={dropOnResults}>
-        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={index === results.length - 1 && phase === 'printing' ? 'ss-ejecting' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
+      {ejectedResult && <div className="ss-eject-slot" aria-label="作品出片口">
+        <Photo item={ejectedResult} className="ss-ejected-card" caption={`向下拔出 · ${ejectedResult.name}`} onClick={() => { setActiveResult(ejectedResult); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'ejected', ejectedResult)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); }} />
+        <span>拖住照片，向下放入作品区</span>
+      </div>}
+      <div className="ss-output-heading"><div><h2>作品</h2><p>从出片口拔出后可自由摆放，按整理自动排齐</p></div><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div>
+      <div className={`ss-results ${organized ? 'is-organized' : ''} ${resultDrop ? 'is-drop-target' : ''}`} aria-label="作品自由摆放区" onDragEnter={e => { const payload = readDraggedCard(e); if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setResultDrop(false); }} onDragOver={e => { e.preventDefault(); const payload = readDraggedCard(e); e.dataTransfer.dropEffect = payload?.kind === 'material' ? 'none' : 'move'; if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDrop={dropOnResults}>
+        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
       </div>
     </div> : <div className="ss-reveal"><div className="ss-reveal-heading"><h2>显影实验室</h2><button className="ss-soft" onClick={() => setCompare(v => !v)}><IconArrowsExchange size={17} />{compare ? '返回作品' : '查看原图'}</button></div><p>{activeResult?.sample ? '本地样片' : '本地生成作品'} · 移动圆窗，探索不同的画面语言</p><Reveal result={activeResult} effect={effect} radius={radius} compare={compare} /><label className="ss-radius">圆窗大小 {radius}%<input aria-label="圆窗大小" type="range" min="10" max="90" value={radius} onChange={e => setRadius(Number(e.target.value))} /></label><div className="ss-effects">{STUDIO_EFFECTS.map((name,index) => <button key={name} aria-pressed={effect === index} onClick={() => setEffect(index)}><img src={activeResult.image} alt="" />{name}</button>)}</div></div>}
     <footer className="ss-footer"><p role="status">{status || '旋转选风格 · 选择自己的素材后，确认上传即可生成。离开本页自动恢复原按键。'}</p><div className="ss-keys" aria-label="页面按键预览">{keyItems.map(([id,name],index) => <button key={id} onClick={() => action(id)} title={`S${index + 1}：${name}`} className={id === 'strength' && adjusting ? 'is-selected' : ''}>S{index + 1}<small>{name}</small></button>)}</div></footer>
@@ -340,13 +362,13 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
           <button className="ss-primary" onClick={async () => { try { await navigator.clipboard.writeText(studioPrompt(style, strength, brief)); notify('提示词已复制'); } catch { setStatus('剪贴板不可用，请手动选择提示词复制。'); } }}><IconCopy size={17} />复制提示词</button>
         </> : modal === 'consent' ? <>
           <span className="ss-eyebrow"><IconInfoCircle size={16} />本次上传确认</span>
-          <h2>用百炼生成“{style.name}”作品？</h2>
-          <p>仅这一次：所选照片会发送到你已配置的阿里云百炼。生成结果会立即下载并保存到本机素材库；打开页面和预览不会上传。</p>
+          <h2>用 Image 2 生成“{style.name}”作品？</h2>
+          <p>仅这一次：所选照片会发送到你配置的 Image 2 兼容接口。结果完成后会保存到本机作品库，再从出片口推出；打开页面和预览不会上传。</p>
           <div className="ss-consent-preview"><img src={source.image} alt={source.name} /><span>{source.name}<small>风格强度 {strength}%</small></span></div>
           <div className="ss-dialog-actions"><button className="ss-primary" onClick={() => void generateReal()}>确认上传并生成</button><button className="ss-soft" onClick={() => setModal(null)}>取消</button></div>
         </> : modal === 'progress' ? <>
           <span className="ss-spinner" aria-hidden="true" />
-          <h2>正在生成“{style.name}”</h2><p>图片生成可能需要几分钟。完成后会自动保存到本地作品库。</p>
+          <h2>Image 2 正在显影“{style.name}”</h2><strong className="ss-progress-time">{formatElapsed(progressSeconds)}</strong><p>通常需要数分钟，本次最长等待 20 分钟。成功后会自动保存，并从中间出片口推出。为避免重复扣费，网络结果不确定时不会自动重试。</p>
           <button autoFocus className="ss-soft" onClick={() => void cancelGeneration()}>取消本次生成</button>
         </> : modal === 'delete' && deleteTarget ? <>
           <span className="ss-eyebrow"><IconInfoCircle size={16} />本地库管理</span>

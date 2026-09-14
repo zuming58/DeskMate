@@ -8,6 +8,10 @@ export const STUDIO_STYLES = [
   { id: 'glass', name: '玻璃花房', description: '把一个小世界，轻轻装进玻璃。', prompt: 'Miniature glass terrarium, delicate moss and leaves, transparent glass dome, warm natural product photography.' },
   { id: 'clay', name: '黏土质感', description: '用手作的温度，重新捏出生活。', prompt: 'Handmade clay sculpture, matte tactile finish, subtle finger-made texture, warm apricot and cream palette.' },
   { id: 'pixel', name: '像素世界', description: '让熟悉的轮廓，进入方块宇宙。', prompt: 'Refined voxel miniature, cubic teal shapes, tiny block plants, warm cream background, clean isometric aesthetic.' },
+  { id: 'ink', name: '水墨微景', description: '让熟悉的身影，落进一方安静山水。', prompt: 'Contemporary Chinese ink-wash miniature on warm xuan paper, expressive ink edges, restrained cobalt and celadon mineral pigments.' },
+  { id: 'chrome', name: '液态银蓝', description: '把轮廓淬成克制、明亮的未来材质。', prompt: 'Pearlescent brushed chrome collectible with translucent cyan glass accents, restrained cobalt rim light, warm-white premium studio.' },
+  { id: 'storybook', name: '绘本暖光', description: '用温暖笔触，重新画下日常片刻。', prompt: 'Premium hand-painted gouache picture-book illustration, colored-pencil edges, soft paper grain, celadon, cobalt and apricot palette.' },
+  { id: 'jelly', name: '果冻软糖', description: '把熟悉的轮廓，变成清透软弹的糖果质感。', prompt: 'Translucent aqua jelly collectible, soft gummy material, subtle internal bubbles, rounded refraction, glossy cobalt highlights, warm-white tabletop.' },
 ].map(style => ({ ...style, image: asset(style.id) }));
 export const STUDIO_EFFECTS = ['原图 / 作品', '彩色点阵', '像素切片', '字符诗篇', '双色印记', '线条回声'];
 export const wrapStudioIndex = (value, length = STUDIO_STYLES.length) => ((value % length) + length) % length;
@@ -21,8 +25,8 @@ export function studioOrbit(index, cursor) {
   return {
     x: Math.cos(angle) * 205,
     y: Math.sin(angle) * 180,
-    scale: 1 - distance * .095,
-    opacity: 1 - distance * .16,
+    scale: Math.max(.5, 1 - distance * .075),
+    opacity: Math.max(.24, 1 - distance * .12),
     angle: -8 + distance * 4,
     z: 10 - distance,
   };

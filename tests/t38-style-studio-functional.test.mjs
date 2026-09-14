@@ -102,10 +102,10 @@ test('T38 service requires explicit consent, freezes a managed source and stores
     const store = new StyleStudioStore({ userDataPath: directory });
     const source = store.importSource({ name: 'portrait', mime: 'image/png', bytes: png() }).record;
     let generated;
-    const service = new StyleStudioService({ store, credentialStore: { status: () => ({ configured: true }), loadSecret: () => ({ apiKey: 'sk-12345678', workspaceId: '' }) }, generate: async value => { generated = value; return { bytes: png(64,64,'made'), mime: 'image/png', requestId: 'provider-1', usage: {} }; } });
+    const service = new StyleStudioService({ store, credentialStore: { status: () => ({ configured: true }), loadSecret: () => ({ apiKey: 'sk-12345678', baseUrl: 'https://metajing.cn/v1' }) }, generate: async value => { generated = value; return { bytes: png(64,64,'made'), mime: 'image/png', requestId: 'provider-1', usage: {} }; } });
     await assert.rejects(service.generate({ requestId: 'studio-12345678', sourceId: source.id, styleId: 'paper', strength: 65 }), /consent-required/);
     const result = await service.generate({ requestId: 'studio-12345678', sourceId: source.id, styleId: 'paper', strength: 65, brief: 'keep face', consent: true });
-    assert.equal(result.ok, true); assert.equal(result.record.sourceId, source.id); assert.match(generated.prompt, /keep face/); assert.equal(service.status().active, false);
+    assert.equal(result.ok, true); assert.equal(result.record.sourceId, source.id); assert.match(generated.prompt, /keep face/); assert.equal(generated.baseUrl, 'https://metajing.cn/v1'); assert.equal(service.status().active, false);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -114,10 +114,10 @@ test('T38 service cancellation aborts the active provider request without creati
   try {
     const store = new StyleStudioStore({ userDataPath: directory });
     const source = store.importSource({ name: 'portrait', mime: 'image/png', bytes: png() }).record;
-    const service = new StyleStudioService({ store, credentialStore: { status: () => ({ configured: true }), loadSecret: () => ({ apiKey: 'sk-12345678', workspaceId: '' }) }, generate: ({ signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('qwen-image-cancelled')), { once: true })) });
+    const service = new StyleStudioService({ store, credentialStore: { status: () => ({ configured: true }), loadSecret: () => ({ apiKey: 'sk-12345678', baseUrl: 'https://metajing.cn/v1' }) }, generate: ({ signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('image2-cancelled')), { once: true })) });
     const pending = service.generate({ requestId: 'studio-cancel-1', sourceId: source.id, styleId: 'paper', strength: 65, consent: true });
     assert.deepEqual(service.cancel('studio-cancel-1'), { ok: true });
-    await assert.rejects(pending, /qwen-image-cancelled/);
+    await assert.rejects(pending, /image2-cancelled/);
     assert.equal(store.list().items.filter(item => item.kind === 'result').length, 0);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });

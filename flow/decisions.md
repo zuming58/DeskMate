@@ -1,5 +1,9 @@
 # Decisions
 
+## D145 — Image 2 generation is a long, explicit print job
+
+2026-09-14: Style Studio uses a dedicated Image 2 credential and main-process adapter rather than borrowing another service's secret. Freeze `gpt-image-2`, 1024×1024 output, a 20-minute deadline, bounded response/download validation and one request per user action. Never auto-retry an uncertain paid submission. Persist only a sanitized allowlisted job journal. A completed result remains an explicit ejected artifact below the machine until the user drags it into Works; block another generation while that artifact is waiting so completion cannot be hidden or overwritten. Keep the accepted white DeskMate shell and transient dial orbit, with nine built-in styles including translucent jelly. This decision adds no firmware, HID write or alternate voice workflow.
+
 ## D144 — Style Studio cards are spatial objects; the style orbit is transient
 
 2026-09-14: Preserve separate material and result identities while restoring the reference interaction. Both regions are bounded free canvases; Explorer image drops enter only the upper material region, the inlet selects a material, and cross-region card drops return instead of silently converting data. Results align only when the user presses **整理**; moving an aligned result returns to free layout. Style cards are absent at idle and appear only during wheel/arrow/dial selection, with the selected left-side card most legible and progressively distant cards smaller and more transparent; choice, timeout, focus loss or route leave closes the orbit. Coordinates are session presentation state, while T38 media persistence, consent, provider and input-lease contracts remain unchanged.

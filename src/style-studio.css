@@ -12,7 +12,7 @@
 .ss-mode { display: flex; align-items: center; gap: 9px; font-size: 12px; color: #637188; }
 .ss-mode small { display: block; margin-top: 3px; color: #8290a3; font-size: 11px; }
 .ss-badge { padding: 7px 10px; border-radius: 20px; background: #f1f5fb; margin-left: 12px; white-space: nowrap; }
-.ss-stage { position: relative; min-height: 920px; max-width: 1260px; margin: auto; }
+.ss-stage { position: relative; min-height: 1040px; max-width: 1260px; margin: auto; }
 .ss-stage h2 { font-size: 21px; margin: 0 0 8px; letter-spacing: -.4px; }
 .ss-stage p { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
 .ss-material-heading { position: absolute; left: 3.5%; top: 35px; z-index: 10; }
@@ -57,9 +57,16 @@
 .ss-orbit .ss-photo { position: absolute; width: 118px; left: -59px; top: -70px; opacity: var(--opacity); transform: translate(var(--ox), var(--oy)) scale(var(--scale)) rotate(var(--tilt)); transition: transform .42s cubic-bezier(.2,.8,.2,1), opacity .25s ease, border-color .2s; animation: ss-orbit-in .24s both; animation-delay: var(--delay, 0ms); }
 .ss-orbit .ss-photo.is-selected { box-shadow: 0 16px 32px #356df33d; }
 .ss-machine.is-adjusting { border-color: #91baf7; }
-.ss-output-heading { position: absolute; top: 610px; left: 3.5%; right: 3.5%; display: flex; align-items: flex-start; justify-content: space-between; }
+.ss-eject-slot { position: absolute; z-index: 18; left: 50%; top: 518px; width: 172px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ss-eject-slot::before { content: ""; position: absolute; z-index: -1; top: -4px; left: 12px; right: 12px; height: 16px; border-radius: 0 0 12px 12px; background: #26364a; box-shadow: inset 0 3px 6px #09132178, 0 3px 8px #27446321; }
+.ss-eject-slot > span { padding: 7px 10px; border-radius: 999px; background: #eef5ffed; color: #4670ad; box-shadow: 0 6px 14px #294c7517; font-size: 10px; white-space: nowrap; }
+.ss-ejected-card { width: 154px; cursor: grab; animation: ss-eject-card .9s cubic-bezier(.18,.72,.2,1) both; }
+.ss-ejected-card:active { cursor: grabbing; }
+.ss-output-heading { position: absolute; top: 713px; left: 3.5%; right: 3.5%; display: flex; align-items: flex-start; justify-content: space-between; }
 .ss-output-heading button[aria-pressed="true"] { background: #edf4ff; border-color: #8bb8f7; color: #2f67e8; }
-.ss-results { position: absolute; left: 14%; right: 12%; top: 655px; height: 245px; z-index: 21; }
+.ss-results { position: absolute; left: 14%; right: 12%; top: 758px; height: 245px; z-index: 21; border-radius: 24px; }
+.ss-results::before { content: "松开放入作品"; position: absolute; inset: 0; z-index: 90; display: grid; place-items: center; border: 2px dashed #75aaf0; border-radius: 24px; background: #f3f8ffeb; color: #356df3; font-size: 14px; font-weight: 650; opacity: 0; transform: scale(.985); pointer-events: none; transition: opacity .18s ease, transform .18s ease; }
+.ss-results.is-drop-target::before { opacity: 1; transform: scale(1); }
 .ss-results .ss-photo { position: absolute; pointer-events: auto; width: 145px; left: var(--x); top: var(--y); z-index: var(--z, 22); transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); cursor: grab; }
 .ss-results .ss-photo:hover { transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)) translateY(-4px); }
 .ss-results.is-organized { display: flex; align-items: flex-start; justify-content: center; gap: 12px; padding-top: 26px; }
@@ -88,6 +95,7 @@
 .ss-consent-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 11px; }
 .ss-consent-preview small { display: block; margin-top: 6px; color: #78899f; }
 .ss-spinner { display: block; width: 48px; height: 48px; margin: 4px auto 18px; border: 4px solid #dce9ff; border-top-color: var(--ss-blue); border-radius: 50%; animation: ss-spin .85s linear infinite; }
+.ss-progress-time { display: block; margin: 0 auto 12px; color: #356df3; font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .ss-reveal { max-width: 850px; margin: auto; padding: 30px; text-align: center; }
 .ss-reveal-heading { display: flex; align-items: center; justify-content: space-between; }
 .ss-reveal h2 { font-size: 22px; }
@@ -100,16 +108,15 @@
 .ss-effects button[aria-pressed=true] { background: #edf4ff; border-color: #89b7f7; color: #346cf0; }
 .ss-effects img { width: 100%; display: block; border-radius: 6px; margin-bottom: 7px; }
 .feeding .ss-loaded { animation: ss-feed .65s ease-in forwards; }
-.ss-ejecting { animation: ss-eject 1s ease-out; }
 @keyframes ss-feed { to { transform: translateY(170px); opacity: .2; } }
-@keyframes ss-eject { from { transform: translateY(-140px); opacity: 0; } to { opacity: 1; } }
+@keyframes ss-eject-card { from { transform: translateY(-135px) scale(.92); opacity: .15; } 72% { opacity: 1; } to { transform: translateY(0) scale(1); opacity: 1; } }
 @keyframes ss-spin { to { transform: rotate(360deg); } }
 @keyframes ss-orbit-in { from { opacity: 0; transform: translate(0, 0) scale(.35) rotate(0); } to { opacity: var(--opacity); transform: translate(var(--ox), var(--oy)) scale(var(--scale)) rotate(var(--tilt)); } }
 @media (max-width: 1200px) {
   .ss-toolbar { padding: 10px 20px; }
   .ss-tabs button { padding: 10px 26px; }
   .ss-mode .ss-badge { display: none; }
-  .ss-stage { min-height: 700px; }
+  .ss-stage { min-height: 900px; }
   .ss-material-heading { top: 25px; }
   .ss-materials { left: 20%; right: 1%; top: 24px; height: 250px; }
   .ss-materials .ss-photo { width: 108px; }
@@ -122,8 +129,9 @@
   .ss-dial { width: 120px; height: 110px; }
   .ss-orbit { top: 72px; transform: translateX(-28px) scale(.68); transform-origin: center; }
   .ss-step { width: 22px; }
-  .ss-output-heading { top: 550px; }
-  .ss-results { left: 18%; right: 7%; top: 595px; height: 220px; }
+  .ss-eject-slot { top: 472px; transform: translateX(-50%) scale(.82); transform-origin: top center; }
+  .ss-output-heading { top: 650px; }
+  .ss-results { left: 18%; right: 7%; top: 695px; height: 190px; }
   .ss-results .ss-photo { width: 112px; }
 }
 @media (max-width: 850px) {
@@ -136,6 +144,7 @@
   .ss-materials { top: 130px; left: 4%; right: 56%; height: 150px; }
   .ss-materials .ss-photo { width: 95px; }
   .ss-orbit { left: 44%; transform: translateX(-22px) scale(.46); top: 72px; }
+  .ss-eject-slot { left: 52%; }
   .ss-results { left: 20%; right: 3%; }
   .ss-footer { flex-wrap: wrap; padding: 15px; }
   .ss-keys { position: static; }

@@ -1,5 +1,5 @@
 const { buildStyleStudioPrompt } = require("./style-studio-presets.cjs");
-const { generateQwenImage } = require("./qwen-image-adapter.cjs");
+const { generateImage2 } = require("./image2-adapter.cjs");
 
 function requestId(value) {
   const id = String(value || "");
@@ -9,7 +9,7 @@ function requestId(value) {
 
 function publicError(error) {
   const reason = String(error?.message || "");
-  if (reason === "style-studio-consent-required") return "请先确认本次照片将上传到百炼生成";
+  if (reason === "style-studio-consent-required") return "请先确认本次照片将上传到 Image 2 生成";
   if (reason === "style-studio-generation-busy") return "已有一张作品正在生成，请稍候或先取消";
   if (reason === "style-studio-source-not-found" || reason === "style-studio-item-not-found") return "素材已不存在，请重新选择";
   if (reason === "style-studio-source-limit") return "本地素材库最多保存 8 张素材";
@@ -19,25 +19,27 @@ function publicError(error) {
   if (reason === "style-studio-image-too-large") return "图片超过当前 10 MB 素材限制";
   if (["style-studio-image-empty", "style-studio-image-invalid", "style-studio-image-type-mismatch", "style-studio-image-pixels-too-large"].includes(reason)) return "图片格式无效、像素过大或扩展名与内容不一致";
   if (["style-studio-library-corrupt", "style-studio-asset-corrupt"].includes(reason)) return "本地素材库校验失败，未继续读取或覆盖数据";
-  if (reason === "qwen-image-cancelled") return "本次生成已取消";
-  if (reason === "qwen-image-timeout") return "生成等待超时，请稍后重试";
-  if (reason.startsWith("qwen-image-http-") || reason.startsWith("qwen-image-download-http-")) return "百炼生成暂时失败，请稍后重试";
-  if (reason.startsWith("style-studio-") || reason.startsWith("qwen-image-")) return "风格作品生成失败，请检查图片后重试";
+  if (reason === "image2-cancelled") return "本次生成已取消";
+  if (reason === "image2-timeout") return "Image 2 等待超过 20 分钟，请先到中转站后台核对任务，再决定是否重试";
+  if (reason === "image2-submission-uncertain") return "提交连接中断，无法确认中转站是否已经接单；为避免重复计费没有自动重试，请先到后台核对";
+  if (reason.startsWith("image2-http-") || reason.startsWith("image2-download-http-")) return "Image 2 生成暂时失败，请稍后重试";
+  if (reason.startsWith("style-studio-") || reason.startsWith("image2-")) return "风格作品生成失败，请检查图片后重试";
   if (/API Key|安全存储|业务空间/.test(reason)) return reason;
   return "风格作品生成失败，请稍后重试";
 }
 
 class StyleStudioService {
-  constructor({ store, credentialStore, generate = generateQwenImage }) {
+  constructor({ store, credentialStore, journal, generate = generateImage2 }) {
     this.store = store;
     this.credentialStore = credentialStore;
+    this.journal = journal;
     this.generateImage = generate;
     this.active = null;
   }
 
   status() {
     const credentials = this.credentialStore.status();
-    return { ok: true, configured: credentials.configured === true, provider: "百炼 · 千问图像 3.0", model: "qwen-image-3.0", active: Boolean(this.active) };
+    return { ok: true, configured: credentials.configured === true, provider: "MetaJing · Image 2", model: "gpt-image-2", active: Boolean(this.active), timeoutSeconds: credentials.timeoutSeconds || 1200, recentGeneration: this.journal?.latest?.() || null };
   }
 
   list() { return { ok: true, ...this.store.list() }; }
@@ -54,10 +56,11 @@ class StyleStudioService {
     const secret = this.credentialStore.loadSecret();
     const controller = new AbortController();
     this.active = { id, controller };
+    this.journal?.start?.({ id, styleId: style.styleId, provider: "metajing", model: "gpt-image-2" });
     try {
       const generated = await this.generateImage({
         apiKey: secret.apiKey,
-        workspaceId: secret.workspaceId,
+        baseUrl: secret.baseUrl,
         sourceBytes: source.bytes,
         sourceMime: source.record.mime,
         prompt: style.prompt,
@@ -73,7 +76,12 @@ class StyleStudioService {
         mime: generated.mime,
         bytes: generated.bytes,
       });
+      this.journal?.finish?.(id, "succeeded", { providerRequestId: generated.requestId });
       return { ok: true, record, bytes: generated.bytes, requestId: generated.requestId, usage: generated.usage };
+    } catch (error) {
+      const reason = String(error?.message || "image2-failed");
+      this.journal?.finish?.(id, reason === "image2-cancelled" ? "cancelled" : reason === "image2-submission-uncertain" ? "uncertain" : "failed", { failureClass: reason });
+      throw error;
     } finally {
       if (this.active?.id === id) this.active = null;
     }

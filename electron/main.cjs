@@ -12,6 +12,7 @@ const { transcribe: transcribeBailian } = require("./bailian.cjs");
 const { organize: organizeBailian } = require("./bailian-organizer.cjs");
 const { BailianRealtimeSession } = require("./bailian-realtime.cjs");
 const { createSecureBailianStore } = require("./secure-bailian.cjs");
+const { createSecureImage2Store } = require("./secure-image2.cjs");
 const { createSecureAiServiceStore } = require("./secure-ai-services.cjs");
 const { CompanionMemoryStore } = require("./companion-memory.cjs");
 const { createWorkbenchOverview } = require("./workbench-overview.cjs");
@@ -73,13 +74,14 @@ const { normalizeHotwords, normalizeRules, normalizeTranscript } = require("./tr
 const { StyleStudioStore } = require("./style-studio-store.cjs");
 const { StyleStudioService, publicError: publicStyleStudioError } = require("./style-studio-service.cjs");
 const { StyleStudioInputLease } = require("./style-studio-input-lease.cjs");
+const { StyleStudioJournal } = require("./style-studio-journal.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t39-style-studio-interactions";
+const DESKMATE_BUILD_ID = "t40-style-studio-image2-eject";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -109,6 +111,7 @@ let voiceTargetWindow = null;
 let voiceTargetCaptureToken = 0;
 let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
+let image2Store;
 let aiServiceStore;
 let styleStudioService;
 let styleStudioInputLease;
@@ -1396,8 +1399,9 @@ app.whenReady().then(async () => {
     return localHistoryService.call(request.command, value);
   });
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
+  image2Store = createSecureImage2Store({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
-  styleStudioService = new StyleStudioService({ store: new StyleStudioStore({ userDataPath: app.getPath("userData") }), credentialStore: bailianStore });
+  styleStudioService = new StyleStudioService({ store: new StyleStudioStore({ userDataPath: app.getPath("userData") }), credentialStore: image2Store, journal: new StyleStudioJournal({ userDataPath: app.getPath("userData") }) });
   styleStudioInputLease = new StyleStudioInputLease({ isForeground: isStyleStudioForeground, publish: value => sendToMain("style-studio-input", value) });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   companionDialogueContext = new CompanionDialogueContext({ seed: companionMemoryStore.recentCompanionContext() });
@@ -1631,7 +1635,7 @@ app.whenReady().then(async () => {
   createTray();
   handleTrusted("style-studio:get-status", () => {
     try { return { ...styleStudioService.status(), library: styleStudioService.list() }; }
-    catch (error) { return { ok: false, reason: publicStyleStudioError(error), configured: bailianStore.status().configured === true, library: { ok: false, revision: 0, items: [] } }; }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error), configured: image2Store.status().configured === true, library: { ok: false, revision: 0, items: [] } }; }
   });
   handleTrusted("style-studio:list", () => {
     try { return styleStudioService.list(); }
@@ -1855,6 +1859,9 @@ app.whenReady().then(async () => {
   handleTrusted("bailian:get-status", () => bailianStore.status());
   handleTrusted("bailian:save-credentials", (value) => bailianStore.save(value || {}));
   handleTrusted("bailian:clear-credentials", () => bailianStore.clear());
+  handleTrusted("image2:get-status", () => image2Store.status());
+  handleTrusted("image2:save-credentials", (value) => image2Store.save(value || {}));
+  handleTrusted("image2:clear-credentials", () => image2Store.clear());
   handleTrusted("ai-services:get-status", () => aiServiceStore.status());
   handleTrusted("ai-services:save-text", (value) => aiServiceStore.saveText(value || {}));
   handleTrusted("ai-services:clear-text", () => aiServiceStore.clearText());

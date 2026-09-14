@@ -1,6 +1,10 @@
 # Development plan
 
-## Current delivery: T39 Style Studio interaction correction — verification in progress
+## Current delivery: T40 Image 2 Style Studio and instant-print output — packaged
+
+风格映像 now has a dedicated encrypted Image 2 configuration, fixed `gpt-image-2` main-process adapter, 20-minute bounded wait, sanitized job journal and no automatic retry after an uncertain paid submission. Completed images remain held in the machine's lower eject slot until the user drags them into Works. Nine styles are available, including the new translucent jelly treatment. Full suite 705/705, native build, independent `release-t40` package and source/final-ASAR interaction probes passed. No live provider call or retained-profile replacement occurred; next is one user-authorized real-account generation followed by physical dial/key acceptance. See `docs/design/style-studio-t40.md` and `docs/contracts/t40-style-studio-image2-v1.md`.
+
+## Previous delivery: T39 Style Studio interaction correction — packaged
 
 The T38 provider/library/input boundaries remain unchanged. T39 adds Explorer drop into the upper material canvas, free bounded placement inside separate material/result regions, one-way result organization, and a transient dial-driven style orbit. No other DeskMate page, voice state, provider contract, firmware or HID write path changes. See `docs/design/style-studio-t39.md`.
 

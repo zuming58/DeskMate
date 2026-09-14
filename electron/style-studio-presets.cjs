@@ -4,6 +4,10 @@ const STYLE_STUDIO_PRESETS = Object.freeze({
   glass: Object.freeze({ name: "玻璃花房", prompt: "Miniature glass terrarium, delicate moss and leaves, transparent glass dome, warm natural product photography, subtle reflections." }),
   clay: Object.freeze({ name: "黏土质感", prompt: "Handmade clay sculpture, matte tactile finish, subtle finger-made texture, warm apricot and cream palette, studio product lighting." }),
   pixel: Object.freeze({ name: "像素世界", prompt: "Refined voxel miniature, cubic teal shapes, tiny block plants, warm cream background, clean isometric aesthetic." }),
+  ink: Object.freeze({ name: "水墨微景", prompt: "Contemporary Chinese ink-wash miniature on warm xuan paper, expressive ink edges, restrained cobalt and celadon mineral pigments, quiet mountain-and-bamboo atmosphere." }),
+  chrome: Object.freeze({ name: "液态银蓝", prompt: "Pearlescent brushed chrome collectible with translucent cyan glass accents, restrained cobalt rim light, clean warm-white premium industrial-design studio." }),
+  storybook: Object.freeze({ name: "绘本暖光", prompt: "Premium hand-painted gouache picture-book illustration, colored-pencil edges, soft paper grain, celadon, cobalt and apricot palette, warm morning light." }),
+  jelly: Object.freeze({ name: "果冻软糖", prompt: "Translucent aqua jelly collectible, soft gummy material, subtle internal bubbles, rounded refraction, glossy cobalt highlights, clean warm-white tabletop, premium product lighting." }),
 });
 
 function normalizeStrength(value) {
