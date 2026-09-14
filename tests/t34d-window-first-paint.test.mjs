@@ -19,8 +19,8 @@ test("tray and second-instance restore also wait while the main frame is loading
   assert.match(showMain, /if \(mainWindow\.isMinimized\(\)\) mainWindow\.restore\(\)/);
 });
 
-test("the packaged build identifies the first-paint recovery slice", () => {
-  assert.match(main, /DESKMATE_BUILD_ID = "t36-companion-state-video"/);
+test("the packaged build identifies the current integrated desktop slice", () => {
+  assert.match(main, /DESKMATE_BUILD_ID = "t37-style-studio-integrated"/);
 });
 
 test("the packaged smoke test reads the main-owned history store after migration", () => {

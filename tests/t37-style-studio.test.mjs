@@ -46,4 +46,7 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert(!/desktopBridge|setShortcutCapture|setGlobalShortcutsEnabled/.test(source));
   assert.match(source,/真实 AI 出图尚未接入/);
   assert.match(source,/clearTimeout\(timer.current\)/);
+  const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
+  assert.match(main,/--show-style-studio/);
+  assert.match(main,/hash: '\/style-studio'/);
 });

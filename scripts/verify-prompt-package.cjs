@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t36-companion-state-video'));
+assert(main.includes('t37-style-studio-integrated'));
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
 for (const name of ['store', 'worker', 'service']) {
@@ -44,7 +44,11 @@ assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources
 for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png', 'assets/expressions/soft/transparent-open.png', 'assets/expressions/soft/transparent-closed.png', 'assets/companion/home-desk/open.png', 'assets/companion/home-desk/blink.png']) {
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale brand asset: ${file}`);
 }
+for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'clay.png', 'pixel.png', 'dial.png', 'manifest.json']) {
+  const file = `assets/style-studio/${filename}`;
+  assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale style-studio asset: ${filename}`);
+}
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T36 packaged resource check passed: four companion videos/poster/manifest, sidebar images, first-paint recovery, offline restore, retention, scenes, renderer assets, voice resources and exact native bridge.');
+console.log('T37 packaged resource check passed: Style Studio assets, companion videos, sidebar images, first-paint recovery, offline restore, retention, scenes, renderer assets, voice resources and exact native bridge.');

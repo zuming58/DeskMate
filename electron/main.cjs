@@ -76,7 +76,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t36-companion-state-video";
+const DESKMATE_BUILD_ID = "t37-style-studio-integrated";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1032,7 +1032,7 @@ function createWindow() {
     mainWindow.show();
   });
   if (process.argv.includes("--dev")) mainWindow.loadURL(getDevUrl());
-  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : process.argv.includes('--show-companion') ? { hash: '/companion' } : {});
+  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-style-studio') ? { hash: '/style-studio' } : process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : process.argv.includes('--show-companion') ? { hash: '/companion' } : {});
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
@@ -2001,7 +2001,7 @@ app.whenReady().then(async () => {
   startInputBridge();
   await syncWakeWordListener("application-ready");
   app.on("activate", () => showMain());
-  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : argv.includes('--show-companion') ? 'companion' : undefined));
+  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-style-studio') ? 'style-studio' : argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : argv.includes('--show-companion') ? 'companion' : undefined));
 });
 
 app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
