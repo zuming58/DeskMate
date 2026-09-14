@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T41 physical Style Studio workflow — packaged and running
+
+风格映像 now accepts source cards/files on the complete machine, visibly seats them in the upper slot, ejects completed results below, and supports a thresholded pointer-following pull into exact Works positions with original insert/pull feedback. The course S1–S8 state model is explicit; S2 leads from enlarged result to Reveal, and Reveal stages effect → circular window → effect granularity on rotate/press. A tenth course-observed `积木模型` preset is included. Full suite 709/709, native build, exact package verification, source/final-ASAR probes and retained-profile adoption passed. Image 2/provider/storage boundaries are unchanged; physical encoder press remains pending because default `scroll_axis_toggle` has no Windows-visible event. See `docs/design/style-studio-t41.md`.
+
 ## Current delivery: T40B compact-window wheel and detent sound — running candidate
 
 The retained-profile app is now running `release-t40b`. In Style Studio, source-identified EasyInput wheel input is paired with Chromium's legacy wheel fallback so one physical detent selects once and does not move the compact page. Coarse whole-page wheel input selects styles; fine touchpad input, editors and dialogs retain scrolling. Each accepted style step has one short, quiet, original locally synthesized detent. Full suite 708/708, native build, source/final-ASAR probes and exact package verification passed. Image 2 remains unconfigured, so the next acceptance step is user entry under Settings → AI 服务 followed by one explicitly consented real generation and physical wheel/press listening check. See `docs/contracts/t40b-style-studio-wheel-feedback-v1.md`.

@@ -8,6 +8,7 @@ const STYLE_STUDIO_PRESETS = Object.freeze({
   chrome: Object.freeze({ name: "液态银蓝", prompt: "Pearlescent brushed chrome collectible with translucent cyan glass accents, restrained cobalt rim light, clean warm-white premium industrial-design studio." }),
   storybook: Object.freeze({ name: "绘本暖光", prompt: "Premium hand-painted gouache picture-book illustration, colored-pencil edges, soft paper grain, celadon, cobalt and apricot palette, warm morning light." }),
   jelly: Object.freeze({ name: "果冻软糖", prompt: "Translucent aqua jelly collectible, soft gummy material, subtle internal bubbles, rounded refraction, glossy cobalt highlights, clean warm-white tabletop, premium product lighting." }),
+  blocks: Object.freeze({ name: "积木模型", prompt: "Intricate interlocking toy-brick sculpture with clearly visible studs and joints throughout the subject, glossy mint, cobalt-blue and warm-cream bricks, playful premium product photography." }),
 });
 
 function normalizeStrength(value) {

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## A physical drag metaphor needs layering, resistance and a committed landing point
+
+- A drop handler alone does not make an object feel inserted. Make the whole machine a target, animate the slot/body response and keep the card partially occluded by the machine at rest.
+- A draggable output must cross a small directional threshold, rise above the destination overlay, follow the pointer and keep the exact bounded release position. If the dragged stacking context stays below the highlighted target, the card appears to disappear even though pointer state is correct.
+- Host software cannot reinterpret a physical control that emits no Windows event. Keep the UI/mouse/keyboard path functional, state the firmware boundary explicitly and require a separately authorized host-visible mapping before claiming physical press acceptance.
+
 ## Validate visual playback wiring through the real runtime store
 
 T36's pure video and audio-observer unit tests passed but first native probe never displayed speak: `runtime-slice` deliberately rejects unregistered keys. Register the ephemeral playback slice, test the actual reducer/export boundary, and run the complete renderer with synthetic PCM through the existing sink. Do not use generation state as a workaround: it would reintroduce speaking before sound. Keep media watchers visual-only, exception-isolated and bounded to visible components.

@@ -12,10 +12,14 @@ export const STUDIO_STYLES = [
   { id: 'chrome', name: '液态银蓝', description: '把轮廓淬成克制、明亮的未来材质。', prompt: 'Pearlescent brushed chrome collectible with translucent cyan glass accents, restrained cobalt rim light, warm-white premium studio.' },
   { id: 'storybook', name: '绘本暖光', description: '用温暖笔触，重新画下日常片刻。', prompt: 'Premium hand-painted gouache picture-book illustration, colored-pencil edges, soft paper grain, celadon, cobalt and apricot palette.' },
   { id: 'jelly', name: '果冻软糖', description: '把熟悉的轮廓，变成清透软弹的糖果质感。', prompt: 'Translucent aqua jelly collectible, soft gummy material, subtle internal bubbles, rounded refraction, glossy cobalt highlights, warm-white tabletop.' },
+  { id: 'blocks', name: '积木模型', description: '把熟悉的轮廓，搭成一件可以看见接缝的积木藏品。', prompt: 'Intricate interlocking toy-brick sculpture with visible studs and joints, glossy mint, cobalt and cream bricks, playful premium product photography.' },
 ].map(style => ({ ...style, image: asset(style.id) }));
 export const STUDIO_EFFECTS = ['原图 / 作品', '彩色点阵', '像素切片', '字符诗篇', '双色印记', '线条回声'];
+export const STUDIO_EFFECT_PARAMETERS = ['无颗粒', '点大小', '像素大小', '字符大小', '色阶大小', '线条间距'];
 export const wrapStudioIndex = (value, length = STUDIO_STYLES.length) => ((value % length) + length) % length;
 export const clampStudioStrength = value => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+export const clampStudioRadius = value => Math.max(10, Math.min(90, Math.round(Number(value) || 0)));
+export const clampStudioDetail = value => Math.max(10, Math.min(90, Math.round(Number(value) || 0)));
 export function studioPrompt(style, strength, brief = '') {
   return `Preserve the recognizable subject and composition. ${style.prompt}\nCreative transformation level: ${clampStudioStrength(strength)}/100.\n${brief.trim() ? `Creative brief: ${brief.trim()}\n` : ''}Output artwork only. No application interface, border, watermark or labels.`;
 }

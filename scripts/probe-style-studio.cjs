@@ -18,6 +18,7 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   const click=async selector=>{await js(`document.querySelector(${JSON.stringify(selector)}).click();true`);await delay(100)};
   const shot=async name=>fs.writeFileSync(path.join(output,name+'.png'),(await window.webContents.capturePage()).resize({width:window.getContentSize()[0]}).toPNG());
   await window.loadFile(path.join(product,'dist/client/index.html'),{hash:'/style-studio'}); await delay(1100);
+  await js(`Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});true`);
   assert(await js(`!!document.querySelector('.style-studio')`));
   assert(await js(`[...document.querySelectorAll('.style-studio img')].every(i=>i.complete&&i.naturalWidth>0)`),'assets loaded');
   assert.equal(await js(`getComputedStyle(document.querySelector('.style-studio')).backgroundColor`),'rgb(255, 255, 255)');
@@ -27,20 +28,29 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   assert.equal(await js(`document.querySelectorAll('.ss-orbit').length`),0,'style cards stay hidden until the dial moves');
   await shot('generate-1440');
   await click('[aria-label="下一个风格"]'); assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'毛线手作');
-  assert.equal(await js(`document.querySelectorAll('.ss-orbit .ss-photo').length`),9,'dial movement reveals the orbit');
+  assert.equal(await js(`document.querySelectorAll('.ss-orbit .ss-photo').length`),10,'dial movement reveals the orbit');
   await shot('orbit-1440');
   await click('.ss-keys button'); assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'调整风格强度');
   await click('[aria-label="下一个风格"]'); assert.equal(await js(`document.querySelector('.ss-strength strong').textContent`),'70%');
   await click('.ss-press-action'); assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'毛线手作');
-  await click('[aria-label="下一个风格"]'); assert.equal(await js(`document.querySelectorAll('.ss-orbit .ss-photo').length`),9,'dial movement reveals the orbit again');
+  await click('[aria-label="下一个风格"]'); assert.equal(await js(`document.querySelectorAll('.ss-orbit .ss-photo').length`),10,'dial movement reveals the orbit again');
   await click('.ss-press-action'); await delay(1800); assert(await js(`!!document.querySelector('.ss-eject-slot .ss-photo')`),'one press generates with the orbit still visible');
   assert.equal(await js(`document.querySelectorAll('.ss-results .ss-photo').length`),3);
   await shot('ejected-1440');
-  const ejectDrag=await js(`(()=>{try{const card=document.querySelector('.ss-eject-slot .ss-photo');const zone=document.querySelector('.ss-results');const a=card.getBoundingClientRect(),z=zone.getBoundingClientRect(),dt=new DataTransfer();card.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt,clientX:a.left+a.width/2,clientY:a.top+a.height/2}));zone.dispatchEvent(new DragEvent('dragenter',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:z.left+z.width*.72,clientY:z.top+z.height*.45}));zone.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:z.left+z.width*.72,clientY:z.top+z.height*.45}));zone.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:z.left+z.width*.72,clientY:z.top+z.height*.45}));return 'ok'}catch(error){return String(error.stack||error)}})()`); assert.equal(ejectDrag,'ok',ejectDrag); await delay(180);
+  const ejectPull=await js(`(()=>{try{const card=document.querySelector('.ss-eject-slot .ss-photo');const zone=document.querySelector('.ss-results');const a=card.getBoundingClientRect(),z=zone.getBoundingClientRect(),x=a.left+a.width/2,y=a.top+a.height/2,dx=z.left+z.width*.72,dy=z.top+z.height*.45;card.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:17,clientX:x,clientY:y,buttons:1}));card.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,cancelable:true,pointerId:17,clientX:dx,clientY:dy,buttons:1}));return {x:dx,y:dy}}catch(error){return String(error.stack||error)}})()`); assert.equal(typeof ejectPull,'object',ejectPull); await delay(120); assert(await js(`document.querySelector('.ss-ejected-card').classList.contains('is-detached')`),'the ejected photo visibly detaches after a downward pull'); await shot('pulling-1440');
+  await js(`(()=>{const card=document.querySelector('.ss-eject-slot .ss-photo');card.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,pointerId:17,clientX:${ejectPull.x},clientY:${ejectPull.y},buttons:0}));return true})()`); await delay(180);
   assert.equal(await js(`document.querySelectorAll('.ss-results .ss-photo').length`),4); assert.equal(await js(`document.querySelectorAll('.ss-eject-slot .ss-photo').length`),0);
   await click('.ss-results .ss-photo:last-child'); await shot('result-1440'); await click('.ss-dialog-actions button:first-child'); await delay(500); assert(downloaded,'sample saved to QA directory');
-  await click('.ss-dialog-actions button:nth-child(2)'); assert(await js(`document.querySelector('.ss-enlarged').src.endsWith('source.png')`));
+  await click('.ss-dialog-actions button:nth-child(2)'); assert.equal(await js(`document.querySelectorAll('.ss-compare-pair img').length`),2,'S5/result compare shows original and result side-by-side'); await shot('compare-1440');
   await click('.ss-dialog-actions button:nth-child(3)'); assert(await js(`!!document.querySelector('.ss-reveal canvas')`));
+  await click('.ss-effects button:nth-child(2)');
+  const radiusBefore=await js(`Number(document.querySelector('.ss-radius input').value)`); await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(100); assert((await js(`Number(document.querySelector('.ss-radius input').value)`))>radiusBefore,'confirmed reveal effect rotates the circular window size');
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'Enter',bubbles:true}));true`); await delay(80); assert.equal((await js(`document.querySelector('.ss-radius').textContent`)).trim().startsWith('点大小'),true,'press switches from circular window to dot size');
+  const detailBefore=await js(`Number(document.querySelector('.ss-radius input').value)`); await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(80); assert((await js(`Number(document.querySelector('.ss-radius input').value)`))>detailBefore,'wheel adjusts point size');
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'Enter',bubbles:true}));true`); await delay(80); assert(await js(`!!document.querySelector('.ss-reveal-select-cue')`),'next press returns to reveal effect selection');
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit1',bubbles:true}));true`); await delay(80); assert.equal(await js(`document.querySelector('.ss-radius input').min`),'0','S1 enters display intensity adjustment');
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(80);
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'Enter',bubbles:true}));true`); await delay(80); assert.equal(await js(`document.querySelector('.ss-radius input').min`),'10','leaving S1 restores bounded reveal controls');
   for(let i=1;i<=6;i++) await click(`.ss-effects button:nth-child(${i})`);
   await shot('reveal-1440'); await click('.ss-tabs button:first-child');
   await click('.ss-output-heading .ss-soft');
@@ -51,7 +61,7 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   await shot('free-after-drag-1440');
   await click('.ss-outline'); await shot('prompt-1440'); await click('.ss-close');
   // Synthetic focus is local to this hidden renderer; never focuses the real desktop.
-  await js(`Object.defineProperty(document,'hasFocus',{configurable:true,value:()=>true});window.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit7',bubbles:true}));true`); await delay(100);
+  await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'Digit7',bubbles:true}));true`); await delay(100);
   assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'纸间光影');
   await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(100);
   assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'毛线手作');
@@ -72,9 +82,11 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   for(const text of ['AI 陪伴','按键配置','提示词','风格映像']) {await js(`[...document.querySelectorAll('.sidebar__nav button')].find(x=>x.innerText===${JSON.stringify(text)}).click();true`);await delay(220);}
   assert(await js(`!!document.querySelector('.style-studio')`),'route reentry');
   await shot('generate-final-1440');
+  const machineDropResult=await js(`(async()=>{try{const blob=await fetch(document.querySelector('.ss-style-preview').src).then(r=>r.blob());const zone=document.querySelector('.ss-machine'),rect=zone.getBoundingClientRect(),dt=new DataTransfer();dt.items.add(new File([blob],'machine-fixture.png',{type:'image/png'}));zone.dispatchEvent(new DragEvent('dragenter',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.5,clientY:rect.top+rect.height*.35}));zone.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.5,clientY:rect.top+rect.height*.35}));zone.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.5,clientY:rect.top+rect.height*.35}));return 'ok'}catch(error){return String(error.stack||error)}})()`); assert.equal(machineDropResult,'ok',machineDropResult); await delay(100);
+  assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),2,'a computer file dropped on the machine imports as material'); assert.equal((await js(`document.querySelector('.ss-inlet .ss-photo span').textContent`)).trim(),'machine-fixture','the dropped file is inserted into the upper slot'); assert(await js(`document.querySelector('.ss-machine').classList.contains('is-inserting')`),'the machine reacts while seating the photo'); await shot('machine-drop-1440');
   // Upload only a repository-generated fixture, never user photos. Concurrent batches must not exceed cap.
   const fileDropResult=await js(`(async()=>{try{const blob=await fetch(document.querySelector('.ss-style-preview').src).then(r=>r.blob());const zone=document.querySelector('.ss-materials'),rect=zone.getBoundingClientRect(),dt=new DataTransfer();dt.items.add(new File([blob],'dropped-fixture.png',{type:'image/png'}));zone.dispatchEvent(new DragEvent('dragenter',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.74,clientY:rect.top+rect.height*.64}));zone.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.74,clientY:rect.top+rect.height*.64}));zone.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientX:rect.left+rect.width*.74,clientY:rect.top+rect.height*.64}));return 'ok'}catch(error){return String(error.stack||error)}})()`); assert.equal(fileDropResult,'ok',fileDropResult);
-  await delay(250); assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),2,'files dropped on the upper canvas import as material');
+  await delay(250); assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),3,'files dropped on the upper canvas import as material');
   await js(`(async()=>{const blob=await fetch(document.querySelector('.ss-style-preview').src).then(r=>r.blob()); const send=()=>{const dt=new DataTransfer();for(let i=0;i<8;i++)dt.items.add(new File([blob],'fixture-'+i+'.png',{type:'image/png'}));const input=document.querySelector('input[type=file]');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))};send();send();return true})()`);
   await delay(800); assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),9,'eight managed imports plus sample');
   await click('.ss-press-action'); assert(await js(`document.querySelector('.ss-footer [role=status]').textContent.includes('浏览器预览')`));
@@ -82,7 +94,7 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   const beforeUnload=await js(`(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented})()`); assert(beforeUnload,'upload has leave guard');
   await shot('upload-1440');
   assert.equal(errors.length,0,errors.join('\n'));
-  fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({passed:true,output,checks:'assets/nav/free-drop/transient-orbit/strength/print/enlarge/compare/effects/organize/prompt/keyboard/responsive/compact-wheel/reentry',consoleErrors:errors,baselineWarnings},null,2));
+  fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({passed:true,output,checks:'assets/nav/machine-drop/free-drop/transient-orbit/strength/print/pointer-pull/enlarge/compare/reveal-parameters/effects/organize/prompt/keyboard/responsive/compact-wheel/reentry',consoleErrors:errors,baselineWarnings},null,2));
   console.log(JSON.stringify({passed:true,output}));
   window.destroy();clearTimeout(deadline);app.exit(0);
 }catch(error){fs.writeFileSync(path.join(output,'error.txt'),String(error.stack));console.error(error);console.log('Renderer errors:',errors);console.log('Evidence: '+output);clearTimeout(deadline);app.exit(1)}});
