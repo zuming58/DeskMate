@@ -83,6 +83,7 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/aria-label="删除作品"/);
   assert.match(source,/STUDIO_EFFECT_PARAMETERS/);
   assert.match(source,/并排对比原图/);
+  assert.match(source,/className="ss-enlarged-action"[^>]+onClick=\{showReveal\}/);
   assert.match(source,/passive: false, capture: true/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);

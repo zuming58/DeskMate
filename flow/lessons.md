@@ -1,5 +1,15 @@
 # Lessons learned
 
+## Verify the exact ESP-IDF entry point, not only the command name
+
+- On Windows, an `idf.py.exe` supplied by an unrelated helper can precede the frozen ESP-IDF checkout on `PATH` and print its own version even after a previous terminal activated ESP-IDF.
+- Before a flash candidate is built, verify both the intended Python environment and the exact `esp-idf/tools/idf.py` path, then invoke those exact files. Record the resulting ESP-IDF version and build HEAD with the image hash; a naked `idf.py` is not sufficient provenance.
+
+## Post-flash helpers must not assume every Windows Bash is Git Bash
+
+- A discovered `bash.exe` may be WSL, where `D:/...` and `/d/...` paths are both invalid. Repeating the same helper with alternate drive spelling does not improve evidence.
+- After bounded failures, perform the helper's documented read-only checks manually before recovery and record the equivalent evidence. Once the user power-cycles into normal application mode, do not reopen esptool merely to repair a tooling transcript.
+
 ## Page ownership of an internal hardware action needs a volatile lease
 
 - A renderer cannot intercept a control the firmware consumes internally. Reconfigure it at the firmware routing boundary, not with another browser key guess.

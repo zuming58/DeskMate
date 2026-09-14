@@ -101,6 +101,9 @@
 .ss-dialog h3 { margin: 16px 0; font-size: 15px; }
 .ss-close { position: absolute; top: 14px; right: 14px; border-radius: 50%; width: 36px; height: 36px; border: 1px solid #dbe3ed; background: #fff; color: #5f738d; display: grid; place-items: center; z-index: 1; }
 .ss-enlarged { display: block; max-width: 100%; max-height: 65vh; margin: auto; object-fit: contain; border-radius: 10px; }
+.ss-enlarged-action { display: block; max-width: 100%; margin: auto; padding: 0; border: 0; border-radius: 10px; background: transparent; cursor: zoom-in; }
+.ss-enlarged-action:hover { box-shadow: 0 0 0 3px #d8e7ff; }
+.ss-enlarged-action .ss-enlarged { pointer-events: none; }
 .ss-compare-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 100%; }
 .ss-compare-pair figure { margin: 0; min-width: 0; border: 1px solid #e3eaf4; border-radius: 14px; overflow: hidden; background: #f7f9fc; }
 .ss-compare-pair img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }

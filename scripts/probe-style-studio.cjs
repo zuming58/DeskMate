@@ -45,7 +45,8 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   await click('.ss-tabs button:first-child');
   await click('.ss-results .ss-photo:last-child'); await shot('result-1440'); await click('.ss-dialog-actions button:first-child'); await delay(500); assert(downloaded,'sample saved to QA directory');
   await click('.ss-dialog-actions button:nth-child(2)'); assert.equal(await js(`document.querySelectorAll('.ss-compare-pair img').length`),2,'S5/result compare shows original and result side-by-side'); await shot('compare-1440');
-  await click('.ss-dialog-actions button:nth-child(3)'); assert(await js(`!!document.querySelector('.ss-reveal canvas')`));
+  await click('.ss-dialog-actions button:nth-child(2)'); assert.equal(await js(`document.querySelectorAll('.ss-compare-pair img').length`),0,'historical result returns from comparison to its enlarged view');
+  await click('.ss-enlarged-action'); assert(await js(`!!document.querySelector('.ss-reveal canvas')`),'clicking the enlarged historical result enters reveal editing');
   await click('.ss-effects button:nth-child(2)');
   const radiusBefore=await js(`Number(document.querySelector('.ss-radius input').value)`); await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(100); assert((await js(`Number(document.querySelector('.ss-radius input').value)`))>radiusBefore,'confirmed reveal effect rotates the circular window size');
   await click('.ss-reveal-controls button:nth-child(2)'); assert.equal((await js(`document.querySelector('.ss-radius').textContent`)).trim().startsWith('点大小'),true,'point-size control switches from circular window to dot size');
