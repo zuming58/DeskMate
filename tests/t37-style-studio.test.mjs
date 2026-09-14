@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { STUDIO_STYLES, wrapStudioIndex, clampStudioStrength, studioPrompt, studioOrbit, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
+import { STUDIO_STYLES, wrapStudioIndex, clampStudioStrength, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
 test('T37 five provenance-backed styles and bounded intensity', () => {
   assert.equal(STUDIO_STYLES.length, 5);
   for (const s of STUDIO_STYLES) assert(fs.existsSync(new URL(`../public/assets/style-studio/${s.id}.png`, import.meta.url)));
@@ -18,9 +18,17 @@ test('T37 all generated raster hashes match the source manifest', () => {
 test('T37 orbital positions are unique, bounded and cycle', () => {
   const positions = STUDIO_STYLES.map((_,i) => studioOrbit(i,0));
   assert.equal(new Set(positions.map(p=>p.x)).size, 5);
-  assert.equal(positions[0].scale, 1);
-  for (const p of positions) { assert(Math.abs(p.x)<=235); assert(Math.abs(p.y)<=255); assert(p.scale>.4); }
+  assert.equal(positions[0].scale, 1); assert.equal(positions[0].opacity, 1);
+  for (const p of positions) { assert(Math.abs(p.x)<=205); assert(Math.abs(p.y)<=180); assert(p.scale>.6); assert(p.opacity>=.36); }
   assert.deepEqual(studioOrbit(0,0), studioOrbit(0,5));
+});
+test('T39 free canvases have deterministic bounded scatter and clamp dropped cards', () => {
+  assert.notDeepEqual(studioScatter(0, 'material'), studioScatter(1, 'material'));
+  assert.notDeepEqual(studioScatter(0, 'material'), studioScatter(0, 'result'));
+  assert.deepEqual(clampStudioPosition({ x: -20, y: 110, tilt: 30 }), { x: 7, y: 82, tilt: 12 });
+  for (let i = 0; i < 30; i++) for (const zone of ['material','result']) {
+    const point = studioScatter(i, zone); assert(point.x >= 7 && point.x <= 93); assert(point.y >= 18 && point.y <= 82); assert(point.tilt >= -12 && point.tilt <= 12);
+  }
 });
 test('T38 page keyboard preserves editors and maps the existing Maker chords only on the page', () => {
   assert.equal(studioKey({code:'Digit1'}), 'strength');
@@ -53,6 +61,10 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/确认上传并生成/);
   assert.match(source,/离开或失焦自动恢复/);
   assert.match(source,/clearTimeout\(timer.current\)/);
+  assert.match(source,/素材自由摆放区/);
+  assert.match(source,/作品自由摆放区/);
+  assert.match(source,/orbitOpen && !adjusting/);
+  assert.match(source,/按“整理”可再次排齐/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);
   assert.match(main,/hash: '\/style-studio'/);

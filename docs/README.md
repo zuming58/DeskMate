@@ -1,5 +1,7 @@
 # Documentation index
 
+- [T39 Style Studio free canvas and transient style orbit](design/style-studio-t39.md)
+
 ## Current handoff
 
 - [T21J dialogue continuity, wake greeting and daily-memory retrieval](contracts/t21j-dialogue-memory-continuity-v1.md)

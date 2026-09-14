@@ -1,6 +1,10 @@
 # Development plan
 
-## Current delivery: T38 functional Style Studio — packaged acceptance pending
+## Current delivery: T39 Style Studio interaction correction — verification in progress
+
+The T38 provider/library/input boundaries remain unchanged. T39 adds Explorer drop into the upper material canvas, free bounded placement inside separate material/result regions, one-way result organization, and a transient dial-driven style orbit. No other DeskMate page, voice state, provider contract, firmware or HID write path changes. See `docs/design/style-studio-t39.md`.
+
+## Previous delivery: T38 functional Style Studio — packaged acceptance pending
 
 The approved T37 风格映像 UI now has a main-process Qwen Image 3.0 adapter, explicit one-time upload consent, persistent managed sources/results, immediate result download, cancellation, safe deletion and a focus/route-bounded input lease. Existing DeskMate pages and the voice state machine are unchanged; no firmware or HID write path was added. Automated provider calls use mocks, so a real user-authorized photo generation and physical-key acceptance remain separate. See `docs/design/style-studio-t38.md` and `docs/contracts/t38-style-studio-v1.md`.
 

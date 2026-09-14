@@ -1,5 +1,9 @@
 # Decisions
 
+## D144 — Style Studio cards are spatial objects; the style orbit is transient
+
+2026-09-14: Preserve separate material and result identities while restoring the reference interaction. Both regions are bounded free canvases; Explorer image drops enter only the upper material region, the inlet selects a material, and cross-region card drops return instead of silently converting data. Results align only when the user presses **整理**; moving an aligned result returns to free layout. Style cards are absent at idle and appear only during wheel/arrow/dial selection, with the selected left-side card most legible and progressively distant cards smaller and more transparent; choice, timeout, focus loss or route leave closes the orbit. Coordinates are session presentation state, while T38 media persistence, consent, provider and input-lease contracts remain unchanged.
+
 ## D143 — Style Studio uploads per consent and restores input ownership by lease
 
 2026-09-14: Keep the approved T37 visual unchanged while adding function behind a main-process boundary. A local source remains local until the user confirms that specific generation; only then may the frozen source/style/strength/brief be sent to the configured Bailian Qwen Image adapter. Validate and immediately download temporary results into an application-managed, hash-checked library. Do not expose keys, paths or provider URLs to React. Allow one active generation with cancellation and explicit local deletion; protect sources still referenced by results. Page input ownership exists only while the focused visible main window is on `#/style-studio`, and releases on route/blur/reload/crash/close. This slice writes no HID report and changes no firmware. Full eight-key physical identity is not claimed from incomplete Raw Input evidence.

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
-import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, wrapStudioIndex, clampStudioStrength, studioPrompt, studioOrbit, studioKey, validStudioUpload } from './domain/styleStudio.js';
+import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, wrapStudioIndex, clampStudioStrength, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from './domain/styleStudio.js';
 import './style-studio.css';
 
 const starter = { id: 'source', name: '生活中的我', image: STUDIO_SOURCE, sample: true };
@@ -12,8 +12,8 @@ function mediaUrl(bytes, mime, urls) {
   urls.current.add(url);
   return url;
 }
-function Photo({ item, className = '', onClick, onDragStart, style, selected, caption }) {
-  return <button type="button" className={`ss-photo ${className} ${selected ? 'is-selected' : ''}`} style={style} onClick={onClick} draggable={Boolean(onDragStart)} onDragStart={onDragStart} aria-label={caption || item.name}>
+function Photo({ item, className = '', onClick, onDragStart, onDragEnd, style, selected, caption }) {
+  return <button type="button" className={`ss-photo ${className} ${selected ? 'is-selected' : ''}`} style={style} onClick={onClick} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onDragEnd={onDragEnd} aria-label={caption || item.name}>
     <img src={item.image} alt={item.name} draggable="false" /><span>{caption || item.name}</span>
   </button>;
 }
@@ -68,10 +68,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [mode, setMode] = useState('generate'), [modal, setModal] = useState(null), [activeResult, setActiveResult] = useState(exampleResults[1]);
   const [phase, setPhase] = useState('idle'), [compare, setCompare] = useState(false), [effect, setEffect] = useState(0), [radius, setRadius] = useState(42);
   const [organized, setOrganized] = useState(false), [brief, setBrief] = useState(''), [dragOver, setDragOver] = useState(false);
+  const [orbitOpen, setOrbitOpen] = useState(false), [materialDrop, setMaterialDrop] = useState(false);
+  const [materialPositions, setMaterialPositions] = useState({}), [resultPositions, setResultPositions] = useState({});
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true);
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
-  const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), busy = useRef(false), wheelAt = useRef(0), alive = useRef(true), dialStart = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
+  const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), busy = useRef(false), wheelAt = useRef(0), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
   const style = STUDIO_STYLES[wrapStudioIndex(cursor)];
   const importing = useRef(false);
   useUnsavedChanges((!provider.available && materials.some(item => !item.sample)) || Boolean(brief.trim()) || busy.current);
@@ -108,6 +110,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     return () => {
       alive.current = false;
       clearTimeout(timer.current);
+      clearTimeout(orbitTimer.current);
       if (activeRequest.current) void api?.cancelStyleStudioImage?.(activeRequest.current);
       void api?.releaseStyleStudioInput?.(leaseToken.current);
       urls.current.forEach(url => URL.revokeObjectURL(url));
@@ -116,7 +119,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   useEffect(() => {
     const api = bridge();
     const acquire = () => { setFocused(true); void api?.acquireStyleStudioInput?.(leaseToken.current); };
-    const blur = () => { setFocused(false); setCompare(false); void api?.releaseStyleStudioInput?.(leaseToken.current); };
+    const blur = () => { setFocused(false); setCompare(false); setOrbitOpen(false); clearTimeout(orbitTimer.current); void api?.releaseStyleStudioInput?.(leaseToken.current); };
     acquire();
     const unsubscribe = api?.onStyleStudioInput?.(event => {
       if (!document.hasFocus()) return;
@@ -126,15 +129,22 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     window.addEventListener('blur', blur); window.addEventListener('focus', acquire);
     return () => { unsubscribe?.(); window.removeEventListener('blur', blur); window.removeEventListener('focus', acquire); };
   }, []);
+  function showOrbit(autoClose = true) {
+    clearTimeout(orbitTimer.current);
+    setOrbitOpen(true);
+    if (autoClose) orbitTimer.current = setTimeout(() => { if (alive.current) setOrbitOpen(false); }, 1250);
+  }
+  function hideOrbit() { clearTimeout(orbitTimer.current); setOrbitOpen(false); }
   function move(direction) {
     if (phase !== 'idle') return;
     if (mode === 'reveal') setEffect(i => wrapStudioIndex(i + direction, STUDIO_EFFECTS.length));
     else if (adjusting) setStrength(n => clampStudioStrength(n + direction * 5));
-    else setCursor(n => n + direction);
+    else { showOrbit(); setCursor(n => n + direction); }
   }
-  function choose(index) { if (busy.current) return; setCursor(index); setAdjusting(false); }
+  function choose(index) { if (busy.current) return; setCursor(index); setAdjusting(false); hideOrbit(); setStatus(`已选择“${STUDIO_STYLES[index].name}”。`); }
   function generate() {
     if (busy.current) return;
+    hideOrbit();
     if (adjusting) { setAdjusting(false); return; }
     if (!source.sample) {
       if (!provider.available) { setStatus('当前是浏览器预览，需在 DeskMate 桌面软件中生成。'); return; }
@@ -178,11 +188,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     if (id) await bridge()?.cancelStyleStudioImage?.(id);
     setStatus('正在取消本次生成…');
   }
-  async function upload(files) {
+  async function upload(files, placement = null) {
     if (importing.current || busy.current) { setStatus('请等待当前导入或出片完成后再添加素材。'); return; }
     importing.current = true;
     try {
     let remaining = 8 - materials.filter(item => !item.sample).length;
+    let placementIndex = 0;
     for (const file of Array.from(files || [])) {
       if (!remaining) { setStatus('本次最多放入 8 张素材。'); break; }
       if (!validStudioUpload(file)) { setStatus('请选择 10 MB 以内的 PNG、JPG 或 WebP 图片。'); continue; }
@@ -191,17 +202,61 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       catch { URL.revokeObjectURL(image); urls.current.delete(image); if (alive.current) setStatus('图片无法读取，或超过 4000 万像素。'); continue; }
       if (!alive.current) { URL.revokeObjectURL(image); urls.current.delete(image); return; }
       const api = bridge();
-      if (!api?.importStyleStudioSource) { const item = { id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), image, sample: false }; setMaterials(items => [...items, item]); setSource(item); remaining--; setStatus('浏览器预览：素材只保留到本次页面关闭。'); continue; }
+      if (!api?.importStyleStudioSource) { const item = { id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), image, sample: false }; setMaterials(items => [...items, item]); setSource(item); if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) })); placementIndex++; remaining--; setStatus('浏览器预览：素材只保留到本次页面关闭。'); continue; }
       const response = await api.importStyleStudioSource({ name: file.name.replace(/\.[^.]+$/, ''), mime: file.type, bytes: await file.arrayBuffer() });
       if (!alive.current) return;
       if (!response.ok) { URL.revokeObjectURL(image); urls.current.delete(image); setStatus(response.reason || '素材没有导入，请检查图片。'); continue; }
       const existing = materials.find(item => item.id === response.record.id);
-      if (existing) { URL.revokeObjectURL(image); urls.current.delete(image); setSource(existing); setStatus('这张素材已在本地素材库中。'); continue; }
+      if (existing) { URL.revokeObjectURL(image); urls.current.delete(image); setSource(existing); if (placement) setMaterialPositions(items => ({ ...items, [existing.id]: clampStudioPosition(placement) })); setStatus('这张素材已在本地素材库中。'); continue; }
       const item = { ...response.record, image, sample: false };
       setMaterials(items => [...items, item]); setSource(item); remaining--;
+      if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) }));
+      placementIndex++;
       setStatus('素材已保存到本地素材库；只有确认生成后才会上传百炼。');
     }
     } finally { importing.current = false; }
+  }
+  function beginCardDrag(event, kind, item) {
+    if (busy.current) { event.preventDefault(); return; }
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragOffset.current = { x: event.clientX - rect.left, y: event.clientY - rect.top, width: rect.width, height: rect.height };
+    const value = JSON.stringify({ kind, id: item.id });
+    event.dataTransfer.setData('application/x-deskmate-studio-card', value);
+    event.dataTransfer.setData(kind === 'material' ? 'application/x-deskmate-material' : 'application/x-deskmate-result', item.id);
+    event.dataTransfer.effectAllowed = 'move';
+  }
+  function dropPosition(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offset = dragOffset.current || { x: 0, y: 0, width: 0, height: 0 };
+    return clampStudioPosition({
+      x: ((event.clientX - rect.left - offset.x + offset.width / 2) / rect.width) * 100,
+      y: ((event.clientY - rect.top - offset.y + offset.height / 2) / rect.height) * 100,
+      tilt: Math.round((((event.clientX - rect.left) / Math.max(1, rect.width)) - .5) * 10),
+    });
+  }
+  function readDraggedCard(event) {
+    try { return JSON.parse(event.dataTransfer.getData('application/x-deskmate-studio-card') || 'null'); }
+    catch { return null; }
+  }
+  function dropOnMaterials(event) {
+    event.preventDefault(); setMaterialDrop(false);
+    if (event.dataTransfer.files?.length) { dragOffset.current = null; const point = dropPosition(event); void upload(event.dataTransfer.files, point); return; }
+    const payload = readDraggedCard(event);
+    if (!payload) return;
+    if (payload.kind !== 'material') { dragOffset.current = null; setStatus('作品仍保留在下方作品区；这里只接收原始素材。'); return; }
+    const point = dropPosition(event); dragOffset.current = null;
+    setMaterialPositions(items => ({ ...items, [payload.id]: point }));
+    setStatus('素材位置已调整；拖到中间进片口即可设为当前原图。');
+  }
+  function dropOnResults(event) {
+    event.preventDefault();
+    const payload = readDraggedCard(event);
+    if (!payload) return;
+    if (payload.kind !== 'result') { dragOffset.current = null; setStatus('原图仍保留在上方素材区；作品区只摆放生成结果。'); return; }
+    const point = dropPosition(event); dragOffset.current = null;
+    setResultPositions(items => ({ ...items, [payload.id]: point }));
+    setOrganized(false);
+    setStatus('作品已自由摆放；按“整理”可再次排齐。');
   }
   async function save() {
     if (!activeResult) return;
@@ -224,18 +279,18 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     setStatus(`已从本地库删除“${deleteTarget.name}”。`); setModal(null); setDeleteTarget(null);
   }
   function action(name) {
-    if (name === 'close') { if (modal === 'progress') { void cancelGeneration(); return; } setModal(null); setDeleteTarget(null); setAdjusting(false); setCompare(false); return; }
+    if (name === 'close') { if (modal === 'progress') { void cancelGeneration(); return; } setModal(null); setDeleteTarget(null); setAdjusting(false); setCompare(false); hideOrbit(); return; }
     if (modal && !['save', 'compare', 'view'].includes(name)) return;
     if (name === 'previous') move(-1);
     if (name === 'next') move(1);
-    if (name === 'confirm') mode === 'generate' ? generate() : setMode('generate');
-    if (name === 'strength') setAdjusting(v => !v);
+    if (name === 'confirm') { if (mode !== 'generate') setMode('generate'); else if (adjusting) setAdjusting(false); else if (orbitOpen) { hideOrbit(); setStatus(`已选择“${style.name}”。`); } else generate(); }
+    if (name === 'strength') { hideOrbit(); setAdjusting(v => !v); }
     if (name === 'view') { if (activeResult) setModal(v => v === 'result' ? null : 'result'); }
     if (name === 'save') void save();
     if (name === 'compare') setCompare(v => !v);
     if (name === 'inspiration') { setBrief('保留主体轮廓，加入温柔的植物与自然光。'); setModal('prompt'); }
-    if (name === 'reset' && !busy.current) { setCursor(0); setStrength(65); setAdjusting(false); setEffect(0); setRadius(42); setStatus('已重置风格参数，素材和作品保留。'); }
-    if (name === 'mode' && !busy.current) setMode(v => v === 'generate' ? 'reveal' : 'generate');
+    if (name === 'reset' && !busy.current) { hideOrbit(); setCursor(0); setStrength(65); setAdjusting(false); setEffect(0); setRadius(42); setStatus('已重置风格参数，素材和作品保留。'); }
+    if (name === 'mode' && !busy.current) { hideOrbit(); setMode(v => v === 'generate' ? 'reveal' : 'generate'); }
   }
   const actions = useRef(action); actions.current = action;
   useEffect(() => {
@@ -245,33 +300,33 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', release); };
   }, []);
   const keyItems = [['strength','强度'],['view','查看'],['save','保存'],['close','收起'],['compare','对比'],['inspiration','灵感'],['reset','重置'],['mode','模式']];
-  const wheel = e => { if (Math.abs(e.deltaY) < 2 || Date.now() - wheelAt.current < 110) return; wheelAt.current = Date.now(); move(e.deltaY > 0 ? 1 : -1); };
+  const wheel = e => { e.preventDefault(); if (Math.abs(e.deltaY) < 2 || Date.now() - wheelAt.current < 110) return; wheelAt.current = Date.now(); move(e.deltaY > 0 ? 1 : -1); };
   return <section className="style-studio" aria-label="风格映像">
     <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className="ss-tabs" role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={mode === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) setMode(id); }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? '百炼已配置' : provider.available ? '百炼未配置' : '浏览器预览'}</span></div></header>
     {mode === 'generate' ? <div className={`ss-stage ${phase}`}>
-      <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><small>点击或拖入 · 本地素材库</small></div>
+      <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
-      <div className="ss-materials" aria-label="素材区" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) void upload(e.dataTransfer.files); }}>
-        {materials.map((item,index) => <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) setSource(item); }} onDragStart={e => { e.dataTransfer.setData('application/x-deskmate-material', item.id); e.dataTransfer.effectAllowed = 'copy'; }} style={{ '--tilt': `${index % 2 ? 6 : -10}deg` }} />)}
+      <div className={`ss-materials ${materialDrop ? 'is-file-over' : ''}`} aria-label="素材自由摆放区" onDragEnter={e => { if (e.dataTransfer.types?.includes('Files')) setMaterialDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMaterialDrop(false); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'result' ? 'none' : 'move'; }} onDrop={dropOnMaterials}>
+        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) setSource(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
       </div>
       <div className={`ss-inlet ${dragOver ? 'is-over' : ''}`} onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); setDragOver(false); if (busy.current) return; const item = materials.find(m => m.id === e.dataTransfer.getData('application/x-deskmate-material')); if (item) { setSource(item); setStatus('素材已放入进片槽。'); } else if (e.dataTransfer.files.length) void upload(e.dataTransfer.files); else setStatus('作品保留在下方；请从素材区放入原图。'); }}>
         <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">{dragOver ? '松开放入' : '原图进片口'}</span>
-      </div>
-      <div className="ss-orbit" aria-label="围绕旋钮选择风格" onWheel={wheel}>
-        {STUDIO_STYLES.map((item,index) => { const pos = studioOrbit(index, cursor); return <Photo key={item.id} item={item} selected={item.id === style.id} onClick={() => choose(index)} style={{ '--ox': `${pos.x}px`, '--oy': `${pos.y}px`, '--scale': pos.scale, '--tilt': `${pos.angle}deg`, zIndex: pos.z }} />; })}
       </div>
       <div className={`ss-machine ${adjusting ? 'is-adjusting' : ''}`}>
         <div className="ss-description"><span className="ss-eyebrow"><IconPhoto size={15} />风格映像</span><h1>{adjusting ? '调整风格强度' : style.name}</h1><p>{adjusting ? '旋转调节，按下旋钮确认。' : style.description}</p><button className="ss-outline" onClick={() => setModal('prompt')}>查看提示词<IconChevronRight size={15} /></button></div>
         <img className="ss-style-preview" src={style.image} alt={`${style.name}预制样片`} />
         <div className="ss-control">
           <label className="ss-strength">风格强度 <strong>{strength}%</strong><input aria-label="风格强度" type="range" min="0" max="100" value={strength} disabled={phase !== 'idle'} onChange={e => setStrength(Number(e.target.value))} /></label>
-          <div className="ss-dial-row"><button aria-label="上一个风格" className="ss-step" onClick={() => move(-1)}><IconChevronLeft size={17} /></button><button className="ss-dial" aria-label={adjusting ? '确认强度' : source.sample ? '按下旋钮演示出片' : '按下旋钮生成作品'} disabled={phase !== 'idle'} onClick={generate} onWheel={wheel} onPointerDown={e => { dialStart.current = e.clientX; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerUp={e => { if (dialStart.current !== null && Math.abs(e.clientX - dialStart.current) > 22) { move(e.clientX > dialStart.current ? 1 : -1); dialStart.current = 'dragged'; } else dialStart.current = null; }} onClickCapture={e => { if (dialStart.current === 'dragged') { e.stopPropagation(); dialStart.current = null; } }}><img src={STUDIO_DIAL} alt="" draggable="false" style={{ transform: `rotate(${adjusting ? strength * 2.7 : cursor * 36}deg)` }} /></button><button aria-label="下一个风格" className="ss-step" onClick={() => move(1)}><IconChevronRight size={17} /></button></div>
+          {orbitOpen && !adjusting && <div className="ss-orbit" aria-label="围绕旋钮选择风格" onWheel={wheel}>
+            {STUDIO_STYLES.map((item,index) => { const pos = studioOrbit(index, cursor); return <Photo key={item.id} item={item} selected={item.id === style.id} onClick={() => choose(index)} style={{ '--ox': `${pos.x}px`, '--oy': `${pos.y}px`, '--scale': pos.scale, '--opacity': pos.opacity, '--tilt': `${pos.angle}deg`, '--delay': `${index * 24}ms`, zIndex: pos.z }} />; })}
+          </div>}
+          <div className="ss-dial-row"><button aria-label="上一个风格" className="ss-step" onClick={() => move(-1)}><IconChevronLeft size={17} /></button><button className="ss-dial" aria-label={adjusting ? '确认强度' : orbitOpen ? '确认当前风格' : '旋转选择风格，按下生成'} disabled={phase !== 'idle'} onClick={() => action('confirm')} onWheel={wheel} onPointerDown={e => { dialStart.current = { start: e.clientX, last: e.clientX, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={e => { const drag = dialStart.current; if (!drag || Math.abs(e.clientX - drag.last) < 22) return; drag.moved = true; showOrbit(false); move(e.clientX > drag.last ? 1 : -1); drag.last = e.clientX; }} onPointerUp={() => { if (dialStart.current?.moved) { dialStart.current = 'dragged'; showOrbit(); } else dialStart.current = null; }} onClickCapture={e => { if (dialStart.current === 'dragged') { e.stopPropagation(); dialStart.current = null; } }}><img src={STUDIO_DIAL} alt="" draggable="false" style={{ transform: `rotate(${adjusting ? strength * 2.7 : cursor * 36}deg)` }} /></button><button aria-label="下一个风格" className="ss-step" onClick={() => move(1)}><IconChevronRight size={17} /></button></div>
           <button className="ss-primary" disabled={phase !== 'idle'} onClick={generate}>{phase !== 'idle' ? '正在出片…' : adjusting ? '确认强度' : source.sample ? '演示出片' : provider.configured ? '生成作品' : '配置百炼后生成'}</button>
         </div>
       </div>
-      <div className="ss-output-heading"><div><h2>作品</h2><p>样片与本地生成作品分开保存</p></div><button className="ss-soft" onClick={() => setOrganized(v => !v)}><IconLayoutGrid size={17} />{organized ? '自由排列' : '整理'}</button></div>
-      <div className={`ss-results ${organized ? 'is-organized' : ''}`} aria-label="作品区" onDragOver={e => e.preventDefault()} onDrop={e => e.preventDefault()}>
-        {results.map((item,index) => <Photo key={item.id} item={item} className={index === results.length - 1 && phase === 'printing' ? 'ss-ejecting' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => { e.dataTransfer.setData('application/x-deskmate-result', item.id); e.dataTransfer.effectAllowed = 'move'; }} style={{ '--tilt': `${organized ? 0 : index % 2 ? 4 : -7}deg` }} />)}
+      <div className="ss-output-heading"><div><h2>作品</h2><p>可自由摆放，按整理后自动排齐</p></div><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div>
+      <div className={`ss-results ${organized ? 'is-organized' : ''}`} aria-label="作品自由摆放区" onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'material' ? 'none' : 'move'; }} onDrop={dropOnResults}>
+        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={index === results.length - 1 && phase === 'printing' ? 'ss-ejecting' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
       </div>
     </div> : <div className="ss-reveal"><div className="ss-reveal-heading"><h2>显影实验室</h2><button className="ss-soft" onClick={() => setCompare(v => !v)}><IconArrowsExchange size={17} />{compare ? '返回作品' : '查看原图'}</button></div><p>{activeResult?.sample ? '本地样片' : '本地生成作品'} · 移动圆窗，探索不同的画面语言</p><Reveal result={activeResult} effect={effect} radius={radius} compare={compare} /><label className="ss-radius">圆窗大小 {radius}%<input aria-label="圆窗大小" type="range" min="10" max="90" value={radius} onChange={e => setRadius(Number(e.target.value))} /></label><div className="ss-effects">{STUDIO_EFFECTS.map((name,index) => <button key={name} aria-pressed={effect === index} onClick={() => setEffect(index)}><img src={activeResult.image} alt="" />{name}</button>)}</div></div>}
     <footer className="ss-footer"><p role="status">{status || '旋转选风格 · 选择自己的素材后，确认上传即可生成。离开本页自动恢复原按键。'}</p><div className="ss-keys" aria-label="页面按键预览">{keyItems.map(([id,name],index) => <button key={id} onClick={() => action(id)} title={`S${index + 1}：${name}`} className={id === 'strength' && adjusting ? 'is-selected' : ''}>S{index + 1}<small>{name}</small></button>)}</div></footer>

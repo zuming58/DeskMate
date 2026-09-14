@@ -1,3 +1,14 @@
+# T39 Style Studio spatial interaction QA — 2026-09-14
+
+- Source visual/correction: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-e08cbc44-8688-4717-b051-aeb86fe6f404.png` (1457×1188). The supplied red annotation and accompanying request supersede the screenshot's always-visible style fan: material and work cards remain free-positioned, while style cards are transient and belong around the dial only during selection.
+- Packaged implementation: `%TEMP%/deskmate-t37-qa-cfpM0b/orbit-1440.png` at a 1440×1024 CSS viewport. Idle, organized, post-drag free and Explorer-drop evidence are `generate-final-1440.png`, `organized-1440.png`, `free-after-drag-1440.png` and `upload-1440.png` in the same isolated QA directory. Source and packaged implementation were normalized to 1024 px height and inspected together in `D:/CodexData/home/visualizations/2026/09/13/01a09b5c-9220-7d51-8952-f29968487205/t39-style-studio-source-vs-implementation.png`.
+- Fidelity: existing DeskMate graphite navigation, white workspace, typography, cobalt controls, main inlet and printer panel are unchanged. The selected style sits clearly to the left of the dial; successive cards follow an upper arc and progressively reduce opacity/scale. The ring is absent at idle, appears on wheel/arrow/dial movement, closes after selection or inactivity, and is not confused with the free material canvas.
+- Spatial behavior: PNG/JPEG/WebP files dropped from the computer into the upper canvas import at the drop location; both material and result cards can be freely repositioned inside their own bounded region. Cross-region drops do not reclassify cards. `整理` performs a one-way alignment of all works; moving a work afterward returns the result region to free layout.
+- Comparison history: the first native responsive pass exposed horizontal overflow from the transient ring at 1024 px (P2), fixed with a compact responsive transform. A real synthetic drag then exposed a stale React `currentTarget` after the state update (P1), fixed by resolving the bounded drop point synchronously. Post-fix source and packaged-ASAR probes pass 1440×1024, 1024×768 and 800×768 with no horizontal overflow or renderer errors. Existing Electron console-event deprecation and Google Fonts CSP fallback are unchanged baselines.
+- Verification: full software suite 700/700; native input bridge publish; independent `release-t39` directory package and exact ASAR/resource/native-bridge verifier passed. No real user photo, provider request, retained-profile mutation, microphone, firmware, Flash or HID write was used. P3 only: the transient ring is intentionally more compact at 800 px and can be tuned after physical-dial feel testing.
+
+final result: passed
+
 # T38 Style Studio functional QA — 2026-09-14
 
 Final visual result: passed for the functional UI states; real provider and physical hardware acceptance remain pending.

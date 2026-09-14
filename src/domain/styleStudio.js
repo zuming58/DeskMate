@@ -17,8 +17,40 @@ export function studioPrompt(style, strength, brief = '') {
 }
 export function studioOrbit(index, cursor) {
   const distance = wrapStudioIndex(index - cursor);
-  const angle = (-135 + distance * 22.5) * Math.PI / 180;
-  return { x: Math.cos(angle) * 240, y: Math.sin(angle) * 255, scale: distance === 0 ? 1 : .76 - distance * .065, angle: -9 + distance * 6, z: 10 - distance };
+  const angle = (-180 + distance * 40) * Math.PI / 180;
+  return {
+    x: Math.cos(angle) * 205,
+    y: Math.sin(angle) * 180,
+    scale: 1 - distance * .095,
+    opacity: 1 - distance * .16,
+    angle: -8 + distance * 4,
+    z: 10 - distance,
+  };
+}
+const STUDIO_SCATTER = {
+  material: [
+    { x: 10, y: 44, tilt: -8 }, { x: 70, y: 38, tilt: 5 }, { x: 86, y: 46, tilt: -3 },
+    { x: 55, y: 55, tilt: 7 }, { x: 93, y: 65, tilt: 9 }, { x: 25, y: 62, tilt: 3 },
+    { x: 79, y: 70, tilt: -7 }, { x: 42, y: 39, tilt: -4 }, { x: 63, y: 72, tilt: 4 },
+  ],
+  result: [
+    { x: 20, y: 50, tilt: -7 }, { x: 42, y: 42, tilt: 4 }, { x: 64, y: 54, tilt: -3 },
+    { x: 82, y: 45, tilt: 6 }, { x: 31, y: 64, tilt: 3 }, { x: 54, y: 68, tilt: -5 },
+    { x: 74, y: 69, tilt: 4 }, { x: 91, y: 64, tilt: -6 },
+  ],
+};
+export function studioScatter(index, zone = 'material') {
+  const points = STUDIO_SCATTER[zone] || STUDIO_SCATTER.material;
+  const point = points[wrapStudioIndex(index, points.length)];
+  const lap = Math.floor(Math.max(0, index) / points.length);
+  return { ...point, x: Math.max(7, Math.min(93, point.x - lap * 2)), y: Math.max(20, Math.min(80, point.y + lap * 3)) };
+}
+export function clampStudioPosition(value = {}) {
+  return {
+    x: Math.max(7, Math.min(93, Number(value.x) || 50)),
+    y: Math.max(18, Math.min(82, Number(value.y) || 50)),
+    tilt: Math.max(-12, Math.min(12, Number(value.tilt) || 0)),
+  };
 }
 export function studioKey(event) {
   if (event.isComposing || event.altKey || event.metaKey || event.shiftKey) return null;
