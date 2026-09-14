@@ -60,6 +60,14 @@ export function clampStudioPosition(value = {}) {
     tilt: Math.max(-12, Math.min(12, Number(value.tilt) || 0)),
   };
 }
+export function resolveStudioDraggedCard(dataTransfer, activeCard) {
+  const valid = value => value?.id && ['material', 'result', 'ejected'].includes(value.kind);
+  try {
+    const transferred = JSON.parse(dataTransfer?.getData?.('application/x-deskmate-studio-card') || 'null');
+    if (valid(transferred)) return { kind: transferred.kind, id: transferred.id };
+  } catch { /* Chromium may omit custom data while an internal card drag is active. */ }
+  return valid(activeCard) ? { kind: activeCard.kind, id: activeCard.id } : null;
+}
 const STUDIO_PAGE_COMMANDS = ['strength', 'view', 'save', 'close', 'compare', 'inspiration', 'reset', 'mode'];
 const KEYBOARD_ACTION_SHORTCUTS = { 'select-all': 'Ctrl+A', copy: 'Ctrl+C', paste: 'Ctrl+V', undo: 'Ctrl+Z', enter: 'Enter', backspace: 'Backspace' };
 const SHORTCUT_CODES = { Return: 'Enter', Enter: 'Enter', Space: 'Space', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown' };

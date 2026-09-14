@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
+import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
 test('T42 ten provenance-backed styles and bounded generation/reveal controls', () => {
   assert.equal(STUDIO_STYLES.length, 10);
   for (const s of STUDIO_STYLES) assert(fs.existsSync(new URL(`../public/assets/style-studio/${s.id}.png`, import.meta.url)));
@@ -33,6 +33,12 @@ test('T39 free canvases have deterministic bounded scatter and clamp dropped car
   for (let i = 0; i < 30; i++) for (const zone of ['material','result']) {
     const point = studioScatter(i, zone); assert(point.x >= 7 && point.x <= 93); assert(point.y >= 18 && point.y <= 82); assert(point.tilt >= -12 && point.tilt <= 12);
   }
+});
+test('T46 internal card drag survives Chromium custom-data loss and wins over native file fallback', () => {
+  const active = { kind: 'material', id: 'new-source' };
+  assert.deepEqual(resolveStudioDraggedCard({ getData: () => '' }, active), active);
+  assert.deepEqual(resolveStudioDraggedCard({ getData: () => JSON.stringify({ kind: 'result', id: 'work-1' }) }, active), { kind: 'result', id: 'work-1' });
+  assert.equal(resolveStudioDraggedCard({ getData: () => '{broken' }, { kind: 'unknown', id: 'bad' }), null);
 });
 test('T42 page keyboard preserves editors and maps the existing Maker chords only on the page', () => {
   assert.equal(studioKey({code:'Digit1'}), 'strength');
@@ -108,6 +114,8 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/studioKey\(e, keyboardKeymap\.current\)/);
   assert.match(source,/if \(name === 'save'\) void save\(\);/);
   assert.doesNotMatch(source,/save\(returnHome/);
+  assert.match(source,/activeCardDrag\.current = payload/);
+  assert.match(source,/if \(!payload && event\.dataTransfer\.files\?\.length\)/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);
   assert.match(main,/hash: '\/style-studio'/);

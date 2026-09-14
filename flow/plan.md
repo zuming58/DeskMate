@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T46 reliable material insertion — packaged candidate
+
+Internal Material cards now retain a bounded renderer-side drag identity, so dropping a newly added card onto the machine still inserts it when Electron strips custom drag data or also presents the image as a native file. External file drops, free placement, result dragging and type rejection remain unchanged. See `docs/contracts/t46-style-studio-internal-drop-v1.md`.
+
 ## Current delivery: T45 Style Studio save stays in context — packaged candidate
 
 S3 now exports the current work without navigating away from Style Studio; after the native Save dialog closes, the selected result, Generate/Reveal mode and parameters remain available. S4 is the sole close/leave key. The change is route-scoped and does not write the board keymap or alter ordinary keys outside Style Studio. See `docs/contracts/t45-style-studio-save-stays-v1.md`.

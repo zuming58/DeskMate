@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick, IconTrash } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
-import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from './domain/styleStudio.js';
+import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, studioKey, validStudioUpload } from './domain/styleStudio.js';
 import { createStyleStudioDetentSound } from './domain/styleStudioDetentSound.js';
 import { createStyleStudioMotionSound } from './domain/styleStudioMotionSound.js';
 import { StyleStudioWheelRouter, styleStudioWheelStep } from './domain/styleStudioWheel.js';
@@ -94,7 +94,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true), [hardwareLease, setHardwareLease] = useState('checking');
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
   const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), insertTimer = useRef(null), settleTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
-  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null), keyboardKeymap = useRef(null);
+  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null), keyboardKeymap = useRef(null), activeCardDrag = useRef(null);
   const style = STUDIO_STYLES[wrapStudioIndex(cursor)];
   const importing = useRef(false);
   useUnsavedChanges((!provider.available && materials.some(item => !item.sample)) || Boolean(brief.trim()) || busy.current);
@@ -278,7 +278,9 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     if (busy.current) { event.preventDefault(); return; }
     const rect = event.currentTarget.getBoundingClientRect();
     dragOffset.current = { x: event.clientX - rect.left, y: event.clientY - rect.top, width: rect.width, height: rect.height };
-    const value = JSON.stringify({ kind, id: item.id });
+    const payload = { kind, id: item.id };
+    activeCardDrag.current = payload;
+    const value = JSON.stringify(payload);
     event.dataTransfer.setData('application/x-deskmate-studio-card', value);
     event.dataTransfer.setData(kind === 'material' ? 'application/x-deskmate-material' : 'application/x-deskmate-result', item.id);
     event.dataTransfer.effectAllowed = 'move';
@@ -293,8 +295,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     });
   }
   function readDraggedCard(event) {
-    try { return JSON.parse(event.dataTransfer.getData('application/x-deskmate-studio-card') || 'null'); }
-    catch { return null; }
+    return resolveStudioDraggedCard(event.dataTransfer, activeCardDrag.current);
   }
   function dragIntoMachine(event) {
     event.preventDefault();
@@ -305,12 +306,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   function dropIntoMachine(event) {
     event.preventDefault(); event.stopPropagation(); setDragOver(false);
     if (busy.current) { setStatus('正在生成或出片，请稍后再放入照片。'); return; }
-    if (event.dataTransfer.files?.length) { dragOffset.current = null; void upload(event.dataTransfer.files, null, true); return; }
     const payload = readDraggedCard(event);
     if (payload?.kind === 'material') {
       const item = materials.find(material => material.id === payload.id);
-      if (item) { dragOffset.current = null; loadSourceIntoMachine(item); return; }
+      if (item) { dragOffset.current = null; activeCardDrag.current = null; loadSourceIntoMachine(item); return; }
     }
+    if (!payload && event.dataTransfer.files?.length) { dragOffset.current = null; void upload(event.dataTransfer.files, null, true); return; }
     setStatus('机器进片口只接收上方素材或电脑里的图片。');
   }
   function clientPointInResults(clientX, clientY) {
@@ -374,8 +375,8 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   }
   function dropOnMaterials(event) {
     event.preventDefault(); setMaterialDrop(false);
-    if (event.dataTransfer.files?.length) { dragOffset.current = null; const point = dropPosition(event); void upload(event.dataTransfer.files, point); return; }
     const payload = readDraggedCard(event);
+    if (!payload && event.dataTransfer.files?.length) { dragOffset.current = null; const point = dropPosition(event); void upload(event.dataTransfer.files, point); return; }
     if (!payload) return;
     if (payload.kind !== 'material') { dragOffset.current = null; setStatus('作品仍保留在下方作品区；这里只接收原始素材。'); return; }
     const point = dropPosition(event); dragOffset.current = null;
@@ -535,7 +536,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><div className="ss-heading-actions"><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><button className={`ss-trash ${trashOver === 'material' ? 'is-over' : ''}`} aria-label="删除素材" onClick={() => setStatus('把不需要的素材拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'material')} onDragOver={e => dragOverTrash(e, 'material')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'material')}><IconTrash size={17} /><span>删除素材</span></button></div><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
       <div className={`ss-materials ${materialDrop ? 'is-file-over' : ''}`} aria-label="素材自由摆放区" onDragEnter={e => { if (e.dataTransfer.types?.includes('Files')) setMaterialDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMaterialDrop(false); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'result' ? 'none' : 'move'; }} onDrop={dropOnMaterials}>
-        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) loadSourceIntoMachine(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; setDragOver(false); setTrashOver(''); }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
+        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) loadSourceIntoMachine(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; activeCardDrag.current = null; setDragOver(false); setTrashOver(''); }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
       </div>
       <div className={`ss-inlet ${dragOver ? 'is-over' : ''} ${insertPulse ? 'is-inserting' : ''}`} onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
         <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">{dragOver ? '松开放入' : '原图进片口'}</span>
@@ -553,12 +554,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
         </div>
       </div>
       {ejectedResult && <div className={`ss-eject-slot ${pullVisual?.detached ? 'is-pulling-card' : ''}`} aria-label="作品出片口">
-        <Photo item={ejectedResult} className={`ss-ejected-card ${pullVisual ? 'is-pulling' : ''} ${pullVisual?.detached ? 'is-detached' : ''}`} style={pullVisual ? { '--pull-x': `${pullVisual.x}px`, '--pull-y': `${pullVisual.y}px` } : undefined} caption={`向下拔出 · ${ejectedResult.name}`} onClick={e => { if (suppressEjectClick.current) { e.preventDefault(); suppressEjectClick.current = false; return; } setActiveResult(ejectedResult); setCompare(false); setModal('result'); }} onPointerDown={e => beginEjectPull(e, ejectedResult)} onPointerMove={moveEjectPull} onPointerUp={finishEjectPull} onPointerCancel={cancelEjectPull} onDragStart={e => beginCardDrag(e, 'ejected', ejectedResult)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); setTrashOver(''); }} />
+        <Photo item={ejectedResult} className={`ss-ejected-card ${pullVisual ? 'is-pulling' : ''} ${pullVisual?.detached ? 'is-detached' : ''}`} style={pullVisual ? { '--pull-x': `${pullVisual.x}px`, '--pull-y': `${pullVisual.y}px` } : undefined} caption={`向下拔出 · ${ejectedResult.name}`} onClick={e => { if (suppressEjectClick.current) { e.preventDefault(); suppressEjectClick.current = false; return; } setActiveResult(ejectedResult); setCompare(false); setModal('result'); }} onPointerDown={e => beginEjectPull(e, ejectedResult)} onPointerMove={moveEjectPull} onPointerUp={finishEjectPull} onPointerCancel={cancelEjectPull} onDragStart={e => beginCardDrag(e, 'ejected', ejectedResult)} onDragEnd={() => { dragOffset.current = null; activeCardDrag.current = null; setResultDrop(false); setTrashOver(''); }} />
         <span>{pullVisual?.detached ? '保持拖动，放进作品区' : '按住照片向下拔出'}</span>
       </div>}
       <div className="ss-output-heading"><div><h2>作品</h2><p>从出片口拔出后可自由摆放，按整理自动排齐</p></div><div className="ss-heading-actions"><button className={`ss-trash ${trashOver === 'result' ? 'is-over' : ''}`} aria-label="删除作品" onClick={() => setStatus('把不需要的作品拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'result')} onDragOver={e => dragOverTrash(e, 'result')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'result')}><IconTrash size={17} /><span>删除作品</span></button><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div></div>
       <div ref={resultsRef} className={`ss-results ${organized ? 'is-organized' : ''} ${resultDrop ? 'is-drop-target' : ''}`} aria-label="作品自由摆放区" onDragEnter={e => { const payload = readDraggedCard(e); if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setResultDrop(false); }} onDragOver={e => { e.preventDefault(); const payload = readDraggedCard(e); e.dataTransfer.dropEffect = payload?.kind === 'material' ? 'none' : 'move'; if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDrop={dropOnResults}>
-        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={justPlacedId === item.id ? 'is-just-placed' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); setTrashOver(''); }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
+        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={justPlacedId === item.id ? 'is-just-placed' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; activeCardDrag.current = null; setResultDrop(false); setTrashOver(''); }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
       </div>
     </div> : <div className="ss-reveal"><div className="ss-reveal-heading"><h2>显影实验室</h2><button className="ss-soft" onClick={() => { setCompare(value => !value); setStatus('已交换圆窗内外的原图与作品。'); }}><IconArrowsExchange size={17} />交换内外</button></div><p>{activeResult?.sample ? '本地样片' : '本地生成作品'} · 先旋转选择效果，按下确认，再连续调节圆窗与颗粒</p><div className="ss-reveal-frame"><Reveal result={activeResult} effect={effect} radius={radius} compare={compare} detail={detail} displayStrength={displayStrength} canvasRef={revealCanvas} /><span className="ss-inside-label">圆窗内 · {compare ? '显影作品' : '原图'}</span><span className="ss-outside-label">圆窗外 · {compare ? '原图' : '显影作品'}</span></div><div className="ss-reveal-readout"><strong>{STUDIO_EFFECTS[effect]}</strong><span>{adjusting ? `S1 显示强度 ${displayStrength}%` : !revealConfirmed ? '旋转选择 · 按压确认' : revealControl === 'window' ? `圆窗大小 ${radius}%` : `${STUDIO_EFFECT_PARAMETERS[effect]} ${detail}%`}</span></div>{revealConfirmed ? <div className="ss-reveal-controls"><button aria-pressed={revealControl === 'window'} onClick={() => { setAdjusting(false); setRevealControl('window'); }}>窗口大小</button><button disabled={effect === 0} aria-pressed={revealControl === 'detail'} onClick={() => { setAdjusting(false); setRevealControl('detail'); }}>{STUDIO_EFFECT_PARAMETERS[effect]}</button><button onClick={() => { setAdjusting(false); setRevealConfirmed(false); setRevealControl('effect'); setStatus('重新选择显影效果。'); }}>重选模式</button></div> : <button type="button" className="ss-reveal-select-cue" onClick={() => action('confirm')}>旋转旋钮浏览 6 种方式，按下或点击进入参数调节</button>}<label className="ss-radius">{revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} {revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius}%<input aria-label={revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} type="range" min={adjusting ? 0 : 10} max={adjusting ? 100 : 90} value={revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius} onChange={e => { const value = Number(e.target.value); if (revealControl === 'detail' && effect > 0) setDetail(value); else if (adjusting) setDisplayStrength(value); else setRadius(value); }} /></label><div className="ss-effects">{STUDIO_EFFECTS.map((name,index) => <button key={name} aria-pressed={effect === index} onClick={() => { setEffect(index); setAdjusting(false); setRevealConfirmed(true); setRevealControl('window'); setStatus(`已选择“${name}”，旋转调节圆窗。`); }}><img src={activeResult.image} alt="" />{name}</button>)}</div></div>}
     <footer className="ss-footer"><p role="status">{status || '旋转选择风格 · 点击或用已映射的旋钮按压生图 · S2 查看/显影。'}</p><div className="ss-keys" aria-label="页面按键预览">{keyItems.map(([id,name],index) => <button key={id} onClick={() => action(id)} title={`S${index + 1}：${name}`} className={(id === 'strength' && adjusting) || (id === 'mode' && modeSelecting) ? 'is-selected' : ''}>S{index + 1}<small>{name}</small></button>)}</div></footer>

@@ -1,5 +1,9 @@
 # Decisions
 
+## D153 — Internal Studio cards use an in-page drag identity
+
+2026-09-14: During a Style Studio HTML drag, keep one bounded `{ kind, id }` reference in renderer memory until drag end. Prefer that internal identity over `DataTransfer.files` when dropping into the machine, because Chromium/Electron may expose a dragged image as a file or omit custom MIME data at an intermediate event. External files remain supported only when no internal card identity exists. Validate kinds, clear the reference on drag end or successful insertion, and keep result/ejected cards rejected by the original-source inlet.
+
 ## D152 — S3 saves in place; only S4 leaves Style Studio
 
 2026-09-14: In Style Studio, S3 exports the current result or Reveal canvas without changing route, closing the result view, resetting controls, or discarding the current editing context. Closing either the native Save dialog or a browser download flow returns to the same Style Studio state. S4 remains the only hardware key that closes the current overlay or leaves the page. This page-scoped navigation rule does not change the user's persistent keymap, firmware, or any S3 behavior outside Style Studio.
