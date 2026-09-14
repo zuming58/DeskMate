@@ -1,5 +1,9 @@
 # Decisions
 
+## D146 — Dial selection is continuous; a host-visible board press confirms the action
+
+2026-09-14: In Style Studio, wheel movement itself selects the highlighted style. A confirm action must generate immediately even while the transient orbit is visible; it must not require one press to close the orbit and a second press to generate. While S1 strength adjustment is active, the same confirm action only saves the strength. Keep provider configuration out of the primary action label and show the compact `按压旋钮生图` cue. The foreground route lease may reinterpret existing EasyInput-origin `F22`/`VoiceInput` events as confirm and must release on blur/leave. It may not consume ordinary keyboard events, rewrite device configuration, write HID, or claim the firmware's default internal `scroll_axis_toggle` as a Windows-visible press. Physical encoder acceptance remains pending evidence of the configured host-visible press action.
+
 ## D145 — Image 2 generation is a long, explicit print job
 
 2026-09-14: Style Studio uses a dedicated Image 2 credential and main-process adapter rather than borrowing another service's secret. Freeze `gpt-image-2`, 1024×1024 output, a 20-minute deadline, bounded response/download validation and one request per user action. Never auto-retry an uncertain paid submission. Persist only a sanitized allowlisted job journal. A completed result remains an explicit ejected artifact below the machine until the user drags it into Works; block another generation while that artifact is waiting so completion cannot be hidden or overwritten. Keep the accepted white DeskMate shell and transient dial orbit, with nine built-in styles including translucent jelly. This decision adds no firmware, HID write or alternate voice workflow.

@@ -122,14 +122,16 @@ test('T38 service cancellation aborts the active provider request without creati
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('T38 input lease only routes the foreground Studio wheel and two proven raw triggers', () => {
+test('T40A input lease turns the existing foreground press trigger into Studio confirmation only while leased', () => {
   let foreground = true; const events = [];
   const lease = new StyleStudioInputLease({ isForeground: () => foreground, publish: value => events.push(value) });
   lease.acquire('studio-12345678');
   assert.equal(lease.routeWheel({ action: 'positive' }), true);
-  assert.equal(lease.routeTrigger({ key: 'VoiceInput' }), true);
-  assert.equal(lease.routeTrigger({ key: 'VoiceEdit' }), true);
-  assert.deepEqual(events.map(item => item.command), ['next','strength','save']);
+  assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceInput' }), true);
+  assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'F22' }), true);
+  assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceEdit' }), true);
+  assert.equal(lease.routeTrigger({ source: 'keyboard', key: 'VoiceInput' }), false);
+  assert.deepEqual(events.map(item => item.command), ['next','confirm','confirm','save']);
   foreground = false; assert.equal(lease.routeWheel({ action: 'negative' }), false);
-  foreground = true; lease.release('studio-12345678'); assert.equal(lease.routeTrigger({ key: 'VoiceInput' }), false);
+  foreground = true; lease.release('studio-12345678'); assert.equal(lease.routeTrigger({ source: 'easyinput-hid', key: 'VoiceInput' }), false);
 });

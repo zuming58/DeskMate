@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T40A Style Studio dial press — candidate verification
+
+风格映像 now treats style selection as continuous and the first dial press as generation; S1 strength still uses press only to confirm its value. The main surface shows a compact `按压旋钮生图` cue instead of provider setup copy. The foreground input lease converts only existing EasyInput-origin F22/VoiceInput events and releases on blur/leave; no firmware or HID write is introduced. Software verification is complete; real Image 2 remains unconfigured in the retained profile, and physical acceptance still requires the board's encoder press mapping to emit one of those host-visible events. See `docs/contracts/t40a-style-studio-dial-press-v1.md`.
+
 ## Current delivery: T40 Image 2 Style Studio and instant-print output — packaged
 
 风格映像 now has a dedicated encrypted Image 2 configuration, fixed `gpt-image-2` main-process adapter, 20-minute bounded wait, sanitized job journal and no automatic retry after an uncertain paid submission. Completed images remain held in the machine's lower eject slot until the user drags them into Works. Nine styles are available, including the new translucent jelly treatment. Full suite 705/705, native build, independent `release-t40` package and source/final-ASAR interaction probes passed. No live provider call or retained-profile replacement occurred; next is one user-authorized real-account generation followed by physical dial/key acceptance. See `docs/design/style-studio-t40.md` and `docs/contracts/t40-style-studio-image2-v1.md`.

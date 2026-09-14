@@ -1,3 +1,13 @@
+# T40A Style Studio dial-press QA — 2026-09-14
+
+- Source correction: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-be77d4fd-9934-4606-8f3b-b630e79d0daa.png` (1542×654). The red annotation rejects the large `配置 Image 2 后生成` button and asks for a smaller, polished press cue beneath the dial.
+- Packaged implementation: `C:/Users/ADMINI~1/AppData/Local/Temp/deskmate-t37-qa-kClV8e/generate-final-1440.png` at a 1440×1024 CSS viewport. Source and final ASAR implementation were normalized and reviewed together in `D:/CodexData/home/visualizations/2026/09/13/01a09b5c-9220-7d51-8952-f29968487205/t40a-dial-press-source-vs-implementation.png`.
+- Visual result: the dial, compact strength control and machine geometry remain unchanged. The former saturated wide button is replaced by a small pale outlined pill with a 14 px Tabler hand-click icon and `按压旋钮生图`, matching the existing white/cobalt language and reducing visual competition with the dial.
+- Interaction result: the source production-renderer probe confirms the style orbit is hidden at rest, opens on movement, and one press generates while it is still open. Strength mode uses one press to confirm without generating. The fake configured Image 2 probe reaches consent, completion, ejection, downward placement and deletion. 1440×1024, 1024×768 and 800×768 stay free of horizontal overflow and renderer errors.
+- Input truth: unit coverage confirms EasyInput-origin F22/VoiceInput is consumed only while the foreground lease is active; keyboard-origin and released/background events are not. No firmware, Flash, HID write, retained profile or paid provider request was used. Physical encoder acceptance is intentionally not claimed because the default internal axis-toggle action has no host event.
+
+final result: passed
+
 # T40 Style Studio Image 2 and eject QA — 2026-09-14
 
 - Source visual truth: the accepted page reference `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-5246aa38-a287-4225-8426-72989bf0106b.png`, plus the later requirements for a pure-white work area, transient dial orbit, compact strength and instant-camera output. The implementation intentionally preserves the current D/M logo and DeskMate navigation instead of copying the older robot-logo mock.

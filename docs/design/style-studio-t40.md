@@ -10,6 +10,8 @@ The style set now contains nine coherent robot treatments: paper cut, yarn, glas
 
 The dial-driven style orbit remains transient. At rest it is hidden. Wheel, arrow or dial movement opens the cards around the dial, with the selected item strongest and distant items smaller/fainter. Strength stays compact above the dial and S1 enters the dedicated adjustment state.
 
+T40A tightens the physical metaphor without changing this layout. Turning the dial continuously selects the highlighted style; pressing the dial immediately starts the generation path even while the orbit is still visible. In the S1 strength state, pressing confirms strength instead. The large provider-dependent primary label is replaced by a small outlined hand cue, `按压旋钮生图`; provider configuration remains a Settings concern and appears only as contextual status/error feedback.
+
 ## Generation and security boundary
 
 - Generation uses a dedicated main-process Image 2 adapter with fixed model `gpt-image-2`, default OpenAI-compatible base URL `https://metajing.cn/v1`, 1024×1024 output and a 20-minute overall deadline.
@@ -37,3 +39,5 @@ The user drags that ejected card downward into the Works area to complete placem
 - Same-input comparison is recorded in root `design-qa.md`.
 
 Automated provider responses were local synthetic fixtures. Real account compatibility, paid generation quality and physical dial/key acceptance remain user-authorized acceptance steps. No retained profile, microphone, firmware, Flash, HID write or hardware state was changed.
+
+The page-scoped press mapping is frozen separately in `docs/contracts/t40a-style-studio-dial-press-v1.md`. It consumes only a board-origin `F22` or `VoiceInput` event while the foreground Style Studio lease is active. The current default firmware `scroll_axis_toggle` changes the board's axis internally and emits no host event, so the software cannot honestly identify that default physical press without a host-visible mapping or a future source-identifying firmware contract.

@@ -25,8 +25,8 @@ app.whenReady().then(async () => {
     assert.equal(await js(`document.querySelector('.ss-badge').textContent`), 'Image 2 已配置');
     assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`), 2);
     await click('.ss-materials .ss-photo:nth-child(2)');
-    assert.equal(await js(`document.querySelector('.ss-control > .ss-primary').textContent`), '生成作品');
-    await click('.ss-control > .ss-primary');
+    assert.equal((await js(`document.querySelector('.ss-press-action').textContent`)).trim(), '按压旋钮生图');
+    await click('.ss-press-action');
     assert.match(await js(`document.querySelector('.ss-confirm-dialog h2').textContent`), /纸间光影/);
     await shot('consent-1440');
     await click('.ss-confirm-dialog .ss-primary');
