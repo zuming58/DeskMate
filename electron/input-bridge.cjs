@@ -245,9 +245,9 @@ class InputBridgeManager extends EventEmitter {
     if (!this.child?.stdin?.writable) return Promise.resolve({ ok: false, reason: "input-bridge-unavailable" });
     const requestId = `paste-${randomUUID()}`;
     return new Promise((resolve) => {
-      const timeout = this.setTimer(() => this.finishPaste({ ok: false, reason: "active-window-output-timeout" }), 3000);
+      const timeout = this.setTimer(() => { if (this.pendingPaste?.requestId === requestId) this.finishPaste({ ok: false, reason: "active-window-output-timeout" }); }, 3000);
       this.pendingPaste = { requestId, timeout, resolve };
-      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "paste-active-window", requestId, targetWindow: target })}\n`, (error) => { if (error) this.finishPaste({ ok: false, reason: "input-bridge-write-failed" }); });
+      this.child.stdin.write(`${JSON.stringify({ version: 1, type: "paste-active-window", requestId, targetWindow: target, expiresUnixMs: Date.now() + 2500 })}\n`, (error) => { if (error && this.pendingPaste?.requestId === requestId) this.finishPaste({ ok: false, reason: "input-bridge-write-failed" }); });
     });
   }
 

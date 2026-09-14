@@ -154,6 +154,10 @@ test("recognized speech activity refreshes the foreground idle deadline until th
   await clock.tick(9999);
   assert.equal(controller.snapshot().active, true);
   await clock.tick(1);
+  assert.equal(controller.snapshot().active, true);
+  await clock.tick(20000);
+  assert.equal(controller.snapshot().active, true);
+  await clock.tick(10000);
   assert.equal(controller.snapshot().active, false);
   assert.deepEqual({ starts: controller.snapshot().turnLifecycle.listeningSpeechStarts, partials: controller.snapshot().turnLifecycle.listeningPartials, refreshes: controller.snapshot().turnLifecycle.idleTimerRefreshes }, { starts: 1, partials: 1, refreshes: 2 });
 });
@@ -195,7 +199,8 @@ test("Companion DOM and CSS keep independent columns, explicit save, and bounded
   const styles = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   const companion = pages.slice(pages.indexOf("export function CompanionPage"), pages.indexOf("function MemoryManagementPage"));
   assert.match(companion, /className="companion-primary-column"[\s\S]*className="companion-stage"[\s\S]*<AgentStateTestPanel[\s\S]*title="我与小岚"/);
-  assert.match(companion, /className="companion-side-stack"[\s\S]*陪伴提醒[\s\S]*陪伴对话设置[\s\S]*设备与服务[\s\S]*语音互斥边界/);
+  assert.match(companion, /className="companion-side-stack"[\s\S]*陪伴对话设置[\s\S]*设备与服务[\s\S]*语音互斥边界/);
+  assert.doesNotMatch(companion, /提醒功能待接入本地调度器/);
   assert.match(companion, /className="companion-identity-grid"[\s\S]*关于我[\s\S]*小岚人设[\s\S]*小岚的年龄 \/ 人格阶段/);
   assert.ok(companion.indexOf("title=\"我与小岚\"") < companion.indexOf("className=\"companion-side-stack\""));
   assert.match(companion, /保存陪伴设置/);

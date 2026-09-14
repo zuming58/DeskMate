@@ -55,7 +55,7 @@ test('brand and friendly companion have distinct consumers without touching lega
   assert.match(dashboard, /<BrandLogo/);
   assert.doesNotMatch(dashboard, /CompanionFace/);
   assert.match(app, /device-card__screen.*appearance="soft"/);
-  assert.match(pages, /companion-stage__face.*appearance="soft"/);
+  assert.match(pages, /companion-stage__face.*<CompanionPortrait/);
   assert.match(face, /motion\?\.addEventListener\?\.\('change', restart\)/);
   assert.match(face, /visibilitychange/);
   assert.match(face, /soft-face-open/);

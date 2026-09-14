@@ -1,5 +1,87 @@
 # Lessons learned
 
+## Validate visual playback wiring through the real runtime store
+
+T36's pure video and audio-observer unit tests passed but first native probe never displayed speak: `runtime-slice` deliberately rejects unregistered keys. Register the ephemeral playback slice, test the actual reducer/export boundary, and run the complete renderer with synthetic PCM through the existing sink. Do not use generation state as a workaround: it would reintroduce speaking before sound. Keep media watchers visual-only, exception-isolated and bounded to visible components.
+
+## Do not substitute a disabled visual fixture for the user's functional app
+
+The T35 visible isolated renderer displayed default 小言, disconnected services and disabled navigation even though the user's real app retained 小岚 and working controls. A preview banner did not prevent confusion. Keep isolated fixtures hidden for QA; when asked to open software, verify the actual executable/build, live preload, saved identity and enabled navigation. If normal Quit cannot be invoked reliably, ask the user for tray Quit; closing the window only hides the resident process. Do not claim an updated runtime merely because the candidate package exists. Wait for the renderer build to finish before capturing or packaging, and compare packaged assets byte-for-byte afterward.
+
+## A live process and a painted product window are separate milestones
+
+- Electron can create a responsive titled native window before React supplies its first frame. A screenshot of the default white surface is not by itself evidence of a renderer crash or corrupt user data.
+- Capture the real page target first: load state, console exceptions, root DOM and computed geometry distinguish a transient first-paint defect from a broken renderer. Once confirmed, gate the native reveal on `ready-to-show` and retain a product-colored compositor background.
+- Keep packaged smoke assertions aligned with storage ownership. After history moved to main-owned SQLite, checking obsolete renderer state produced a false smoke failure even though transcription and output succeeded.
+
+## Segment boundaries are not punctuation instructions
+
+- Realtime providers may finish one recording as several items and may already punctuate either side of each boundary. Blind `join('，')` creates deterministic artifacts such as `。 ，` even when recognition and insertion both succeed.
+- Keep one boundary-local stitcher upstream of both preview and final output. Test absent/left/right/both-side punctuation, Chinese and ASCII marks, empty segments and raw interior preservation. Do not disguise filler cleanup or possible ASR omissions as punctuation repair.
+
+## Startup acknowledgement is separate from resource readiness
+
+- Do not wait for audio ownership/permissions to acknowledge a physical voice key visually. Show a truthful preparing state in the existing workflow, not a fake recording timer. Guard duplicate starts and both main/renderer cancellation generations; getUserMedia can resolve after Escape and those tracks must be released without starting capture.
+- Before manual acceptance verify the executable actually running. A packaged candidate does not replace an older resident single-instance application; use its normal Quit action, then launch the verified candidate and confirm process path plus visible responsive window.
+
+## Whole-recording completion and genuine UI probe launchers
+
+- A realtime ASR utterance result can arrive while the user continues speaking. Never use the first final segment as the recording result; test delayed tails, final ordering, duplicate events, premature close, timeout and cancellation. Preview content is not final content. Connect before capture and finish only after capture/queued sends stop.
+- A renamed or historical packaged Electron executable may load its embedded application instead of the requested probe script. Exit0 alone is not evidence. Verify a stock runtime with default_app.asar and explicit assertion output; inject the intended candidate ASAR into a fresh synthetic profile. Prior T31–T33 UI claims based on the incomplete-T20 packaged launcher were corrected in the T34 review and rerun against the final candidate.
+
+## Retention must bind consent to exact evidence
+
+- A day count is only a candidate cutoff. Successful transcription, reliable dates, completed derivations and required remote receipts are separate gates; otherwise cleanup converts a recoverable failure into permanent loss.
+- Preview counts are insufficient without row/reference identity. Bind the token to exact IDs, digests, timestamps and recording references, then revalidate before mutation so a newly linked record cannot lose its recording.
+- Database deletion, content-addressed file removal and browser legacy cleanup are different commits. Quarantine first, journal every phase and acknowledge renderer cleanup; a toast after the first database transaction is not end-to-end completion.
+
+## Restore needs crash evidence and a separate live activation gate
+
+- A successful export or a caught exception is insufficient restore evidence. Validate reconstructed schemas and content, test actual child-process exit after a partial write, then recover using the saved journal before opening stores.
+- Never use an outer JSON checksum as schema/authentication trust. Recomputed malicious fields, extra SQL table names, corrupted source payloads and malformed audio still require rejection.
+- Multi-megabyte base64 should use bounded decode/canonical re-encode and content hashes, not a repeating capture regex that can exhaust the regex engine. Keep all this work away from the voice/main event loop.
+
+## Freeze source while packaging and verify actual archived resources
+
+- Editing while asar is assembled can invalidate content offsets. Reject failed JSON/byte verification, freeze source, rebuild.
+- Use a separate ignored candidate directory while the user runs the current application. Do not kill their active session merely to overwrite a release directory.
+- Run the real worker from inside candidate asar with an isolated profile: Node tests alone do not validate Electron worker loading.
+
+## Migration success needs more than record counts
+
+- Verify source payload digests, referenced and unreferenced source audio before atomic publication. Keep originals and expose retry.
+- A completed-migration marker distinguishes a fresh install from a missing primary database. Do not silently resurrect outdated records.
+- Paginate against a maximum sequence; merge hydration without losing concurrent appends.
+
+## Settings reset and UI wiring need failure-path tests
+
+- A config serializer that excludes private history can still erase it if import blindly replaces all application state. Whitelist configuration slices and test export/import with a populated synthetic history.
+- Editable text is not a React key. Use stable rule IDs, and validate actual focus continuity in an isolated renderer, not only source assertions.
+- A status poll and an editor cannot share unconditional setters. Track edit revisions so old polls and save acknowledgements cannot roll back new drafts.
+- UI probes must seed storage before renderer initialization; setting localStorage after React mounts can race with the old state persistence effect. Use a dedicated preload in an isolated profile, never the user's profile.
+
+## Real insertion needs a target-owned end-to-end check
+
+- T29 native ABI size and fake expiry checks passed, but a real owned textarea reproduced direct SendInput failure. The established PowerShell/WinForms call inserted in the same target, as did resident STA SendWait. A native ACK is not proof of text delivery. Preserve a content-free failure cause and check actual contents using synthetic text, never typing a test into an unrelated user's application.
+- A rolling 24-hour window crosses midnight. Keeping records and attaching them to a new prompt are separate decisions: filter direct context by today's local date and use dated retrieval for yesterday.
+
+## A recovery event must survive the last UI mapping
+
+- T28 correctly recovered two model network failures to listening, but the capsule's recording branch ignored the explicit error message and replaced it with a generic microphone prompt. Test provider event through controller, overlay policy and final rendered text; successful state recovery alone does not prove the user was informed.
+- Read the project's earlier focus failures before native-output optimization. T29 preserves the proven capture boundary, validates expiry in the helper and tests target return/change/expiry with a pure native policy. A timeout acknowledgement must not cancel a newer request; an expired queued command must not type later.
+
+## Dictation output latency is not necessarily model latency
+
+- A raw-output diagnostic with local rules does not explain slow insertion by itself. DeskMate's per-output PowerShell/Add-Type startup measured about 1.3 seconds even without sending input. Trace the actual caller: the presence of a fast native paste helper does not mean dictation uses it.
+- Keep stage wording and diagnostics aligned. A hard-coded success message mentioning organizing is not proof of another model call; an outputting state can outlive paste acknowledgement when completion still awaits history. Measure these separately before changing ASR/model providers.
+- Level updates should mutate existing overlay nodes, not rebuild the whole animated capsule and repeatedly show the native window. Terminal timers need session ownership, not only an equal state name.
+
+## Voice latency: verify the controller gate as well as the provider
+
+- A provider accepting audio does not prove the microphone is forwarded during model thinking. T28 found the controller allowed three-stage uplink in speaking/draining but blocked thinking, losing mid-computation continuation. Test source-to-provider forwarding in each phase, not just the provider method.
+- Speculative candidate equivalence must preserve internal punctuation: stripping all punctuation equates `1.5` with `15`. Only harmless terminal punctuation/case is normalized; words, negations, numeric separators and item ownership remain significant.
+- A single overwritten last-timing object hides previous successful requests and can be corrupted by rejected playback partials. Own timings per turn, keep a bounded history, separate queued from audible, and label HTTP/network/timeout without exporting error bodies or user content.
+
 ## Optional memory outages must not tax every conversational turn
 
 - A per-turn remote lookup can add seconds even when it returns no usable evidence. In T27, the configured KnowledgeOS adapter spent about three seconds failing to connect to a stopped Core; the old gateway disguised that as an empty result.

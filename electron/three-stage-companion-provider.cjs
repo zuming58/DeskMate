@@ -14,6 +14,11 @@ function comparisonText(value) {
   return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
+// Keep internal punctuation: 1.5 and 15 are different instructions.
+function draftTextKey(value) {
+  return cleanVisibleText(value).normalize('NFKC').trim().toLowerCase().replace(/[。！？.!?]+$/u, '').replace(/\s+/g, ' ');
+}
+
 function classifyRecognizedBargeIn(candidate, assistantText = "") {
   const normalized = comparisonText(candidate);
   if (!normalized || BARGE_IN_FILLERS.has(normalized) || NON_SPEECH_LABEL.test(normalized)) return Object.freeze({ accepted: false, reason: "weak" });
@@ -50,7 +55,7 @@ function stablePipelineReason(value) {
 }
 
 class ThreeStageCompanionProvider {
-  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, bargeFinalRecoveryMs = DEFAULT_BARGE_FINAL_RECOVERY_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
+  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, preemptive = false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, bargeFinalRecoveryMs = DEFAULT_BARGE_FINAL_RECOVERY_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     if (![asrFactory, modelFactory, ttsFactory].every((value) => typeof value === "function")) throw new Error("three-stage-provider-factory-required");
     this.asrFactory = asrFactory;
     this.modelFactory = modelFactory;
@@ -80,6 +85,11 @@ class ThreeStageCompanionProvider {
     this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, receivedStopAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
+    this.preemptive = preemptive === true;
+    this.draft = null;
+    this.draftTimer = null;
+    this.draftAttempts = 0;
+    this.turnHistory = [];
     this.counters = {
       asrPartials: 0, asrFinals: 0, duplicateFinals: 0, trustedBypasses: 0,
       modelRequests: 0, assistantDeltas: 0, ttsRequests: 0, ttsAudioChunks: 0,
@@ -87,6 +97,7 @@ class ThreeStageCompanionProvider {
       bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
       bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0, postPlaybackEchoDrops: 0,
       bargeFinalTimeouts: 0, bargeFinalRecoveries: 0, lateBargeFinalDrops: 0,
+      draftsStarted: 0, draftsReused: 0, draftsCancelled: 0, modelRecoveries: 0,
     };
     this.lastTiming = {
       speechStarted: null, firstAsrPartialMs: null, asrFinalMs: null,
@@ -109,6 +120,8 @@ class ThreeStageCompanionProvider {
       context: this.model?.diagnostics?.() || {},
       counters: Object.freeze({ ...this.counters }),
       lastTiming: Object.freeze({ ...this.lastTiming }),
+      turnHistory: this.turnHistory.map(row => ({ ...row, timing: { ...row.timing }, modelTiming: { ...row.modelTiming }, failure: row.failure ? { ...row.failure } : null })),
+      preemptiveEnabled: this.preemptive,
     });
   }
 
@@ -138,6 +151,69 @@ class ThreeStageCompanionProvider {
   sendAudio(value) {
     if (!this.ready || this.closed) return false;
     return this.asr?.sendAudio?.(value) === true;
+  }
+
+  cancelDraft() {
+    if (this.draftTimer) this.cancelSchedule(this.draftTimer);
+    this.draftTimer = null;
+    const draft = this.draft;
+    this.draft = null;
+    if (draft) {
+      this.counters.draftsCancelled += 1;
+      draft.token.cancelled = true;
+      draft.abortController.abort('superseded');
+    }
+  }
+
+  considerDraft(event) {
+    if (!this.preemptive || this.bargeContext() || !this.model?.prepareDraft) return;
+    const text = cleanVisibleText(event.text).trim();
+    if (this.draft && draftTextKey(this.draft.text) === draftTextKey(text) && this.draft.itemId === String(event.itemId || '')) return;
+    this.cancelDraft();
+    if (comparisonText(text).length < 5 || !classifyRecognizedBargeIn(text).accepted || this.draftAttempts >= 3) return;
+    try { if (this.shouldBypassModel(text)) return; } catch { return; }
+    this.draftTimer = this.schedule(() => {
+      this.draftTimer = null;
+      if (this.closed || this.bargeContext()) return;
+      let token;
+      try { token = this.model.prepareDraft(text); } catch { return; }
+      if (!token) return;
+      const draft = { text, itemId: String(event.itemId || ''), token, startedAt: this.now(), firstDeltaAt: null, answer: '', abortController: new AbortController(), deliver: null };
+      this.draft = draft;
+      this.draftAttempts += 1;
+      this.counters.draftsStarted += 1;
+      this.counters.modelRequests += 1;
+      // The settled wrapper owns rejection even if the candidate is discarded.
+      draft.promise = this.model.streamTurn({ text, draft: token, signal: draft.abortController.signal, onDelta: (delta, fullText) => {
+        if (draft.abortController.signal.aborted || this.closed) return;
+        draft.firstDeltaAt ??= this.now();
+        draft.answer = cleanVisibleText(fullText);
+        draft.deliver?.(delta, fullText);
+      } }).then(result => ({ result }), error => ({ error }));
+    }, 500);
+    this.draftTimer?.unref?.();
+  }
+
+  takeDraft(text, itemId) {
+    if (this.draftTimer) this.cancelSchedule(this.draftTimer);
+    this.draftTimer = null;
+    const draft = this.draft;
+    this.draftAttempts = 0;
+    if (draft && draftTextKey(draft.text) === draftTextKey(text) && (!draft.itemId || draft.itemId === itemId) && draft.token.commit(text)) {
+      this.draft = null;
+      this.counters.draftsReused += 1;
+      return draft;
+    }
+    this.cancelDraft();
+    return null;
+  }
+
+  recordTurn(turn, outcome, failure = null) {
+    if (!turn || turn.recorded) return;
+    turn.recorded = true;
+    turn.timing.turnCompletedMs = Math.max(0, this.now() - turn.startedAt);
+    this.turnHistory.push({ outcome, kind: turn.kind, timing: turn.timing, modelTiming: turn.kind === 'model' ? { ...this.model?.diagnostics?.()?.timings } : {}, failure });
+    if (this.turnHistory.length > 20) this.turnHistory.shift();
   }
 
   bargeContext() {
@@ -271,6 +347,10 @@ class ThreeStageCompanionProvider {
     if (this.closed || generation !== this.generation) return;
     if (event.type === "speech.started") {
       const nextItemId = String(event.itemId || "").slice(0, 160);
+      if (this.draftTimer) this.cancelSchedule(this.draftTimer);
+      this.draftTimer = null;
+      // A new ASR item cannot inherit a preceding item's private candidate.
+      if (this.draft && this.draft.itemId && nextItemId !== this.draft.itemId) this.cancelDraft();
       const bargeContext = this.bargeContext();
       if (this.pendingBargeInFinal?.itemId && nextItemId && this.pendingBargeInFinal.itemId !== nextItemId) this.clearPendingBargeInFinal();
       this.resetSpeechEvidence();
@@ -320,6 +400,7 @@ class ThreeStageCompanionProvider {
         else this.counters.bargeInsRejectedWeak += 1;
       }
       this.emit({ type: "asr.partial", text });
+      this.considerDraft(event);
       return;
     }
     if (event.type === "final") {
@@ -379,10 +460,13 @@ class ThreeStageCompanionProvider {
       let bypass = false;
       try { bypass = this.shouldBypassModel(text) === true; } catch { bypass = false; }
       if (bypass) {
+        this.cancelDraft();
+        this.draftAttempts = 0;
         this.counters.trustedBypasses += 1;
         return;
       }
-      void this.runModelTurn(text, generation, utteranceStartedAt);
+      const draft = this.takeDraft(text, itemId);
+      void this.runModelTurn(text, generation, utteranceStartedAt, draft);
       return;
     }
     if (event.type === "error") this.fail("three-stage-asr-unavailable", generation);
@@ -390,6 +474,7 @@ class ThreeStageCompanionProvider {
   }
 
   newTurn(kind = "model", startedAt = this.now()) {
+    if (kind === 'direct') this.lastTiming = Object.fromEntries(Object.keys(this.lastTiming).map(key => [key, null]));
     this.lastTiming.playbackQueuedMs = null;
     const turn = {
       id: ++this.turnSequence,
@@ -405,6 +490,7 @@ class ThreeStageCompanionProvider {
       ttsEnded: false,
       assistantText: "",
       startedAt,
+      timing: this.lastTiming,
     };
     this.activeTurn = turn;
     return turn;
@@ -427,7 +513,7 @@ class ThreeStageCompanionProvider {
       if (!this.isCurrentTurn(turn)) return;
       if (!turn.ttsStarted) {
         turn.ttsStarted = true;
-        this.lastTiming.firstTtsRequestMs = Math.max(0, this.now() - turn.startedAt);
+        turn.timing.firstTtsRequestMs = Math.max(0, this.now() - turn.startedAt);
         this.emit({ type: "tts.start", diagnostic: { providerEvent: "tts-start" } });
       }
       this.counters.ttsRequests += 1;
@@ -438,7 +524,7 @@ class ThreeStageCompanionProvider {
           if (!this.isCurrentTurn(turn)) return;
           if (firstAudio) {
             firstAudio = false;
-            if (this.lastTiming.firstTtsAudioMs === null) this.lastTiming.firstTtsAudioMs = Math.max(0, this.now() - turn.startedAt);
+            if (turn.timing.firstTtsAudioMs === null) turn.timing.firstTtsAudioMs = Math.max(0, this.now() - turn.startedAt);
             // Receipt is not physical speaker playback. Keep playbackStartedMs
             // unknown; the controller separately reports renderer queue receipt.
           }
@@ -447,26 +533,41 @@ class ThreeStageCompanionProvider {
         },
       });
     });
+    // A TTS failure may precede model completion; never leave it unobserved.
+    turn.speechChain.catch(() => {});
     return true;
   }
 
-  async runModelTurn(text, generation, startedAt = this.now()) {
+  async runModelTurn(text, generation, startedAt = this.now(), draft = null) {
     if (this.closed || generation !== this.generation || this.activeTurn) return;
     const turn = this.newTurn("model", startedAt);
-    this.counters.modelRequests += 1;
-    this.lastTiming.modelRequestStartedMs = Math.max(0, this.now() - turn.startedAt);
+    if (!draft) this.counters.modelRequests += 1;
+    turn.timing.modelRequestStartedMs = Math.max(0, (draft?.startedAt ?? this.now()) - turn.startedAt);
+    if (draft?.firstDeltaAt != null) turn.timing.firstAssistantDeltaMs = Math.max(0, draft.firstDeltaAt - turn.startedAt);
+    if (draft) turn.abortController.signal.addEventListener('abort', () => { draft.token.cancelled = true; draft.abortController.abort('interrupted'); }, { once: true });
+    const delayedNotice = this.schedule(() => {
+      if (this.isCurrentTurn(turn) && !turn.assistantText) this.emit({ type: 'model.status', status: 'waiting' });
+    }, 3000);
+    delayedNotice?.unref?.();
+    turn.abortController.signal.addEventListener('abort', () => this.cancelSchedule(delayedNotice), { once: true });
     try {
-      const result = await this.model.streamTurn({
-        text,
-        signal: turn.abortController.signal,
-        onDelta: (delta, fullText) => {
+      const onDelta = (delta, fullText) => {
           if (!this.isCurrentTurn(turn)) return;
-          if (this.lastTiming.firstAssistantDeltaMs === null) this.lastTiming.firstAssistantDeltaMs = Math.max(0, this.now() - turn.startedAt);
+          if (turn.timing.firstAssistantDeltaMs === null) turn.timing.firstAssistantDeltaMs = Math.max(0, this.now() - turn.startedAt);
           this.counters.assistantDeltas += 1;
           turn.assistantText = cleanVisibleText(fullText);
           this.emit({ type: "chat.partial", text: cleanVisibleText(delta), fullText: turn.assistantText });
           for (const segment of turn.segmenter.push(delta)) this.queueSpeech(turn, segment);
-        },
+      };
+      let result;
+      if (draft) {
+        draft.deliver = onDelta;
+        if (draft.answer) onDelta(draft.answer, draft.answer);
+        const settled = await draft.promise;
+        if (settled.error) throw settled.error;
+        result = settled.result;
+      } else result = await this.model.streamTurn({ text, signal: turn.abortController.signal, onDelta,
+        onStatus: status => { if (this.isCurrentTurn(turn)) this.emit({ type: 'model.status', status: status.type }); },
       });
       if (!this.isCurrentTurn(turn)) return;
       for (const segment of turn.segmenter.finish(result.text)) this.queueSpeech(turn, segment);
@@ -477,7 +578,18 @@ class ThreeStageCompanionProvider {
       this.completeTurn(turn);
     } catch (error) {
       if (!this.isCurrentTurn(turn)) return;
+      this.recordTurn(turn, 'failed', error.failure || null);
+      if (error.recoverable && !turn.ttsStarted) {
+        this.counters.errors += 1;
+        this.counters.modelRecoveries += 1;
+        turn.abortController.abort('failed');
+        this.activeTurn = null;
+        this.emit({ type: 'turn.failed', message: stablePipelineReason(error), failureClass: error.failure?.failureClass });
+        return;
+      }
       this.fail(stablePipelineReason(error), generation);
+    } finally {
+      this.cancelSchedule(delayedNotice);
     }
   }
 
@@ -502,9 +614,9 @@ class ThreeStageCompanionProvider {
   completeTurn(turn) {
     if (!this.isCurrentTurn(turn)) return;
     turn.ttsEnded = true;
-    this.lastTiming.turnCompletedMs = Math.max(0, this.now() - turn.startedAt);
+    this.recordTurn(turn, 'completed');
     this.counters.turnsCompleted += 1;
-    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText, kind: turn.kind, id: turn.id, startedAt: turn.startedAt }) : null;
+    this.playbackTail = turn.ttsStarted ? Object.freeze({ assistantText: turn.assistantText, kind: turn.kind, id: turn.id, startedAt: turn.startedAt, timing: turn.timing }) : null;
     this.activeTurn = null;
     this.clearPendingBargeInFinal();
     this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
@@ -521,14 +633,16 @@ class ThreeStageCompanionProvider {
 
   playbackQueued(turnId) {
     const turn = this.activeTurn || this.playbackTail;
-    if (this.closed || !turn || turn.id !== turnId || this.lastTiming.playbackQueuedMs != null) return false;
-    this.lastTiming.playbackQueuedMs = Math.max(0, this.now() - turn.startedAt);
+    if (this.closed || !turn || turn.id !== turnId || turn.timing.playbackQueuedMs != null) return false;
+    turn.timing.playbackQueuedMs = Math.max(0, this.now() - turn.startedAt);
     return true;
   }
 
   speakText(value) {
     const text = cleanVisibleText(value, 240).trim();
     if (!this.ready || this.closed || !text || this.activeTurn) return false;
+    this.cancelDraft();
+    this.draftAttempts = 0;
     void this.runDirectSpeech(text, this.generation);
     return true;
   }
@@ -536,6 +650,7 @@ class ThreeStageCompanionProvider {
   sayHello(value) { return this.speakText(value); }
 
   interrupt({ preservePendingBargeIn = false } = {}) {
+    this.cancelDraft();
     const turn = this.activeTurn;
     const hadPlaybackTail = Boolean(this.playbackTail);
     if (!turn && !hadPlaybackTail) {
@@ -545,6 +660,7 @@ class ThreeStageCompanionProvider {
     this.counters.cancellations += 1;
     if (turn?.kind === "model" || this.playbackTail?.kind === "model") this.model?.interruptResponse?.();
     if (turn) {
+      this.recordTurn(turn, 'cancelled');
       turn.abortController.abort("interrupted");
       this.tts?.interrupt?.();
     }
@@ -561,6 +677,8 @@ class ThreeStageCompanionProvider {
     if (this.closed || generation !== this.generation) return;
     this.counters.errors += 1;
     const turn = this.activeTurn;
+    this.recordTurn(turn, 'failed');
+    this.cancelDraft();
     if (turn) turn.abortController.abort("failed");
     this.activeTurn = null;
     this.playbackTail = null;
@@ -574,6 +692,8 @@ class ThreeStageCompanionProvider {
   close() {
     if (this.closed) return;
     const turn = this.activeTurn;
+    this.recordTurn(turn, 'cancelled');
+    this.cancelDraft();
     if (turn) turn.abortController.abort("closed");
     this.activeTurn = null;
     this.playbackTail = null;

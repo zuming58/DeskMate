@@ -50,7 +50,7 @@ function journalHarness(directory, { syncEnabled = false } = {}) {
 test("T25 policy migrates to hourly summaries, configurable close time and 20-day raw retention", () => temporary("deskmate-t25-policy-", (directory) => {
   fs.writeFileSync(path.join(directory, "companion-memory-policy.json"), JSON.stringify({ version: 1, enabledSources: ["companion"], schedule: "daily", dailyTime: "22:45", lastResults: {} }));
   const policy = new CompanionMemoryPolicyStore({ userDataPath: directory });
-  assert.deepEqual({ version: policy.snapshot().version, hourlyEnabled: policy.snapshot().hourlyEnabled, rawRetentionDays: policy.snapshot().rawRetentionDays, dailyTime: policy.snapshot().dailyTime }, { version: 2, hourlyEnabled: true, rawRetentionDays: 20, dailyTime: "22:45" });
+  assert.deepEqual({ version: policy.snapshot().version, audioRetentionDays: policy.snapshot().audioRetentionDays, hourlyEnabled: policy.snapshot().hourlyEnabled, rawRetentionDays: policy.snapshot().rawRetentionDays, dailyTime: policy.snapshot().dailyTime }, { version: 3, audioRetentionDays: 7, hourlyEnabled: true, rawRetentionDays: 20, dailyTime: "22:45" });
   policy.save({ version: 2, enabledSources: ["companion", "dictation"], schedule: "daily", dailyTime: "23:30", hourlyEnabled: false, rawRetentionDays: 30 });
   assert.equal(new CompanionMemoryPolicyStore({ userDataPath: directory }).snapshot().rawRetentionDays, 30);
 }));

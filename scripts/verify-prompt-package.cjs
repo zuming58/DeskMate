@@ -3,7 +3,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const asar = require('@electron/asar');
 const root = path.resolve(__dirname, '..');
-const archive = path.join(root, 'release/win-unpacked/resources/app.asar');
+const releaseDirectory = process.argv[2] || 'release';
+assert(/^release(?:-[a-z0-9-]+)?$/.test(releaseDirectory), 'invalid release directory');
+const archive = path.join(root, releaseDirectory, 'win-unpacked/resources/app.asar');
 const packagedFile = (file) => asar.extractFile(archive, path.normalize(file));
 const bundled = JSON.parse(packagedFile('electron/prompt-library.json'));
 const source = JSON.parse(fs.readFileSync(path.join(root, 'electron/prompt-library.json'), 'utf8'));
@@ -12,23 +14,37 @@ assert.equal(bundled.prompts.length, 80);
 assert.equal(bundled.primaryScenes.find(scene => scene.id === 'scene-video')?.title, '多媒体制作');
 assert.equal(bundled.prompts.filter(prompt => prompt.primarySceneId === 'scene-video').length, 26);
 const main = packagedFile('electron/main.cjs').toString('utf8');
-assert(main.includes('t27-local-first-voice-latency'));
+for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg','manifest.json']) {
+  const file = `assets/companion/home-video/${name}`;
+  assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
+}
+assert(main.includes('t36-companion-state-video'));
+for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
+for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
+for (const name of ['store', 'worker', 'service']) {
+  const file = `electron/local-history-${name}.cjs`;
+  assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale local-history resource: ${file}`);
+}
 assert(main.includes('--show-prompts'));
-for (const file of ['electron/main.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/codex-hook-state.cjs', 'electron/codex-hook-integration.cjs', 'electron/codex-app-server-catalog.cjs', 'electron/codex-task-brief.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs']) {
+for (const file of ['electron/main.cjs', 'electron/companion-model-transport.cjs', 'electron/voice-overlay-presenter.cjs', 'electron/overlay-preload.cjs', 'electron/three-stage-companion-provider.cjs', 'electron/companion-conversation.cjs', 'electron/preload.cjs', 'electron/agent-state-hid.cjs', 'electron/xiaozhi-hardware-policy.cjs', 'electron/prompt-wheel-router.cjs', 'electron/prompt-workbench.cjs', 'electron/prompt-workbench-controller.cjs', 'electron/input-bridge.cjs', 'electron/input-bridge-protocol.cjs', 'electron/codex-hook-state.cjs', 'electron/codex-hook-integration.cjs', 'electron/codex-app-server-catalog.cjs', 'electron/codex-task-brief.cjs', 'electron/companion-memory.cjs', 'electron/companion-memory-policy.cjs', 'electron/companion-model-adapter.cjs', 'electron/knowledge-base-projection.cjs', 'electron/knowledgeos-settings.cjs', 'electron/knowledgeos-mcp-client.cjs', 'electron/memory-journal-service.cjs']) {
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale package: ${file}`);
 }
 assert(packagedFile('electron/codex-hook-state.cjs').toString('utf8').includes('Codex 临时任务'));
 assert(packagedFile('electron/prompt-workbench.cjs').toString().includes("require('./prompt-library.json')"));
 assert(packagedFile('electron/preload.cjs').toString().includes('prompts:command'));
 assert(packagedFile('electron/workbench-overview.cjs').equals(fs.readFileSync(path.join(root, 'electron/workbench-overview.cjs'))));
-for (const file of ['electron/companion-retrieval-policy.cjs', 'electron/companion-speech-segmenter.cjs', 'electron/companion-preferences.cjs', 'electron/three-stage-companion-provider.cjs', 'electron/companion-conversation.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale voice resource: ${file}`);
+for (const file of ['electron/dictation-text.cjs', 'electron/companion-dialogue-context.cjs', 'electron/companion-retrieval-policy.cjs', 'electron/companion-speech-segmenter.cjs', 'electron/companion-preferences.cjs', 'electron/three-stage-companion-provider.cjs', 'electron/companion-conversation.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale voice resource: ${file}`);
 assert(main.includes('workbench:get-overview'));
 assert(packagedFile('dist/client/index.html').equals(fs.readFileSync(path.join(root, 'dist/client/index.html'))));
-assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/input-bridge/DeskMate.InputBridge.exe')).equals(fs.readFileSync(path.join(root, 'native/DeskMate.InputBridge/publish/DeskMate.InputBridge.exe'))));
-for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png']) {
+for (const asset of fs.readdirSync(path.join(root, 'dist/client/assets'), { withFileTypes: true }).filter(entry => entry.isFile())) {
+  const file = `dist/client/assets/${asset.name}`;
+  assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale renderer asset: ${file}`);
+}
+assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/input-bridge/DeskMate.InputBridge.exe')).equals(fs.readFileSync(path.join(root, 'native/DeskMate.InputBridge/publish/DeskMate.InputBridge.exe'))));
+for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png', 'assets/expressions/soft/transparent-open.png', 'assets/expressions/soft/transparent-closed.png', 'assets/companion/home-desk/open.png', 'assets/companion/home-desk/blink.png']) {
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale brand asset: ${file}`);
 }
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
-  assert(fs.readFileSync(path.join(root, 'release/win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
+  assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T27 packaged resource check passed: local-first cancellable recall, first-clause voice timing, captured scene shortcuts, multimedia scenes, mouse/encoder routing, branding and native bridge.');
+console.log('T36 packaged resource check passed: four companion videos/poster/manifest, sidebar images, first-paint recovery, offline restore, retention, scenes, renderer assets, voice resources and exact native bridge.');

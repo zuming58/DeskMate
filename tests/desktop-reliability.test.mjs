@@ -124,13 +124,13 @@ test("active-window output preserves fail-closed target changes and helper failu
   }
 });
 
-test("desktop main restores the known PowerShell target capture and atomic target-check-and-paste path", async () => {
+test("desktop main preserves stable capture but uses native exact-target paste", async () => {
   const source = await readFile(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const output = await readFile(new URL("../electron/active-window-output.cjs", import.meta.url), "utf8");
   const body = source.match(/async function pasteIntoCapturedWindow\(text\) \{([\s\S]*?)\n\}/)?.[1] || "";
   assert.match(source, /voiceTargetCapturePromise = getForegroundWindowId\(\)/);
-  assert.match(body, /runPowershell\(PASTE_CAPTURED_WINDOW_SCRIPT/);
-  assert.doesNotMatch(body, /pasteActiveWindow/);
+  assert.doesNotMatch(body, /runPowershell/);
+  assert.match(body, /inputBridge\?\.pasteActiveWindow\(expectedWindow\)/);
   assert.match(output, /do \{ \$current = .*?if \(\$current -eq \$expected\).*?SendKeys\]::SendWait\('\^v'\).*?target-window-changed/s);
   assert.match(source, /AddMilliseconds\(250\).*?\$current -eq \$previous/s);
 });

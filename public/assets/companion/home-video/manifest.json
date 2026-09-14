@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "provenance": "User-supplied generated companion clips, authorized for DeskMate on 2026-09-13. Originals remain untouched outside the repository.",
+  "transform": "H.264 CRF23, 960x720, square pixels, video-only, faststart",
+  "clips": [
+    {
+      "state": "idle",
+      "sourceName": "等待.mp4",
+      "sourceSha256": "89CDD83921D836372111638132F1A28294FDECEB005B641576E4315B3B37C7F5",
+      "sourceBytes": 5892610,
+      "file": "idle.mp4",
+      "sha256": "BCCAEA6BA436C111362E874B8EE709C3462FEFCC2FB78ADA0FCD6C612442420B",
+      "bytes": 1311466,
+      "duration": 15.041667,
+      "width": 960,
+      "height": 720,
+      "fps": 24,
+      "audio": false
+    },
+    {
+      "state": "listen",
+      "sourceName": "倾听.mp4",
+      "sourceSha256": "BBBB8C4618B3337C8D540F21B73C95FF19BD62FBB3E310C51DA59846A5199AC5",
+      "sourceBytes": 6045289,
+      "file": "listen.mp4",
+      "sha256": "06B5D024D8A47972B4CEB9CAC372453682810BEA02E42B304CBE948E71666286",
+      "bytes": 1315361,
+      "duration": 15.041667,
+      "width": 960,
+      "height": 720,
+      "fps": 24,
+      "audio": false
+    },
+    {
+      "state": "think",
+      "sourceName": "思考.mp4",
+      "sourceSha256": "1579B725115C2A163AE5605EB26BFA4E3F525EE16CC7FB98D2ABBBB7AE55E67F",
+      "sourceBytes": 5987982,
+      "file": "think.mp4",
+      "sha256": "8254FAEEB0C6E2606FE659B80B0F1F01D0C3EC0779CD4020833533D7BCB6D069",
+      "bytes": 1291241,
+      "duration": 15.041667,
+      "width": 960,
+      "height": 720,
+      "fps": 24,
+      "audio": false
+    },
+    {
+      "state": "speak",
+      "sourceName": "说话.mp4",
+      "sourceSha256": "EDAF88C56E7CF71FAFD58D7903ED882FD93F5692A4A6F4A64DEC111C92FBFE6E",
+      "sourceBytes": 6221124,
+      "file": "speak.mp4",
+      "sha256": "CEEF5BFFDF49FAFBEEC52B4FB168AA6D7FA3D05F5B8CFEAAA641D2A6AE78E456",
+      "bytes": 1336941,
+      "duration": 15.041667,
+      "width": 960,
+      "height": 720,
+      "fps": 24,
+      "audio": false
+    }
+  ]
+}

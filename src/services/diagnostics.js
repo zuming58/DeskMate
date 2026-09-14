@@ -1,7 +1,17 @@
 import { normalizeAgentDelivery, normalizeLinkDiagnostics } from "../domain/linkDiagnostics.js";
+import { safeOutputReason } from '../domain/voiceOutputDiagnostics.js';
 import { isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs } from "../domain/companionPreferences.js";
 
 const SECRET_KEYS = /token|api.?key|password|wifi|path|text|transcript|recording|audio|serial|window.?title|ip|address/i;
+const PIPELINE_TIMINGS = ['speechStarted', 'firstAsrPartialMs', 'asrFinalMs', 'speechStopToFinalMs', 'modelRequestStartedMs', 'firstAssistantDeltaMs', 'firstTtsRequestMs', 'firstTtsAudioMs', 'playbackStartedMs', 'playbackQueuedMs', 'turnCompletedMs'];
+const MODEL_TIMINGS = ['localRecallMs', 'remoteRecallMs', 'contextPreparationMs', 'modelHttpStartedMs', 'modelFirstDeltaMs', 'modelHttpAttempts', 'modelRetries'];
+const safeTimings = (value, keys) => Object.fromEntries(keys.map(key => [key, typeof value?.[key] === 'number' && Number.isFinite(value[key]) ? Math.max(0, Math.min(120000, value[key])) : null]));
+const safeModelFailure = (value) => value ? {
+  failureClass: ['rate-limit', 'authentication', 'server', 'request', 'timeout', 'response', 'network'].includes(value.failureClass) ? value.failureClass : 'unknown',
+  httpStatus: Number.isInteger(value.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599 ? value.httpStatus : null,
+  ...safeTimings(value, ['elapsedMs']),
+  ...(value.networkCode ? { networkCode: ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET'].includes(value.networkCode) ? value.networkCode : 'unknown' } : {}),
+} : null;
 const AUDIO_STATES = new Set(["not-configured", "binding", "waiting-heartbeat", "ready", "starting", "streaming", "ambiguous", "faulted", "unavailable", "desktop-bridge-unavailable"]);
 const CONVERSATION_STATES = new Set(["idle", "connecting", "listening", "thinking", "speaking", "stopping", "completed", "error"]);
 const PROVIDER_EVENTS = new Set(["none", "audio", "tts-start", "tts-end", "session-ready", "session-finished", "session-failed", "connection-started", "connection-failed", "connection-finished", "dialog-error", "error-frame", "provider-error", "transport-error", "transport-close", "other"]);
@@ -263,10 +273,20 @@ export function createDiagnosticReport(input = {}) {
           status: ['skipped', 'found', 'empty', 'timeout', 'unavailable', 'cancelled'].includes(pipelineSource.context?.retrieval?.status) ? pipelineSource.context.retrieval.status : 'unavailable',
           ...Object.fromEntries(['localHits', 'remoteHits'].map(key => [key, Math.max(0, Math.min(8, Number(pipelineSource.context?.retrieval?.[key]) || 0))])),
         },
-        timings: Object.fromEntries(['localRecallMs', 'remoteRecallMs', 'contextPreparationMs', 'modelHttpStartedMs', 'modelFirstDeltaMs'].map(key => [key, typeof pipelineSource.context?.timings?.[key] === 'number' && Number.isFinite(pipelineSource.context.timings[key]) ? Math.max(0, Math.min(120000, pipelineSource.context.timings[key])) : null])),
+        timings: Object.fromEntries(MODEL_TIMINGS.map(key => [key, typeof pipelineSource.context?.timings?.[key] === 'number' && Number.isFinite(pipelineSource.context.timings[key]) ? Math.max(0, Math.min(120000, pipelineSource.context.timings[key])) : null])),
+        lastFailure: safeModelFailure(pipelineSource.context?.lastFailure),
       },
       counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsRejectedEcho", "bargeInsRejectedWeak", "bargeSpeechStarts", "bargeInsRejectedUnstable", "postPlaybackEchoDrops", "bargeFinalTimeouts", "bargeFinalRecoveries", "lateBargeFinalDrops"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
       timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "speechStopToFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "playbackQueuedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
+      preemptiveEnabled: pipelineSource.preemptiveEnabled === true,
+      speculation: Object.fromEntries(['draftsStarted', 'draftsReused', 'draftsCancelled', 'modelRecoveries'].map(key => [key, Math.max(0, Math.min(1000000, Number(pipelineCountersSource[key]) || 0))])),
+      turnHistory: (Array.isArray(pipelineSource.turnHistory) ? pipelineSource.turnHistory : []).slice(-20).map(row => ({
+        outcome: ['completed', 'failed', 'cancelled'].includes(row?.outcome) ? row.outcome : 'unknown',
+        kind: ['model', 'direct'].includes(row?.kind) ? row.kind : 'unknown',
+        timing: safeTimings(row?.timing, PIPELINE_TIMINGS),
+        modelTiming: safeTimings(row?.modelTiming, MODEL_TIMINGS),
+        failure: safeModelFailure(row?.failure),
+      })),
     },
     wakeWord: {
       version: ["windows-speech-wake-v2", "windows-speech-wake-v3", "windows-speech-wake-v4", "windows-speech-wake-v5", "sherpa-onnx-kws-v1"].includes(wakeSource.version) ? wakeSource.version : "unavailable",
@@ -304,6 +324,7 @@ export function createDiagnosticReport(input = {}) {
     },
   };
   const safeInput = sanitize(input);
+  if(safeInput.stt) safeInput.stt.finalization = safeDictationFinalization(input.stt?.finalization);
   delete safeInput.inputBridge;
   delete safeInput.conversation;
   const taskBriefSource = input.codexTaskBrief || {};
@@ -312,5 +333,18 @@ export function createDiagnosticReport(input = {}) {
     taskCount: Math.max(0, Math.min(8, Number(taskBriefSource.taskCount) || 0)),
     announcementsEnabled: taskBriefSource.announcementsEnabled !== false,
   };
-  return { ...safeInput, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, codexTaskBrief, easyInputHid, xiaozhiHardware, deskMateLink: link, agentStateDelivery, codexLedDelivery, manualCalibration, motionPresets, choreography };
+  const voiceOutput = { ...safeTimings(input.voiceOutput, ['outputMs', 'historyWaitMs', 'totalMs']), destination: ['active-window', 'clipboard', 'history'].includes(input.voiceOutput?.destination) ? input.voiceOutput.destination : 'unknown', ok: input.voiceOutput?.ok === true, requestedMode: ['active-window', 'clipboard', 'history'].includes(input.voiceOutput?.requestedMode) ? input.voiceOutput.requestedMode : 'unknown', fallback: input.voiceOutput?.fallback === true, reason: safeOutputReason(input.voiceOutput?.reason) };
+  const retentionSource = input.retention || {};
+  const heldReasons = ["date-unknown", "transcription-not-successful", "daily-summary-incomplete", "knowledgeos-sync-pending", "memory-link-missing", "recording-retention-pending", "orphan-recovery-required", "history-integrity-failed"];
+  const retention = {
+    enabled: retentionSource.enabled === true,
+    pending: Math.max(0, Math.min(100, Number(retentionSource.pending) || 0)),
+    recordingDays: Math.max(1, Math.min(365, Number(retentionSource.policy?.audioRetentionDays) || 7)),
+    rawTextDays: Math.max(1, Math.min(365, Number(retentionSource.policy?.rawRetentionDays) || 20)),
+    lastRunAt: Number.isFinite(retentionSource.lastRunAt) ? Math.max(0, Number(retentionSource.lastRunAt)) : null,
+    removed: Object.fromEntries(["recordings", "historyText", "memoryTurns"].map((key) => [key, Math.max(0, Number(retentionSource.lastResult?.[key]) || 0)])),
+    held: Object.fromEntries(heldReasons.map((reason) => [reason, Math.max(0, Number(retentionSource.lastResult?.held?.[reason]) || 0)])),
+  };
+  return { ...safeInput, voiceOutput, retention, schemaVersion: 1, generatedAt: new Date().toISOString(), lanAudio, conversation, codexTaskBrief, easyInputHid, xiaozhiHardware, deskMateLink: link, agentStateDelivery, codexLedDelivery, manualCalibration, motionPresets, choreography };
 }
+import { safeDictationFinalization } from '../domain/dictationStreamCompletion.js';

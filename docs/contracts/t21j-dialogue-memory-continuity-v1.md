@@ -2,6 +2,10 @@
 
 Status: `T21J_DIALOGUE_MEMORY_CONTINUITY_V1_FROZEN`
 
+T30 [calendar-day amendment](./t30-voice-insertion-day-context-v1.md) supersedes
+automatic previous-day prompt inclusion below. Same-day continuity remains;
+explicit historical work review may retrieve attributed raw dictation.
+
 The always-current reviewed memory and 24-hour context remain. Historical daily
 evidence, optional remote routing and endpoint defaults are amended by
 [T27](./t27-local-first-companion-latency-v1.md); summaries do not become approved facts.

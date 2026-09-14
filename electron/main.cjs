@@ -45,9 +45,11 @@ const { COMPANION_CALL_ACTION, wakeGreeting } = require("./companion-call.cjs");
 const { CompanionPreferenceStore } = require("./companion-preferences.cjs");
 const { SherpaKeywordWakeWordAdapter } = require("./sherpa-keyword-wake-adapter.cjs");
 const { shouldUpdateCompanionOverlay } = require("./companion-overlay-policy.cjs");
+const { createVoiceOverlayPresenter } = require('./voice-overlay-presenter.cjs');
+const presentVoiceOverlay = createVoiceOverlayPresenter({ getWindow: () => overlayWindow, show: () => positionAndShowOverlay() });
 const { configFingerprint: stableConfigFingerprint, sanitizeKeyboardConfig: stableSanitizeKeyboardConfig, mergeKeyboardPatch: strictMergeKeyboardPatch, sanitizedDiff, checkHostCapabilities } = require("./config-merge.cjs");
 const { completeConfigWrite } = require("./config-readback.cjs");
-const { PASTE_CAPTURED_WINDOW_SCRIPT, pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
+const { pasteIntoCapturedWindow: pasteToCapturedWindow } = require("./active-window-output.cjs");
 const { COPY_SELECTION_SCRIPT, captureSelectedText } = require("./selection-capture.cjs");
 const { editSelectedText: editSelectedTextWithBailian } = require("./voice-edit.cjs");
 const { isVoiceActivityActive } = require("./voice-trigger-state.cjs");
@@ -74,7 +76,8 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t27-local-first-voice-latency";
+const DESKMATE_BUILD_ID = "t36-companion-state-video";
+let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
   "$deadline = [DateTime]::UtcNow.AddMilliseconds(250)",
@@ -82,7 +85,7 @@ const FOREGROUND_SCRIPT = [
   "do { $current = [DeskMateForeground]::GetForegroundWindow().ToInt64(); if ($current -gt 0 -and $current -eq $previous) { $current; exit 0 }; $previous = $current; Start-Sleep -Milliseconds 10 } while ([DateTime]::UtcNow -lt $deadline)",
   "[Console]::Error.Write('foreground-window-unstable'); exit 2",
 ].join("; ");
-const VOICE_STATES = new Set(["idle", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
+const VOICE_STATES = new Set(["idle", "preparing", "recording", "transcribing", "organizing", "outputting", "completed", "error", "cancelled"]);
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
@@ -142,6 +145,7 @@ let keyboardConfigState = { raw: null, fingerprint: "", source: 2, token: null }
 let shortcutCaptureActive = false;
 let lastVoiceState = { state: "idle", message: "准备就绪", transcript: "", seconds: 0, level: 0, floating: true };
 let lastVoiceToggleAt = 0;
+let voiceStartPending = false;
 let pendingEditShortcutTimer = null;
 // Codex lifecycle remains available for software status, queries and announcements,
 // but it must not occupy Xiaozhi's face. Hardware expressions belong to companion
@@ -307,6 +311,7 @@ function releaseForegroundSession(session) {
 }
 
 async function beginDictationForeground() {
+  if (restoreMaintenance) throw new Error('backup-maintenance-active');
   wakeWordTransitioning = true;
   await wakeWordAdapter?.pause?.("dictation-active");
   if (companionIsActive()) await companionConversationController.stop("dictation-preempted");
@@ -375,22 +380,17 @@ function updateCompanionOverlay(event = {}) {
   if (["reply.partial", "turn.assistant-final"].includes(event.type)) return;
   if (!shouldUpdateCompanionOverlay(event)) return;
   const map = { connecting: "organizing", listening: "recording", thinking: "transcribing", speaking: "outputting", completed: "completed", error: "error", idle: "idle", stopping: "cancelled" };
-  const state = event.type === "state" ? map[event.state] : null;
+  const state = event.type === "response.status" ? "transcribing" : event.type === "state" ? map[event.state] : null;
   const transcript = ["transcript.partial", "turn.user-final"].includes(event.type) ? String(event.text || "").slice(-500) : "";
   const snapshot = {
     state: state || (event.type?.startsWith("reply") ? "outputting" : event.type?.startsWith("transcript") ? "recording" : "organizing"),
-    message: event.error || ({ connecting: "正在连接三段式语音…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
+    message: event.type === 'response.status' ? (event.status === 'retrying' ? '回答连接不稳定，正在重试一次…' : '已听到，回答还在生成中…') : event.error || ({ connecting: "正在连接三段式语音…", listening: "正在陪伴倾听…", thinking: "正在思考…", speaking: "正在播报…", completed: "本轮对话完成", stopping: "正在结束陪伴对话…" }[event.state] || "陪伴对话"),
     transcript,
     seconds: 0,
     level: event.type?.startsWith("transcript") ? 24 : 0,
     floating: true,
   };
-  overlayWindow?.webContents.send("voice-state", snapshot);
-  if (snapshot.state === "idle") overlayWindow?.hide();
-  else {
-    positionAndShowOverlay();
-    if (["completed", "error", "cancelled"].includes(snapshot.state)) setTimeout(() => { if (!companionIsActive()) overlayWindow?.hide(); }, 1800);
-  }
+  presentVoiceOverlay(snapshot);
 }
 
 function companionIntentBridgePublicStatus() {
@@ -530,11 +530,11 @@ function assertTrustedSender(event) {
 }
 
 function handleTrusted(channel, handler) {
-  ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); return handler(...args); });
+  ipcMain.handle(channel, (event, ...args) => { assertTrustedSender(event); if (restoreMaintenance) throw new Error('backup-maintenance-active'); return handler(...args); });
 }
 
 function onTrusted(channel, handler) {
-  ipcMain.on(channel, (event, ...args) => { assertTrustedSender(event); handler(...args); });
+  ipcMain.on(channel, (event, ...args) => { assertTrustedSender(event); if (!restoreMaintenance) handler(...args); });
 }
 
 function isAudioSetupSender(event) {
@@ -782,14 +782,23 @@ async function handleHermesHookState(value) {
 }
 
 async function emitVoiceToggle(source = "global-shortcut", label = shortcut, requestedWorkflow = "input") {
+  if (voiceStartPending || lastVoiceState.state === 'preparing') return { ignored: true, reason: 'voice-starting' };
   const now = Date.now();
   if (now - lastVoiceToggleAt < 350) return { ignored: true, reason: "duplicate-trigger" };
   lastVoiceToggleAt = now;
   const phase = voiceSessionRecording ? "stop" : "start";
   const workflow = phase === "stop" ? activeVoiceWorkflow : requestedWorkflow === "edit" ? "edit" : "input";
   if (phase === "start") {
-    await beginDictationForeground();
     const captureToken = ++voiceTargetCaptureToken;
+    updateVoiceState({state:'preparing',message:'正在准备录音…',floating:lastVoiceState.floating,source:'startup-feedback'});
+    voiceStartPending = true;
+    try { await beginDictationForeground(); }
+    catch {
+      if(captureToken === voiceTargetCaptureToken) updateVoiceState({state:'error',message:'录音准备失败，请重试',floating:lastVoiceState.floating});
+      return {ignored:true,reason:'voice-start-failed'};
+    }
+    finally { voiceStartPending = false; }
+    if(captureToken !== voiceTargetCaptureToken) { finishDictationForeground(); return {ignored:true,reason:'voice-start-cancelled'}; }
     voiceTargetWindow = null;
     voiceEditContext = null;
     if (workflow === "edit") {
@@ -842,6 +851,7 @@ async function emitVoiceCancel(source = "keyboard") {
   activeVoiceWorkflow = "input";
   voiceTargetCapturePromise = Promise.resolve(null);
   finishDictationForeground();
+  updateVoiceState({state:'cancelled',message:'已取消当前语音输入',floating:lastVoiceState.floating});
   sendToMain("voice-cancel", { source, at: new Date().toISOString() });
   return { cancelled: true };
 }
@@ -920,7 +930,7 @@ async function pasteIntoCapturedWindow(text) {
     text,
     targetWindow,
     writeClipboard: (value) => clipboard.writeText(value),
-    runPaste: (expectedWindow) => runPowershell(PASTE_CAPTURED_WINDOW_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
+    runPaste: (expectedWindow) => inputBridge?.pasteActiveWindow(expectedWindow) || { ok: false, reason: "input-bridge-unavailable" },
   });
   if (result.ok) voiceTargetWindow = null;
   return result;
@@ -956,7 +966,7 @@ function positionAndShowOverlay() {
 
 function updateVoiceState(value = {}) {
   const state = VOICE_STATES.has(value.state) ? value.state : "error";
-  if (state !== "idle" && value.source === "voice-workflow" && !activeDictationSession) void beginDictationForeground();
+  if (state !== "idle" && state !== 'preparing' && value.source === "voice-workflow" && !activeDictationSession) void beginDictationForeground();
   void agentStatePublisher.publishVoiceState({ state, source: value.source });
   lastVoiceState = {
     state,
@@ -969,12 +979,7 @@ function updateVoiceState(value = {}) {
   voiceSessionRecording = state === "recording";
   motionAutomationCoordinator?.touchActivity();
   if (["idle", "completed", "error", "cancelled"].includes(state)) finishDictationForeground();
-  overlayWindow?.webContents.send("voice-state", lastVoiceState);
-  if (!lastVoiceState.floating || ["idle"].includes(state)) overlayWindow?.hide();
-  else {
-    positionAndShowOverlay();
-    if (["completed", "error", "cancelled"].includes(state)) setTimeout(() => { if (lastVoiceState.state === state) overlayWindow?.hide(); }, 1800);
-  }
+  presentVoiceOverlay(lastVoiceState);
   refreshTrayMenu();
   return { ok: true, state };
 }
@@ -982,8 +987,13 @@ function updateVoiceState(value = {}) {
 function showMain(route) {
   if (promptWorkbench && route !== 'prompts') promptWorkbench.transient = false;
   if (!mainWindow) createWindow();
-  mainWindow.show();
-  mainWindow.restore();
+  const reveal = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+  };
+  if (mainWindow.webContents.isLoadingMainFrame()) mainWindow.once("ready-to-show", reveal);
+  else reveal();
   if (route) sendToMain("desktop-navigate", { route });
 }
 
@@ -1012,11 +1022,17 @@ function createWindow() {
     height: 1024,
     minWidth: 960,
     minHeight: 680,
+    show: false,
+    backgroundColor: "#f4f7fb",
     icon: loadAppIcon("deskmate-dm.ico", "deskmate-dm.png"),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
+  mainWindow.once("ready-to-show", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.show();
+  });
   if (process.argv.includes("--dev")) mainWindow.loadURL(getDevUrl());
-  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : {});
+  else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : process.argv.includes('--show-companion') ? { hash: '/companion' } : {});
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on("did-finish-load", () => {
@@ -1085,12 +1101,14 @@ function startInputBridge() {
     if (promptWorkbench?.isForeground() && Math.abs(Date.now() - Date.parse(event.time)) < 500) sendToMain('prompt-wheel', { step: event.action === 'positive' ? 1 : -1 });
   });
   inputBridge.on("trigger", (event) => {
+    if (restoreMaintenance) return;
     sendToMain("key-diagnostic", event);
     if (event.key === "VoiceEdit") cancelPendingEditShortcut();
     void emitVoiceToggle(event.source, event.key, event.key === "VoiceEdit" ? "edit" : "input");
   });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
+    if (restoreMaintenance) return;
     const result = await hostActionExecutor.execute(event.hostActionId);
     const kind = Object.values(PROMPT_ACTIONS).some(a => a.id === event.hostActionId) ? 'prompt-workbench' : event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app";
     sendToMain("host-action-result", { kind, ...result, at: new Date().toISOString() });
@@ -1122,7 +1140,9 @@ async function finishSmokeTest() {
   await new Promise((resolve) => setTimeout(resolve, 1200));
   await emitVoiceToggle("smoke-test", shortcut);
   await new Promise((resolve) => setTimeout(resolve, 2800));
-  const report = await mainWindow.webContents.executeJavaScript(`(() => { const state = JSON.parse(localStorage.getItem("deskmate.app-state") || "{}"); return { historyText: state.history?.[0]?.text || "", route: location.hash, sttMode: state.settings?.sttMode || "missing", simulatorEnabled: Boolean(state.settings?.simulatorEnabled), sttStatus: state.diagnostics?.stt?.status || "missing", sttProvider: state.diagnostics?.stt?.provider || "missing" }; })()`);
+  const report = await mainWindow.webContents.executeJavaScript(`(() => { const state = JSON.parse(localStorage.getItem("deskmate.app-state") || "{}"); return { route: location.hash, sttMode: state.settings?.sttMode || "missing", simulatorEnabled: Boolean(state.settings?.simulatorEnabled), sttStatus: state.diagnostics?.stt?.status || "missing", sttProvider: state.diagnostics?.stt?.provider || "missing" }; })()`);
+  const [latestHistory] = await localHistoryService.call("list", { limit: 1 });
+  report.historyText = latestHistory?.text || "";
   report.clipboardText = clipboard.readText();
   report.ok = Boolean(report.historyText && report.clipboardText === report.historyText && report.route === "#/dashboard");
   const resultPath = process.env.DESKMATE_SMOKE_RESULT;
@@ -1193,6 +1213,7 @@ function normalizeTrustedAnnouncement(value) {
 }
 
 async function startCompanionConversation(value = {}) {
+  if (restoreMaintenance) return {ok:false,reason:'backup-maintenance-active'};
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
   }
@@ -1275,8 +1296,85 @@ async function callCompanionConversation(reason = "companion-call") {
   return { ...result, label: COMPANION_CALL_ACTION.label, status: companionConversationStatus() };
 }
 
+const { LocalHistoryService } = require("./local-history-service.cjs");
+const { LocalBackupService } = require("./local-backup-service.cjs");
+const { LocalRetentionService } = require("./local-retention-service.cjs");
+const { startupRestore, getHandover, acknowledgeHandover, verifyStartupDatabases } = require('./restore-lifecycle.cjs');
+let localHistoryService;
+let localBackupService;
+let localRetentionService;
+let localBackupDialogBusy = false;
+app.on("before-quit", () => localHistoryService?.close());
+app.on("before-quit", () => localBackupService?.close());
+app.on("before-quit", () => localRetentionService?.close());
 app.whenReady().then(async () => {
+  if (!singleInstance) return;
+  try { startupRestore(app.getPath('userData')); verifyStartupDatabases(app.getPath('userData')); }
+  catch {
+    const answer=await dialog.showMessageBox({type:'error',title:'本地数据需要恢复',message:'数据库或上次恢复未通过校验，已停止启动以保留原数据。',detail:'可以选择已验证的本机快照或外部备份。恢复前会先显示内容，失败时保留原文件。',buttons:['退出并保留数据','选择备份恢复'],defaultId:0,cancelId:0});
+    if(answer.response===1) {
+      const root=app.getPath('userData');
+      try {
+        const selection=await dialog.showOpenDialog({title:'选择恢复备份',defaultPath:path.join(root,'recovery','verified-latest.json'),properties:['openFile'],filters:[{name:'DeskMate 备份',extensions:['json']}]});
+        if(!selection.canceled && selection.filePaths[0]) {
+          const engine=require('./local-backup.cjs');
+          const preview=engine.prepareRestore(root,JSON.parse(engine.boundedRead(selection.filePaths[0])));
+          const confirm=await dialog.showMessageBox({type:'warning',title:'核对恢复内容',message:`备份时间：${preview.summary.createdAt}`,detail:`${preview.summary.history} 条历史，${preview.summary.recordings} 份录音，${preview.summary.turns} 条原始记忆，${preview.summary.journals} 天日终总结。确认后替换当前数据并重新启动。`,buttons:['取消','恢复并重启'],defaultId:0,cancelId:0});
+          if(confirm.response===1){engine.queueRestore(root,preview.id,{supersedeInterrupted:true});app.relaunch();}
+        }
+      } catch {dialog.showErrorBox('未能准备恢复','备份校验或磁盘写入失败，当前数据保留。请检查备份和磁盘后重试。');}
+    }
+    app.quit();return;
+  }
   app.setAppUserModelId(APP_ID);
+  localHistoryService = new LocalHistoryService({ userDataPath: app.getPath("userData") });
+  localBackupService = new LocalBackupService({ userDataPath: app.getPath("userData") });
+  localRetentionService = new LocalRetentionService({ userDataPath: app.getPath("userData") });
+  handleTrusted('local-backup:handover', () => getHandover(app.getPath('userData')));
+  handleTrusted('local-backup:acknowledge', id => acknowledgeHandover(app.getPath('userData'), id));
+  handleTrusted("local-backup:command", async (request = {}) => {
+    if(request.version !== 1 || !["export","inspect","prepare","restore","checkpoint","prepare-checkpoint"].includes(request.command)) throw new Error("backup-command-invalid");
+    if(localBackupDialogBusy || localBackupService.pending) return {ok:false,reason:"backup-busy"};
+    localBackupDialogBusy = true;
+    try {
+      if(request.command==='checkpoint') {
+        if(request.pendingHistory !== false || restoreBusy())return {ok:false,reason:'backup-busy'};
+        return await localBackupService.call('checkpoint',{config:request.config});
+      }
+      if(request.command==='prepare-checkpoint')return await localBackupService.call('prepare-checkpoint',{});
+      if(request.command === 'restore') {
+        if(request.pendingHistory !== false || restoreBusy())return {ok:false,reason:'backup-history-pending'};
+        const retention=await localRetentionService.call('status');
+        if(retention.pending || restoreBusy())return {ok:false,reason:'backup-busy'};
+        const answer=await dialog.showMessageBox(mainWindow,{type:'warning',title:'恢复本地备份',message:'用预览的备份替换当前文字、记忆和设置，并重启 DeskMate？',detail:'恢复前保存当前副本，失败将回滚。请先导出需要保留的新内容。恢复后需重新检查应用绑定、语音服务和自动整理；不会自动同步键盘或重发旧日记。',buttons:['取消','恢复并重启'],defaultId:0,cancelId:0});
+        if(answer.response!==1)return {ok:false,canceled:true};
+        if(restoreBusy())return {ok:false,reason:'backup-busy'};
+        restoreMaintenance=true;
+        try { const result=await localBackupService.call('queue',{token:request.token}); app.relaunch(); isQuitting=true; setImmediate(()=>app.quit()); return result; }
+        catch(error) { restoreMaintenance=false; throw error; }
+      }
+      if(request.command === "export") {
+        if(typeof request.includeAudio !== "boolean" || !request.config || Buffer.byteLength(JSON.stringify(request.config)) > 2*1024*1024) return {ok:false,reason:"backup-request-invalid"};
+        if(!(await localHistoryService.call("status")).migrated) return {ok:false,reason:"backup-migration-incomplete"};
+        const selection = await dialog.showSaveDialog(mainWindow, {title:"保存本地备份（包含私人文字，请妥善保管）",defaultPath:`deskmate-${new Date().toISOString().slice(0,10)}.deskmate-backup.json`,filters:[{name:"DeskMate 备份",extensions:["json"]}]});
+        if(selection.canceled || !selection.filePath)return {ok:false,canceled:true};
+        if(!selection.filePath.endsWith(".deskmate-backup.json"))return {ok:false,reason:"backup-extension-invalid"};
+        return await localBackupService.call("export",{file:selection.filePath,config:request.config,includeAudio:request.includeAudio});
+      }
+      const selection = await dialog.showOpenDialog(mainWindow,{title:"校验备份并预览内容（不覆盖当前数据）",properties:["openFile"],filters:[{name:"DeskMate 备份",extensions:["json"]}]});
+      if(selection.canceled || !selection.filePaths?.[0])return {ok:false,canceled:true};
+      return await localBackupService.call(request.command === 'prepare' ? 'prepare' : 'inspect',{file:selection.filePaths[0]});
+    } catch(error) {return {ok:false,reason:/^backup-[a-z-]+$/.test(error?.message)?error.message:"backup-data-or-storage-invalid"};}
+    finally {localBackupDialogBusy=false;}
+  });
+  handleTrusted("local-history:command", (request = {}) => {
+    if (request.version !== 1 || !["status", "list", "append", "audio-put", "audio-get", "stage", "finish", "remove"].includes(request.command)) throw new Error("local-history-command-invalid");
+    let value = request.value;
+    if (request.command === "stage" && Array.isArray(value?.records) && value.records.length <= 50) {
+      value = { records: value.records.map(({ record }) => ({ record, memoryAt: companionMemoryStore?.db?.prepare("SELECT created_at FROM conversation_turns WHERE source_event_id=?").get(`dictation:${String(record?.id || "")}`)?.created_at || null })) };
+    }
+    return localHistoryService.call(request.command, value);
+  });
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
@@ -1344,7 +1442,7 @@ app.whenReady().then(async () => {
   companionMemoryGenerationCoordinator.projectIfConfigured();
   companionMemoryDigestScheduler = new CompanionMemoryDigestScheduler({
     policyStore: companionMemoryPolicyStore,
-    pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }),
+    pendingDays: (source) => companionMemoryStore.unprocessedDays({ source }).filter(day => !companionMemoryStore.isRestoredDay(day)),
     process: ({ source, day }) => companionMemoryGenerationCoordinator.processSourceDay({ source, day }),
   });
   memoryJournalService = new MemoryJournalService({
@@ -1355,9 +1453,25 @@ app.whenReady().then(async () => {
     knowledgeOsClient,
     loadSecret: () => loadTextModelSecret(),
   });
+  const restoreBusy = () => Boolean(
+    localHistoryService?.pending?.size || localRetentionService?.pending?.size ||
+    activeDictationSession || voiceSessionRecording || companionIsActive() ||
+    activeBailianRequests.size || activeBailianOrganizers.size || activeRealtimeSessions.size ||
+    memoryJournalService?.active || memoryJournalService?.syncActive || companionMemoryDigestScheduler?.active ||
+    companionMemoryGenerationCoordinator?.backlogActive || companionMemoryPipeline?.active || manualControlCoordinator?.snapshot?.().active || choreographyService?.snapshot?.().busy
+  );
+  const retentionBusy = () => restoreMaintenance || localBackupDialogBusy || localBackupService?.pending || restoreBusy();
+  const emitRetentionCleanup = (result) => {
+    if (result?.cleanup?.phase === "browser-pending") sendToMain("local-retention-browser-cleanup", result.cleanup);
+    for (const cleanup of result?.status?.pendingBrowserCleanup || []) sendToMain("local-retention-browser-cleanup", cleanup);
+  };
   const tickMemoryServices = async () => {
+    if (restoreMaintenance) return;
     try { await memoryJournalService.tick(); } catch { /* persisted state will retry */ }
     try { await companionMemoryDigestScheduler.tick(); } catch { /* per-source digest retries later */ }
+    if (!retentionBusy()) {
+      try { const result = await localRetentionService.call("tick"); emitRetentionCleanup(result); } catch { /* journaled cleanup retries later */ }
+    }
   };
   memoryDigestTimer = setInterval(() => { void tickMemoryServices(); }, 60_000);
   memoryDigestTimer.unref?.();
@@ -1390,6 +1504,7 @@ app.whenReady().then(async () => {
     providerLabel: "three-stage",
     providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
       onEvent,
+      preemptive: true,
       postPlaybackEchoGraceMs: Math.max(6000, Math.min(12000, Number(sessionPreferences.endSmoothWindowMs) + 2000)),
       bargeFinalRecoveryMs: Math.max(5000, Math.min(6000, Number(sessionPreferences.endSmoothWindowMs) + 1000)),
       asrFactory: ({ onEvent: onAsrEvent }) => new BailianStreamingAsrAdapter({
@@ -1727,7 +1842,27 @@ app.whenReady().then(async () => {
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
   handleTrusted("workbench:get-overview", () => createWorkbenchOverview({ memoryStore: companionMemoryStore, policyStore: companionMemoryPolicyStore, knowledgeOsSettings, promptStore: promptWorkbench.store, serviceStatus: threeStageServiceStatus(), wakeStatus: wakeWordAdapter.status(), running: memoryJournalService.active }));
   handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
-  handleTrusted("memory:set-policy", (value = {}) => companionMemoryPolicyStore.save(value));
+  handleTrusted("memory:set-policy", async (value = {}) => {
+    const previous = companionMemoryPolicyStore.snapshot();
+    const result = companionMemoryPolicyStore.save(value);
+    if (previous.audioRetentionDays !== result.audioRetentionDays || previous.rawRetentionDays !== result.rawRetentionDays) await localRetentionService.call("deactivate");
+    return result;
+  });
+  handleTrusted("retention:get-status", () => localRetentionService.call("status"));
+  handleTrusted("retention:preview", async (value = {}) => {
+    if (value.pending === true || retentionBusy()) return { ok: false, reason: "retention-application-busy" };
+    if (!(await localHistoryService.call("status")).migrated) return { ok: false, reason: "retention-migration-incomplete" };
+    return localRetentionService.call("preview");
+  });
+  handleTrusted("retention:confirm", async (value = {}) => {
+    if (value.pending === true || retentionBusy()) return { ok: false, reason: "retention-application-busy" };
+    const result = await localRetentionService.call("confirm", { token: value.token }); emitRetentionCleanup(result); return result;
+  });
+  handleTrusted("retention:run-now", async (value = {}) => {
+    if (value.pending === true || retentionBusy()) return { ok: false, reason: "retention-application-busy" };
+    const result = await localRetentionService.call("tick"); emitRetentionCleanup(result); return result;
+  });
+  handleTrusted("retention:acknowledge", (value = {}) => localRetentionService.call("acknowledge", { jobId: value.jobId }));
   handleTrusted("memory:commit-dictation", (value = {}) => companionMemoryStore.commitConversationTurn({ ...value, role: "user", source: "dictation" }));
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:list-turns", (value) => companionMemoryStore.listTurns(value || {}));
@@ -1866,7 +2001,7 @@ app.whenReady().then(async () => {
   startInputBridge();
   await syncWakeWordListener("application-ready");
   app.on("activate", () => showMain());
-  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : undefined));
+  app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : argv.includes('--show-companion') ? 'companion' : undefined));
 });
 
 app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });

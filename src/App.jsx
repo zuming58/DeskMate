@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { confirmNavigation } from './domain/unsavedChanges.js';
 import {
-  IconBell as Bell,
   IconBook as BookOpen,
   IconBrain as Brain,
   IconChevronLeft as ChevronLeft,
@@ -34,13 +34,11 @@ import {
   CompanionPage,
   ConnectionsPage,
   DashboardPage,
-  ExpressionEditorPage,
   ExpressionsPage,
   HistoryPage,
   KeymapPage,
   MemoryManagementPage,
   MotionPage,
-  SensorsPage,
   SettingsPage,
   VocabularyPage,
   VoicePage,
@@ -89,9 +87,8 @@ function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMo
       </nav>
       <button className="sidebar__collapse" onClick={() => setCollapsed(!collapsed)} aria-label={collapsed ? "展开侧栏" : "收起侧栏"}>{collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}<span>收起导航</span></button>
       <div className="device-card">
-        <div className="device-card__screen"><CompanionFace appearance="soft" expressionId={expressionId} alt="DeskMate 陪伴表情" /></div>
-        <div className={`device-card__status ${boardConnected ? "" : "device-card__status--pending"}`}><span />{boardConnected ? "EasyInput 已连接" : "等待 EasyInput 板子"}</div>
-        <small>{boardConnected ? "USB HID · Ctrl+Shift+Space / F22 监听就绪" : "请通过 USB 连接开发板"}</small>
+        <div className="device-card__screen" title={boardConnected ? "EasyInput 已连接" : "EasyInput 未连接"}><CompanionFace appearance="soft" transparent expressionId={expressionId} alt="DeskMate 陪伴表情" /></div>
+        <div className={`device-card__status ${boardConnected ? "" : "device-card__status--pending"}`} role="status"><span />{boardConnected ? "EasyInput 已连接" : "EasyInput 未连接"}</div>
       </div>
     </aside>
   );
@@ -99,14 +96,18 @@ function Sidebar({ current, navigate, collapsed, setCollapsed, mobileOpen, setMo
 
 function AppHeader({ current, setMobileOpen }) {
   const meta = pageMeta[current];
+  const { state, storageStatus, historyStatus } = useAppStore();
+  const inputReady = state.runtime?.inputBridge?.process === "running";
   return (
     <header className="app-header">
       <button className="mobile-menu" aria-label="打开菜单" onClick={() => setMobileOpen(true)}><Menu2 size={22} /></button>
       <div className="breadcrumbs"><strong>DESKMATE</strong><span>/</span><span>{meta.title}</span></div>
       <div className="app-header__right">
-        <span className="service-status"><i />本地核心已运行</span>
+        {storageStatus === "error" && <span role="alert" className="storage-warning">本机保存失败，请先导出历史和配置备份</span>}
+        {storageStatus === "corrupt" && <span role="alert" className="storage-warning">旧配置损坏，已停止覆盖，请保留原数据并恢复备份</span>}
+        {historyStatus.phase === "error" && <a className="storage-warning" href="#/history">历史保存失败，查看与重试</a>}
+        <span className="service-status"><i style={{ background: inputReady ? "#20ba87" : "#b7791f" }} />{inputReady ? "输入服务运行中" : "输入服务待连接"}</span>
         <span className="app-date">{formatDashboardDate()}</span>
-        <button className="header-icon" aria-label="通知"><Bell size={19} stroke={1.7} /><i /></button>
       </div>
     </header>
   );
@@ -124,9 +125,7 @@ const pages = {
   connections: ConnectionsPage,
   agents: AgentsPage,
   expressions: ExpressionsPage,
-  editor: ExpressionEditorPage,
   motion: MotionPage,
-  sensors: SensorsPage,
   settings: SettingsPage,
 };
 
@@ -230,7 +229,7 @@ function AppContent() {
   useEffect(() => {
     const bridge = globalThis.desktopBridge;
     if (!bridge?.onCompanionComputerAudioCommand || !bridge?.sendCompanionComputerAudioEvent) return undefined;
-    const engine = createComputerCompanionAudioEngine({ bridge });
+    const engine = createComputerCompanionAudioEngine({ bridge, onPlaybackChange: playing => mergeRuntime('companionPlayback', { playing }) });
     const unsubscribe = bridge.onCompanionComputerAudioCommand((command) => { void engine.handleCommand(command); });
     void bridge.setCompanionComputerAudioReady?.(true);
     return () => {
@@ -238,7 +237,7 @@ function AppContent() {
       void bridge.setCompanionComputerAudioReady?.(false);
       void engine.close();
     };
-  }, []);
+  }, [mergeRuntime]);
   useEffect(() => {
     const bridge = globalThis.desktopBridge;
     if (!bridge?.onDanceMusicCommand || !bridge?.sendDanceMusicPlaybackEvent || !bridge?.loadDanceMusic) return undefined;
@@ -284,11 +283,15 @@ function AppContent() {
   }, [state.settings.microphoneSource, state.settings.microphoneId, state.vocabulary.hotwords, state.vocabulary.rules]);
   useEffect(() => voiceAdapters.desktop.onNavigate(({ route }) => {
     if (!pages[route]) return;
-    window.location.hash = `/${route}`;
+    if (!confirmNavigation()) return;
+    window.history.pushState(null, '', `#/${route}`);
     setCurrent(route);
   }), []);
   useEffect(() => {
-    const onHash = () => setCurrent(resolveHash());
+    const onHash = event => {
+      if(!confirmNavigation()){window.history.replaceState(null,'',new URL(event.oldURL).hash || '#/dashboard');return;}
+      setCurrent(resolveHash());
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -307,7 +310,8 @@ function AppContent() {
     return () => window.clearTimeout(timer);
   }, [toast]);
   const navigate = (page) => {
-    window.location.hash = `/${page}`;
+    if (!confirmNavigation()) return;
+    window.history.pushState(null, '', `#/${page}`);
     setCurrent(page.split("/")[0]);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };

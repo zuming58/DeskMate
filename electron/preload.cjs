@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  localHistory: (value) => ipcRenderer.invoke("local-history:command", value),
+  localBackup: (value) => ipcRenderer.invoke("local-backup:command", value),
+  getRestoreHandover: () => ipcRenderer.invoke('local-backup:handover'),
+  acknowledgeRestore: id => ipcRenderer.invoke('local-backup:acknowledge', id),
   getCapabilities: () => ipcRenderer.invoke("desktop:get-capabilities"),
   getXiaozhiHardwarePolicy: () => ipcRenderer.invoke("desktop:get-xiaozhi-hardware-policy"),
   setXiaozhiHardwarePolicy: (enabled) => ipcRenderer.invoke("desktop:set-xiaozhi-hardware-policy", { enabled: Boolean(enabled) }),
@@ -118,6 +122,12 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getWorkbenchOverview: () => ipcRenderer.invoke("workbench:get-overview"),
   getMemoryPolicy: () => ipcRenderer.invoke("memory:get-policy"),
   setMemoryPolicy: (value) => ipcRenderer.invoke("memory:set-policy", value),
+  getLocalRetentionStatus: () => ipcRenderer.invoke("retention:get-status"),
+  previewLocalRetention: (value) => ipcRenderer.invoke("retention:preview", value),
+  confirmLocalRetention: (value) => ipcRenderer.invoke("retention:confirm", value),
+  runLocalRetentionNow: (value) => ipcRenderer.invoke("retention:run-now", value),
+  acknowledgeLocalRetention: (value) => ipcRenderer.invoke("retention:acknowledge", value),
+  onLocalRetentionCleanup: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("local-retention-browser-cleanup", handler); return () => ipcRenderer.removeListener("local-retention-browser-cleanup", handler); },
   commitDictationMemory: (value) => ipcRenderer.invoke("memory:commit-dictation", value),
   listMemories: (value) => ipcRenderer.invoke("memory:list", value),
   listMemoryTurns: (value) => ipcRenderer.invoke("memory:list-turns", value),

@@ -29,7 +29,7 @@ async function temporary(run) {
 }
 
 test("T21J model context survives provider replacement, hours idle and more than six topic changes", async () => {
-  let at = Date.now();
+  let at = new Date(2026, 8, 12, 8).getTime();
   const context = new CompanionDialogueContext({ now: () => at });
   const requests = [];
   const makeModel = () => new OpenAiStreamingCompanionModelAdapter({ config, dialogueContext: context, fetchImpl: async (_url, options) => {
@@ -282,6 +282,6 @@ test("T21J main wires shared context, per-question retrieval and wake greeting w
   assert.match(main, /wakeGreeting: reason === "wake-word"/);
   assert.match(main, /companionDialogueContext.clear\(\)/);
   const report = createDiagnosticReport({ conversation: { pipeline: { version: 1, provider: "three-stage", context: { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, content: "私密对话" } } } });
-  assert.deepEqual(report.conversation.pipeline.context, { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, retrieval: { route: 'unavailable', status: 'unavailable', localHits: 0, remoteHits: 0 }, timings: { localRecallMs: null, remoteRecallMs: null, contextPreparationMs: null, modelHttpStartedMs: null, modelFirstDeltaMs: null } });
+  assert.deepEqual(report.conversation.pipeline.context, { retainedMessages: 20, appliedMessages: 18, appliedReviewedMemories: 3, personaSchemaVersion: 4, ownerProfileConfiguredFields: 3, companionAgeConfigured: true, retrieval: { route: 'unavailable', status: 'unavailable', localHits: 0, remoteHits: 0 }, timings: { localRecallMs: null, remoteRecallMs: null, contextPreparationMs: null, modelHttpStartedMs: null, modelFirstDeltaMs: null, modelHttpAttempts: null, modelRetries: null }, lastFailure: null });
   assert.doesNotMatch(JSON.stringify(report), /私密对话/);
 });

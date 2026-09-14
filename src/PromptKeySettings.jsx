@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { IconCheck, IconPlus, IconCode, IconScissors, IconBriefcase, IconX, IconAppWindow, IconFolderOpen } from '@tabler/icons-react';
 import { COMMON_SCENE_ACTIONS, sceneBindingForMode, sceneBindingMode } from './domain/sceneKeyActions.js';
 import { ShortcutRecorder } from './ShortcutRecorder.jsx';
+import { SceneManager } from './SceneManager.jsx';
+import { useUnsavedChanges } from './domain/unsavedChanges.js';
 
 const bridge = () => window.desktopBridge;
 export const isSceneKey = index => index >= 4 && index <= 6;
@@ -10,6 +12,7 @@ export const isSceneKey = index => index >= 4 && index <= 6;
 export function useSceneKeymap(notify) {
   const [data, setData] = useState(null);
   const [draft, setDraft] = useState(null);
+  useUnsavedChanges(Boolean(draft));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const lock = useRef(false);
@@ -55,6 +58,7 @@ export function useSceneKeymap(notify) {
     select: id => transact(async () => { await save(); await command({ type: 'scene', id }); }),
     cycle: reverse => transact(async () => { await save(); await command({ type: 'cycle', reverse }); }),
     add: fields => transact(async () => { await save(); const current = await command({ type: 'get' }); await command({ type: 'save-scene', scene: fields, revision: current.revision }); }),
+    manage: fields => transact(async () => { await command({ type: 'manage-scene', ...fields }); }),
     setting: fields => transact(async () => { await save(); const current = await command({ type: 'get' }); await command({ type: 'settings', ...fields, revision: current.revision }); }),
   };
 }
@@ -95,28 +99,16 @@ export function useKeymapSceneTab(scenes, disabled) {
 }
 
 export function KeymapSceneRail({ scenes, disabled }) {
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const [hint, setHint] = useState('');
-  useEffect(() => {
-    if (!adding) return;
-    const key = event => {
-      if (event.key === 'Escape' && !scenes.busy) { event.preventDefault(); event.stopPropagation(); setAdding(false); }
-      if (event.key === 'Tab') {
-        const items = [...document.querySelectorAll('.keymap-scene-modal button:not(:disabled), .keymap-scene-modal input:not(:disabled)')];
-        if (event.shiftKey && event.target === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
-        else if (!event.shiftKey && event.target === items.at(-1)) { event.preventDefault(); items[0]?.focus(); }
-      }
-    };
-    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key);
-  }, [adding, scenes.busy]);
+  const [managing,setManaging]=useState(false);
+
   return <>
     <div className="keymap-scenes" role="group" aria-label="工作场景">
-      {scenes.data?.scenes.map(scene => { const Icon = scene.id === 'coding' ? IconCode : scene.id === 'scene-video' ? IconScissors : IconBriefcase; return <button type="button" key={scene.id} disabled={disabled || scenes.busy} aria-pressed={scene.id === scenes.data.activeScene} className={`keymap-scene ${scene.id === scenes.data.activeScene ? 'is-active' : ''}`} onClick={() => scenes.select(scene.id)}><Icon size={23} stroke={1.6} /><span><strong>{scene.title}</strong><small>{scene.hint || '自定义工作场景'}</small></span>{scene.id === scenes.data.activeScene && <IconCheck size={18} />}</button>; })}
-      <button type="button" className="keymap-scene-add" aria-label="添加工作场景" disabled={!scenes.data || disabled || scenes.busy} onClick={() => { setTitle(''); setHint(''); setAdding(true); }}><IconPlus size={22} /></button>
+      {scenes.data?.scenes.filter(scene=>!scene.archived).map(scene => { const Icon = scene.id === 'coding' ? IconCode : scene.id === 'scene-video' ? IconScissors : IconBriefcase; return <button type="button" key={scene.id} disabled={disabled || scenes.busy} aria-pressed={scene.id === scenes.data.activeScene} className={`keymap-scene ${scene.id === scenes.data.activeScene ? 'is-active' : ''}`} onClick={() => scenes.select(scene.id)}><Icon size={23} stroke={1.6} /><span><strong>{scene.title}</strong><small>{scene.hint || '自定义工作场景'}</small></span>{scene.id === scenes.data.activeScene && <IconCheck size={18} />}</button>; })}
+      <button type="button" className="keymap-scene-add" aria-label="管理场景" title="管理场景" disabled={!scenes.data || disabled || scenes.busy} onClick={async () => {if(await scenes.save())setManaging(true);}}><IconPlus size={22} /><small>管理</small></button>
     </div>
+    {managing && <SceneManager scenes={scenes} onClose={()=>setManaging(false)}/>}
     {scenes.error && <p role="alert">{scenes.error}</p>}
-    {adding && <div className="prompt-modal-scrim"><section className="prompt-modal keymap-scene-modal" role="dialog" aria-modal="true" aria-labelledby="keymap-scene-title"><div className="prompt-modal-title"><h2 id="keymap-scene-title">添加工作场景</h2><button aria-label="关闭场景编辑" disabled={scenes.busy} onClick={() => setAdding(false)}><IconX /></button></div><label>场景名称<input autoFocus maxLength={40} value={title} onChange={event => setTitle(event.target.value)} /></label><label>简短说明<input maxLength={100} value={hint} onChange={event => setHint(event.target.value)} /></label><p>共用键保持不变；创建后点击第 5～7 键设置这个场景的功能。</p><div className="prompt-modal-footer"><button className="pw-button" disabled={scenes.busy} onClick={() => setAdding(false)}>取消</button><button className="pw-button primary" disabled={scenes.busy || !title.trim()} onClick={async () => { if (await scenes.add({ title, hint })) setAdding(false); }}>创建场景</button></div></section></div>}
+
   </>;
 }
 

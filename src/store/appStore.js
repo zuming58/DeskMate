@@ -1,5 +1,6 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
-import { expressionPresets, historyItems } from "../appData.js";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { cleanupLegacyRetention, copyLegacyAudio, hasManagedHistory, historyCommand, loadManagedHistory, migrateLegacyHistory } from "./historyPersistence.js";
+import { expressionPresets } from "../appData.js";
 import { AI_EVENT_TYPES } from "../adapters/index.js";
 import { legacyState } from "../domain/aiStatus.js";
 import { DEFAULT_ENCODER, DEFAULT_KEYMAP, normalizeEncoder, normalizeKeyBinding } from "../domain/keymap.js";
@@ -8,10 +9,13 @@ import { normalizeAgentControl } from "../domain/agentControl.js";
 import { normalizeMicrophoneSource } from "../domain/microphoneSource.js";
 import { COMPANION_DEFAULTS, isValidCompanionEndSmoothWindowMs, isValidCompanionIdleTimeoutMs, isValidCompanionVolume, normalizeCompanionPreferences } from "../domain/companionPreferences.js";
 import { normalizeMotionState } from "../domain/motionPresets.js";
-import { normalizeKeyboardPending } from "../domain/keymapWorkspace.js";
+import { normalizeKeyboardPending, SHARED_KEY_INDEXES } from "../domain/keymapWorkspace.js";
+import { stableVocabulary } from "../domain/vocabulary.js";
 
 export const STORAGE_KEY = "deskmate.app-state";
 export const SCHEMA_VERSION = 15;
+export const PREVIOUS_STATE_KEY = `${STORAGE_KEY}.previous-valid`;
+const PENDING_HISTORY_KEY = "deskmate.history-pending.v1";
 
 const DEFAULT_AI_EVENT = Object.freeze({ type: "idle", agent: "Codex", progress: 0, detail: "等待真实 Agent 状态" });
 
@@ -34,14 +38,15 @@ function normalizeHistoryEntry(item) {
 
 export const defaultState = {
   schemaVersion: SCHEMA_VERSION,
-  history: historyItems,
-  vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ from: "桌面宠物", to: "桌宠" }, { from: "克劳德代码", to: "Claude Code" }] },
+  history: [],
+  vocabulary: { hotwords: ["DeskMate", "ESP32-S3", "Codex", "Claude Code", "Hermes"], rules: [{ id: "default-rule-1", from: "桌面宠物", to: "桌宠" }, { id: "default-rule-2", from: "克劳德代码", to: "Claude Code" }] },
   keymap: structuredClone(DEFAULT_KEYMAP),
   encoder: structuredClone(DEFAULT_ENCODER),
   keyboardPending: { keymap: {}, encoder: {} },
   keyboardLayoutVersion: 0,
   settings: { microphoneId: "", microphoneSource: "computer", formatting: "raw", customOrganizerRule: "", theme: "system", floating: true, backgroundOpacity: 70, operation: "toggle", startupSound: true, voiceShortcut: "Ctrl+Shift+Space", globalShortcutsEnabled: false, boardF22Enabled: true, rightAltEnabled: false, outputMode: "history", activeWindowOutputEnabled: true, keyDiagnosticsEnabled: false, simulatorEnabled: false, sttMode: "unconfigured", sttEndpoint: "", companionName: COMPANION_DEFAULTS.name, companionWakePhrase: COMPANION_DEFAULTS.wakePhrase, companionEndSmoothWindowMs: COMPANION_DEFAULTS.endSmoothWindowMs, companionIdleTimeoutMs: COMPANION_DEFAULTS.idleTimeoutMs, companionConversationVolume: COMPANION_DEFAULTS.conversationVolume, companionCodexBriefVolume: COMPANION_DEFAULTS.codexBriefVolume, companionWakeEnabled: false },
   runtime: {
+    companionPlayback: { playing: false },
     inputBridge: { available: false, process: "unknown", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, restarts: 0, error: "" },
     easyInputAudio: { available: false, configured: false, kind: "easyinput-lan", state: "not-configured", reason: "easyinput-audio-not-configured", networkReady: false, heartbeat: false, streaming: false, setup: { configured: false }, micTest: false, level: 0, counters: {} },
     companion: { active: false, state: "idle", provider: "three-stage", sessionId: "", generation: 0, eventSequence: 0, transcript: "", reply: "", error: "", audioSource: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSink: { available: false, kind: "computer", reason: "computer-audio-renderer-unavailable" }, audioSelection: { requestedSource: "computer", activeSource: "", output: "computer", fallback: null }, computerAudio: { ready: false, sourceActive: false, sinkActive: false, counters: {}, sinkCancelReasons: {}, lastSinkCancelReason: "none" }, service: { configured: false, provider: "three-stage", stages: {} }, serviceConfigured: false, intentBridge: { status: "unavailable", taskCount: 0 }, build: { id: "unknown", version: "unknown" }, mainState: { active: false, state: "idle", generation: 0 }, stopLifecycle: { pending: false, result: "never", error: "", attempts: 0 }, providerLifecycle: {}, turnLifecycle: {} },
@@ -69,7 +74,7 @@ function mergeDefaults(value) {
     encoder: normalizeEncoder(value.encoder),
     keyboardPending: normalizeKeyboardPending(value.keyboardPending),
     keyboardLayoutVersion: value.keyboardLayoutVersion >= 1 ? 1 : 0,
-    vocabulary: { ...defaultState.vocabulary, ...(value.vocabulary || {}) },
+    vocabulary: stableVocabulary({ ...defaultState.vocabulary, ...(value.vocabulary || {}) }),
     settings: (() => { const companion = normalizeCompanionPreferences({ name: value.settings?.companionName, wakePhrase: value.settings?.companionWakePhrase, endSmoothWindowMs: value.settings?.companionEndSmoothWindowMs, idleTimeoutMs: value.settings?.companionIdleTimeoutMs, conversationVolume: value.settings?.companionConversationVolume, codexBriefVolume: value.settings?.companionCodexBriefVolume, wakeEnabled: value.settings?.companionWakeEnabled }); return { ...defaultState.settings, ...(value.settings || {}), microphoneSource: normalizeMicrophoneSource(value.settings?.microphoneSource), operation: "toggle", companionName: companion.name, companionWakePhrase: companion.wakePhrase, companionEndSmoothWindowMs: companion.endSmoothWindowMs, companionIdleTimeoutMs: companion.idleTimeoutMs, companionConversationVolume: companion.conversationVolume, companionCodexBriefVolume: companion.codexBriefVolume, companionWakeEnabled: companion.wakeEnabled }; })(),
     expressionMapping: { ...defaultState.expressionMapping, ...(value.expressionMapping || {}) },
     agentExpressionMapping: { ...defaultState.agentExpressionMapping, ...(value.agentExpressionMapping || {}) },
@@ -119,6 +124,31 @@ export function serializeConfig(state) {
   return JSON.stringify(safe, null, 2);
 }
 
+export function persistState(state, storage = globalThis.localStorage) {
+  try {
+    const current = storage.getItem(STORAGE_KEY);
+    if (current) {
+      try { validateConfig(JSON.parse(current)); } catch { return "corrupt"; }
+    }
+    const persisted = structuredClone(state);
+    delete persisted.runtime;
+    validateConfig(persisted);
+    if (current) storage.setItem(PREVIOUS_STATE_KEY, current);
+    storage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+    return "saved";
+  } catch { return "error"; }
+}
+
+export function recoverPreviousState(storage = globalThis.localStorage) {
+  const previous = storage.getItem(PREVIOUS_STATE_KEY);
+  if (!previous) throw new Error("没有已验证的上一份配置，请使用手动导出的备份恢复");
+  const validated = validateConfig(JSON.parse(previous));
+  const damaged = storage.getItem(STORAGE_KEY);
+  if (damaged) storage.setItem(`${STORAGE_KEY}.damaged.${Date.now()}`, damaged);
+  storage.setItem(STORAGE_KEY, previous);
+  return validated;
+}
+
 export function validateConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("配置必须是 JSON 对象");
   if (value.schemaVersion !== undefined && (!Number.isInteger(value.schemaVersion) || value.schemaVersion < 0)) throw new Error("schemaVersion 必须是非负整数数字");
@@ -127,8 +157,8 @@ export function validateConfig(value) {
   if (value.keymap !== undefined && (!Array.isArray(value.keymap) || value.keymap.length !== 8 || value.keymap.some((item) => typeof item !== "string" && (!item || typeof item !== "object" || Array.isArray(item) || typeof item.action !== "string")))) throw new Error("按键映射必须包含 8 项有效动作");
   if (value.encoder !== undefined && (!value.encoder || typeof value.encoder !== "object" || Array.isArray(value.encoder))) throw new Error("旋钮配置格式无效");
   if (value.vocabulary !== undefined && (!value.vocabulary || typeof value.vocabulary !== "object" || Array.isArray(value.vocabulary))) throw new Error("词库格式无效");
-  if (value.vocabulary?.hotwords && (!Array.isArray(value.vocabulary.hotwords) || value.vocabulary.hotwords.some((item) => typeof item !== "string"))) throw new Error("热词格式无效");
-  if (value.vocabulary?.rules && (!Array.isArray(value.vocabulary.rules) || value.vocabulary.rules.some((item) => !item || typeof item.from !== "string" || typeof item.to !== "string"))) throw new Error("替换规则格式无效");
+  if (value.vocabulary?.hotwords !== undefined && (!Array.isArray(value.vocabulary.hotwords) || value.vocabulary.hotwords.some((item) => typeof item !== "string"))) throw new Error("热词格式无效");
+  if (value.vocabulary?.rules !== undefined && (!Array.isArray(value.vocabulary.rules) || value.vocabulary.rules.some((item) => !item || typeof item.from !== "string" || typeof item.to !== "string"))) throw new Error("替换规则格式无效");
   if (value.settings !== undefined && (!value.settings || typeof value.settings !== "object" || Array.isArray(value.settings))) throw new Error("设置格式无效");
   if (value.settings?.voiceShortcut !== undefined && (typeof value.settings.voiceShortcut !== "string" || value.settings.voiceShortcut.length > 64)) throw new Error("语音快捷键格式无效");
   if (value.settings?.microphoneSource !== undefined && !["computer", "easyinput"].includes(value.settings.microphoneSource)) throw new Error("麦克风来源无效");
@@ -179,8 +209,38 @@ function agentKey(value = "") {
 }
 
 export function reduceAppState(state, action) {
-  if (action.type === "reset") return structuredClone(defaultState);
-  if (action.type === "replace") return action.value;
+  if (action.type === "history-append") return { ...state, history: [action.value, ...state.history.filter((item) => String(item.id) !== String(action.value.id))] };
+  if (action.type === "history-hydrate") {
+    const persisted = new Set(action.rows.map((row) => String(row.id)));
+    return { ...state, history: [...state.history.filter((row) => !persisted.has(String(row.id))), ...action.rows] };
+  }
+  if (action.type === "reset") return { ...state, settings: structuredClone(defaultState.settings) };
+  if (action.type === "replace") {
+    const next = { ...state };
+    const fields = action.fields || Object.keys(action.value);
+    const allowed = ["settings", "vocabulary", "expressionMapping", "agentExpressionMapping", "agentControl", "expressionEditor", "motion", "sensors", "currentExpression"];
+    for (const field of allowed) if (fields.includes(field)) next[field] = action.value[field];
+    const pending = normalizeKeyboardPending(state.keyboardPending);
+    if (fields.includes("keymap")) {
+      next.keymap = state.keymap.map((item, index) => SHARED_KEY_INDEXES.includes(index) ? action.value.keymap[index] : item);
+      for (const index of SHARED_KEY_INDEXES) pending.keymap[`KEY${index + 1}`] = next.keymap[index];
+    }
+    if (fields.includes("encoder")) { next.encoder = action.value.encoder; pending.encoder = { ...next.encoder }; }
+    next.keyboardPending = pending;
+    return next;
+  }
+  if (action.type === "history-remove") {
+    const ids = new Set(action.ids);
+    return { ...state, history: state.history.filter((item) => !ids.has(item.id)) };
+  }
+  if (action.type === "history-retention-cleanup") {
+    const historyIds = new Set((action.historyIds || []).map(String));
+    const audioIds = new Set((action.audioIds || []).map(String));
+    return { ...state, history: state.history.filter((item) => !historyIds.has(String(item.id))).map((item) => {
+      if (!audioIds.has(String(item.audioId || ""))) return item;
+      const next = { ...item, recordingUnavailable: true }; delete next.audioId; return next;
+    }) };
+  }
   if (action.type === "patch") return { ...state, ...action.value };
   if (action.type === "runtime-slice") {
     const slice = String(action.slice || "");
@@ -238,19 +298,108 @@ export function reduceAppState(state, action) {
 const AppStoreContext = createContext(null);
 export function AppStoreProvider({ children }) {
   const [state, dispatch] = useReducer(reduceAppState, undefined, loadState);
-  useEffect(() => { try { const persisted = structuredClone(state); delete persisted.runtime; localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted)); } catch { /* storage can be unavailable */ } }, [state]);
+  const [storageStatus, setStorageStatus] = useState("pending");
+  const [historyStatus, setHistoryStatus] = useState({ phase: hasManagedHistory() ? "migrating" : "browser", error: "" });
+  const historyBusy = useRef(false);
+  const pendingHistory = useRef(new Map());
+  const migrationSource = useRef(state.history);
+  const mounted = useRef(false);
+  const persistPending = () => {
+    // A corrupt retry queue is evidence, not an empty default to overwrite.
+    const prior = localStorage.getItem(PENDING_HISTORY_KEY);
+    if (prior && !Array.isArray(JSON.parse(prior))) throw new Error("待保存队列损坏，请先导出本次文字");
+    localStorage.setItem(PENDING_HISTORY_KEY, JSON.stringify([...pendingHistory.current.values()]));
+  };
+  const saveManagedEntry = async (entry) => {
+    if (entry.audioId) {
+      const audio = await historyCommand("audio-get", entry.audioId);
+      if (!audio) await copyLegacyAudio(entry.audioId);
+    }
+    await historyCommand("append", entry);
+    pendingHistory.current.delete(String(entry.id));
+    persistPending();
+  };
+  const retryHistory = useCallback(async () => {
+    if (!hasManagedHistory() || historyBusy.current) return;
+    historyBusy.current = true;
+    setHistoryStatus({ phase: "migrating", error: "" });
+    try {
+      // Do not switch to an empty store when the legacy source cannot be decoded.
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) validateConfig(JSON.parse(raw));
+      const savedPending = JSON.parse(localStorage.getItem(PENDING_HISTORY_KEY) || "[]");
+      if (!Array.isArray(savedPending)) throw new Error("待保存队列损坏");
+      for (const entry of savedPending) {
+        if (!entry || entry.id == null || typeof entry.text !== "string") throw new Error("待保存队列损坏");
+        pendingHistory.current.set(String(entry.id), entry);
+        dispatch({ type: "history-append", value: entry });
+      }
+      await migrateLegacyHistory(migrationSource.current);
+      for (const entry of [...pendingHistory.current.values()]) await saveManagedEntry(entry);
+      const rows = await loadManagedHistory();
+      dispatch({ type: "history-hydrate", rows, pendingIds: [...pendingHistory.current.keys()] });
+      setHistoryStatus({ phase: "ready", error: "" });
+    } catch (error) { setHistoryStatus({ phase: "error", error: error.message || "本机历史保存不可用" }); }
+    finally { historyBusy.current = false; }
+  }, []);
+  useEffect(() => { if (!mounted.current) { mounted.current = true; void retryHistory(); } }, [retryHistory]);
+  useEffect(() => {
+    let disposed = false;
+    const applyCleanup = async (value) => {
+      if (disposed || !value?.jobId || historyBusy.current || pendingHistory.current.size) return;
+      try {
+        await cleanupLegacyRetention(value);
+        const removed = new Set((value.historyIds || []).map(String));
+        const removedAudio = new Set((value.audioIds || []).map(String));
+        migrationSource.current = migrationSource.current.filter((item) => !removed.has(String(item.id))).map((item) => {
+          if (!removedAudio.has(String(item.audioId || ""))) return item;
+          const next = { ...item, recordingUnavailable: true }; delete next.audioId; return next;
+        });
+        dispatch({ type: "history-retention-cleanup", historyIds: value.historyIds, audioIds: value.audioIds });
+        await globalThis.desktopBridge?.acknowledgeLocalRetention?.({ jobId: value.jobId });
+      } catch { /* Primary data is already quarantined; main keeps this exact browser cleanup retryable. */ }
+    };
+    const unsubscribe = globalThis.desktopBridge?.onLocalRetentionCleanup?.(applyCleanup);
+    void globalThis.desktopBridge?.getLocalRetentionStatus?.().then((status) => Promise.all((status?.pendingBrowserCleanup || []).map(applyCleanup))).catch(() => {});
+    return () => { disposed = true; unsubscribe?.(); };
+  }, []);
+  useEffect(() => {
+    setStorageStatus(persistState(historyStatus.phase === "ready" ? { ...state, history: [] } : state));
+  }, [state, historyStatus.phase]);
+  const appendHistory = useCallback(async (entry) => {
+    dispatch({ type: "history-append", value: entry });
+    if (!hasManagedHistory()) return;
+    pendingHistory.current.set(String(entry.id), entry);
+    // Best-effort crash retry source; primary SQLite success remains authoritative.
+    try { persistPending(); } catch { /* Primary write below may still succeed. */ }
+    try { await saveManagedEntry(entry); }
+    catch (error) {
+      setHistoryStatus({ phase: "error", error: error.message || "记录未保存，请重试或导出" });
+      throw new Error("历史未能可靠保存；本次文字仍在页面，请前往历史记录重试或导出");
+    }
+  }, []);
+  const removeHistory = useCallback(async (ids) => {
+    if (hasManagedHistory()) {
+      if (historyBusy.current || pendingHistory.current.size) throw new Error("请先完成迁移或重试未保存记录");
+      const status = await historyCommand("status");
+      if (!status.migrated) throw new Error("迁移未完成，原数据仍保留");
+      await historyCommand("remove", { ids });
+    }
+    dispatch({ type: "history-remove", ids });
+  }, []);
   const patch = useCallback((value) => dispatch({ type: "patch", value }), []);
   const mergeRuntime = useCallback((slice, value) => dispatch({ type: "runtime-slice", slice, value }), []);
   const updateCompanion = useCallback((value) => dispatch({ type: "companion-runtime", value }), []);
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
   const replace = useCallback((value) => {
     const validated = validateConfig(value);
-    dispatch({ type: "replace", value: validated });
+    dispatch({ type: "replace", value: validated, fields: Object.keys(value) });
     return validated;
   }, []);
   const event = useCallback((value) => dispatch({ type: "event", value }), []);
   const exportConfig = useCallback(() => serializeConfig(state), [state]);
-  const api = useMemo(() => ({ state, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig }), [state, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig]);
+  const hasPendingHistory = useCallback(() => historyBusy.current || pendingHistory.current.size > 0, []);
+  const api = useMemo(() => ({ state, storageStatus, historyStatus, hasPendingHistory, retryHistory, appendHistory, removeHistory, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig }), [state, storageStatus, historyStatus, hasPendingHistory, retryHistory, appendHistory, removeHistory, patch, mergeRuntime, updateCompanion, reset, replace, event, exportConfig]);
   return createElement(AppStoreContext.Provider, { value: api }, children);
 }
 export function useAppStore() { const value = useContext(AppStoreContext); if (!value) throw new Error("useAppStore must be used inside AppStoreProvider"); return value; }

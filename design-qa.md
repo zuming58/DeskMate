@@ -1,3 +1,26 @@
+# T36 supplied video state transitions — 2026-09-13
+
+- Source clips' first/middle/last frames inspected, proportions retained at 4:3; silent 960×720 copies and neutral poster checked. Four clips total about 5 MB. Not generated lipsync.
+- Full tests 685/685, targeted final main/store suite 27/27. Source hidden native probe passed actual decoding for all four states, actual zero-PCM sink feedback (not real speech), interruption, looping seam, hidden/blur/reduced-motion release, retry, and real enabled navigation across keymap/memory/prompts/companion.
+- Screenshots `%TEMP%/deskmate-t36-ui-F02d4n/` at 1440×1024 and 1024×768. Layout remains proportional and without horizontal overflow; sidebar card keeps dark frame/transparent face/only connection status. Initial isolated probe caught missing runtime-slice registration; fixed rather than claiming the state-only tests were enough. Final ASAR/adoption evidence is in latest progress.
+
+# T35A retained dark card and full navigation QA — 2026-09-13
+
+- Supersedes the borderless T35 sidebar: original 16px dark card retained, internal face surface transparent, only connection caption. Rejected portrait blink disabled by default; approved still remains pending user video.
+- Full tests 677/677. Hidden native production-renderer QA at 1440×1024 and 1024×768 passed: actual sidebar blink, computed card border/background, transparent interior, no extra copy, collapsed state, portrait remains still, visibility/reduced-motion, fallback, and actual enabled navigation clicks to keymap/memory/prompts/companion. Evidence `%TEMP%/deskmate-t35-ui-2JX3BF/`; actual 1440 capture inspected, card scope matches user correction. Fixtures are not opened for user acceptance and their default identity is not the saved user's identity.
+- First probe ran before the concurrent Vite build completed and saw old CSS (0px card radius). Rejected that evidence and reran after completed build; final result passed. Package resource verification remains a separate gate.
+
+# T35 home portrait and transparent sidebar QA — 2026-09-13
+
+Final visual result: passed (lightweight blink preview only).
+
+- Source: user-selected blue-shirt desk portrait `design/characters/t35/home-desk-open-source.png`; user annotated sidebar screenshots request removing white backing and secondary copy. Reviewed source together with actual native Electron captures `companion-open-1440.png`, `companion-blink-1440.png`, `companion-open-1024.png` in `%TEMP%/deskmate-t35-ui-6uhHHg/`. Captures use production renderer and isolated synthetic defaults, not real device evidence.
+- Fonts/content: existing system typography, tabs, buttons and safety controls unchanged. Sidebar now only face plus EasyInput connected/not-connected state. D/M branding unchanged. Portrait accessible label explicitly says preview, not realtime lipsync.
+- Layout: original 3:2 portrait composition remains uncropped in the existing maximum 570×380 CSS slot; face has headroom and laptop stays below it. 1440×1024 and 1024×768 have no horizontal overflow. Narrow layout retains scrolling and stacked settings; start button may be below fold as before. Collapsed navigation remains available.
+- Colors/assets: real alpha robot blends into graphite with no white rectangle/card. Actual raster masters generated through Image Gen, then mechanically resized; no SVG approximation. Selected room/body stay fixed during the eyelid-only overlay. Native natural closed and reopened states visually inspected; no full-scene flash.
+- Behavior: probe passed actual image load, natural blink/reopen, transparent backgrounds, status-only text, viewport size, collapse, hidden/reduced-motion pause, route cleanup and base-image failure with voice button retained. No external audio, network or hardware action.
+- No open P0/P1/P2 issues within this visual scope. P3 limitation: two-frame eyelid transition is a preview, not continuous facial motion; transparent sidebar masters have tiny edge remnants visible at extreme zoom, not at sidebar size. Future realistic motion/lipsync needs a separate quality/performance gate.
+
 # T26A brand and light companion QA — 2026-09-11
 
 Final result: passed

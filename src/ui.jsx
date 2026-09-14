@@ -62,6 +62,9 @@ export function ConfirmationDialog({ open, title, description, paths = [], busy 
   const titleId = useId();
   const descriptionId = useId();
   const cancelButtonRef = useRef(null);
+  const dialogRef = useRef(null);
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
   const restoreFocusRef = useRef(null);
 
   useEffect(() => {
@@ -71,9 +74,18 @@ export function ConfirmationDialog({ open, title, description, paths = [], busy 
     document.body.style.overflow = "hidden";
     window.requestAnimationFrame(() => cancelButtonRef.current?.focus());
     const onKeyDown = (event) => {
-      if (event.key !== "Escape" || busy) return;
-      event.preventDefault();
-      onCancel?.();
+      if (event.key === "Tab") {
+        event.stopPropagation();
+        const items = [...(dialogRef.current?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') || [])];
+        const first = items[0], last = items.at(-1);
+        if (!first) { event.preventDefault(); dialogRef.current?.focus(); }
+        else if (!dialogRef.current?.contains(document.activeElement) || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+          event.preventDefault(); (event.shiftKey ? last : first).focus();
+        }
+      }
+      if (event.key !== "Escape") return;
+      event.preventDefault(); event.stopPropagation();
+      if (!busy) cancelRef.current?.();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => {
@@ -81,12 +93,12 @@ export function ConfirmationDialog({ open, title, description, paths = [], busy 
       document.body.style.overflow = previousOverflow;
       restoreFocusRef.current?.focus?.();
     };
-  }, [busy, onCancel, open]);
+  }, [busy, open]);
 
   if (!open) return null;
   return (
     <div className="confirmation-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onCancel?.(); }}>
-      <section className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
+      <section ref={dialogRef} tabIndex={-1} className="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId}>
         <div className="confirmation-dialog__header">
           <span className="confirmation-dialog__icon"><ShieldCheck size={24} stroke={1.75} /></span>
           <div>

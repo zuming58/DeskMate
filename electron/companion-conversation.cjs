@@ -139,6 +139,7 @@ class CompanionConversationController {
     this.stopPromise = null;
     this.idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS;
     this.idleTimer = null;
+    this.awaitingSpeechFinal = false;
     this.lastStopReason = "never";
     this.sessionProviderPreferences = Object.freeze({ revision: 0, ...COMPANION_PREFERENCES_DEFAULT });
     this.sessionPersona = normalizePersona();
@@ -195,7 +196,7 @@ class CompanionConversationController {
     if (!this.active || this.stopPromise) return false;
     if (this.closeAfterTrustedAnnouncement) return false;
     if (this.halfDuplexPhase === "listening" && !this.playbackDraining) return true;
-    return this.providerLabel === "three-stage" && ["speaking", "draining"].includes(this.halfDuplexPhase);
+    return this.providerLabel === "three-stage" && ["thinking", "speaking", "draining"].includes(this.halfDuplexPhase);
   }
 
   setHalfDuplexPhase(phase) {
@@ -423,9 +424,15 @@ class CompanionConversationController {
     this.idleTimer = this.setTimer(() => {
       this.idleTimer = null;
       if (!this.isCurrent(token) || this.state !== "listening") return;
+      if (this.awaitingSpeechFinal) {
+        this.awaitingSpeechFinal = false;
+        this.onEvent({ type: 'state', state: 'listening', error: '刚才的语音识别没有完成，我还在听，请再说一次。', reason: 'speech-final-timeout', sessionId: this.active.sessionId, generation: this.active.generation });
+        this.armIdleTimer('speech-final-timeout');
+        return;
+      }
       this.onEvent({ type: "idle.timeout", reason: "listening-idle-timeout", sessionId: this.active.sessionId, generation: this.active.generation });
       void this.stop("listening-idle-timeout");
-    }, this.idleTimeoutMs);
+    }, this.awaitingSpeechFinal ? Math.max(30000, this.idleTimeoutMs) : this.idleTimeoutMs);
     this.onEvent({ type: "idle.timer", reason: safeErrorReason(reason), armed: true, timeoutMs: this.idleTimeoutMs, sessionId: this.active.sessionId, generation: this.active.generation });
     return true;
   }
@@ -438,6 +445,7 @@ class CompanionConversationController {
   async transition(state, detail = {}) {
     if (!STATES.includes(state)) throw new Error("companion-state-invalid");
     this.state = state;
+    this.awaitingSpeechFinal = false;
     this.syncHalfDuplexPhaseFromState(state);
     if (state === "listening") this.armIdleTimer(detail.reason || "listening");
     else this.clearIdleTimer();
@@ -556,7 +564,7 @@ class CompanionConversationController {
     return this.active ? "active" : "idle";
   }
 
-  recordProviderArrival(event = {}) {
+  recordProviderArrival(event = {}, canRefreshIdle = true) {
     const sequence = this.providerLifecycle.providerEventSequence + 1;
     const phase = this.providerArrivalPhase();
     const asrArrivalPhase = this.halfDuplexPhase;
@@ -609,11 +617,16 @@ class CompanionConversationController {
     const suppressAsr = isAsr && asrArrivalPhase !== "listening" && event?.bargeIn !== true;
     if (["transport-error", "transport-close"].includes(providerEvent)) this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "reconnecting");
     else if (event?.type === "error") this.setHalfDuplexPhase(this.stopPromise ? "stopping" : "error");
+    else if (event?.type === 'turn.failed') this.setHalfDuplexPhase('listening');
     else if (event?.type === "asr.final" && !suppressAsr) this.setHalfDuplexPhase("thinking");
     else if (["chat.partial", "chat.final"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("thinking");
     else if (["tts.start", "audio"].includes(event?.type) && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("speaking");
     else if (event?.type === "tts.end" && !this.discardResponseUntilTtsEnd) this.setHalfDuplexPhase("draining");
-    if (event?.type === "asr.final" && !suppressAsr && boundedText(event.text).trim()) this.clearIdleTimer();
+    if (canRefreshIdle && asrArrivalPhase === 'listening' && (event?.type === 'asr.speech-started' || (event?.type === 'asr.partial' && boundedText(event.text).trim()))) {
+      this.awaitingSpeechFinal = true;
+      this.armIdleTimer('recognized-speech-arrival');
+    }
+    if (canRefreshIdle && event?.type === "asr.final" && !suppressAsr && boundedText(event.text).trim()) { this.awaitingSpeechFinal = false; this.clearIdleTimer(); }
     return Object.freeze({ sequence, phase, providerEvent, terminalEvent, asrArrivalPhase, suppressAsr });
   }
 
@@ -637,7 +650,7 @@ class CompanionConversationController {
     const providerEpoch = ++this.providerEpoch;
     return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, sessionTranscriptContext: this.sessionTranscriptContext, onEvent: (event) => {
       const bargeSinkInterrupt = this.prepareRecognizedBargeIn(event, token);
-      const providerArrival = this.recordProviderArrival(event);
+      const providerArrival = this.recordProviderArrival(event, this.isCurrent(token) && providerEpoch === this.providerEpoch);
       const arrival = Object.freeze({
         ...providerArrival,
         providerEpoch,
@@ -755,6 +768,19 @@ class CompanionConversationController {
   async handleProviderEvent(event = {}, token, arrival = {}) {
     if (!this.isCurrent(token) || arrival.providerEpoch !== this.providerEpoch) return { ignored: true, reason: "companion-event-stale" };
     if (event.type === "connection.closed") { void this.reconnect(token); return { ok: true }; }
+    if (event.type === 'model.status') {
+      if (this.state !== 'thinking' || this.halfDuplexPhase !== 'thinking') return { ignored: true };
+      this.onEvent({ type: 'response.status', status: event.status === 'retrying' ? 'retrying' : 'waiting', sessionId: this.active.sessionId, generation: this.active.generation });
+      return { ok: true };
+    }
+    if (event.type === 'turn.failed') {
+      this.capturePipelineDiagnostics();
+      this.pendingTrustedResponse = null;
+      this.discardResponseUntilTtsEnd = false;
+      this.postInterruptState = '';
+      await this.transition('listening', { reason: 'model-turn-recovered', error: '刚才回答服务暂时没连上，我还在听，请再说一次。' });
+      return { ok: true, recovered: true };
+    }
     if (event.type === "error") {
       if (["doubao-connection-error", "doubao-connection-closed"].includes(event.message)) { void this.reconnect(token); return { ok: true, reconnecting: true }; }
       await this.fail(event.message || "companion-provider-error", token);

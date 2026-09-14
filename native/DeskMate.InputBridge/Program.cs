@@ -14,7 +14,7 @@ internal static class Program
         Console.OutputEncoding = new UTF8Encoding(false);
         if (args.Contains("--protocol-self-test", StringComparer.OrdinalIgnoreCase))
         {
-            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && HidCollectionContracts.RunSelfTest() && RawInputWindow.InputLayoutSelfTest() ? 0 : 1;
+            Environment.ExitCode = VendorReportProtocol.RunSelfTest() && HidCollectionContracts.RunSelfTest() && RawInputWindow.InputLayoutSelfTest() && DesktopPastePolicy.RunSelfTest() ? 0 : 1;
             return;
         }
         var writer = new EventWriter();
@@ -302,7 +302,9 @@ internal sealed class ConfigCommandListener : IDisposable
             {
                 if (!root.TryGetProperty("targetWindow", out var targetValue) || !ulong.TryParse(targetValue.GetString(), out var target) || target == 0)
                     throw new InvalidOperationException("invalid-active-window-command");
-                var output = RawInputWindow.PasteActiveWindow(new IntPtr(unchecked((long)target)));
+                if (!root.TryGetProperty("expiresUnixMs", out var expiryValue) || !expiryValue.TryGetInt64(out var expiry))
+                    throw new InvalidOperationException("invalid-active-window-command");
+                var output = RawInputWindow.PasteActiveWindow(new IntPtr(unchecked((long)target)), expiry);
                 _writer.DesktopOutputResult(requestId, output.ok, output.reason);
                 return Task.CompletedTask;
             }
@@ -712,12 +714,13 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return (false, "workbench-output-denied");
     }
     private static RawInputWindow? Current;
+    private readonly Control _desktopDispatcher = new();
     public static void BeginRead(string requestId, uint numericRequest, byte flag) => Current?.BeginReadInternal(requestId, numericRequest, flag);
     public static void CancelRead(string requestId) => Current?.CancelReadInternal(requestId);
     public static (bool ok, string reason, int bytes) InjectFixedText(string requestId, long expiresUnixMs, uint blockedProcessId, IReadOnlySet<IntPtr> blockedWindows) =>
         Current?.InjectFixedTextInternal(requestId, expiresUnixMs, blockedProcessId, blockedWindows) ?? (false, "input-window-unavailable", 0);
-    public static (bool ok, string reason) PasteActiveWindow(IntPtr expectedWindow) =>
-        Current?.PasteActiveWindowInternal(expectedWindow) ?? (false, "input-window-unavailable");
+    public static (bool ok, string reason) PasteActiveWindow(IntPtr expectedWindow, long expiresUnixMs) =>
+        Current?.PasteActiveWindowInternal(expectedWindow, expiresUnixMs) ?? (false, "input-window-unavailable");
     public static (bool ok, string reason, string targetWindow) CaptureActiveWindow() =>
         Current?.CaptureActiveWindowInternal() ?? (false, "input-window-unavailable", string.Empty);
     private const int WmInput = 0x00FF;
@@ -792,6 +795,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
     {
         _writer = writer;
         Current = this;
+        _desktopDispatcher.CreateControl();
         _diagnosticMode = diagnosticMode;
         _keyboardProc = KeyboardHook;
         CreateHandle(new CreateParams { Caption = "DeskMate Raw Input Bridge", Parent = new IntPtr(-3) });
@@ -1139,21 +1143,20 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         return sent == inputs.Count ? (true, "", pending.Bytes) : (false, "fixed-text-send-input-incomplete", 0);
     }
 
-    private (bool ok, string reason) PasteActiveWindowInternal(IntPtr expectedWindow)
+    private (bool ok, string reason) PasteActiveWindowInternal(IntPtr expectedWindow, long expiresUnixMs)
     {
-        var foreground = GetForegroundWindow();
-        if (expectedWindow == IntPtr.Zero || foreground != expectedWindow || !IsWindowVisible(foreground))
-            return (false, "target-window-changed");
-        var inputs = new[]
-        {
-            NativeInput.Key(VkControl, false), NativeInput.Key(VkV, false),
-            NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true),
-        };
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeInput>());
-        if (sent == inputs.Length) return (true, "");
-        var releases = new[] { NativeInput.Key(VkV, true), NativeInput.Key(VkControl, true) };
-        SendInput((uint)releases.Length, releases, Marshal.SizeOf<NativeInput>());
-        return (false, "desktop-output-send-input-incomplete");
+        if (_desktopDispatcher.InvokeRequired)
+            return ((bool ok, string reason))_desktopDispatcher.Invoke(() => PasteActiveWindowInternal(expectedWindow, expiresUnixMs));
+        return DesktopPastePolicy.Execute(expectedWindow, expiresUnixMs,
+            () => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), GetForegroundWindow, IsWindowVisible, Thread.Sleep, SendPasteKeys);
+    }
+
+    private static (bool ok, string reason) SendPasteKeys()
+    {
+        // Same WinForms API as the accepted PowerShell path, on our resident STA
+        // message loop. Do not start another process or retry uncertain delivery.
+        try { SendKeys.SendWait("^v"); return (true, ""); }
+        catch { return (false, "desktop-output-send-input-incomplete"); }
     }
 
     private (bool ok, string reason, string targetWindow) CaptureActiveWindowInternal()
@@ -1240,6 +1243,7 @@ internal sealed class RawInputWindow : NativeWindow, IDisposable
         if (_disposed) return;
         _disposed = true;
         if (ReferenceEquals(Current, this)) Current = null;
+        _desktopDispatcher.Dispose();
         if (_keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(_keyboardHook);
         DestroyHandle();
     }

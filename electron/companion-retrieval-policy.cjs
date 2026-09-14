@@ -22,9 +22,14 @@ function memoryQueryPlan(value, { now = Date.now() } = {}) {
   } else if (/上个月|上月/.test(text)) {
     since = new Date(today.getFullYear(), today.getMonth() - 1, 1).getTime();
     until = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+  } else if (/今天/.test(text)) {
+    since = today.getTime(); const end = new Date(today); end.setDate(end.getDate() + 1); until = end.getTime();
   }
   const currentOnly = current && !/以前|之前|历史|上次|昨天|前天|上周|上个月|上月|去年|个月前|天前|周前|\d{4}[-年/]/.test(text);
-  return { kind: explicit && !noRemote ? 'explicit-knowledge' : currentOnly ? 'current-dialogue' : historical ? 'history' : 'conversation', noRemote, since, until, query: text };
+  const kind = explicit && !noRemote ? 'explicit-knowledge' : currentOnly ? 'current-dialogue' : historical ? 'history' : 'conversation';
+  const dayReview = kind === 'history' && since !== null && /干了|做了|哪些活|忙了|完成|工作|回顾|总结/.test(text);
+  const includeDictation = kind !== 'conversation' && /工作|项目|干了|做了|哪些活|忙了|完成|语音输入|听写|口述|转写/.test(text);
+  return { kind, noRemote, since, until, query: text, dayReview, includeDictation };
 }
 
 function relevantLocalEvidence(query, rows, plan = {}) {

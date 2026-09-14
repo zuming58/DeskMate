@@ -67,11 +67,17 @@ test("native agent-state writer validates the frozen report before HidD_SetFeatu
   assert.match(protocol, /report\.Slice\(17\)\.ContainsAnyExcept\(\(byte\)0\)/);
 });
 
-test("native active-window paste validates the exact target and releases modifiers on failure", () => {
+test("native active-window paste validates exact target and dispatches WinForms paste on resident STA", () => {
   const source = readFileSync(path.join(root, "native", "DeskMate.InputBridge", "Program.cs"), "utf8");
   assert.match(source, /commandType == "paste-active-window"/);
-  assert.match(source, /foreground != expectedWindow/);
-  assert.match(source, /NativeInput\.Key\(VkControl, false\).*NativeInput\.Key\(VkV, false\).*NativeInput\.Key\(VkV, true\).*NativeInput\.Key\(VkControl, true\)/s);
+  const policy = readFileSync(path.join(root, 'native', 'DeskMate.InputBridge', 'DesktopPastePolicy.cs'), 'utf8');
+  assert.match(source, /DesktopPastePolicy.Execute\(expectedWindow, expiresUnixMs/);
+  assert.match(policy, /foreground\(\) == expectedWindow && visible\(expectedWindow\)/);
+  assert.match(policy, /clock\(\) >= expiry/);
+  assert.match(policy, /poll <= 30/);
+  assert.match(source, /DesktopPastePolicy.RunSelfTest\(\)/);
+  assert.match(source, /_desktopDispatcher.Invoke\(\(\) => PasteActiveWindowInternal\(expectedWindow, expiresUnixMs\)\)/);
+  assert.match(source, /SendKeys.SendWait\("\^v"\)/);
   assert.match(source, /desktop-output-send-input-incomplete/);
   assert.doesNotMatch(source, /PasteActiveWindow\([^)]*text/i);
 });

@@ -47,11 +47,12 @@ class CompanionDialogueContext {
 
   messages() {
     this.prune();
-    return this.entries.filter((entry) => entry.content).map((entry) => ({ role: entry.role, content: entry.content + (entry.interrupted ? INTERRUPTED_NOTE : "") }));
+    const start = new Date(this.now()); start.setHours(0, 0, 0, 0);
+    return this.entries.filter((entry) => entry.content && entry.at >= start.getTime()).map((entry) => ({ role: entry.role, content: entry.content + (entry.interrupted ? INTERRUPTED_NOTE : "") }));
   }
 
   recordRequest(messages, reviewedMemories) { this.lastRequest = { messages, reviewedMemories }; }
-  earliestTimestamp() { this.prune(); return this.entries[0]?.at || this.now() + 1; }
+  earliestTimestamp() { this.prune(); const day = new Date(this.now()); day.setHours(0, 0, 0, 0); return this.entries.find(row => row.at >= day.getTime())?.at || this.now() + 1; }
   status() { return { version: 1, retainedMessages: this.messages().length, appliedMessages: this.lastRequest.messages, appliedReviewedMemories: this.lastRequest.reviewedMemories }; }
   clear() { this.entries = []; this.lastRequest = { messages: 0, reviewedMemories: 0 }; }
 }

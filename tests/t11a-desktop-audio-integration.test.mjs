@@ -14,7 +14,8 @@ test("production companion uses locked selected input and computer speaker witho
   assert.match(main, /audioSink:\s*computerCompanionAudio\.sink/);
   assert.match(main, /companionSource === "easyinput"/);
   assert.doesNotMatch(main, /new UnavailableCompanionAudioSource\(\)/);
-  assert.match(pages, /EasyInput 扬声器.*待协议冻结/);
+  assert.doesNotMatch(pages, /EasyInput 扬声器.*待协议冻结/);
+  assert.match(pages, /当前陪伴输出.*电脑扬声器/);
   assert.doesNotMatch(main, /EISD|EISA|speaker.*udp/i);
 });
 

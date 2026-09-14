@@ -1,3 +1,5 @@
+import { safeOutputReason } from '../domain/voiceOutputDiagnostics.js';
+
 export function describeTranscriptionFailure(transcript = {}) {
   const status = String(transcript.status || "error");
   const message = String(transcript.message || "").toLowerCase();
@@ -9,7 +11,9 @@ export function describeTranscriptionFailure(transcript = {}) {
   return { code: "request-failed", label: "转写请求失败", historyText: "录音已保存，语音识别请求失败", message: "语音识别请求失败，请稍后重试或查看系统诊断" };
 }
 
-export async function processVoiceRecording({ blob, stt, organizer, organizerOptions, editor, operation = "input", saveHistory, output, outputMode = "history", signal, onPhase }) {
+export async function processVoiceRecording({ blob, stt, organizer, organizerOptions, editor, operation = "input", saveHistory, output, outputMode = "history", signal, onPhase, onTiming, now = Date.now }) {
+  const startedAt = now();
+  let outputMs = null;
   onPhase?.("transcribing");
   let transcript;
   try { transcript = await stt.transcribe(blob, { signal, hotwords: organizerOptions?.hotwords || [] }); } catch (error) { transcript = { status: "error", text: "", provider: "unknown", durationMs: 0, message: error.message }; }
@@ -36,9 +40,11 @@ export async function processVoiceRecording({ blob, stt, organizer, organizerOpt
   // Persistence is not part of the user's output latency. Start it now, but
   // allow the active-window/clipboard write to proceed in parallel.
   const historyPromise = Promise.resolve().then(() => saveHistory({ text, transcript, organized, failure }));
+  historyPromise.catch(() => {}); // Observe early failures while insertion is in flight.
   let outputResult = { ok: true, mode: "history" };
   if (transcript.status === "success" && organized?.status !== "cancelled" && (operation !== "edit" || organized?.status === "success")) {
     onPhase?.("outputting");
+    const outputStarted = now();
     try { outputResult = await output.output(text, outputMode); } catch (error) { outputResult = { ok: false, reason: error.message }; }
     if (outputMode === "active-window" && !outputResult?.ok) {
       const activeWindowFailure = outputResult?.reason || "active-window-output-failed";
@@ -49,8 +55,18 @@ export async function processVoiceRecording({ blob, stt, organizer, organizerOpt
         outputResult = { ok: false, mode: "clipboard", fallbackFrom: "active-window", reason: error.message || activeWindowFailure };
       }
     }
+    outputMs = Math.max(0, now() - outputStarted);
+    onPhase?.('saving', outputResult);
   }
   if (organized?.status === "cancelled") outputResult = { ok: false, cancelled: true, reason: "organizer-cancelled" };
+  const historyWaitStarted = now();
   const history = await historyPromise;
-  return { text, transcript, organized, failure, history, output: outputResult };
+    const timing = { outputMs, historyWaitMs: Math.max(0, now() - historyWaitStarted), totalMs: Math.max(0, now() - startedAt), destination: outputResult.mode || outputMode, ok: Boolean(outputResult.ok), requestedMode: outputMode, fallback: outputResult.fallbackFrom === 'active-window', reason: safeOutputReason(outputResult.reason) };
+  onTiming?.(timing);
+  return { text, transcript, organized, failure, history, output: outputResult, timing };
+}
+
+export function voiceCompletionMessage({ output = {}, organized = {} } = {}) {
+  const destination = output.mode === 'history' ? '已保存到历史' : output.mode === 'clipboard' ? '已复制到剪贴板' : '已输入';
+  return organized.mode === 'raw' ? destination : `整理完成，${destination}`;
 }

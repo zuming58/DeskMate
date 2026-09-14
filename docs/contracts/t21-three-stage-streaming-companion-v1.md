@@ -5,6 +5,11 @@ Status: `T21_THREE_STAGE_STREAMING_COMPANION_V1_FROZEN`
 Retrieval, first-clause speech and timing defaults are amended by
 [T27 local-first latency](./t27-local-first-companion-latency-v1.md).
 
+The partial-only-display rule and three-stage thinking uplink gate are narrowly
+amended by [T28 isolated preemptive generation](./t28-preemptive-companion-v1.md).
+Only private ordinary-chat candidates may run before final; final remains the
+mandatory context/tool/speech commit gate. Legacy realtime behavior is unchanged.
+
 The v1 no-automatic-barge-in boundary below is superseded only for this
 three-stage provider by
 [`T21B_RECOGNIZED_BARGE_IN_AND_LOCAL_WAKE_REPAIR_V1_FROZEN`](./t21b-recognized-barge-in-and-local-wake-repair-v1.md).

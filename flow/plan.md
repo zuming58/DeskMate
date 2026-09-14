@@ -1,5 +1,59 @@
 # Development plan
 
+## Current delivery: T36 state video — ready for user dialogue acceptance
+
+Four user-generated clips integrated as foreground-only silent 4:3 video. Idle/listen/think and real PCM playback mapping, 150ms prepared-frame crossfade, interruption, loop seam and background resource release implemented. Full suite 685/685, targeted final main/store tests 27/27, source and final ASAR actual-decoder/navigation QA passed. Full `release-t36` opened with retained profile; live 小岚 and updated visuals inspected, exact hashes in latest progress. Next is user real-dialogue transition acceptance, then existing ordered software acceptance. T35A pending-video notes below are historical.
+
+## Current candidate: T35A full app — awaiting retained-profile adoption
+
+Dark sidebar container restored, inner white backing/secondary captions removed, real connection status retained. Rejected portrait blink disabled pending user video. Complete candidate `release-t35a/win-unpacked/DeskMate.exe`, build `t35a-sidebar-complete-app`, full tests 677/677 and final packaged native navigation/visual checks passed. Old T34D remains in the tray; ask normal Exit before launching the candidate with the retained profile. No visible isolated fixture as a substitute. See latest progress entry and D141; historical visual slices below are superseded.
+
+## Current visual slice: T35 home companion preview
+
+User selected the blue-shirt home-desk still. Software preview and transparent status-only sidebar implemented; full tests 677/677 and isolated native visual checks passed. Package candidate `release-t35`, build ID `t35-home-companion-preview`; adoption evidence belongs in the latest progress entry. Next: user checks portrait size/blink feel, then resumes the existing ordered software/voice acceptance. No new firmware or realtime lipsync in this slice. See `docs/design/companion-home-preview-t35.md`.
+
+## Current slice: T34D running — manual punctuation/dictation acceptance
+
+Punctuation-aware whole-session stitching serves both live preview and final output. T34D additionally hides the native window until the first renderer frame, eliminating the reported white launch surface; full suite673/673, package resource checks and isolated packaged smoke pass. Current running build `t34d-window-first-paint`. Next test raw multi-pause dictation in History and one target field, then resume the T34 ordered page checklist. See `docs/reviews/t34d-window-first-paint-2026-09-13.md` and the T34C review. T34B capsule feedback was user-confirmed; possible provider word omissions remain a separate evidence question.
+
+## Current slice: T34 / T34A software closure ready for controlled acceptance
+
+Restore confirmation/offline handover, retained-copy policy, unified scene management, results-first memory and dirty/busy UI guards are implemented. T34A fixes dictation consuming an early utterance instead of the completed recording; fallback reprocesses complete audio. Candidate `release-t34a`, build `t34a-dictation-completion`; full suite658/658 and isolated candidate UI/build/resource checks passed. No running-user-app replacement or real-data/hardware/cloud acceptance performed.
+
+Next: adopt the candidate at an idle moment, test paused multi-sentence dictation first, then follow `docs/testing/t34-page-acceptance-2026-09-13.md`. Review: `docs/reviews/t34-software-closure-2026-09-13.md`. Manual recovery snapshots are available; automatic periodic full-database snapshots are not claimed. Historical Current slice sections below describe prior delivery states and are superseded where noted.
+
+## Current slice: T33 consent-based automatic cleanup (package 2)
+
+The unified local retention lifecycle is implemented: adjustable recording 7-day/raw-text 20-day defaults, first-use exact preview and explicit consent, summary/KnowledgeOS readiness gates, visible hold reasons, worker-owned recovery jobs, exact renderer-copy cleanup, daily idle execution and redacted status. Changing either duration revokes consent. No live user cleanup has been run. Next: finish production restore activation (remaining package 1), then complete scene management and interface closure. Contract: `docs/contracts/t33-consent-retention-v1.md`; review: `docs/reviews/t33-consent-retention-2026-09-13.md`.
+
+## Current slice: T32B backup export and safe inspection (partial package 1)
+
+Worker-generated, verified local backups and a settings-page inspection preview are implemented. Audio is opt-in; secrets/registered application paths are excluded. Offline restore engine is fault-tested but **not wired to live startup**. Next: complete maintenance/busy guards, renderer handover and per-day no-replay enforcement before exposing confirmation/restart. Package 1 remains partial; package 2 retention is now implemented separately by T33. Contract: `docs/contracts/t32b-local-backup-v1.md`.
+
+## Current slice: T32 persistence foundation (partial package 1)
+
+Accepted sequence: data safety → automatic cleanup → scene management → UI closure. Checklist: `flow/tasks/t32-software-reliability.md`. Contract: `docs/contracts/t32-local-history-v1.md`.
+
+Worker-owned SQLite history/managed audio, manifest-verified migration/retry, reliable dates, ID-based appends and corrupt-source overwrite prevention are implemented. Old daily-close cleanup is paused for first-use confirmation. This does **not** complete backup/restore or automatic cleanup. Next: verified recovery snapshots and versioned backups with maintenance locks, then coordinated 7/20-day cleanup, then scene/UI packages.
+
+## Current slice: T31 audit closure and UI data safety
+
+Settings/history separation, confirmed snapshot deletion, real vocabulary/history transfer, visible storage errors, draft revision guards, removal of inert production controls. Contract: `docs/contracts/t31-ui-data-safety-v1.md`. 601 tests and ten isolated Electron UI checks pass. Remaining: cross-store retention/recovery, full scene management, advanced UI grouping and user-present current-package acceptance. See `docs/reviews/t31-audit-fixes-2026-09-12.md`.
+
+## Current slice: T30 insertion, speech waiting and calendar-day memory
+
+Resident STA WinForms paste; bounded recognition waiting before idle exit;
+ordinary context limited to today; historical work review queries both sources.
+Contract: `docs/contracts/t30-voice-insertion-day-context-v1.md`.
+
+## Previous slice: T29 resident dictation output and companion network recovery
+
+User-authorized repair after real T28 testing: preserve proven recording-start target capture, replace per-output PowerShell with the resident native paste bridge, enforce expiry/exact target/clipboard fallback, and separate output/persistence timings. The capsule updates existing nodes with one shared terminal-timer owner and respects explicit recovery messages. Confirmed model requests may retry one pre-response network/5xx failure under the existing deadline; no draft or streamed-response replay. [Frozen boundary](../docs/contracts/t29-voice-output-recovery-v1.md). Live user microphone/target-app acceptance stays separate from unit tests and native self-tests.
+
+## Current slice: T28 preemptive companion preparation
+
+User-approved Windows-only optimization: isolated ordinary-chat drafts after 500 ms text stability, ASR-final/context equivalence before speech and memory commit, bounded cancellation, continuous three-stage microphone uplink during thinking, transient pre-speech model recovery and per-turn diagnostic history. Existing ASR silence preference, Doubao voice, local-first memory and accepted echo/barge-in gates stay intact. No firmware change. [Frozen contract and deferred semantic endpointing](../docs/contracts/t28-preemptive-companion-v1.md); exact build/test and remaining live acceptance are recorded in the latest progress entry.
+
 ## Current slice: T27 local-first companion latency
 
 Voice companion recall is now local-first with bounded remote fallback for historical gaps or explicit KnowledgeOS requests. Daily notes remain unreviewed evidence, and local 20-day raw cleanup does not remove summaries or approved memory. New-profile pause default is 1.5 seconds, first complete clause can start TTS, and official DeepSeek V4 companionship uses non-thinking requests. Content-free per-stage measurements distinguish optional lookup, model and audio queueing. See [contract and live synthetic evidence](../docs/contracts/t27-local-first-companion-latency-v1.md). KnowledgeOS Core was not running during the probe, so successful live remote retrieval is still a separate gate; the delay/failure fallback itself was tested. Real microphone pause/echo/interruption acceptance remains user-present.

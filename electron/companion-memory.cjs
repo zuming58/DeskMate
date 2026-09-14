@@ -428,12 +428,11 @@ class CompanionMemoryStore {
     return [...indexes].sort((a, b) => a - b).map((index) => ({ ...rows[index], content: rows[index].content.slice(0, 700) })).slice(0, 12);
   }
 
-  localHistoryForQuery(query, { since = null, until = null } = {}) {
-    // Local retained raw companion + durable daily notes, never loose files or
-    // raw dictation. Notes remain evidence, not automatically approved facts.
+  localHistoryForQuery(query, { since = null, until = null, includeDictation = false, dayReview = false } = {}) {
+    // Explicit historical work reviews may include attributed dictation material.
     const floor = since === null ? 0 : Math.max(0, Number(since) || 0);
     const ceiling = until === null ? this.now() + 1 : Math.min(Number(until), this.now() + 1);
-    const raw = this.db.prepare("SELECT source, role, content, created_at AS createdAt FROM conversation_turns WHERE source='companion' AND created_at>=? AND created_at<? ORDER BY created_at DESC LIMIT 1500").all(floor, ceiling);
+    const raw = ['companion', ...(includeDictation ? ['dictation'] : [])].flatMap(source => this.db.prepare("SELECT source, role, content, created_at AS createdAt FROM conversation_turns WHERE source=? AND created_at>=? AND created_at<? ORDER BY created_at DESC LIMIT 750").all(source, floor, ceiling));
     const fromDay = since === null ? '0000-00-00' : localDayAt(floor);
     const toDay = until === null ? '9999-99-99' : localDayAt(ceiling - 1);
     const journals = this.db.prepare("SELECT day, work_markdown AS work, personal_markdown AS personal FROM memory_daily_journals WHERE status='completed' AND day>=? AND day<=? ORDER BY day DESC LIMIT 366").all(fromDay, toDay);
@@ -450,19 +449,26 @@ class CompanionMemoryStore {
       for (let offset = 0; offset < text.length; offset += 600) {
         const part = text.slice(offset, offset + 900);
         const lexical = terms.length ? terms.filter(term => part.toLowerCase().includes(term)).length / terms.length : 0;
-        if (lexical > 0 || (since !== null && row.kind === 'daily-journal' && !terms.length)) candidates.push({ ...row, content: part, lexical });
+        if (lexical > 0 || (since !== null && (dayReview || (row.kind === 'daily-journal' && !terms.length)))) candidates.push({ ...row, content: part, lexical });
       }
     };
-    for (const row of raw) add({ ...row, day: localDayAt(row.createdAt), kind: 'raw-companion' }, row.content);
+    for (const row of raw) add({ ...row, day: localDayAt(row.createdAt), kind: row.source === 'dictation' ? 'raw-dictation' : 'raw-companion' }, row.content);
     for (const row of journals) {
       add({ day: row.day, source: 'work', kind: 'daily-journal' }, row.work);
       add({ day: row.day, source: 'personal', kind: 'daily-journal' }, row.personal);
     }
     for (const row of daily) add({ ...row, kind: 'daily-summary' }, row.content);
     // Cheap keyword preselection keeps hashing out of the full history scan.
-    return candidates.sort((a, b) => b.lexical - a.lexical).slice(0, 48)
-      .map(({ lexical, ...row }) => ({ ...row, score: !terms.length && since !== null && row.kind === 'daily-journal' ? 0.4 : Math.max(0, cosine(target, embed(row.content))) * 0.65 + lexical * 0.35 }))
-      .filter(row => row.score >= 0.22).sort((a, b) => b.score - a.score).slice(0, 8);
+    candidates.sort((a, b) => b.lexical - a.lexical);
+    const shortlist = dayReview ? ['companion', 'dictation', 'work', 'personal'].flatMap(source => candidates.filter(row => row.source === source).slice(0, 12)) : candidates.slice(0, 48);
+    const ranked = shortlist
+      .map(({ lexical, ...row }) => ({ ...row, score: since !== null && (dayReview || (!terms.length && row.kind === 'daily-journal')) ? 0.4 + lexical * 0.35 : Math.max(0, cosine(target, embed(row.content))) * 0.65 + lexical * 0.35 }))
+      .filter(row => row.score >= 0.22).sort((a, b) => b.score - a.score);
+    // Reserve coverage for both sources instead of allowing a long transcript to
+    // occupy all slots. The answer must describe these as bounded excerpts.
+    const selected = includeDictation ? ['companion', 'dictation'].flatMap(source => ranked.filter(row => row.source === source).slice(0, 3)) : [];
+    for (const row of ranked) { if (selected.length >= 8) break; if (!selected.includes(row)) selected.push(row); }
+    return selected;
   }
 
   ensureActiveWorkday(timestamp = this.now()) {
@@ -609,8 +615,10 @@ class CompanionMemoryStore {
   }
 
   pendingJournalDeliveries({ limit = 4, at = this.now() } = {}) {
-    return this.db.prepare("SELECT id, day, memory_class AS memoryClass, project_id AS projectId, payload_json AS payloadJson, idempotency_key AS idempotencyKey, attempts FROM memory_journal_outbox WHERE status IN ('pending','failed') AND next_attempt_at<=? ORDER BY day, memory_class LIMIT ?").all(Number(at), Math.max(1, Math.min(20, Number(limit) || 4))).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) }));
+    return this.db.prepare("SELECT id, day, memory_class AS memoryClass, project_id AS projectId, payload_json AS payloadJson, idempotency_key AS idempotencyKey, attempts FROM memory_journal_outbox WHERE status IN ('pending','failed') AND next_attempt_at<=? AND NOT EXISTS (SELECT 1 FROM companion_memory_meta WHERE key='restore-hold:' || memory_journal_outbox.day) ORDER BY day, memory_class LIMIT ?").all(Number(at), Math.max(1, Math.min(20, Number(limit) || 4))).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) }));
   }
+
+  isRestoredDay(day) { return Boolean(this.db.prepare("SELECT 1 FROM companion_memory_meta WHERE key=?").get(`restore-hold:${day}`)); }
 
   markJournalDelivery(id, { ok, submissionId = "", reason = "", retryAt = 0 } = {}) {
     const normalizedId = boundedId(id, "投递 ID");

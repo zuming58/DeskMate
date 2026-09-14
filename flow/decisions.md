@@ -1,5 +1,85 @@
 # Decisions
 
+## D142 — User-supplied state video is a foreground-only visual consumer
+
+2026-09-13: Use approved idle/listen/think/speak clips as silent 4:3 derivatives. Speech motion follows the existing actual PCM sink, not TTS-generation events. Decode the next first frame before a short two-layer crossfade; pause speaking immediately on interruption, never delay speech for video completion. Unmount off the companion overview; release sources on hidden/blur/offscreen/reduced-motion. No new voice pipeline, cloud visual service, model, firmware or persisted persona. Detailed contracts and provenance: `docs/design/companion-state-video-t36.md`.
+
+## D141 — Keep sidebar container; do not ship rejected portrait blink as accepted motion
+
+2026-09-13: User explicitly retained the dark rounded outer device card while removing its inner white image backing and secondary captions. Preserve that separation. Disable the portrait's rejected two-frame blink by default until the user supplies a looping video. A request to open/test DeskMate means the full packaged app with its real preload and retained profile; isolated renderer fixtures stay hidden for QA and are not a replacement for the user's app.
+
+## D140 — Companion avatar remains a visibility-bounded visual consumer
+
+2026-09-13: User selected the blue-shirt home-desk portrait for the software Companion page and a transparent cyan blinking face/status-only sidebar. Use a fixed approved 3:2 base plus an eyelid-only blink overlay; do not swap the entire room, gate TTS on generated frames, infer hardware status or claim realtime lipsync. Hidden/offscreen/reduced-motion views stop visual work. The brand icon and physical Xiaozhi remain separate. See `docs/design/companion-home-preview-t35.md`.
+
+## D139 — The native window is not product readiness evidence
+
+- Create the main Electron window hidden and reveal it only after `ready-to-show`; use the workbench background color as a compositor fallback. Do not expose the default white native surface while renderer assets and retained state are still loading.
+- Tray and second-instance restoration may reveal an already loaded window immediately, but must wait when the main frame is still loading. This is one renderer and one existing application state, not a loading-status simulation.
+- Diagnose a blank surface before resetting data: distinguish main-process liveness, navigation failure, renderer exception, DOM completion and compositor/first-paint timing. Never delete or normalize a retained profile merely to hide a startup symptom.
+
+## D138 — Realtime punctuation is one boundary-local stitch, not per-segment formatting
+
+- Live preview and final dictation must share the same main-process segment stitcher. Preserve provider text inside each finalized segment; raw mode does not remove fillers, repetitions or rewrite semantics.
+- Insert a Chinese comma only when neither adjacent boundary supplies punctuation. When both sides supply punctuation, collapse only that boundary and prefer a sentence-ending mark. Do not globally normalize punctuation.
+- The renderer accepts stitched text only from the whole-session `session.finished` event. If finalized segments exist but stitched session text is absent, fail to full-recording transcription rather than reconstructing a partial prefix.
+- Punctuation stitching does not prove recognition completeness. Diagnose missing words by comparing managed recording, History raw text and target output; keep diagnostics content-free.
+
+## D137 — Restore requires offline handover; dictation requires whole-session completion
+
+- T34 exposes restore only through immutable staged preview, expiring token, native confirmation, busy lock, offline validation/rollback and pre-mount renderer acknowledgement. Imported days stay held out of automatic summaries/journal deliveries. Credentials remain local but accesses/triggers/application paths require revalidation. A verified recovery snapshot is user-requested, not a claimed continuous backup service.
+- Scene metadata has separate user overrides; archive preserves its contents and excludes it from the shared ordered Tab loop. Global keys remain1/2/3/4/8, scene keys5/6/7.
+- T34A follows provider `session.finished`, not utterance `completed`, for dictation output. Drain captured audio before finish. Never accept an incomplete prefix on timeout/error: fallback reprocesses the whole recording; cancellation does not write. Diagnostics contain allowlisted finalization metrics only.
+- Real-data restore/cleanup and actual audio/hardware/cloud acceptance remain user-controlled. See T34/T34A contracts and the dated review.
+
+## D136 — Retention is consent plus readiness, not age alone
+
+- Default retention is 7 days for original recordings and 20 days for original text, adjustable from 1–365 days. Installation/upgrade is disabled until an exact preview is confirmed; changing either duration revokes the prior consent.
+- Age never overrides evidence gates. Require a reliable timestamp and successful transcription; memory-linked raw material waits for the completed daily journal and, when KnowledgeOS sync is enabled, accepted `work` plus projectless `personal` deliveries.
+- Quarantine exact rows/files before mutation and journal history DB, files, memory DB, renderer copies and acknowledgement separately. An expiring preview is revalidated; concurrent new rows never join its deletion set. Internal recovery lasts seven days; exported backups and KnowledgeOS Raw are out of scope.
+- Summaries, journals, candidates and confirmed long-term memory survive raw cleanup. Expose counts and allowlisted hold reasons without content, paths or credentials. Software tests do not authorize cleanup of the user's live profile.
+
+## D135 — Backup inspection is not permission to restore
+
+- Backup v1 contains logical allowlisted data; rebuild trusted product schemas instead of opening imported SQLite or executing backup SQL. Exclude credentials, raw device paths and registered application launch paths. Audio is explicit opt-in; private content is not a sanitized diagnostic.
+- Native dialogs own file selection; renderer gets counts/status, never local paths. Export hashing/DB queries/verification live in a worker and do not lock the voice pipeline. Existing pending history must finish first; concurrent later content belongs to a later backup.
+- T32B ships export and non-destructive inspection only. Offline engine tests do not authorize live replacement. Before enabling restore, require busy checks, exact verified rollback snapshots, safe restart/renderer handoff, reviewed paths/credentials and explicit exclusion of imported journal days from automatic resubmission.
+- Independent store snapshots are not an instantaneous distributed transaction. Source copies remain until the future consent-based retention lifecycle.
+
+## D134 — Durable history, preserved migration evidence, explicit cleanup consent
+
+- Defaults: original audio 7 days, raw text 20 days, ultimately configurable. Daily summaries/approved memory and KnowledgeOS Raw are excluded. Full text/config backup defaults to no audio or secrets.
+- T32 begins with worker-owned independent SQLite history and content-addressed audio. Renderer only sends bounded IPC records/IDs/bytes. Preserve insertion concurrency and VoiceWorkflow.
+- Verify staged legacy records/audio before publishing. Do not delete sources or mistake relative labels for dates. Missing migrated databases and conflicting IDs fail closed.
+- Pause old daily-close deletion until unified preview and first-use confirmation. Current desktop history removal is logical only and says so; migration copies/recordings await journaled reclamation.
+- T32 foundation is not the complete backup/recovery/retention package. Accepted checklist: `flow/tasks/t32-software-reliability.md`.
+
+## D133 - Configuration is not user content; do not imply product-wide erasure
+
+- T31 settings import preserves history, runtime, diagnostics and keyboard provenance; shared mapping imports remain pending explicit synchronization. Restore defaults resets only software preferences, not content stores or credentials.
+- Confirmed history deletion targets a snapshot of IDs. Do not remove text when its recording deletion fails or delete concurrently created records. Persistence failure must be visible.
+- Memory polling uses edit/save revision guards. Retention labels distinguish memory SQLite, renderer history, IndexedDB recordings and KnowledgeOS Raw; cross-store automatic cleanup is a separate unimplemented slice.
+- Remove fake controls instead of calling them working. Real file transfer and controlled synthetic end-to-end evidence are required beyond source presence checks.
+
+## D132 - Calendar-day dialogue and resident WinForms insertion
+
+- User clarified daytime continuity with fresh morning context. Select direct context by local calendar day on every request; retain records and reviewed identity/preferences. Historical work review searches companion and dictated material with source dates, never elevating drafts to personal facts.
+- Owned-window comparison rejected direct SendInput even on STA; established WinForms SendWait and resident STA SendWait inserted successfully. Use the resident implementation with existing capture/expiry/focus/fallback boundaries and no uncertain retry. No specific underlying Windows error is proven.
+- Accepted speech is not silence. Give pending recognition at least 30 seconds, refreshing on arrival before queued work, then visibly recover and return to configured idle. No partial-as-final or saved endpoint change. See T30 contract.
+
+## D131 - Native output without changing capture; bounded model reconnect feedback
+
+- Retain the HIL-proven recording-start PowerShell capture and its stable HWND. Only dictation's output execution moves to the resident bridge, with bounded exact-target wait, native command expiry and no automatic paste retry or focus restoration. The prior all-native capture candidate was rejected; do not repeat it implicitly.
+- Companion retries at most one pre-response network/5xx failure, same body/context entry and overall abort/deadline. Private drafts, auth/rate limits, malformed or partially consumed responses, and TTS are not retried. No new provider, microphone or firmware change.
+- Status UI is not speech/memory: show delayed-response and retry notices, retain visible failure while listening, distinguish writing from history persistence, and never claim raw output used a model. Shared overlay nodes and session/revision-owned hide timers prevent stale completion hiding a new interaction. [T29 contract](../docs/contracts/t29-voice-output-recovery-v1.md).
+
+## D130 - Private preemptive drafts, not premature speech
+
+- User approved overlapping LLM preparation with the pause/end-of-utterance wait. T28 enables bounded, cancellable ordinary-chat drafts after 500 ms of stable partial text, while the unchanged ASR final remains the playback/commit gate. Text stability is not advertised as acoustic silence or semantic turn detection.
+- A candidate writes no dialogue/SQLite, invokes no tools/remote retrieval/TTS, and must match final text, context and current reviewed memory before adoption. Internal punctuation/decimal separators remain significant; changed or late drafts cannot speak. Maximum three candidate attempts then confirmed-only fallback.
+- Three-stage thinking must keep microphone uplink open; meaningful recognized speech can cancel an in-flight answer while previous confirmed user text remains available. Noise/claps and speaker echo keep the existing evidence gates. One-shot announcements and legacy realtime gates are unchanged.
+- Recover transient model-only failures before speech without silently closing the microphone session. No infinite retry or replay. Record 20 bounded content-free per-turn timing/failure rows; queue receipt is not acoustic onset. Chinese Smart Turn and preemptive TTS remain separate evaluation gates. [Frozen slice](../docs/contracts/t28-preemptive-companion-v1.md).
+
 ## D129 - Local-first conversational recall and measured latency
 
 - Ordinary voice chats do not search KnowledgeOS. Preserve main-owned recent context and refreshed approved local memory; historical work/experience queries search local records and dated evidence before optional remote fallback. Explicit knowledge-library requests still query remotely; local-only instructions forbid it.

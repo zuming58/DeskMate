@@ -40,15 +40,30 @@ async function runTransaction(mode, operation) {
   }
 }
 
-export function saveRecordingBlob(id, blob) {
+export async function saveRecordingBlob(id, blob) {
   if (!(blob instanceof Blob)) return Promise.reject(new Error("录音数据无效"));
+  if (globalThis.desktopBridge?.localHistory) {
+    try {
+      return await globalThis.desktopBridge.localHistory({ version: 1, command: "audio-put", value: { id, bytes: new Uint8Array(await blob.arrayBuffer()), mime: blob.type || "audio/webm", createdAt: Date.now() } });
+    } catch {
+      // Keep a retry source when the primary disk service is unavailable.
+      return runTransaction("readwrite", (store) => store.put({ id, blob, createdAt: Date.now() }));
+    }
+  }
   return runTransaction("readwrite", (store) => store.put({ id, blob, createdAt: Date.now() }));
 }
 
 export async function getRecordingBlob(id) {
+  if (globalThis.desktopBridge?.localHistory) {
+    const result = await globalThis.desktopBridge.localHistory({ version: 1, command: "audio-get", value: id });
+    if (result) return new Blob([result.bytes], { type: result.mime });
+  }
   const result = await runTransaction("readonly", (store) => store.get(id));
   return result?.blob || null;
 }
+
+export const getLegacyRecording = (id) => runTransaction("readonly", (store) => store.get(id));
+export const listLegacyRecordingIds = () => runTransaction("readonly", (store) => store.getAllKeys());
 
 export function deleteRecordingBlob(id) {
   return runTransaction("readwrite", (store) => store.delete(id));
@@ -56,4 +71,15 @@ export function deleteRecordingBlob(id) {
 
 export function clearRecordingBlobs() {
   return runTransaction("readwrite", (store) => store.clear());
+}
+
+// Delete only recordings that the user confirmed, never a concurrently captured recording.
+export function deleteRecordingBlobs(ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return Promise.resolve();
+  return runTransaction("readwrite", (store) => {
+    let request;
+    for (const id of unique) request = store.delete(id);
+    return request;
+  });
 }

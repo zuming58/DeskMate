@@ -1,5 +1,6 @@
 const WebSocket = require("ws");
 const { validateApiKey, validateWorkspaceId } = require("./bailian.cjs");
+const { stitchRecognizedSegments } = require("./dictation-text.cjs");
 
 const DEFAULT_REALTIME_MODEL = "qwen3-asr-flash-realtime";
 const BALANCED_VAD_THRESHOLD = 0.2;
@@ -58,9 +59,8 @@ class BailianRealtimeSession {
   }
 
   combinedPreview(itemId = "") {
-    const completed = [...this.completedItems.values()].filter(Boolean).join("，");
     const live = itemId ? this.liveItems.get(itemId) || "" : [...this.liveItems.values()].at(-1) || "";
-    return [completed, live].filter(Boolean).join(completed && live ? "，" : "");
+    return stitchRecognizedSegments([...this.completedItems.values(), live]);
   }
 
   emit(event) { this.onEvent(event); }
@@ -105,9 +105,11 @@ class BailianRealtimeSession {
           this.liveItems.delete(event.itemId);
           if (event.text.trim()) this.completedItems.set(event.itemId, event.text.trim());
           this.emit({ ...event, currentText: event.text.trim(), preview: this.combinedPreview() });
+        } else if (event.kind === "finished") {
+          this.emit({ ...event, text: stitchRecognizedSegments(this.completedItems.values()) });
+          this.cancel();
         } else {
           this.emit(event);
-          if (event.kind === "finished") this.cancel();
         }
       });
       socket.once("error", (error) => {

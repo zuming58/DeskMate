@@ -37,13 +37,13 @@ const defaultBindings = id => id === 'scene-video'
   : id === 'office' ? { 5: hotkey('全选', 'Ctrl+A'), 6: hotkey('保存', 'Ctrl+S'), 7: hotkey('复制', 'Ctrl+C') }
     : { 5: hotkey('全选', 'Ctrl+A'), 6: hotkey('撤销', 'Ctrl+Z'), 7: hotkey('复制', 'Ctrl+C') };
 const initial = () => ({ schema: 'deskmate.prompt-workbench', schemaVersion: 1, revision: 0,
-  scenes: library.primaryScenes.map(scene => ({ ...scene, bindings: defaultBindings(scene.id) })),
+  scenes: library.primaryScenes.map(scene => ({ ...scene, archived: false, bindings: defaultBindings(scene.id) })),
   activeScene: 'coding', selected: {}, orders: {}, personal: [], favorites: [], usage: [], history: [], announcements: true, reverseSelection: true });
 const refreshBuiltinSceneMetadata = state => {
   const metadata = new Map(library.primaryScenes.map(scene => [scene.id, scene]));
   return {
     ...state,
-    scenes: state.scenes.map(scene => metadata.has(scene.id) ? { ...scene, ...metadata.get(scene.id), bindings: scene.bindings } : scene),
+    scenes: state.scenes.map(scene => metadata.has(scene.id) ? { ...scene, ...metadata.get(scene.id), title: scene.userTitle ?? metadata.get(scene.id).title, hint: scene.userHint ?? metadata.get(scene.id).hint, bindings: scene.bindings } : scene),
   };
 };
 
@@ -52,10 +52,10 @@ function validateState(raw) {
   if (!Array.isArray(raw.scenes) || raw.scenes.length < 1 || raw.scenes.length > 30) fail('场景数量无效');
   const scenes = raw.scenes.map(s => {
     if (!/^[a-z0-9-]{1,64}$/.test(s.id) || ['constructor', 'prototype', '__proto__'].includes(s.id)) fail('场景 ID 无效');
-    return { id: s.id, title: text(s.title, 40, true), hint: text(s.hint || '', 100), icon: ['coding', 'editing', 'office'].includes(s.icon) ? s.icon : 'office',
+    return { id: s.id, title: text(s.title, 40, true), hint: text(s.hint || '', 100), archived: s.archived === true, ...(s.userTitle !== undefined ? {userTitle:text(s.userTitle,40,true)} : {}), ...(s.userHint !== undefined ? {userHint:text(s.userHint,100)} : {}), icon: ['coding', 'editing', 'office'].includes(s.icon) ? s.icon : 'office',
       bindings: Object.fromEntries([5, 6, 7].map(key => [key, binding(s.bindings?.[key])])) };
   });
-  if (new Set(scenes.map(s => s.id)).size !== scenes.length || !scenes.some(s => s.id === raw.activeScene)) fail('当前场景无效');
+  if (new Set(scenes.map(s => s.id)).size !== scenes.length || !scenes.some(s => s.id === raw.activeScene && !s.archived)) fail('当前场景无效');
   if (!Array.isArray(raw.personal) || raw.personal.length > 1000) fail('个人提示词最多 1000 条');
   const personal = raw.personal.map(p => {
     if (!/^user-[0-9a-f-]{36}$/.test(p.id) || !Number.isSafeInteger(p.revision) || p.revision < 1) fail('个人提示词 ID 或版本无效');
@@ -135,7 +135,7 @@ class PromptWorkbenchStore {
     const d = clone(this.data); let savedId = '';
     switch (command.type) {
       case 'scene':
-        if (!d.scenes.some(s => s.id === command.id)) fail('场景不存在'); d.activeScene = command.id; break;
+        if (!d.scenes.some(s => s.id === command.id && !s.archived)) fail('场景不存在或已归档'); d.activeScene = command.id; break;
       case 'settings':
         if (command.announcements !== undefined) d.announcements = command.announcements === true;
         if (command.reverseSelection !== undefined) d.reverseSelection = command.reverseSelection === true;
@@ -174,6 +174,24 @@ class PromptWorkbenchStore {
         d.scenes = [...d.scenes.filter(s => s.id !== next.id), next]; d.orders ||= {}; d.orders[next.id] ||= [];
         if (old) d.scenes.sort((a, b) => this.data.scenes.findIndex(s => s.id === a.id) - this.data.scenes.findIndex(s => s.id === b.id));
         if (command.activate !== false) d.activeScene = next.id; break;
+      }
+      case 'manage-scene': {
+        if (!Number.isSafeInteger(command.revision)) fail('缺少场景版本，请重新打开管理');
+        const scene=d.scenes.find(s=>s.id===command.id);
+        if(!scene) fail('场景不存在');
+        if(command.title!==undefined) scene.title=scene.userTitle=text(command.title,40,true);
+        if(command.hint!==undefined) scene.hint=scene.userHint=text(command.hint,100);
+        if(command.archived!==undefined) {
+          if(command.archived && !scene.archived && d.scenes.filter(s=>!s.archived).length===1)fail('至少保留一个可用场景');
+          scene.archived=command.archived===true;
+          if(scene.archived && d.activeScene===scene.id)d.activeScene=d.scenes.find(s=>!s.archived).id;
+        }
+        if(command.direction!==undefined) {
+          if(![-1,1].includes(command.direction))fail('排序方向无效');
+          const index=d.scenes.indexOf(scene), target=index+command.direction;
+          if(target>=0 && target<d.scenes.length)[d.scenes[index],d.scenes[target]]=[d.scenes[target],d.scenes[index]];
+        }
+        break;
       }
       default: fail('不支持的提示词操作');
     }

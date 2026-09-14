@@ -4,6 +4,7 @@ const OVERLAY_CONTENT_EVENTS = new Set([
   "reply.partial",
   "turn.assistant-final",
   "trusted-speech.timeout",
+  "response.status",
 ]);
 
 function shouldUpdateCompanionOverlay(event = {}) {

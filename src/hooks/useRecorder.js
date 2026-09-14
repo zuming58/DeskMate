@@ -12,6 +12,7 @@ export function useRecorder({ deviceId, onComplete, onError, onAudioChunk } = {}
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState("");
+  const acquisitionGenerationRef = useRef(0);
   const recorderRef = useRef(null); const streamRef = useRef(null); const contextRef = useRef(null); const processorRef = useRef(null); const animationRef = useRef(null); const chunksRef = useRef([]); const startedRef = useRef(0); const startingRef = useRef(false); const lastToggleRef = useRef(0); const audioChunkRef = useRef(onAudioChunk);
   audioChunkRef.current = onAudioChunk;
   const stopTracks = useCallback(() => {
@@ -27,12 +28,14 @@ export function useRecorder({ deviceId, onComplete, onError, onAudioChunk } = {}
   useEffect(() => () => stopTracks(), [stopTracks]);
   useEffect(() => { if (status !== "recording") return undefined; const timer = setInterval(() => setSeconds(Math.floor((Date.now() - startedRef.current) / 1000)), 250); return () => clearInterval(timer); }, [status]);
   const start = useCallback(async () => {
+    const acquisition = ++acquisitionGenerationRef.current;
     setError("");
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder || !AudioContextClass) { const message = "当前浏览器不支持麦克风录音"; setError(message); setStatus("error"); onError?.(message); return false; }
     try {
       chunksRef.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: deviceId ? { deviceId: { exact: deviceId } } : true });
+      if(acquisition !== acquisitionGenerationRef.current) { stream.getTracks().forEach(track=>track.stop()); return false; }
       if (!stream.getAudioTracks().length) throw new Error("没有可用的麦克风设备");
       const recorder = new MediaRecorder(stream); const context = new AudioContextClass(); const source = context.createMediaStreamSource(stream); const analyser = context.createAnalyser(); analyser.fftSize = 256; source.connect(analyser); const data = new Uint8Array(analyser.frequencyBinCount);
       const processor = context.createScriptProcessor(4096, 1, 1); const mute = context.createGain(); mute.gain.value = 0; source.connect(processor); processor.connect(mute); mute.connect(context.destination);
@@ -70,6 +73,6 @@ export function useRecorder({ deviceId, onComplete, onError, onAudioChunk } = {}
       startingRef.current = false;
     }
   }, [start, stop]);
-  const cancel = useCallback(() => { if (recorderRef.current?.state === "recording") { recorderRef.current.onstop = null; recorderRef.current.stop(); } recorderRef.current = null; chunksRef.current = []; stopTracks(); setStatus("idle"); setSeconds(0); setLevel(0); }, [stopTracks]);
+  const cancel = useCallback(() => { acquisitionGenerationRef.current += 1; if (recorderRef.current?.state === "recording") { recorderRef.current.onstop = null; recorderRef.current.stop(); } recorderRef.current = null; chunksRef.current = []; stopTracks(); setStatus("idle"); setSeconds(0); setLevel(0); }, [stopTracks]);
   return { status, seconds, level, error, start, stop, toggle, cancel };
 }

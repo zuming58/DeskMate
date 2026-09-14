@@ -14,7 +14,7 @@ function sameSession(command, session) {
   return Boolean(session && String(command?.sessionId || "") === session.sessionId && Number(command?.generation) === session.generation);
 }
 
-export function createComputerCompanionAudioEngine({ bridge, mediaDevices = globalThis.navigator?.mediaDevices, AudioContextClass = globalThis.window?.AudioContext || globalThis.window?.webkitAudioContext } = {}) {
+export function createComputerCompanionAudioEngine({ bridge, onPlaybackChange, mediaDevices = globalThis.navigator?.mediaDevices, AudioContextClass = globalThis.window?.AudioContext || globalThis.window?.webkitAudioContext } = {}) {
   let session = null;
   let stream = null;
   let captureContext = null;
@@ -28,6 +28,14 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
   let playbackAt = 0;
   const playbackNodes = new Map();
   const drainWaiters = new Map();
+  let reportedPlaying = false;
+  const reportPlayback = () => {
+    const playing = playbackNodes.size > 0 && playbackContext?.state === 'running';
+    if (playing === reportedPlaying) return;
+    reportedPlaying = playing;
+    // Optional visual observer must never delay or break audio/credits.
+    try { onPlaybackChange?.(playing); } catch { /* visual-only observer */ }
+  };
 
   const emit = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: session?.sessionId || "", generation: session?.generation || 0, ...extra });
   const emitWake = (type, extra = {}) => bridge?.sendCompanionComputerAudioEvent?.({ version: VERSION, type, sessionId: wakeSession?.sessionId || "", generation: wakeSession?.generation || 0, ...extra });
@@ -63,6 +71,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     const sequence = playbackNodes.get(node);
     if (!sequence) return;
     playbackNodes.delete(node);
+    reportPlayback();
     emit("sink.played", { audioSequence: sequence });
     for (const [requestSequence, waiter] of drainWaiters) {
       waiter.delete(node);
@@ -77,11 +86,13 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
       emit("sink.cancelled", { audioSequence: sequence });
     }
     playbackNodes.clear();
+    reportPlayback();
     playbackAt = playbackContext?.currentTime || 0;
     finishAllDrainWaiters();
   };
   const stopPlayback = async () => {
     interruptPlayback();
+    if (playbackContext) playbackContext.onstatechange = null;
     await playbackContext?.close?.().catch?.(() => {});
     playbackContext = null;
     playbackGain = null;
@@ -165,6 +176,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
       if (!AudioContextClass) throw new Error("computer-audio-renderer-unsupported");
       session = Object.freeze({ sessionId: String(command.sessionId), generation: Number(command.generation) });
       playbackContext = new AudioContextClass({ sampleRate: 24000 });
+      playbackContext.onstatechange = reportPlayback;
       await playbackContext.resume?.();
       playbackGain = playbackContext.createGain();
       playbackGain.gain.value = Math.max(0, Math.min(1, (Number.isFinite(Number(command.volume)) ? Number(command.volume) : 75) / 100));
@@ -200,6 +212,7 @@ export function createComputerCompanionAudioEngine({ bridge, mediaDevices = glob
     playbackNodes.set(node, audioSequence);
     node.onended = () => markPlaybackEnded(node);
     node.start(startAt);
+    reportPlayback();
     emit("sink.accepted", { audioSequence });
   };
 

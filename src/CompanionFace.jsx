@@ -17,7 +17,7 @@ export function expressionAssetUrl(expressionId) {
   return companionExpressionAssets[expressionId] || companionExpressionAssets.focus;
 }
 
-export function CompanionFace({ expressionId = "focus", className = "", allowBlink = true, appearance = "classic", alt = "DeskMate 表情" }) {
+export function CompanionFace({ expressionId = "focus", className = "", allowBlink = true, appearance = "classic", transparent = false, alt = "DeskMate 表情" }) {
   const [blinking, setBlinking] = useState(false);
   const source = useMemo(
     () => expressionAssetUrl(blinking ? "sleep" : expressionId),
@@ -60,9 +60,9 @@ export function CompanionFace({ expressionId = "focus", className = "", allowBli
 
   if (appearance === 'soft') {
     const closed = softCompanionClosed(expressionId, blinking);
-    return <span role="img" aria-label={alt} data-eye-state={closed ? 'closed' : 'open'} className={`companion-face companion-face--soft ${closed ? 'is-closed' : ''} ${blinking ? 'is-blinking' : ''} ${className}`.trim()}>
-      <img className="soft-face-open" src={`${BASE_ASSET_URL}/soft/open.png`} alt="" draggable="false" />
-      <img className="soft-face-closed" src={`${BASE_ASSET_URL}/soft/closed.png`} alt="" draggable="false" />
+    return <span role="img" aria-label={alt} data-eye-state={closed ? 'closed' : 'open'} className={`companion-face companion-face--soft ${transparent ? 'companion-face--transparent' : ''} ${closed ? 'is-closed' : ''} ${blinking ? 'is-blinking' : ''} ${className}`.trim()}>
+      <img className="soft-face-open" src={`${BASE_ASSET_URL}/soft/${transparent ? 'transparent-' : ''}open.png`} alt="" draggable="false" />
+      <img className="soft-face-closed" src={`${BASE_ASSET_URL}/soft/${transparent ? 'transparent-' : ''}closed.png`} alt="" draggable="false" />
     </span>;
   }
 

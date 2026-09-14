@@ -95,7 +95,7 @@ test("companion desktop layout keeps the overview aligned and only the independe
   assert.match(styles, /\.companion-overview \{[^}]*align-items: start/);
   assert.match(styles, /\.companion-primary-column \{[^}]*display: grid;[^}]*align-items: start/);
   assert.match(styles, /\.companion-stage \{[^}]*height: auto;[^}]*align-self: start/);
-  assert.match(styles, /\.companion-stage__face \{[^}]*aspect-ratio: 3\/2;[^}]*max-height: 380px;[^}]*flex: 0 0 auto/);
+  assert.match(styles, /\.companion-stage__face \{[^}]*aspect-ratio: 4\/3;[^}]*max-height: 427\.5px;[^}]*flex: 0 0 auto/);
   assert.match(styles, /\.companion-side-stack \{[^}]*height: auto;[^}]*align-self: start/);
   assert.match(styles, /@media \(max-width: 1180px\)[\s\S]*\.companion-overview \{ align-items: start; \}/);
   assert.match(pages, /className="companion-session-controls"/);

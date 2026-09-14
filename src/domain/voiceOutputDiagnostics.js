@@ -1,0 +1,2 @@
+const REASONS = new Set(['no-captured-target', 'target-window-invalid', 'target-window-changed', 'input-bridge-unavailable', 'input-window-unavailable', 'active-window-output-busy', 'active-window-output-expired', 'active-window-output-timeout', 'desktop-output-send-input-incomplete', 'input-bridge-write-failed', 'input-bridge-exited', 'input-bridge-stopped', 'desktop-bridge-unavailable']);
+export const safeOutputReason = value => !value ? '' : REASONS.has(value) ? value : 'active-window-output-failed';

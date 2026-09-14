@@ -43,6 +43,7 @@ class MemoryJournalService {
     this.requestJson = requestJson;
     this.now = now;
     this.active = false;
+    this.syncActive = false;
     this.lastHourlyCheckAt = 0;
   }
 
@@ -54,6 +55,7 @@ class MemoryJournalService {
     if (policy.hourlyEnabled === false || !policy.enabledSources.length) return { ok: true, skipped: true, reason: "memory-hourly-disabled" };
     const now = this.now();
     const workday = this.store.ensureActiveWorkday(now);
+    if (!force && this.store.isRestoredDay?.(workday.day)) return { ok: true, skipped: true, reason: "memory-restored-day-held" };
     const turns = this.store.turnsForWorkday({ day: workday.day, sources: policy.enabledSources, before: now });
     const prior = this.store.hourlySummariesForDay(workday.day);
     const covered = new Set(prior.flatMap((item) => item.sourceTurnIds));
@@ -134,6 +136,7 @@ class MemoryJournalService {
   }
 
   ensureDelivery(journal) {
+    if (this.store.isRestoredDay?.(journal.day)) return;
     const connection = this.knowledgeOsSettings.status();
     for (const memoryClass of ["work", "personal"]) {
       const markdown = memoryClass === "work" ? journal.workMarkdown : journal.personalMarkdown;
@@ -162,32 +165,39 @@ class MemoryJournalService {
 
   async closeCurrentWorkday({ manual = false } = {}) {
     if (this.active) return { ok: false, reason: "memory-generation-active" };
+    if (!manual && this.store.isRestoredDay?.(this.store.ensureActiveWorkday(this.now()).day)) return { ok: true, skipped: true, reason: "memory-restored-day-held" };
     const closing = this.store.beginWorkdayClose({ at: this.now(), manual });
     if (closing.skipped) return closing;
     const result = await this.finalizeDay(closing.day);
     const sync = await this.syncPending();
     const policy = this.policyStore.snapshot();
-    const cleanup = this.store.cleanupExpiredRaw({ retentionDays: policy.rawRetentionDays, at: this.now(), requireRemoteAccepted: this.knowledgeOsSettings.status().syncEnabled });
+    // T33 cleanup is coordinated after this service becomes idle. Daily close never
+    // deletes raw rows inside the summarization transaction.
+    const cleanup = { removed: 0, skipped: true, reason: "retention-coordinated-background", audioRetentionDays: policy.audioRetentionDays, rawRetentionDays: policy.rawRetentionDays };
     return { ...result, sync, cleanup };
   }
 
   async syncPending() {
+    if (this.syncActive) return { ok: false, skipped: true, reason: "knowledgeos-sync-active", accepted: 0 };
     const status = this.knowledgeOsSettings.status();
     if (!status.syncEnabled) return { ok: true, skipped: true, reason: "knowledgeos-sync-disabled", accepted: 0 };
     if (!status.configured) return { ok: false, skipped: true, reason: "knowledgeos-not-configured", accepted: 0 };
-    for (const journal of this.store.journalProjectionItems()) this.ensureDelivery(journal);
-    const deliveries = this.store.pendingJournalDeliveries({ limit: 4, at: this.now() });
-    let accepted = 0;
-    const results = [];
-    for (const item of deliveries) {
-      const result = await this.knowledgeOsClient.callTool("memory.submit_journal", item.payload);
-      const submissionId = String(result?.data?.submission_id || "");
-      const ok = result.ok === true && Boolean(submissionId);
-      this.store.markJournalDelivery(item.id, { ok, submissionId, reason: result.reason || "knowledgeos-submit-failed", retryAt: this.now() + (result.retryable ? 5 * 60 * 1000 : 30 * 60 * 1000) });
-      if (ok) accepted += 1;
-      results.push({ day: item.day, memoryClass: item.memoryClass, ok, reason: ok ? "" : result.reason || "knowledgeos-submit-failed" });
-    }
-    return { ok: results.every((item) => item.ok), skipped: !results.length, accepted, results };
+    this.syncActive = true;
+    try {
+      for (const journal of this.store.journalProjectionItems()) this.ensureDelivery(journal);
+      const deliveries = this.store.pendingJournalDeliveries({ limit: 4, at: this.now() });
+      let accepted = 0;
+      const results = [];
+      for (const item of deliveries) {
+        const result = await this.knowledgeOsClient.callTool("memory.submit_journal", item.payload);
+        const submissionId = String(result?.data?.submission_id || "");
+        const ok = result.ok === true && Boolean(submissionId);
+        this.store.markJournalDelivery(item.id, { ok, submissionId, reason: result.reason || "knowledgeos-submit-failed", retryAt: this.now() + (result.retryable ? 5 * 60 * 1000 : 30 * 60 * 1000) });
+        if (ok) accepted += 1;
+        results.push({ day: item.day, memoryClass: item.memoryClass, ok, reason: ok ? "" : result.reason || "knowledgeos-submit-failed" });
+      }
+      return { ok: results.every((item) => item.ok), skipped: !results.length, accepted, results };
+    } finally { this.syncActive = false; }
   }
 
   async tick() {
@@ -198,7 +208,7 @@ class MemoryJournalService {
     const [hour, minute] = String(policy.dailyTime).split(":").map(Number);
     const due = new Date(now).getHours() * 60 + new Date(now).getMinutes() >= hour * 60 + minute;
     const active = this.store.ensureActiveWorkday(now);
-    const pendingHistorical = this.store.journalDaysPending({ beforeDay: active.day });
+    const pendingHistorical = policy.schedule === 'daily' ? this.store.journalDaysPending({ beforeDay: active.day }).filter(day => !this.store.isRestoredDay?.(day)) : [];
     if (pendingHistorical.length) return this.finalizeDay(pendingHistorical[0]);
     if (policy.schedule === "daily" && due && active.day === today && active.lastCloseCalendarDay !== today) return this.closeCurrentWorkday({ manual: false });
     const hourly = await this.processHourly();

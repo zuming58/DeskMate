@@ -90,8 +90,9 @@ class PromptWorkbenchController {
       if ((!this.isForeground() && !this.isSettingsForeground()) || this.editing) return { ok: false, reason: '请先退出编辑' };
       this.wheel.reset();
       const d = this.store.snapshot();
-      const i = d.scenes.findIndex(s => s.id === d.activeScene);
-      const id = value.type === 'scene' ? value.id : d.scenes[(i + (value.reverse ? -1 : 1) + d.scenes.length) % d.scenes.length].id;
+      const activeScenes = d.scenes.filter(s => !s.archived);
+      const i = activeScenes.findIndex(s => s.id === d.activeScene);
+      const id = value.type === 'scene' ? value.id : activeScenes[(i + (value.reverse ? -1 : 1) + activeScenes.length) % activeScenes.length].id;
       this.store.mutate({ type: 'scene', id });
       this.view = { query: '', filter: 'all', scope: 'scene', category: '' }; this.selected = '';
       const result = this.changed();

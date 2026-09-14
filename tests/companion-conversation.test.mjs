@@ -199,6 +199,34 @@ class FakeProvider {
   emit(value) { this.onEvent(value); }
 }
 
+test('T28 recoverable model turn keeps microphone and session, then accepts the next final', async () => {
+  const source = new SimulatedCompanionAudioSource();
+  const sink = new SimulatedCompanionAudioSink();
+  const events = [], saved = [];
+  let provider;
+  const controller = new CompanionConversationController({
+    providerLabel: 'three-stage',
+    providerFactory: ({ onEvent }) => (provider = new FakeProvider(onEvent)),
+    audioSource: source, audioSink: sink, wait: async () => {},
+    commitTurn: async value => saved.push(value), onEvent: event => events.push(event),
+  });
+  await controller.start({ sessionId: 'model-recovery', generation: 1 });
+  provider.emit({ type: 'asr.final', text: '第一轮模型故障' });
+  await controller.eventChain;
+  provider.emit({ type: 'turn.failed', message: 'three-stage-model-unavailable', failureClass: 'server' });
+  // Arrival must reopen the ASR gate before the asynchronous handler catches up.
+  provider.emit({ type: 'asr.final', text: '第二轮仍然能听见' });
+  await controller.eventChain;
+  assert.equal(controller.snapshot().active, true);
+  assert.equal(provider.closed, false);
+  assert.deepEqual(saved.map(row => row.content), ['第一轮模型故障', '第二轮仍然能听见']);
+  assert.equal(events.some(event => event.type === 'state' && event.reason === 'model-turn-recovered' && event.error.includes('我还在听')), true);
+  assert.equal(events.some(event => event.type === 'state' && event.state === 'error'), false);
+  source.push(Buffer.from([1, 2]));
+  assert.equal(provider.audio.length > 0, true);
+  await controller.stop('test');
+});
+
 test("stopped companion retains the last content-free pipeline counters for diagnostics", async () => {
   const source = new SimulatedCompanionAudioSource();
   const sink = new SimulatedCompanionAudioSink();
