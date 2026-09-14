@@ -21,13 +21,14 @@ export function studioOrbit(index, cursor) {
   return { x: Math.cos(angle) * 240, y: Math.sin(angle) * 255, scale: distance === 0 ? 1 : .76 - distance * .065, angle: -9 + distance * 6, z: 10 - distance };
 }
 export function studioKey(event) {
-  if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return null;
+  if (event.isComposing || event.altKey || event.metaKey || event.shiftKey) return null;
   if (event.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return null;
   if (event.code === 'Enter' && event.target?.closest?.('button,a')) return null;
+  if (event.ctrlKey) return ({ KeyA: 'compare', KeyC: 'inspiration', KeyV: 'reset', KeyZ: 'mode' })[event.code] || null;
   const key = event.code;
   if (event.repeat && !['ArrowLeft', 'ArrowRight'].includes(key)) return null;
-  return ({ ArrowLeft: 'previous', ArrowRight: 'next', Enter: 'confirm', Digit1: 'strength', Digit2: 'view', Digit3: 'save', Digit4: 'close', Digit5: 'compare', Digit6: 'inspiration', Digit7: 'reset', Digit8: 'mode', Escape: 'close' })[key] || null;
+  return ({ ArrowLeft: 'previous', ArrowRight: 'next', Enter: 'confirm', Backspace: 'close', Digit1: 'strength', Digit2: 'view', Digit3: 'save', Digit4: 'close', Digit5: 'compare', Digit6: 'inspiration', Digit7: 'reset', Digit8: 'mode', Escape: 'close' })[key] || null;
 }
 export function validStudioUpload(file) {
-  return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) && file.size > 0 && file.size <= 15 * 1024 * 1024;
+  return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) && file.size > 0 && file.size <= 10 * 1024 * 1024;
 }

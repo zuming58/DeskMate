@@ -2,7 +2,7 @@
 const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const product = process.env.DESKMATE_T37_PROBE_ASAR || root;
+const product = process.env.DESKMATE_T38_PROBE_ASAR || process.env.DESKMATE_T37_PROBE_ASAR || root;
 const output = fs.mkdtempSync(path.join(app.getPath('temp'), 'deskmate-t37-qa-'));
 app.setPath('userData', path.join(output,'profile')); app.disableHardwareAcceleration();
 const delay = ms => new Promise(r=>setTimeout(r,ms));
@@ -49,8 +49,8 @@ app.whenReady().then(async()=>{ let window; try {
   await shot('generate-final-1440');
   // Upload only a repository-generated fixture, never user photos. Concurrent batches must not exceed cap.
   await js(`(async()=>{const blob=await fetch(document.querySelector('.ss-loaded img').src).then(r=>r.blob()); const send=()=>{const dt=new DataTransfer();for(let i=0;i<8;i++)dt.items.add(new File([blob],'fixture-'+i+'.png',{type:'image/png'}));const input=document.querySelector('input[type=file]');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}))};send();send();return true})()`);
-  await delay(800); assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),8,'bounded import');
-  await click('.ss-control > .ss-primary'); assert(await js(`document.querySelector('.ss-footer [role=status]').textContent.includes('真实 AI 出图尚未接入')`));
+  await delay(800); assert.equal(await js(`document.querySelectorAll('.ss-materials .ss-photo').length`),9,'eight managed imports plus sample');
+  await click('.ss-control > .ss-primary'); assert(await js(`document.querySelector('.ss-footer [role=status]').textContent.includes('浏览器预览')`));
   assert.equal(await js(`document.querySelectorAll('.ss-results .ss-photo').length`),3,'no fake transform for upload');
   const beforeUnload=await js(`(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented})()`); assert(beforeUnload,'upload has leave guard');
   await shot('upload-1440');

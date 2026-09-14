@@ -1,5 +1,9 @@
 # Decisions
 
+## D143 — Style Studio uploads per consent and restores input ownership by lease
+
+2026-09-14: Keep the approved T37 visual unchanged while adding function behind a main-process boundary. A local source remains local until the user confirms that specific generation; only then may the frozen source/style/strength/brief be sent to the configured Bailian Qwen Image adapter. Validate and immediately download temporary results into an application-managed, hash-checked library. Do not expose keys, paths or provider URLs to React. Allow one active generation with cancellation and explicit local deletion; protect sources still referenced by results. Page input ownership exists only while the focused visible main window is on `#/style-studio`, and releases on route/blur/reload/crash/close. This slice writes no HID report and changes no firmware. Full eight-key physical identity is not claimed from incomplete Raw Input evidence.
+
 ## D142 — User-supplied state video is a foreground-only visual consumer
 
 2026-09-13: Use approved idle/listen/think/speak clips as silent 4:3 derivatives. Speech motion follows the existing actual PCM sink, not TTS-generation events. Decode the next first frame before a short two-layer crossfade; pause speaking immediately on interruption, never delay speech for video completion. Unmount off the companion overview; release sources on hidden/blur/offscreen/reduced-motion. No new voice pipeline, cloud visual service, model, firmware or persisted persona. Detailed contracts and provenance: `docs/design/companion-state-video-t36.md`.

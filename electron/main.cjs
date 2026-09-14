@@ -70,13 +70,16 @@ const { MotionAutomationCoordinator, MotionAutomationPolicyStore } = require("./
 const { XiaozhiHardwareCoordinator, XiaozhiHardwarePolicyStore } = require("./xiaozhi-hardware-policy.cjs");
 const { LocalDanceMusicStore } = require("./local-dance-music.cjs");
 const { normalizeHotwords, normalizeRules, normalizeTranscript } = require("./transcript-normalizer.cjs");
+const { StyleStudioStore } = require("./style-studio-store.cjs");
+const { StyleStudioService, publicError: publicStyleStudioError } = require("./style-studio-service.cjs");
+const { StyleStudioInputLease } = require("./style-studio-input-lease.cjs");
 
 const DEFAULT_SHORTCUT = "Ctrl+Shift+Space";
 const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t37-style-studio-integrated";
+const DESKMATE_BUILD_ID = "t38-style-studio-functional";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -107,6 +110,8 @@ let voiceTargetCaptureToken = 0;
 let voiceTargetCapturePromise = Promise.resolve(null);
 let bailianStore;
 let aiServiceStore;
+let styleStudioService;
+let styleStudioInputLease;
 let companionMemoryStore;
 let companionMemoryControl;
 let companionMemoryPipeline;
@@ -606,6 +611,12 @@ function sendToMain(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
+function isStyleStudioForeground() {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isFocused() || !mainWindow.isVisible()) return false;
+  try { return new URL(mainWindow.webContents.getURL()).hash === "#/style-studio"; }
+  catch { return false; }
+}
+
 function emitDanceMusicStatus() {
   const value = localDanceMusicStore?.status?.() || { configured: false, enabled: false, label: "", storage: "unavailable", state: "idle", reason: "dance-music-unavailable" };
   sendToMain("dance-music-status", value);
@@ -1035,6 +1046,8 @@ function createWindow() {
   else mainWindow.loadFile(path.join(APP_ROOT, "index.html"), process.argv.includes('--show-style-studio') ? { hash: '/style-studio' } : process.argv.includes('--show-keymap') ? { hash: '/keymap' } : process.argv.includes('--show-prompts') ? { hash: '/prompts' } : process.argv.includes('--show-companion') ? { hash: '/companion' } : {});
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   mainWindow.webContents.on("will-navigate", (event, url) => { if (!isAllowedAppUrl(url)) event.preventDefault(); });
+  mainWindow.webContents.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) styleStudioInputLease?.release(); });
+  mainWindow.webContents.on("render-process-gone", () => styleStudioInputLease?.release());
   mainWindow.webContents.on("did-finish-load", () => {
     emitInputBridgeStatus();
     sendToMain("manual-calibration-status", manualCalibrationController?.snapshot?.() || { available: false, gate: "unavailable", controlsEnabled: false });
@@ -1046,14 +1059,15 @@ function createWindow() {
     emitAgentProviderStatus(activeAgentProvider);
     if (smokeStage === 0) void runSmokeTest(); else if (smokeStage === 1) void finishSmokeTest();
   });
-  mainWindow.on("blur", () => { manualControlCoordinator?.end("window-blur"); });
+  mainWindow.on("blur", () => { manualControlCoordinator?.end("window-blur"); styleStudioInputLease?.release(); });
   mainWindow.on("close", (event) => {
     if (isQuitting || smokeMode) return;
     manualControlCoordinator?.end("window-blur");
+    styleStudioInputLease?.release();
     event.preventDefault();
     mainWindow.hide();
   });
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => { styleStudioInputLease?.release(); mainWindow = null; });
 }
 
 function startInputBridge() {
@@ -1098,17 +1112,23 @@ function startInputBridge() {
   });
   inputBridge.on("diagnostic", (event) => sendToMain("key-diagnostic", event));
   inputBridge.on("board-wheel", event => {
+    if (styleStudioInputLease?.routeWheel(event)) return;
     if (promptWorkbench?.isForeground() && Math.abs(Date.now() - Date.parse(event.time)) < 500) sendToMain('prompt-wheel', { step: event.action === 'positive' ? 1 : -1 });
   });
   inputBridge.on("trigger", (event) => {
     if (restoreMaintenance) return;
     sendToMain("key-diagnostic", event);
+    if (styleStudioInputLease?.routeTrigger(event)) return;
     if (event.key === "VoiceEdit") cancelPendingEditShortcut();
     void emitVoiceToggle(event.source, event.key, event.key === "VoiceEdit" ? "edit" : "input");
   });
   inputBridge.on("cancel", (event) => { sendToMain("key-diagnostic", event); emitVoiceCancel(event.source); });
   inputBridge.on("host-action", async (event) => {
     if (restoreMaintenance) return;
+    if (styleStudioInputLease?.active()) {
+      sendToMain("style-studio-input", { command: "blocked-host-action", source: "easyinput-host-action" });
+      return;
+    }
     const result = await hostActionExecutor.execute(event.hostActionId);
     const kind = Object.values(PROMPT_ACTIONS).some(a => a.id === event.hostActionId) ? 'prompt-workbench' : event.hostActionId === COMPANION_CALL_ACTION.id ? COMPANION_CALL_ACTION.kind : "open-app";
     sendToMain("host-action-result", { kind, ...result, at: new Date().toISOString() });
@@ -1377,6 +1397,8 @@ app.whenReady().then(async () => {
   });
   bailianStore = createSecureBailianStore({ safeStorage, userDataPath: app.getPath("userData") });
   aiServiceStore = createSecureAiServiceStore({ safeStorage, userDataPath: app.getPath("userData") });
+  styleStudioService = new StyleStudioService({ store: new StyleStudioStore({ userDataPath: app.getPath("userData") }), credentialStore: bailianStore });
+  styleStudioInputLease = new StyleStudioInputLease({ isForeground: isStyleStudioForeground, publish: value => sendToMain("style-studio-input", value) });
   companionMemoryStore = new CompanionMemoryStore({ userDataPath: app.getPath("userData") });
   companionDialogueContext = new CompanionDialogueContext({ seed: companionMemoryStore.recentCompanionContext() });
   companionMemoryControl = new CompanionMemoryControl({ store: companionMemoryStore });
@@ -1607,6 +1629,35 @@ app.whenReady().then(async () => {
   createWindow();
   createOverlayWindow();
   createTray();
+  handleTrusted("style-studio:get-status", () => {
+    try { return { ...styleStudioService.status(), library: styleStudioService.list() }; }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error), configured: bailianStore.status().configured === true, library: { ok: false, revision: 0, items: [] } }; }
+  });
+  handleTrusted("style-studio:list", () => {
+    try { return styleStudioService.list(); }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error), revision: 0, items: [] }; }
+  });
+  handleTrusted("style-studio:import", (value = {}) => {
+    try {
+      const bytes = value.bytes instanceof ArrayBuffer ? Buffer.from(value.bytes) : Buffer.from(value.bytes || []);
+      return styleStudioService.importSource({ name: value.name, mime: value.mime, bytes });
+    } catch (error) { return { ok: false, reason: publicStyleStudioError(error) }; }
+  });
+  handleTrusted("style-studio:read", (value = {}) => {
+    try { return styleStudioService.read(value); }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error) }; }
+  });
+  handleTrusted("style-studio:remove", (value = {}) => {
+    try { return styleStudioService.remove(value); }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error) }; }
+  });
+  handleTrusted("style-studio:generate", async (value = {}) => {
+    try { return await styleStudioService.generate(value); }
+    catch (error) { return { ok: false, reason: publicStyleStudioError(error) }; }
+  });
+  handleTrusted("style-studio:cancel", requestId => styleStudioService.cancel(requestId));
+  handleTrusted("style-studio:acquire-input", token => styleStudioInputLease.acquire(token));
+  handleTrusted("style-studio:release-input", token => styleStudioInputLease.release(token));
   handleTrusted('prompts:command', async (value = {}) => {
     try { return await promptWorkbench.command(value); }
     catch (error) { return { ok: false, reason: error.message || '提示词操作失败' }; }
@@ -2004,6 +2055,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-style-studio') ? 'style-studio' : argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : argv.includes('--show-companion') ? 'companion' : undefined));
 });
 
-app.on("before-quit", () => { isQuitting = true; motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; styleStudioInputLease?.release(); styleStudioService?.close(); motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

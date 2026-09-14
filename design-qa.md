@@ -1,3 +1,13 @@
+# T38 Style Studio functional QA — 2026-09-14
+
+Final visual result: passed for the functional UI states; real provider and physical hardware acceptance remain pending.
+
+- The Product Design image-to-code workflow was applied to preserve the user-selected T37 screenshot implementation rather than reinterpret its layout. T38 changes state, dialogs and data behavior only: the existing DeskMate shell, white printer composition, orbit cards, compact strength and output zone remain visually stable.
+- Production-renderer functional probe used a fake configured bridge in an isolated temp profile. Consent, generated result and deletion states were captured at CSS 1440×1024 under `%TEMP%/deskmate-t38-functional-Faoupc/`; `consent-1440.png`, `generated-1440.png` and `delete-1440.png` were visually inspected. It recorded one consented request, one managed-result deletion and input-lease release on route leave. The delete dialog is centered, legible and consistent with existing cobalt/white tokens. No new console errors.
+- General native renderer regression passed from source at `%TEMP%/deskmate-t37-qa-Kp3j72/` and again from the final T38 ASAR at `%TEMP%/deskmate-t37-qa-LzEBjq/`: assets, navigation/reentry, orbit, strength, print, enlarge, compare, effects, prompt, synthetic keys and 1440/1024/800 responsive layouts. The known Google Fonts CSP refusal remains the only baseline warning.
+- UI claims remain honest: upload confirmation names Bailian; preview alone does not upload; generated output says local work; sample output remains a sample. Deletion is explicit and linked sources are protected.
+- No actual private photo, API request, microphone, retained profile, hardware/firmware or HID write was used by this QA. The functional probe's synthetic global-status toast reflects its intentionally partial fake bridge and is not a product runtime result.
+
 # T36 supplied video state transitions — 2026-09-13
 
 - Source clips' first/middle/last frames inspected, proportions retained at 4:3; silent 960×720 copies and neutral poster checked. Four clips total about 5 MB. Not generated lipsync.

@@ -22,11 +22,16 @@ test('T37 orbital positions are unique, bounded and cycle', () => {
   for (const p of positions) { assert(Math.abs(p.x)<=235); assert(Math.abs(p.y)<=255); assert(p.scale>.4); }
   assert.deepEqual(studioOrbit(0,0), studioOrbit(0,5));
 });
-test('T37 page keyboard ignores typing, modified and repeated action keys', () => {
+test('T38 page keyboard preserves editors and maps the existing Maker chords only on the page', () => {
   assert.equal(studioKey({code:'Digit1'}), 'strength');
   assert.equal(studioKey({code:'ArrowLeft',repeat:true}), 'previous');
   assert.equal(studioKey({code:'Digit3',repeat:true}), null);
   assert.equal(studioKey({code:'Enter',ctrlKey:true}), null);
+  assert.equal(studioKey({code:'Backspace'}), 'close');
+  assert.equal(studioKey({code:'KeyA',ctrlKey:true}), 'compare');
+  assert.equal(studioKey({code:'KeyC',ctrlKey:true}), 'inspiration');
+  assert.equal(studioKey({code:'KeyV',ctrlKey:true}), 'reset');
+  assert.equal(studioKey({code:'KeyZ',ctrlKey:true}), 'mode');
   assert.equal(studioKey({code:'Digit1',isComposing:true}), null);
   assert.equal(studioKey({code:'Digit1',target:{closest:()=>true}}), null);
   assert.equal(studioKey({code:'F22'}), null);
@@ -34,7 +39,7 @@ test('T37 page keyboard ignores typing, modified and repeated action keys', () =
 test('T37 upload types and limits exclude SVG, executables and empty files', () => {
   assert(validStudioUpload({type:'image/png',size:1024}));
   assert(!validStudioUpload({type:'image/svg+xml',size:100}));
-  assert(!validStudioUpload({type:'image/png',size:16*1024*1024}));
+  assert(!validStudioUpload({type:'image/png',size:11*1024*1024}));
   assert(!validStudioUpload({type:'image/jpeg',size:0}));
 });
 test('T37 navigation adds one route after Companion and CSS stays scoped', () => {
@@ -43,8 +48,10 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   const css=fs.readFileSync(new URL('../src/style-studio.css',import.meta.url),'utf8');
   assert(!/^[.#]?(sidebar|device-card|app-header|body|:root)\s*\{/m.test(css));
   const source=fs.readFileSync(new URL('../src/StyleStudioPage.jsx',import.meta.url),'utf8');
-  assert(!/desktopBridge|setShortcutCapture|setGlobalShortcutsEnabled/.test(source));
-  assert.match(source,/真实 AI 出图尚未接入/);
+  assert.match(source,/getStyleStudioStatus/);
+  assert.doesNotMatch(source,/setShortcutCapture|setGlobalShortcutsEnabled/);
+  assert.match(source,/确认上传并生成/);
+  assert.match(source,/离开或失焦自动恢复/);
   assert.match(source,/clearTimeout\(timer.current\)/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);

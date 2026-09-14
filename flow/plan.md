@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T38 functional Style Studio — packaged acceptance pending
+
+The approved T37 风格映像 UI now has a main-process Qwen Image 3.0 adapter, explicit one-time upload consent, persistent managed sources/results, immediate result download, cancellation, safe deletion and a focus/route-bounded input lease. Existing DeskMate pages and the voice state machine are unchanged; no firmware or HID write path was added. Automated provider calls use mocks, so a real user-authorized photo generation and physical-key acceptance remain separate. See `docs/design/style-studio-t38.md` and `docs/contracts/t38-style-studio-v1.md`.
+
 ## Current delivery: T36 state video — ready for user dialogue acceptance
 
 Four user-generated clips integrated as foreground-only silent 4:3 video. Idle/listen/think and real PCM playback mapping, 150ms prepared-frame crossfade, interruption, loop seam and background resource release implemented. Full suite 685/685, targeted final main/store tests 27/27, source and final ASAR actual-decoder/navigation QA passed. Full `release-t36` opened with retained profile; live 小岚 and updated visuals inspected, exact hashes in latest progress. Next is user real-dialogue transition acceptance, then existing ordered software acceptance. T35A pending-video notes below are historical.
@@ -55,7 +59,7 @@ User-authorized repair after real T28 testing: preserve proven recording-start t
 User-approved Windows-only optimization: isolated ordinary-chat drafts after 500 ms text stability, ASR-final/context equivalence before speech and memory commit, bounded cancellation, continuous three-stage microphone uplink during thinking, transient pre-speech model recovery and per-turn diagnostic history. Existing ASR silence preference, Doubao voice, local-first memory and accepted echo/barge-in gates stay intact. No firmware change. [Frozen contract and deferred semantic endpointing](../docs/contracts/t28-preemptive-companion-v1.md); exact build/test and remaining live acceptance are recorded in the latest progress entry.
 ## T37 integrated UI slice — Style Studio
 
-Integrated and adopted on 2026-09-14: 风格映像 sits directly below AI 陪伴 while the existing shell and other pages remain intact. The selected white printer layout and local sample interactions are in the formal T37 desktop package. Real AI, managed media and page-scoped hardware ownership remain separate follow-up slices. See `docs/design/style-studio-t37.md`; no hardware acceptance is claimed.
+Integrated and adopted on 2026-09-14: 风格映像 sits directly below AI 陪伴 while the existing shell and other pages remain intact. The selected white printer layout and local sample interactions are in the formal T37 desktop package. T38 supersedes its former real-AI/library/input-lease gaps; the historical UI acceptance remains in `docs/design/style-studio-t37.md`.
 
 
 ## Current slice: T27 local-first companion latency
