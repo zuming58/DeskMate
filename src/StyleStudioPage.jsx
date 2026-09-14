@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
 import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, wrapStudioIndex, clampStudioStrength, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from './domain/styleStudio.js';
+import { createStyleStudioDetentSound } from './domain/styleStudioDetentSound.js';
+import { StyleStudioWheelRouter, styleStudioWheelStep } from './domain/styleStudioWheel.js';
 import './style-studio.css';
 
 const starter = { id: 'source', name: '生活中的我', image: STUDIO_SOURCE, sample: true };
@@ -78,7 +80,8 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true);
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
-  const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), busy = useRef(false), wheelAt = useRef(0), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
+  const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
+  const detentSound = useRef(null), wheelRouter = useRef(null);
   const style = STUDIO_STYLES[wrapStudioIndex(cursor)];
   const importing = useRef(false);
   useUnsavedChanges((!provider.available && materials.some(item => !item.sample)) || Boolean(brief.trim()) || busy.current);
@@ -137,6 +140,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     const unsubscribe = api?.onStyleStudioInput?.(event => {
       if (!document.hasFocus()) return;
       if (event?.command === 'blocked-host-action') { setStatus('本页已暂停原场景按键动作；离开后自动恢复。'); return; }
+      if (event?.source === 'easyinput-wheel' && ['previous', 'next'].includes(event.command)) { wheelRouter.current?.accept(event.command === 'next' ? 1 : -1, 'native'); return; }
       if (event?.command) actions.current(event.command);
     });
     window.addEventListener('blur', blur); window.addEventListener('focus', acquire);
@@ -152,7 +156,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     if (phase !== 'idle') return;
     if (mode === 'reveal') setEffect(i => wrapStudioIndex(i + direction, STUDIO_EFFECTS.length));
     else if (adjusting) setStrength(n => clampStudioStrength(n + direction * 5));
-    else { showOrbit(); setCursor(n => n + direction); }
+    else { void detentSound.current?.play(direction); showOrbit(); setCursor(n => n + direction); }
   }
   function choose(index) { if (busy.current) return; setCursor(index); setAdjusting(false); hideOrbit(); setStatus(`已选择“${STUDIO_STYLES[index].name}”。`); }
   function generate() {
@@ -311,14 +315,36 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     if (name === 'mode' && !busy.current) { hideOrbit(); setMode(v => v === 'generate' ? 'reveal' : 'generate'); }
   }
   const actions = useRef(action); actions.current = action;
+  if (!wheelRouter.current) wheelRouter.current = new StyleStudioWheelRouter(step => actions.current(step > 0 ? 'next' : 'previous'));
   useEffect(() => {
     const key = e => { const command = studioKey(e); if (!command || !document.hasFocus()) return; e.preventDefault(); actions.current(command); };
     const release = e => { if (e.code === 'Digit5' || e.code === 'KeyA') setCompare(false); };
     window.addEventListener('keydown', key); window.addEventListener('keyup', release);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', release); };
   }, []);
+  useEffect(() => {
+    detentSound.current = createStyleStudioDetentSound();
+    const prime = () => { void detentSound.current?.prime(); };
+    const wheel = event => {
+      if (!document.hasFocus() || event.defaultPrevented || event.target?.closest?.('input, textarea, .ss-overlay')) return;
+      const step = styleStudioWheelStep(event);
+      if (!step) return;
+      event.preventDefault();
+      wheelRouter.current?.accept(step, 'dom');
+    };
+    window.addEventListener('pointerdown', prime, true);
+    window.addEventListener('keydown', prime, true);
+    window.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener('pointerdown', prime, true);
+      window.removeEventListener('keydown', prime, true);
+      window.removeEventListener('wheel', wheel, true);
+      wheelRouter.current?.reset();
+      void detentSound.current?.close();
+      detentSound.current = null;
+    };
+  }, []);
   const keyItems = [['strength','强度'],['view','查看'],['save','保存'],['close','收起'],['compare','对比'],['inspiration','灵感'],['reset','重置'],['mode','模式']];
-  const wheel = e => { e.preventDefault(); if (Math.abs(e.deltaY) < 2 || Date.now() - wheelAt.current < 110) return; wheelAt.current = Date.now(); move(e.deltaY > 0 ? 1 : -1); };
   return <section className="style-studio" aria-label="风格映像">
     <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className="ss-tabs" role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={mode === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) setMode(id); }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? 'Image 2 已配置' : provider.available ? 'Image 2 未配置' : '浏览器预览'}</span></div></header>
     {mode === 'generate' ? <div className={`ss-stage ${phase}`}>
@@ -335,10 +361,10 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
         <img className="ss-style-preview" src={style.image} alt={`${style.name}预制样片`} />
         <div className="ss-control">
           <label className="ss-strength">风格强度 <strong>{strength}%</strong><input aria-label="风格强度" type="range" min="0" max="100" value={strength} disabled={phase !== 'idle'} onChange={e => setStrength(Number(e.target.value))} /></label>
-          {orbitOpen && !adjusting && <div className="ss-orbit" aria-label="围绕旋钮选择风格" onWheel={wheel}>
+          {orbitOpen && !adjusting && <div className="ss-orbit" aria-label="围绕旋钮选择风格">
             {STUDIO_STYLES.map((item,index) => { const pos = studioOrbit(index, cursor); return <Photo key={item.id} item={item} selected={item.id === style.id} onClick={() => choose(index)} style={{ '--ox': `${pos.x}px`, '--oy': `${pos.y}px`, '--scale': pos.scale, '--opacity': pos.opacity, '--tilt': `${pos.angle}deg`, '--delay': `${index * 24}ms`, zIndex: pos.z }} />; })}
           </div>}
-          <div className="ss-dial-row"><button aria-label="上一个风格" className="ss-step" onClick={() => move(-1)}><IconChevronLeft size={17} /></button><button className="ss-dial" aria-label={adjusting ? '按压旋钮确认强度' : '旋转选择风格，按压旋钮生成'} disabled={phase !== 'idle'} onClick={() => action('confirm')} onWheel={wheel} onPointerDown={e => { dialStart.current = { start: e.clientX, last: e.clientX, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={e => { const drag = dialStart.current; if (!drag || Math.abs(e.clientX - drag.last) < 22) return; drag.moved = true; showOrbit(false); move(e.clientX > drag.last ? 1 : -1); drag.last = e.clientX; }} onPointerUp={() => { if (dialStart.current?.moved) { dialStart.current = 'dragged'; showOrbit(); } else dialStart.current = null; }} onClickCapture={e => { if (dialStart.current === 'dragged') { e.stopPropagation(); dialStart.current = null; } }}><img src={STUDIO_DIAL} alt="" draggable="false" style={{ transform: `rotate(${adjusting ? strength * 2.7 : cursor * 36}deg)` }} /></button><button aria-label="下一个风格" className="ss-step" onClick={() => move(1)}><IconChevronRight size={17} /></button></div>
+          <div className="ss-dial-row"><button aria-label="上一个风格" className="ss-step" onClick={() => move(-1)}><IconChevronLeft size={17} /></button><button className="ss-dial" aria-label={adjusting ? '按压旋钮确认强度' : '旋转选择风格，按压旋钮生成'} disabled={phase !== 'idle'} onClick={() => action('confirm')} onPointerDown={e => { dialStart.current = { start: e.clientX, last: e.clientX, moved: false }; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={e => { const drag = dialStart.current; if (!drag || Math.abs(e.clientX - drag.last) < 22) return; drag.moved = true; showOrbit(false); move(e.clientX > drag.last ? 1 : -1); drag.last = e.clientX; }} onPointerUp={() => { if (dialStart.current?.moved) { dialStart.current = 'dragged'; showOrbit(); } else dialStart.current = null; }} onClickCapture={e => { if (dialStart.current === 'dragged') { e.stopPropagation(); dialStart.current = null; } }}><img src={STUDIO_DIAL} alt="" draggable="false" style={{ transform: `rotate(${adjusting ? strength * 2.7 : cursor * 36}deg)` }} /></button><button aria-label="下一个风格" className="ss-step" onClick={() => move(1)}><IconChevronRight size={17} /></button></div>
           <button className="ss-press-action" disabled={phase !== 'idle'} onClick={() => action('confirm')}><IconHandClick size={14} stroke={1.8} />{phase !== 'idle' ? '正在出片' : adjusting ? '按压确认强度' : ejectedResult ? '先收好作品' : '按压旋钮生图'}</button>
         </div>
       </div>

@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T40B compact-window wheel and detent sound — running candidate
+
+The retained-profile app is now running `release-t40b`. In Style Studio, source-identified EasyInput wheel input is paired with Chromium's legacy wheel fallback so one physical detent selects once and does not move the compact page. Coarse whole-page wheel input selects styles; fine touchpad input, editors and dialogs retain scrolling. Each accepted style step has one short, quiet, original locally synthesized detent. Full suite 708/708, native build, source/final-ASAR probes and exact package verification passed. Image 2 remains unconfigured, so the next acceptance step is user entry under Settings → AI 服务 followed by one explicitly consented real generation and physical wheel/press listening check. See `docs/contracts/t40b-style-studio-wheel-feedback-v1.md`.
+
 ## Current delivery: T40A Style Studio dial press — candidate verification
 
 风格映像 now treats style selection as continuous and the first dial press as generation; S1 strength still uses press only to confirm its value. The main surface shows a compact `按压旋钮生图` cue instead of provider setup copy. The foreground input lease converts only existing EasyInput-origin F22/VoiceInput events and releases on blur/leave; no firmware or HID write is introduced. Software verification is complete; real Image 2 remains unconfigured in the retained profile, and physical acceptance still requires the board's encoder press mapping to emit one of those host-visible events. See `docs/contracts/t40a-style-studio-dial-press-v1.md`.

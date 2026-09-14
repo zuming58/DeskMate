@@ -1,3 +1,12 @@
+# T40B compact-wheel and detent feedback QA — 2026-09-14
+
+- Source correction: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-0d7665c0-d75e-4e0c-8c38-1946e1770831.png`. At a smaller window the hardware dial's legacy wheel event scrolled the long page because interception existed only over the visible blue dial.
+- Implemented behavior: focused Style Studio captures coarse wheel input across the page, prefers the source-identified EasyInput Raw Input event, and deduplicates its Chromium fallback. Fine touchpad deltas, input controls and dialogs remain scrollable. Accepted style steps play a locally synthesized 58 ms, maximum-gain 0.034 mechanical/glass detent; strength and reveal states stay silent.
+- Source evidence: `C:/Users/Administrator/AppData/Local/Temp/deskmate-t37-qa-mVSC3d/generate-800.png`. Final ASAR evidence: `C:/Users/Administrator/AppData/Local/Temp/deskmate-t37-qa-gCYuiE/generate-800.png`. Both 800×768 probes verify the style name changes after a coarse wheel event while `scrollY` is byte-for-byte unchanged, with no renderer errors; 1024×768 and 1440×1024 remain overflow-free.
+- Functional/security evidence: full suite 708/708, exact `release-t40b` package verification and the synthetic consent → generate → eject → place → delete flow passed. Sound is original oscillator synthesis, not an Apple/system asset. No private image, paid request, key, firmware, Flash, device configuration or HID write was used.
+
+final result: passed
+
 # T40A Style Studio dial-press QA — 2026-09-14
 
 - Source correction: `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-be77d4fd-9934-4606-8f3b-b630e79d0daa.png` (1542×654). The red annotation rejects the large `配置 Image 2 后生成` button and asks for a smaller, polished press cue beneath the dial.

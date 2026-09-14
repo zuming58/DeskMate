@@ -55,7 +55,19 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'纸间光影');
   await js(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowRight',bubbles:true}));true`); await delay(100);
   assert.equal(await js(`document.querySelector('.ss-description h1').textContent`),'毛线手作');
-  for(const width of [1024,800]) {window.setContentSize(width,768);await delay(400);await shot('generate-'+width);fs.writeFileSync(path.join(output,'bounds-'+width+'.json'),JSON.stringify(await js(`[...document.querySelectorAll('.style-studio *')].map(e=>({class:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).filter(x=>x.right>innerWidth+1)`)));assert(await js(`document.documentElement.scrollWidth<=innerWidth+1`),'no overflow at '+width)}
+  for(const width of [1024,800]) {
+    window.setContentSize(width,768);await delay(400);await shot('generate-'+width);
+    fs.writeFileSync(path.join(output,'bounds-'+width+'.json'),JSON.stringify(await js(`[...document.querySelectorAll('.style-studio *')].map(e=>({class:e.className,right:e.getBoundingClientRect().right,width:e.getBoundingClientRect().width})).filter(x=>x.right>innerWidth+1)`)));
+    assert(await js(`document.documentElement.scrollWidth<=innerWidth+1`),'no overflow at '+width);
+    if(width===800){
+      const before=await js(`({name:document.querySelector('.ss-description h1').textContent,y:scrollY,focused:document.hasFocus(),modal:!!document.querySelector('.ss-overlay')})`);
+      const dispatched=await js(`(()=>{const event=new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true});const result=document.querySelector('.ss-materials').dispatchEvent(event);return {result,prevented:event.defaultPrevented}})()`);
+      await delay(600);
+      const after=await js(`({name:document.querySelector('.ss-description h1').textContent,y:scrollY})`);
+      assert.notEqual(after.name,before.name,`coarse wheel selects a style across the compact page: ${JSON.stringify({before,after,dispatched})}`);
+      assert.equal(after.y,before.y,'coarse wheel does not vertically scroll the compact page');
+    }
+  }
   window.setContentSize(1440,1024);await delay(200);
   for(const text of ['AI 陪伴','按键配置','提示词','风格映像']) {await js(`[...document.querySelectorAll('.sidebar__nav button')].find(x=>x.innerText===${JSON.stringify(text)}).click();true`);await delay(220);}
   assert(await js(`!!document.querySelector('.style-studio')`),'route reentry');
@@ -70,7 +82,7 @@ app.whenReady().then(async()=>{ let window, errors=[]; try {
   const beforeUnload=await js(`(()=>{const e=new Event('beforeunload',{cancelable:true});window.dispatchEvent(e);return e.defaultPrevented})()`); assert(beforeUnload,'upload has leave guard');
   await shot('upload-1440');
   assert.equal(errors.length,0,errors.join('\n'));
-  fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({passed:true,output,checks:'assets/nav/free-drop/transient-orbit/strength/print/enlarge/compare/effects/organize/prompt/keyboard/responsive/reentry',consoleErrors:errors,baselineWarnings},null,2));
+  fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({passed:true,output,checks:'assets/nav/free-drop/transient-orbit/strength/print/enlarge/compare/effects/organize/prompt/keyboard/responsive/compact-wheel/reentry',consoleErrors:errors,baselineWarnings},null,2));
   console.log(JSON.stringify({passed:true,output}));
   window.destroy();clearTimeout(deadline);app.exit(0);
 }catch(error){fs.writeFileSync(path.join(output,'error.txt'),String(error.stack));console.error(error);console.log('Renderer errors:',errors);console.log('Evidence: '+output);clearTimeout(deadline);app.exit(1)}});

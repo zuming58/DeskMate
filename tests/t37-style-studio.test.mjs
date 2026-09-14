@@ -67,6 +67,9 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/Image 2 正在显影/);
   assert.match(source,/orbitOpen && !adjusting/);
   assert.match(source,/按“整理”可再次排齐/);
+  assert.match(source,/styleStudioWheelStep/);
+  assert.match(source,/createStyleStudioDetentSound/);
+  assert.match(source,/passive: false, capture: true/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);
   assert.match(main,/hash: '\/style-studio'/);

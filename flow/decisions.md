@@ -1,5 +1,9 @@
 # Decisions
 
+## D147 — Style Studio owns coarse wheel detents across its compact page
+
+2026-09-14: While the focused Style Studio lease is active, a source-identified EasyInput Raw Input wheel step changes the current Studio choice regardless of pointer position. Pair and suppress Chromium's duplicate legacy wheel event so one hardware detent produces one selection and no document scroll. The whole Studio surface also treats coarse DOM wheel input as a selection fallback, while fine pixel touchpad motion, editors and dialogs retain scrolling. Play one original, locally synthesized, sub-60-ms low-gain detent only for an accepted style step; do not copy platform/system audio, play on initial render, or add sound to strength/reveal states. Teardown cancels pending wheel fallbacks and closes Web Audio. This is a read-only host interpretation and adds no firmware, Flash, configuration or HID write.
+
 ## D146 — Dial selection is continuous; a host-visible board press confirms the action
 
 2026-09-14: In Style Studio, wheel movement itself selects the highlighted style. A confirm action must generate immediately even while the transient orbit is visible; it must not require one press to close the orbit and a second press to generate. While S1 strength adjustment is active, the same confirm action only saves the strength. Keep provider configuration out of the primary action label and show the compact `按压旋钮生图` cue. The foreground route lease may reinterpret existing EasyInput-origin `F22`/`VoiceInput` events as confirm and must release on blur/leave. It may not consume ordinary keyboard events, rewrite device configuration, write HID, or claim the firmware's default internal `scroll_axis_toggle` as a Windows-visible press. Physical encoder acceptance remains pending evidence of the configured host-visible press action.

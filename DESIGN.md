@@ -1,5 +1,7 @@
 # DeskMate design direction
 
+T40B (2026-09-14): 风格映像在小窗口下把粗颗粒旋钮/鼠标滚轮提升为整页选择输入，来源明确的 EasyInput Raw Input 优先，并与 Chromium 同一格产生的传统滚轮事件去重；因此旋钮不会再一边换风格一边把页面向下拖。细微触控板位移、输入框和弹窗仍保留滚动。每个实际生效的风格档位播放一次 58 ms 内、低增益的原创机械玻璃“咯哒”合成音，只在风格选择状态播放，离页关闭音频上下文。不复制苹果或系统音效，不改固件/HID。详见 `docs/contracts/t40b-style-studio-wheel-feedback-v1.md`。
+
 T40A (2026-09-14): 风格映像把旋钮语义收敛为“旋转即选择，按压即生图”。风格环展开时按压不再先做一次选择确认；S1 强度状态下按压只确认强度。主操作不再显示服务配置文案，改为旋钮下方的小型 `按压旋钮生图` 提示。页面租约只拦截来自 EasyInput 的既有主机可见 F22/VoiceInput 信号，离页或失焦后恢复原语音功能；不改固件、不写 HID。默认 `scroll_axis_toggle` 不向 Windows 发事件，因此仍需实际板上按压映射产生主机可见信号后才能完成真机验收。详见 `docs/design/style-studio-t40.md` 与 `docs/contracts/t40a-style-studio-dial-press-v1.md`。
 
 T40 (2026-09-14): 风格映像改用独立的 Image 2 主进程适配器，固定 `gpt-image-2`、1024×1024 与最长 20 分钟等待；密钥单独加密保存，超时/不确定提交不自动重试。生成完成后照片从中央机器下方卡槽吐出，必须向下拖入作品区才完成收纳，避免结果被静默覆盖。风格扩展为九种，新增水墨、未来铬、故事绘本与半透明果冻；其余 DeskMate 外壳、白色工作区和临时旋钮风格环保持不变。详见 `docs/design/style-studio-t40.md` 与冻结合同 `docs/contracts/t40-style-studio-image2-v1.md`。

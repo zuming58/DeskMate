@@ -12,6 +12,8 @@ The dial-driven style orbit remains transient. At rest it is hidden. Wheel, arro
 
 T40A tightens the physical metaphor without changing this layout. Turning the dial continuously selects the highlighted style; pressing the dial immediately starts the generation path even while the orbit is still visible. In the S1 strength state, pressing confirms strength instead. The large provider-dependent primary label is replaced by a small outlined hand cue, `按压旋钮生图`; provider configuration remains a Settings concern and appears only as contextual status/error feedback.
 
+T40B corrects compact-window wheel behavior without enlarging or rearranging the machine. EasyInput Raw Input now owns style selection across the whole focused page, and a bounded renderer router pairs the duplicate Chromium wheel event so one hardware detent changes one style without moving the document. A coarse DOM wheel is the fallback; fine touchpad motion and wheel activity inside editors/dialogs remain available for scrolling. Each accepted style step plays one short, quiet, original Web Audio mechanical/glass detent. Strength/reveal changes remain silent, and the audio context closes on page leave. The frozen addition is `docs/contracts/t40b-style-studio-wheel-feedback-v1.md`.
+
 ## Generation and security boundary
 
 - Generation uses a dedicated main-process Image 2 adapter with fixed model `gpt-image-2`, default OpenAI-compatible base URL `https://metajing.cn/v1`, 1024×1024 output and a 20-minute overall deadline.
@@ -30,6 +32,16 @@ Submitting a job changes the machine to a long-running print state with elapsed 
 The user drags that ejected card downward into the Works area to complete placement. The lower canvas highlights as a valid target. Until the held output is placed, another generation is blocked so no finished work is hidden or overwritten. After placement it follows the existing free-position behavior; `整理` aligns works once, and moving a work returns the canvas to free layout.
 
 ## Verification
+
+Current T40B candidate evidence:
+
+- Full automated software suite: 708/708 passed.
+- Native input bridge publish and production renderer build passed.
+- Independent Windows directory package `release-t40b` and exact package verifier passed.
+- Source and packaged-ASAR UI probes passed 1440×1024 / 1024×768 / 800×768; the 800×768 compact check proves a coarse wheel changes style while `scrollY` remains unchanged.
+- Synthetic Image 2 consent → completion → eject → Works placement → delete flow passed with no renderer errors.
+
+Original T40 delivery evidence:
 
 - Full automated software suite: 705/705 passed.
 - Native input bridge publish and production renderer build passed.
