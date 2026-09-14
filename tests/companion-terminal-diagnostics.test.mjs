@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes the integrated Style Studio build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t41-style-studio-physical-workflow/);
+  assert.match(main, /t42-style-studio-trash-key-routing/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

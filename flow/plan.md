@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T42 Style Studio deletion and S1/S2 correction — packaged
+
+风格映像 now has separate drag-to-delete targets for Materials and Works, with valid-target feedback, managed-store deletion, linked-source protection and immutable samples. The page maps the current Maker semantics correctly: S1 opens strength, S2/Return performs result view then Reveal even when a button owns focus, S3 saves, and source-identified F22 remains confirm. Full suite 709/709, native build, source functional probes, final-ASAR probe and exact package verification passed. Physical encoder press remains pending because the default internal `scroll_axis_toggle` emits no Windows-visible event; no board configuration was written. See `docs/design/style-studio-t42.md` and `docs/contracts/t42-style-studio-delete-key-routing-v1.md`.
+
 ## Current delivery: T41 physical Style Studio workflow — packaged and running
 
 风格映像 now accepts source cards/files on the complete machine, visibly seats them in the upper slot, ejects completed results below, and supports a thresholded pointer-following pull into exact Works positions with original insert/pull feedback. The course S1–S8 state model is explicit; S2 leads from enlarged result to Reveal, and Reveal stages effect → circular window → effect granularity on rotate/press. A tenth course-observed `积木模型` preset is included. Full suite 709/709, native build, exact package verification, source/final-ASAR probes and retained-profile adoption passed. Image 2/provider/storage boundaries are unchanged; physical encoder press remains pending because default `scroll_axis_toggle` has no Windows-visible event. See `docs/design/style-studio-t41.md`.

@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Physical labels are not host event identities
+
+- Keyboard-emulation controls arrive as their configured semantic output. If S2 emits Return, mapping Return to “confirm” both steals S2 and makes its documented behavior fail.
+- Focus guards must distinguish editors from buttons. Ignoring Return merely because a button has focus can make a physical key appear dead; consume its page action and prevent the native button activation instead.
+- A GPIO-backed press can still be invisible to desktop software when firmware handles it internally. Separate hardware presence, configured action, host-visible event, and physical acceptance in both code and reporting.
+
 ## A physical drag metaphor needs layering, resistance and a committed landing point
 
 - A drop handler alone does not make an object feel inserted. Make the whole machine a target, animate the slot/body response and keep the card partially occluded by the machine at rest.

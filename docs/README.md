@@ -1,5 +1,7 @@
 # Documentation index
 
+- [T42 Style Studio cleanup and physical-key correction](design/style-studio-t42.md)
+- [T42 Style Studio delete and key-routing contract](contracts/t42-style-studio-delete-key-routing-v1.md)
 - [T41 Style Studio camera handling and Reveal controls](design/style-studio-t41.md)
 - [T41 Style Studio physical workflow contract](contracts/t41-style-studio-physical-workflow-v1.md)
 - [T39 Style Studio free canvas and transient style orbit](design/style-studio-t39.md)

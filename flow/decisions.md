@@ -1,5 +1,9 @@
 # Decisions
 
+## D149 — Page-scoped mappings follow emitted semantics; cleanup is a direct spatial gesture
+
+2026-09-14: Style Studio must map the event the current Maker configuration actually emits, not the physical label we wish it represented. Default S1 `VoiceInput` becomes strength, S2 `Return` becomes view then Reveal even with focused buttons, S3 `VoiceEdit` remains save, and only a source-identified host-visible F22 can confirm. A physical GPIO18 press configured as internal `scroll_axis_toggle` is not observable by Windows and cannot be claimed as fixed in React. Materials and Works each get a type-specific trash target; a valid drop is already an explicit delete instruction, while the main-process store still protects linked sources and built-in samples. No device write is implicit in page entry.
+
 ## D148 — Style Studio treats photos as inserted/ejected objects and Reveal as a staged dial mode
 
 2026-09-14: The complete central machine is a valid source drop target. A source visibly seats into the upper slot; a generated result remains partly inserted below until a thresholded downward pull detaches it, keeps it above the Works target and records the bounded release position. Only `整理` aligns Works. Original local insert/pull sounds may reinforce those state changes and must close on teardown. S2 owns enlarge → Reveal; Reveal rotates through six effects, then press/rotate stages window size and effect-specific granularity. S1 changes generation or display intensity, S3 exports, S4 closes/returns, S5 compares, S6 fills local inspiration, S7 resets controls without deleting media, and S8 chooses mode. Add only the course-observed `积木模型` preset; do not claim an unseen complete course library. Preserve Image 2/main-process security and the explicit limitation that the default firmware `scroll_axis_toggle` emits no host-visible press. No firmware, Flash, device configuration or HID write is part of this decision.

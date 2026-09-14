@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t41-style-studio-physical-workflow'));
+assert(main.includes('t42-style-studio-trash-key-routing'));
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
 for (const name of ['store', 'worker', 'service']) {
@@ -53,4 +53,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T41 packaged resource check passed: machine drop, pointer-following eject, staged Reveal controls, ten Style Studio presets, Image 2 adapter/secure store/journal, renderer, companion videos, recovery, voice resources and exact native bridge.');
+console.log('T42 packaged resource check passed: material/result trash drop, S1/S2 route correction, machine drop, pointer-following eject, staged Reveal controls, ten Style Studio presets, Image 2 adapter/secure store/journal, renderer, companion videos, recovery, voice resources and exact native bridge.');

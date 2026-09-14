@@ -19,7 +19,7 @@ class StyleStudioInputLease {
   }
 
   active() { return Boolean(this.token && this.isForeground()); }
-  snapshot() { return { ok: true, active: this.active(), mapping: "style-studio-page-lease-v2", firmwareChanged: false }; }
+  snapshot() { return { ok: true, active: this.active(), mapping: "style-studio-page-lease-v3", firmwareChanged: false }; }
 
   routeWheel(event = {}) {
     if (!this.active()) return false;
@@ -30,7 +30,7 @@ class StyleStudioInputLease {
   routeTrigger(event = {}) {
     if (!this.active()) return false;
     if (event.source !== "easyinput-hid") return false;
-    const command = ["F22", "VoiceInput"].includes(event.key) ? "confirm" : event.key === "VoiceEdit" ? "save" : "";
+    const command = event.key === "F22" ? "confirm" : event.key === "VoiceInput" ? "strength" : event.key === "VoiceEdit" ? "save" : "";
     if (!command) return false;
     this.publish({ command, source: "easyinput-trigger" });
     return true;

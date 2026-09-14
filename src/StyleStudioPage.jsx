@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick } from '@tabler/icons-react';
+import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick, IconTrash } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
 import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from './domain/styleStudio.js';
 import { createStyleStudioDetentSound } from './domain/styleStudioDetentSound.js';
@@ -90,7 +90,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [materialPositions, setMaterialPositions] = useState({}), [resultPositions, setResultPositions] = useState({});
   const [ejectedResult, setEjectedResult] = useState(null), [progressSeconds, setProgressSeconds] = useState(0);
   const [insertPulse, setInsertPulse] = useState(false), [pullVisual, setPullVisual] = useState(null), [justPlacedId, setJustPlacedId] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null), [trashOver, setTrashOver] = useState('');
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true);
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
   const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), insertTimer = useRef(null), settleTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
@@ -406,21 +406,48 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     }
     catch { setStatus('保存未完成，请重试。'); }
   }
-  async function removeLocal() {
-    if (!deleteTarget || deleteTarget.sample) return;
-    const response = await bridge()?.removeStyleStudioMedia?.({ id: deleteTarget.id });
-    if (!alive.current) return;
-    if (!response?.ok) { setStatus(response?.reason || '没有删除，请稍后重试。'); setModal(null); setDeleteTarget(null); return; }
-    if (deleteTarget.kind === 'source') {
-      setMaterials(items => items.filter(item => item.id !== deleteTarget.id));
-      if (source.id === deleteTarget.id) setSource(starter);
-    } else {
-      setResults(items => items.filter(item => item.id !== deleteTarget.id));
-      if (ejectedResult?.id === deleteTarget.id) setEjectedResult(null);
-      if (activeResult.id === deleteTarget.id) setActiveResult(exampleResults[1]);
+  async function removeLocal(target = deleteTarget, kind = target?.kind, fromTrash = false) {
+    if (!target) return;
+    if (target.sample) {
+      setStatus('预制样片固定保留，不占用你的本地素材或作品额度。');
+      setTrashOver(''); setModal(null); setDeleteTarget(null); return;
     }
-    if (deleteTarget.image) { URL.revokeObjectURL(deleteTarget.image); urls.current.delete(deleteTarget.image); }
-    setStatus(`已从本地库删除“${deleteTarget.name}”。`); setModal(null); setDeleteTarget(null);
+    const api = bridge();
+    if (api?.removeStyleStudioMedia && ['source', 'result'].includes(target.kind)) {
+      const response = await api.removeStyleStudioMedia({ id: target.id });
+      if (!alive.current) return;
+      if (!response?.ok) { setStatus(response?.reason || '没有删除，请稍后重试。'); setTrashOver(''); setModal(null); setDeleteTarget(null); return; }
+    }
+    if (kind === 'source') {
+      setMaterials(items => items.filter(item => item.id !== target.id));
+      setMaterialPositions(items => { const next = { ...items }; delete next[target.id]; return next; });
+      if (source.id === target.id) setSource(starter);
+    } else {
+      setResults(items => items.filter(item => item.id !== target.id));
+      setResultPositions(items => { const next = { ...items }; delete next[target.id]; return next; });
+      if (ejectedResult?.id === target.id) setEjectedResult(null);
+      if (activeResult?.id === target.id) setActiveResult(exampleResults[1]);
+    }
+    if (target.image) { URL.revokeObjectURL(target.image); urls.current.delete(target.image); }
+    setStatus(`${fromTrash ? '已扔进垃圾桶并删除' : '已从本地库删除'}“${target.name}”。`); setTrashOver(''); setModal(null); setDeleteTarget(null);
+  }
+  function trashPayload(event, zone) {
+    const payload = readDraggedCard(event);
+    const valid = zone === 'material' ? payload?.kind === 'material' : ['result', 'ejected'].includes(payload?.kind);
+    return valid ? payload : null;
+  }
+  function dragOverTrash(event, zone) {
+    event.preventDefault(); event.stopPropagation();
+    const payload = trashPayload(event, zone);
+    event.dataTransfer.dropEffect = payload ? 'move' : 'none';
+    setTrashOver(payload ? zone : '');
+  }
+  function dropOnTrash(event, zone) {
+    event.preventDefault(); event.stopPropagation();
+    const payload = trashPayload(event, zone); dragOffset.current = null; setTrashOver('');
+    if (!payload) { setStatus(zone === 'material' ? '上方垃圾桶只接收素材。' : '下方垃圾桶只接收作品。'); return; }
+    const item = zone === 'material' ? materials.find(value => value.id === payload.id) : payload.kind === 'ejected' ? ejectedResult : results.find(value => value.id === payload.id);
+    if (item) void removeLocal(item, zone === 'material' ? 'source' : 'result', true);
   }
   function action(name) {
     if (name === 'close') {
@@ -499,10 +526,10 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   return <section className="style-studio" aria-label="风格映像">
     <header className="ss-toolbar"><button className="ss-back" onClick={() => navigate('dashboard')}><IconArrowLeft size={18} />返回工作台</button><div className={`ss-tabs ${modeSelecting ? 'is-choosing' : ''}`} role="tablist" aria-label="创作模式">{[['generate','生成'],['reveal','显影']].map(([id,label]) => <button role="tab" aria-selected={(modeSelecting ? modeChoice : mode) === id} key={id} disabled={phase !== 'idle'} onClick={() => { if (!busy.current) { setMode(id); setModeChoice(id); setModeSelecting(false); setAdjusting(false); if (id === 'reveal') { setRevealConfirmed(false); setRevealControl('effect'); } } }}>{label}</button>)}</div><div className="ss-mode"><IconInfoCircle size={16} /><span>{focused ? '本页按键模式' : '按键已恢复'}<small>{focused ? '离开或失焦自动恢复' : '回到本页重新接管'}</small></span><span className="ss-badge">{provider.configured ? 'Image 2 已配置' : provider.available ? 'Image 2 未配置' : '浏览器预览'}</span></div></header>
     {mode === 'generate' ? <div className={`ss-stage ${phase}`}>
-      <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><small>可从电脑拖入，也可自由摆放</small></div>
+      <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><div className="ss-heading-actions"><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><button className={`ss-trash ${trashOver === 'material' ? 'is-over' : ''}`} aria-label="删除素材" onClick={() => setStatus('把不需要的素材拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'material')} onDragOver={e => dragOverTrash(e, 'material')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'material')}><IconTrash size={17} /><span>删除素材</span></button></div><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
       <div className={`ss-materials ${materialDrop ? 'is-file-over' : ''}`} aria-label="素材自由摆放区" onDragEnter={e => { if (e.dataTransfer.types?.includes('Files')) setMaterialDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMaterialDrop(false); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'result' ? 'none' : 'move'; }} onDrop={dropOnMaterials}>
-        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) loadSourceIntoMachine(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; setDragOver(false); }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
+        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) loadSourceIntoMachine(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; setDragOver(false); setTrashOver(''); }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
       </div>
       <div className={`ss-inlet ${dragOver ? 'is-over' : ''} ${insertPulse ? 'is-inserting' : ''}`} onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
         <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">{dragOver ? '松开放入' : '原图进片口'}</span>
@@ -520,15 +547,15 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
         </div>
       </div>
       {ejectedResult && <div className={`ss-eject-slot ${pullVisual?.detached ? 'is-pulling-card' : ''}`} aria-label="作品出片口">
-        <Photo item={ejectedResult} className={`ss-ejected-card ${pullVisual ? 'is-pulling' : ''} ${pullVisual?.detached ? 'is-detached' : ''}`} style={pullVisual ? { '--pull-x': `${pullVisual.x}px`, '--pull-y': `${pullVisual.y}px` } : undefined} caption={`向下拔出 · ${ejectedResult.name}`} onClick={e => { if (suppressEjectClick.current) { e.preventDefault(); suppressEjectClick.current = false; return; } setActiveResult(ejectedResult); setCompare(false); setModal('result'); }} onPointerDown={e => beginEjectPull(e, ejectedResult)} onPointerMove={moveEjectPull} onPointerUp={finishEjectPull} onPointerCancel={cancelEjectPull} onDragStart={e => beginCardDrag(e, 'ejected', ejectedResult)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); }} />
+        <Photo item={ejectedResult} className={`ss-ejected-card ${pullVisual ? 'is-pulling' : ''} ${pullVisual?.detached ? 'is-detached' : ''}`} style={pullVisual ? { '--pull-x': `${pullVisual.x}px`, '--pull-y': `${pullVisual.y}px` } : undefined} caption={`向下拔出 · ${ejectedResult.name}`} onClick={e => { if (suppressEjectClick.current) { e.preventDefault(); suppressEjectClick.current = false; return; } setActiveResult(ejectedResult); setCompare(false); setModal('result'); }} onPointerDown={e => beginEjectPull(e, ejectedResult)} onPointerMove={moveEjectPull} onPointerUp={finishEjectPull} onPointerCancel={cancelEjectPull} onDragStart={e => beginCardDrag(e, 'ejected', ejectedResult)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); setTrashOver(''); }} />
         <span>{pullVisual?.detached ? '保持拖动，放进作品区' : '按住照片向下拔出'}</span>
       </div>}
-      <div className="ss-output-heading"><div><h2>作品</h2><p>从出片口拔出后可自由摆放，按整理自动排齐</p></div><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div>
+      <div className="ss-output-heading"><div><h2>作品</h2><p>从出片口拔出后可自由摆放，按整理自动排齐</p></div><div className="ss-heading-actions"><button className={`ss-trash ${trashOver === 'result' ? 'is-over' : ''}`} aria-label="删除作品" onClick={() => setStatus('把不需要的作品拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'result')} onDragOver={e => dragOverTrash(e, 'result')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'result')}><IconTrash size={17} /><span>删除作品</span></button><button className="ss-soft" aria-pressed={organized} onClick={() => { setOrganized(true); setStatus('作品已整理并排齐；再次拖动即可恢复自由摆放。'); }}><IconLayoutGrid size={17} />整理</button></div></div>
       <div ref={resultsRef} className={`ss-results ${organized ? 'is-organized' : ''} ${resultDrop ? 'is-drop-target' : ''}`} aria-label="作品自由摆放区" onDragEnter={e => { const payload = readDraggedCard(e); if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setResultDrop(false); }} onDragOver={e => { e.preventDefault(); const payload = readDraggedCard(e); e.dataTransfer.dropEffect = payload?.kind === 'material' ? 'none' : 'move'; if (payload && ['result','ejected'].includes(payload.kind)) setResultDrop(true); }} onDrop={dropOnResults}>
-        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={justPlacedId === item.id ? 'is-just-placed' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
+        {results.map((item,index) => { const position = resultPositions[item.id] || studioScatter(index, 'result'); return <Photo key={item.id} item={item} className={justPlacedId === item.id ? 'is-just-placed' : ''} onClick={() => { setActiveResult(item); setCompare(false); setModal('result'); }} onDragStart={e => beginCardDrag(e, 'result', item)} onDragEnd={() => { dragOffset.current = null; setResultDrop(false); setTrashOver(''); }} style={organized ? { '--tilt': '0deg' } : { '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': 2 + index }} />; })}
       </div>
-    </div> : <div className="ss-reveal"><div className="ss-reveal-heading"><h2>显影实验室</h2><button className="ss-soft" onClick={() => { setCompare(value => !value); setStatus('已交换圆窗内外的原图与作品。'); }}><IconArrowsExchange size={17} />交换内外</button></div><p>{activeResult?.sample ? '本地样片' : '本地生成作品'} · 先旋转选择效果，按下确认，再连续调节圆窗与颗粒</p><div className="ss-reveal-frame"><Reveal result={activeResult} effect={effect} radius={radius} compare={compare} detail={detail} displayStrength={displayStrength} canvasRef={revealCanvas} /><span className="ss-inside-label">圆窗内 · {compare ? '显影作品' : '原图'}</span><span className="ss-outside-label">圆窗外 · {compare ? '原图' : '显影作品'}</span></div><div className="ss-reveal-readout"><strong>{STUDIO_EFFECTS[effect]}</strong><span>{adjusting ? `S1 显示强度 ${displayStrength}%` : !revealConfirmed ? '旋转选择 · 按压确认' : revealControl === 'window' ? `圆窗大小 ${radius}%` : `${STUDIO_EFFECT_PARAMETERS[effect]} ${detail}%`}</span></div>{revealConfirmed ? <div className="ss-reveal-controls"><button aria-pressed={revealControl === 'window'} onClick={() => { setAdjusting(false); setRevealControl('window'); }}>窗口大小</button><button disabled={effect === 0} aria-pressed={revealControl === 'detail'} onClick={() => { setAdjusting(false); setRevealControl('detail'); }}>{STUDIO_EFFECT_PARAMETERS[effect]}</button><button onClick={() => { setAdjusting(false); setRevealConfirmed(false); setRevealControl('effect'); setStatus('重新选择显影效果。'); }}>重选模式</button></div> : <div className="ss-reveal-select-cue">旋转旋钮浏览 6 种方式，按下进入参数调节</div>}<label className="ss-radius">{revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} {revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius}%<input aria-label={revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} type="range" min={adjusting ? 0 : 10} max={adjusting ? 100 : 90} value={revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius} onChange={e => { const value = Number(e.target.value); if (revealControl === 'detail' && effect > 0) setDetail(value); else if (adjusting) setDisplayStrength(value); else setRadius(value); }} /></label><div className="ss-effects">{STUDIO_EFFECTS.map((name,index) => <button key={name} aria-pressed={effect === index} onClick={() => { setEffect(index); setAdjusting(false); setRevealConfirmed(true); setRevealControl('window'); setStatus(`已选择“${name}”，旋转调节圆窗。`); }}><img src={activeResult.image} alt="" />{name}</button>)}</div></div>}
-    <footer className="ss-footer"><p role="status">{status || '旋转选择风格 · 按压旋钮生图 · 离开本页自动恢复原按键。'}</p><div className="ss-keys" aria-label="页面按键预览">{keyItems.map(([id,name],index) => <button key={id} onClick={() => action(id)} title={`S${index + 1}：${name}`} className={(id === 'strength' && adjusting) || (id === 'mode' && modeSelecting) ? 'is-selected' : ''}>S{index + 1}<small>{name}</small></button>)}</div></footer>
+    </div> : <div className="ss-reveal"><div className="ss-reveal-heading"><h2>显影实验室</h2><button className="ss-soft" onClick={() => { setCompare(value => !value); setStatus('已交换圆窗内外的原图与作品。'); }}><IconArrowsExchange size={17} />交换内外</button></div><p>{activeResult?.sample ? '本地样片' : '本地生成作品'} · 先旋转选择效果，按下确认，再连续调节圆窗与颗粒</p><div className="ss-reveal-frame"><Reveal result={activeResult} effect={effect} radius={radius} compare={compare} detail={detail} displayStrength={displayStrength} canvasRef={revealCanvas} /><span className="ss-inside-label">圆窗内 · {compare ? '显影作品' : '原图'}</span><span className="ss-outside-label">圆窗外 · {compare ? '原图' : '显影作品'}</span></div><div className="ss-reveal-readout"><strong>{STUDIO_EFFECTS[effect]}</strong><span>{adjusting ? `S1 显示强度 ${displayStrength}%` : !revealConfirmed ? '旋转选择 · 按压确认' : revealControl === 'window' ? `圆窗大小 ${radius}%` : `${STUDIO_EFFECT_PARAMETERS[effect]} ${detail}%`}</span></div>{revealConfirmed ? <div className="ss-reveal-controls"><button aria-pressed={revealControl === 'window'} onClick={() => { setAdjusting(false); setRevealControl('window'); }}>窗口大小</button><button disabled={effect === 0} aria-pressed={revealControl === 'detail'} onClick={() => { setAdjusting(false); setRevealControl('detail'); }}>{STUDIO_EFFECT_PARAMETERS[effect]}</button><button onClick={() => { setAdjusting(false); setRevealConfirmed(false); setRevealControl('effect'); setStatus('重新选择显影效果。'); }}>重选模式</button></div> : <button type="button" className="ss-reveal-select-cue" onClick={() => action('confirm')}>旋转旋钮浏览 6 种方式，按下或点击进入参数调节</button>}<label className="ss-radius">{revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} {revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius}%<input aria-label={revealControl === 'detail' && effect > 0 ? STUDIO_EFFECT_PARAMETERS[effect] : adjusting ? '显示强度' : '圆窗大小'} type="range" min={adjusting ? 0 : 10} max={adjusting ? 100 : 90} value={revealControl === 'detail' && effect > 0 ? detail : adjusting ? displayStrength : radius} onChange={e => { const value = Number(e.target.value); if (revealControl === 'detail' && effect > 0) setDetail(value); else if (adjusting) setDisplayStrength(value); else setRadius(value); }} /></label><div className="ss-effects">{STUDIO_EFFECTS.map((name,index) => <button key={name} aria-pressed={effect === index} onClick={() => { setEffect(index); setAdjusting(false); setRevealConfirmed(true); setRevealControl('window'); setStatus(`已选择“${name}”，旋转调节圆窗。`); }}><img src={activeResult.image} alt="" />{name}</button>)}</div></div>}
+    <footer className="ss-footer"><p role="status">{status || '旋转选择风格 · 点击或用已映射的旋钮按压生图 · S2 查看/显影。'}</p><div className="ss-keys" aria-label="页面按键预览">{keyItems.map(([id,name],index) => <button key={id} onClick={() => action(id)} title={`S${index + 1}：${name}`} className={(id === 'strength' && adjusting) || (id === 'mode' && modeSelecting) ? 'is-selected' : ''}>S{index + 1}<small>{name}</small></button>)}</div></footer>
     {modal && <div className="ss-overlay" onPointerDown={e => { if (e.target === e.currentTarget && !['progress', 'consent', 'delete'].includes(modal)) setModal(null); }}>
       <div className={`ss-dialog ${modal === 'prompt' ? 'ss-prompt-dialog' : ''} ${['progress','consent','delete'].includes(modal) ? 'ss-confirm-dialog' : ''}`} role="dialog" aria-modal="true" aria-label={modal === 'prompt' ? '风格提示词' : modal === 'consent' ? '确认上传生成' : modal === 'progress' ? '正在生成' : modal === 'delete' ? '确认删除本地图片' : '图片预览'} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); action('close'); } if (e.key === 'Tab') { const nodes = [...e.currentTarget.querySelectorAll('button,input,textarea')].filter(el => !el.disabled); const first = nodes[0], last = nodes.at(-1); if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } } }}>
         {modal !== 'progress' && <button autoFocus className="ss-close" aria-label="关闭预览" onClick={() => { setModal(null); setDeleteTarget(null); }}><IconX size={22} /></button>}

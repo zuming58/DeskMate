@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
-test('T41 ten provenance-backed styles and bounded generation/reveal controls', () => {
+test('T42 ten provenance-backed styles and bounded generation/reveal controls', () => {
   assert.equal(STUDIO_STYLES.length, 10);
   for (const s of STUDIO_STYLES) assert(fs.existsSync(new URL(`../public/assets/style-studio/${s.id}.png`, import.meta.url)));
   assert.equal(STUDIO_STYLES.at(-1).id, 'blocks');
@@ -34,11 +34,13 @@ test('T39 free canvases have deterministic bounded scatter and clamp dropped car
     const point = studioScatter(i, zone); assert(point.x >= 7 && point.x <= 93); assert(point.y >= 18 && point.y <= 82); assert(point.tilt >= -12 && point.tilt <= 12);
   }
 });
-test('T38 page keyboard preserves editors and maps the existing Maker chords only on the page', () => {
+test('T42 page keyboard preserves editors and maps the existing Maker chords only on the page', () => {
   assert.equal(studioKey({code:'Digit1'}), 'strength');
   assert.equal(studioKey({code:'ArrowLeft',repeat:true}), 'previous');
   assert.equal(studioKey({code:'Digit3',repeat:true}), null);
   assert.equal(studioKey({code:'Enter',ctrlKey:true}), null);
+  assert.equal(studioKey({code:'Enter'}), 'view');
+  assert.equal(studioKey({code:'Enter',target:{closest:()=>false}}), 'view');
   assert.equal(studioKey({code:'Backspace'}), 'close');
   assert.equal(studioKey({code:'KeyA',ctrlKey:true}), 'compare');
   assert.equal(studioKey({code:'KeyC',ctrlKey:true}), 'inspiration');
@@ -76,6 +78,9 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.match(source,/createStyleStudioMotionSound/);
   assert.match(source,/dropIntoMachine/);
   assert.match(source,/beginEjectPull/);
+  assert.match(source,/dropOnTrash/);
+  assert.match(source,/aria-label="删除素材"/);
+  assert.match(source,/aria-label="删除作品"/);
   assert.match(source,/STUDIO_EFFECT_PARAMETERS/);
   assert.match(source,/并排对比原图/);
   assert.match(source,/passive: false, capture: true/);
