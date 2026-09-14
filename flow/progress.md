@@ -1,5 +1,12 @@
 # Progress log
 
+# 2026-09-14 — Read-only Style Studio generation-path audit
+
+- User asked why the teacher's StyleCam output appeared immediate and why a prior DeskMate submission produced no work. Course materials explicitly allow a local-sample flow before paid API integration and record no completed paid-API verification, so the observed classroom speed cannot be treated as evidence of a realtime remote generation. No claim was made about the teacher's exact live backend without its runtime evidence.
+- DeskMate's actual adapter is `qwen-image-3.0` through Bailian's synchronous OpenAI-compatible `/images/generations` interface: one input image as Base64, `size: auto`, one output, prompt extension on, thinking off, no watermark, bounded at 600 seconds including result download. Official current documentation confirms this standard model supports image-to-image editing and that synchronous image generation may require a long client timeout.
+- Local retained-profile metadata was inspected without decrypting or exposing credentials or image content. At 2026-09-14 13:27 local time, a Bailian key record existed, no workspace override was configured, and the managed Style Studio library contained one source and zero results at revision 1. The sole library write was the source import around 11:40 local time. Therefore no generation reached the successful result-save boundary.
+- Exact failure is not recoverable after the fact in T38/T39: the request is synchronous and in-memory; only successful results persist, while request ID, duration and sanitized failure class are not stored. Plausible branches are unconfirmed upload consent, HTTP/provider failure, or the 10-minute timeout. No new provider request, credential readout, user-image readout, profile mutation, software restart, firmware/Flash or HID operation was performed during this audit.
+
 # 2026-09-14 — T39 Style Studio free canvases and transient dial orbit packaged
 
 - Implemented the user's corrected interaction model without changing other DeskMate pages: Explorer PNG/JPEG/WebP files can be dropped directly into the upper material canvas at the pointer; material and work cards have bounded free positions inside their own regions; cross-region drops remain rejected rather than silently changing asset type. The work `整理` control performs one alignment pass, and moving any work afterward restores free layout.
