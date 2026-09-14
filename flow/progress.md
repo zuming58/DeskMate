@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-15 — T48 小岚桌面陪伴实体身份已冻结、打包并运行
+
+- 用户要求完善小岚的人设，使她知道自己不是泛化语音助手，而是 DeskMate 的桌面 AI 陪伴伙伴，并能如实解释 EasyInput 与小智云台的关系。T48 将不可被普通人设字段覆盖的产品身份置于可编辑性格之后：Windows DeskMate 提供对话、记忆、声音与状态编排；EasyInput 是可选实体按键、旋钮和麦克风交互入口；小智云台是可选实体表现身体，显示屏承载表情、两个舵机提供左右转动与上下点头。她不会声称自己是人，也不会猜测手臂、腿、摄像头或未冻结传感器能力。
+- 身份回答按每一轮的受信运行状态投影：EasyInput 为 connected/disconnected/unavailable/unknown，小智为 disabled/connected/enabled-disconnected/unknown，动作链为 disabled/ready/busy/available-unverified/unavailable/unknown。只有受信动作回执才能说某次动作已经完成；“设计上有小智身体”与“当前已连接”明确分开。`你是什么`、`你是不是语音助手`、`小智云台算什么`、`你有身体吗` 等问题走确定性本地回答，不触发动作，也不依赖自由对话模型临场猜测；普通闲聊不反复背诵架构。
+- 实现与合同：`electron/companion-persona.cjs`、`electron/companion-intent-bridge.cjs`、`electron/companion-model-adapter.cjs`、`electron/main.cjs`、`src/pages.jsx`，以及 `docs/contracts/t48-companion-embodiment-persona-v1.md`。分支 `codex/t48-companion-embodiment-persona`，实现提交 `9da4df71016c8009a693bcbd801bf9042dea2c66`；build ID `t48-companion-embodiment-persona`。
+- 验证通过：T48 定向/相关测试 **46/46**；完整 `npm test` **721/721**，无失败/跳过；`npm run build:desktop`、原生 InputBridge 发布、Vite/Windows 目录包、精确包内资源校验和 `git diff --check` 均通过。交付目录 `release-t48/win-unpacked`；EXE SHA-256 `A5F7518DE7F402120B76FDB2053814D6BDB3C4B1FD2FBD242C0BE2E61000B572`，ASAR `4F8BA79D4669A033C2810B84DF8AF4DADAFD4680D091918CCED2A55575129022`，InputBridge `E6E96BFBBC115F47B9C42743082AE22B889A55538E0C7F1749A848FDE2E5AA7F`。
+- 运行采用：只停止经路径核实的 `release-t47` DeskMate 进程族，保留 `%APPDATA%/deskmate` 中已有的小岚姓名、唤醒词、记忆和配置；启动精确 T48 `DeskMate.exe --show-companion`。主 PID `27328` 响应正常，可见窗口句柄 `920744`，观察到的 8 个 DeskMate/InputBridge 进程均来自 `release-t48`。未改固件、Flash、NVS、实体按键映射、凭据或用户数据，未发起云端/付费请求。下一步由用户在真实保存配置与当前链路状态下询问“你是什么”和“小智云台算什么”，再分别验收未连接/连接文案；真机动作仍以每次实际回执为准。
+
 # 2026-09-14 — T47 real-pointer Material insertion repaired, packaged and running
 
 - The user physically reconfirmed that T46 still lit the machine while dragging a newly added Material card but did not insert it after release. A new OS-mouse Electron probe reproduced the missing terminal event: native HTML drag began, but no `dragenter`, `dragover`, `drop` or `dragend` reached the renderer before mouse-up. This proved the T46 `DataTransfer` identity fallback could not repair a `drop` event that never arrived.
