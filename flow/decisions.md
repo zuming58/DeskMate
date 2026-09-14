@@ -1,5 +1,9 @@
 # Decisions
 
+## D154 — Material-card insertion uses a page-owned pointer gesture
+
+2026-09-14: Do not make Style Studio Material-card insertion depend on Chromium completing native HTML drag-and-drop. A real Electron pointer path may start the drag and show the receiving state yet omit the final `drop`. Disable native dragging for Material cards, retain a six-pixel movement threshold, render one non-interactive pointer-following ghost, and resolve release coordinates against the inlet/machine, Material canvas, or Material trash. Explorer file drops remain native, Result/ejected cards keep their existing paths, clicks still select, and no media/provider/device boundary changes.
+
 ## D153 — Internal Studio cards use an in-page drag identity
 
 2026-09-14: During a Style Studio HTML drag, keep one bounded `{ kind, id }` reference in renderer memory until drag end. Prefer that internal identity over `DataTransfer.files` when dropping into the machine, because Chromium/Electron may expose a dragged image as a file or omit custom MIME data at an intermediate event. External files remain supported only when no internal card identity exists. Validate kinds, clear the reference on drag end or successful insertion, and keep result/ejected cards rejected by the original-source inlet.

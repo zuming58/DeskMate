@@ -19,8 +19,8 @@ function formatElapsed(seconds) {
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 }
-function Photo({ item, className = '', onClick, onDragStart, onDragEnd, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onKeyDown, style, selected, caption }) {
-  return <button type="button" className={`ss-photo ${className} ${selected ? 'is-selected' : ''}`} style={style} onClick={onClick} draggable={Boolean(onDragStart)} onDragStart={onDragStart} onDragEnd={onDragEnd} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onKeyDown={onKeyDown} aria-label={caption || item.name}>
+function Photo({ item, className = '', onClick, draggable, onDragStart, onDragEnd, onMouseDown, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onKeyDown, style, selected, caption }) {
+  return <button type="button" className={`ss-photo ${className} ${selected ? 'is-selected' : ''}`} style={style} onClick={onClick} draggable={draggable ?? Boolean(onDragStart)} onDragStart={onDragStart} onDragEnd={onDragEnd} onMouseDown={onMouseDown} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel} onKeyDown={onKeyDown} aria-label={caption || item.name}>
     <img src={item.image} alt={item.name} draggable="false" /><span>{caption || item.name}</span>
   </button>;
 }
@@ -89,12 +89,12 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   const [orbitOpen, setOrbitOpen] = useState(false), [materialDrop, setMaterialDrop] = useState(false), [resultDrop, setResultDrop] = useState(false);
   const [materialPositions, setMaterialPositions] = useState({}), [resultPositions, setResultPositions] = useState({});
   const [ejectedResult, setEjectedResult] = useState(null), [progressSeconds, setProgressSeconds] = useState(0);
-  const [insertPulse, setInsertPulse] = useState(false), [pullVisual, setPullVisual] = useState(null), [justPlacedId, setJustPlacedId] = useState('');
+  const [insertPulse, setInsertPulse] = useState(false), [pullVisual, setPullVisual] = useState(null), [materialPullVisual, setMaterialPullVisual] = useState(null), [justPlacedId, setJustPlacedId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null), [trashOver, setTrashOver] = useState('');
   const [status, setStatus] = useState(''), [focused, setFocused] = useState(true), [hardwareLease, setHardwareLease] = useState('checking');
   const [provider, setProvider] = useState({ configured: false, available: Boolean(bridge()?.getStyleStudioStatus), active: false });
   const uploader = useRef(null), urls = useRef(new Set()), timer = useRef(null), orbitTimer = useRef(null), insertTimer = useRef(null), settleTimer = useRef(null), busy = useRef(false), alive = useRef(true), dialStart = useRef(null), dragOffset = useRef(null), activeRequest = useRef(''), leaseToken = useRef(`studio-${crypto.randomUUID()}`);
-  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), suppressEjectClick = useRef(false), resultsRef = useRef(null), revealCanvas = useRef(null), keyboardKeymap = useRef(null), activeCardDrag = useRef(null);
+  const detentSound = useRef(null), motionSound = useRef(null), wheelRouter = useRef(null), pullState = useRef(null), materialPullState = useRef(null), suppressEjectClick = useRef(false), suppressMaterialClick = useRef(''), resultsRef = useRef(null), revealCanvas = useRef(null), keyboardKeymap = useRef(null), activeCardDrag = useRef(null);
   const style = STUDIO_STYLES[wrapStudioIndex(cursor)];
   const importing = useRef(false);
   useUnsavedChanges((!provider.available && materials.some(item => !item.sample)) || Boolean(brief.trim()) || busy.current);
@@ -134,6 +134,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       clearTimeout(orbitTimer.current);
       clearTimeout(insertTimer.current);
       clearTimeout(settleTimer.current);
+      materialPullState.current?.cleanup?.();
       if (activeRequest.current) void api?.cancelStyleStudioImage?.(activeRequest.current);
       void api?.releaseStyleStudioInput?.(leaseToken.current);
       urls.current.forEach(url => URL.revokeObjectURL(url));
@@ -284,6 +285,63 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
     event.dataTransfer.setData('application/x-deskmate-studio-card', value);
     event.dataTransfer.setData(kind === 'material' ? 'application/x-deskmate-material' : 'application/x-deskmate-result', item.id);
     event.dataTransfer.effectAllowed = 'move';
+  }
+  function pointInside(selector, clientX, clientY) {
+    const rect = document.querySelector(selector)?.getBoundingClientRect();
+    return Boolean(rect && clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom);
+  }
+  function materialPoint(clientX, clientY, drag) {
+    const rect = document.querySelector('.ss-materials')?.getBoundingClientRect();
+    if (!rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+    return clampStudioPosition({
+      x: ((clientX - rect.left - drag.offsetX + drag.width / 2) / rect.width) * 100,
+      y: ((clientY - rect.top - drag.offsetY + drag.height / 2) / rect.height) * 100,
+      tilt: Math.round((((clientX - rect.left) / Math.max(1, rect.width)) - .5) * 10),
+    });
+  }
+  function beginMaterialPull(event, item) {
+    if (busy.current || event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.preventDefault();
+    const move = mouseEvent => moveMaterialPull(mouseEvent);
+    const finish = mouseEvent => finishMaterialPull(mouseEvent);
+    const cancel = () => cancelMaterialPull();
+    const cleanup = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', finish); window.removeEventListener('blur', cancel); };
+    materialPullState.current = { item, startX: event.clientX, startY: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, width: rect.width, height: rect.height, moved: false, cleanup };
+    window.addEventListener('mousemove', move, { passive: false });
+    window.addEventListener('mouseup', finish, { once: true });
+    window.addEventListener('blur', cancel, { once: true });
+    suppressMaterialClick.current = '';
+  }
+  function moveMaterialPull(event) {
+    const drag = materialPullState.current;
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) <= 6) return;
+    drag.moved = true; event.preventDefault();
+    const overMachine = pointInside('.ss-inlet', event.clientX, event.clientY) || pointInside('.ss-machine', event.clientX, event.clientY);
+    const overTrash = pointInside('.ss-material-heading .ss-trash', event.clientX, event.clientY);
+    setMaterialPullVisual({ item: drag.item, left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY, width: drag.width });
+    setDragOver(overMachine); setTrashOver(overTrash ? 'material' : '');
+  }
+  function finishMaterialPull(event) {
+    const drag = materialPullState.current;
+    if (!drag) return;
+    drag.cleanup?.();
+    materialPullState.current = null; setMaterialPullVisual(null); setDragOver(false); setTrashOver('');
+    if (!drag.moved) return;
+    event.preventDefault(); suppressMaterialClick.current = drag.item.id;
+    setTimeout(() => { if (suppressMaterialClick.current === drag.item.id) suppressMaterialClick.current = ''; }, 0);
+    if (pointInside('.ss-inlet', event.clientX, event.clientY) || pointInside('.ss-machine', event.clientX, event.clientY)) {
+      loadSourceIntoMachine(drag.item); return;
+    }
+    if (pointInside('.ss-material-heading .ss-trash', event.clientX, event.clientY)) { void removeLocal(drag.item, 'source', true); return; }
+    const point = materialPoint(event.clientX, event.clientY, drag);
+    if (point) { setMaterialPositions(items => ({ ...items, [drag.item.id]: point })); setStatus('素材位置已调整；拖到中间进片口即可设为当前原图。'); return; }
+    setStatus('这里不能放入素材；请拖到中间进片槽、素材区或素材垃圾桶。');
+  }
+  function cancelMaterialPull() {
+    materialPullState.current?.cleanup?.();
+    materialPullState.current = null; setMaterialPullVisual(null); setDragOver(false); setTrashOver(''); suppressMaterialClick.current = '';
   }
   function dropPosition(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -536,8 +594,9 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       <div className="ss-material-heading"><h2>素材</h2><p>放入照片，开启风格之旅</p><div className="ss-heading-actions"><button className="ss-soft" disabled={phase !== 'idle'} onClick={() => uploader.current.click()}><IconPlus size={17} />添加照片</button><button className={`ss-trash ${trashOver === 'material' ? 'is-over' : ''}`} aria-label="删除素材" onClick={() => setStatus('把不需要的素材拖到这个垃圾桶即可删除。')} onDragEnter={e => dragOverTrash(e, 'material')} onDragOver={e => dragOverTrash(e, 'material')} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setTrashOver(''); }} onDrop={e => dropOnTrash(e, 'material')}><IconTrash size={17} /><span>删除素材</span></button></div><small>可从电脑拖入，也可自由摆放</small></div>
       <input ref={uploader} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={e => { void upload(e.target.files); e.target.value = ''; }} />
       <div className={`ss-materials ${materialDrop ? 'is-file-over' : ''}`} aria-label="素材自由摆放区" onDragEnter={e => { if (e.dataTransfer.types?.includes('Files')) setMaterialDrop(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMaterialDrop(false); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = readDraggedCard(e)?.kind === 'result' ? 'none' : 'move'; }} onDrop={dropOnMaterials}>
-        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (!busy.current) loadSourceIntoMachine(item); }} onDragStart={e => beginCardDrag(e, 'material', item)} onDragEnd={() => { dragOffset.current = null; activeCardDrag.current = null; setDragOver(false); setTrashOver(''); }} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
+        {materials.map((item,index) => { const position = materialPositions[item.id] || studioScatter(index, 'material'); return <Photo key={item.id} item={item} selected={source.id === item.id} onClick={() => { if (suppressMaterialClick.current === item.id) { suppressMaterialClick.current = ''; return; } if (!busy.current) loadSourceIntoMachine(item); }} draggable={false} onDragStart={e => beginCardDrag(e, 'material', item)} onMouseDown={e => beginMaterialPull(e, item)} style={{ '--x': `${position.x}%`, '--y': `${position.y}%`, '--tilt': `${position.tilt}deg`, '--z': source.id === item.id ? 4 : 2 + index }} />; })}
       </div>
+      {materialPullVisual && <div className="ss-photo ss-material-pull-ghost" style={{ left: materialPullVisual.left, top: materialPullVisual.top, width: materialPullVisual.width }} aria-hidden="true"><img src={materialPullVisual.item.image} alt="" /><span>{materialPullVisual.item.name}</span></div>}
       <div className={`ss-inlet ${dragOver ? 'is-over' : ''} ${insertPulse ? 'is-inserting' : ''}`} onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
         <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">{dragOver ? '松开放入' : '原图进片口'}</span>
       </div>

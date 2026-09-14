@@ -116,6 +116,11 @@ test('T37 navigation adds one route after Companion and CSS stays scoped', () =>
   assert.doesNotMatch(source,/save\(returnHome/);
   assert.match(source,/activeCardDrag\.current = payload/);
   assert.match(source,/if \(!payload && event\.dataTransfer\.files\?\.length\)/);
+  assert.match(source,/beginMaterialPull/);
+  assert.match(source,/finishMaterialPull/);
+  assert.match(source,/pointInside\('\.ss-inlet'/);
+  assert.match(source,/className="ss-photo ss-material-pull-ghost"/);
+  assert.match(source,/draggable=\{false\} onDragStart=\{e => beginCardDrag\(e, 'material', item\)\} onMouseDown=\{e => beginMaterialPull\(e, item\)\}/);
   const main=fs.readFileSync(new URL('../electron/main.cjs',import.meta.url),'utf8');
   assert.match(main,/--show-style-studio/);
   assert.match(main,/hash: '\/style-studio'/);

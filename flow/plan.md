@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T47 pointer-owned material insertion — candidate
+
+Material cards now use a thresholded page-owned mouse gesture with a pointer-following ghost and coordinate-based release targets. Releasing over the inlet or machine inserts even when Electron never emits the native HTML `drop` event; the Material canvas and its trash target remain usable through the same gesture. Native Explorer file drops and all result/eject behavior remain unchanged. See `docs/contracts/t47-style-studio-pointer-drop-v1.md`.
+
 ## Current delivery: T46 reliable material insertion — packaged candidate
 
 Internal Material cards now retain a bounded renderer-side drag identity, so dropping a newly added card onto the machine still inserts it when Electron strips custom drag data or also presents the image as a native file. External file drops, free placement, result dragging and type rejection remain unchanged. See `docs/contracts/t46-style-studio-internal-drop-v1.md`.

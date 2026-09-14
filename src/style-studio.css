@@ -35,9 +35,10 @@
 .ss-photo span { display: block; padding: 10px 2px 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-photo:hover { border-color: #82b7f5; box-shadow: 0 12px 25px #25487522; }
 .ss-photo.is-selected { border-color: #8dbffd; box-shadow: 0 14px 28px #356df326; }
-.ss-materials .ss-photo { position: absolute; width: 132px; left: var(--x); top: var(--y); z-index: var(--z, 2); transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); cursor: grab; }
+.ss-materials .ss-photo { position: absolute; width: 132px; left: var(--x); top: var(--y); z-index: var(--z, 2); transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)); cursor: grab; touch-action: none; }
 .ss-materials .ss-photo:active, .ss-results .ss-photo:active { cursor: grabbing; }
 .ss-materials .ss-photo:hover { transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)) translateY(-4px); }
+.ss-material-pull-ghost { position: fixed; z-index: 500; margin: 0; pointer-events: none; transform: rotate(1deg) scale(1.025); transition: none; opacity: .96; box-shadow: 0 24px 48px #1835563d, 0 0 0 4px #dcecff; }
 .ss-inlet { position: absolute; left: 39%; top: 86px; width: 185px; height: 268px; border-bottom: 10px solid #c4cedb; border-radius: 0 0 12px 12px; display: flex; justify-content: center; z-index: 5; }
 .ss-inlet .ss-photo { width: 177px; height: fit-content; padding: 9px 9px 0; }
 .ss-inlet .ss-photo img { aspect-ratio: .81; }
