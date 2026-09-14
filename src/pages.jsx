@@ -514,6 +514,7 @@ export function CompanionPage({ notify, navigate, stopCompanion, initialSection 
               </section>
               <section className="companion-identity-pane" aria-labelledby="companion-persona-heading">
                 <div className="companion-identity-pane__heading"><div><span>COMPANION PERSONA</span><strong id="companion-persona-heading">小岚人设</strong></div><small>设定她是谁、怎么说话和哪些事不能做</small></div>
+                <Notice tone="info" title="内置身份 · 桌面 AI 陪伴伙伴">小岚不是普通语音助手。她也可以称作桌面 AI 陪伴机器人：DeskMate 提供对话、记忆和声音，小智云台是她可选的屏幕表情与双舵机实体身体。当前状态：{serviceStatus.xiaozhi.label}。这层身份会随真实硬件状态更新，不会被自定义人设覆盖。</Notice>
                 <div className="companion-settings-form companion-persona-form">
                   <label className="field-label">小岚的年龄 / 人格阶段（可选）<input maxLength={80} value={personaDraft.companionProfile?.ageStage || ""} placeholder="例如：25 岁，或年轻的桌面伙伴" onChange={(event) => editPersonaDraft({ ...personaDraft, companionProfile: { ...personaDraft.companionProfile, ageStage: event.target.value } })} /></label>
                   <label className="field-label">角色定位<input maxLength={160} value={personaDraft.role} onChange={(event) => editPersonaDraft({ ...personaDraft, role: event.target.value })} /></label>

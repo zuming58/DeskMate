@@ -81,7 +81,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t47-style-studio-pointer-drop";
+const DESKMATE_BUILD_ID = "t48-companion-embodiment-persona";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -239,6 +239,27 @@ async function sendAgentStateReport(report) {
 
 function xiaozhiHardwareEnabled() {
   return xiaozhiHardwareCoordinator?.enabled?.() !== false;
+}
+
+function companionEmbodimentContext() {
+  const bridge = inputBridge?.snapshot?.() || null;
+  const linkState = bridge?.linkDiagnostics?.state || "unavailable";
+  const hardware = xiaozhiHardwareCoordinator?.snapshot?.(linkState) || null;
+  const motion = motionPresetService?.snapshot?.() || null;
+  const easyInputState = !bridge ? "unknown" : bridge.boardConnected === true ? "connected" : bridge.available === false ? "unavailable" : "disconnected";
+  const xiaozhiState = ["disabled", "connected", "enabled-disconnected"].includes(hardware?.state) ? hardware.state : "unknown";
+  const motionState = xiaozhiState === "disabled"
+    ? "disabled"
+    : xiaozhiState !== "connected"
+      ? "unavailable"
+      : motion?.busy
+        ? "busy"
+        : motion?.phase === "ready"
+          ? "ready"
+          : motion?.available
+            ? "available-unverified"
+            : "unavailable";
+  return Object.freeze({ easyInputState, xiaozhiState, motionState });
 }
 
 function xiaozhiHardwareDisabledResult(extra = {}) {
@@ -1549,6 +1570,7 @@ app.whenReady().then(async () => {
         readKnowledgeContext: (text, options) => knowledgeOsMemoryGateway.searchEvidence(text, options),
         readLocalHistory: (text, plan) => companionMemoryStore.localHistoryForQuery(text, plan),
         readEarlierContext: (text, before) => companionMemoryStore.earlierCompanionContextForQuery(text, { before }),
+        readEmbodimentContext: () => companionEmbodimentContext(),
       }),
       ttsFactory: () => new DoubaoStreamingTtsAdapter({
         config: { ...aiServiceStore.loadRealtimeSecret(), ...sessionPreferences, persona: sessionPersona, memoryContext: sessionMemoryContext },
@@ -1594,7 +1616,7 @@ app.whenReady().then(async () => {
       return runMotionPreset({ preset, repeat, source: "voice" });
     },
     mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
-    readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona }),
+    readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona, embodiment: companionEmbodimentContext() }),
   });
   promptWorkbench = new PromptWorkbenchController({
     store: new PromptWorkbenchStore({ userDataPath: app.getPath('userData') }),

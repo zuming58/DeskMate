@@ -111,7 +111,7 @@ class CompanionIntentBridge {
     if (typeof this.readPersona !== "function") return null;
     try {
       const current = this.readPersona() || {};
-      return explicitProfileAnswer(source, current.persona || current, current.name);
+      return explicitProfileAnswer(source, current.persona || current, current.name, current.embodiment);
     } catch {
       return null;
     }

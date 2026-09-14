@@ -1,5 +1,6 @@
 # Documentation index
 
+- [T48 companion embodiment identity](contracts/t48-companion-embodiment-persona-v1.md)
 - [T42 Style Studio cleanup and physical-key correction](design/style-studio-t42.md)
 - [T42 Style Studio delete and key-routing contract](contracts/t42-style-studio-delete-key-routing-v1.md)
 - [T41 Style Studio camera handling and Reveal controls](design/style-studio-t41.md)

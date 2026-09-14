@@ -1,5 +1,9 @@
 # Decisions
 
+## D155 — Companion identity separates software mind, interaction surface and optional body
+
+2026-09-15: Define 小岚 as a DeskMate desktop AI companion with an optional physical form, not a generic voice assistant or a human. Windows DeskMate owns conversation, memory, speech and state orchestration; EasyInput is a separate key/dial/configured-microphone interaction surface; Xiaozhi is the optional screen-expression and two-servo physical embodiment. Append this immutable identity after editable persona fields, but refresh only allowlisted EasyInput/Xiaozhi/motion states per model turn. Explicit identity questions use a deterministic local answer. Never turn “enabled”, “connected” or “request sent” into a completed physical-action claim; only the existing trusted motion result can do that. No identity wording grants hardware authority or invents limbs, camera vision or sensors.
+
 ## D154 — Material-card insertion uses a page-owned pointer gesture
 
 2026-09-14: Do not make Style Studio Material-card insertion depend on Chromium completing native HTML drag-and-drop. A real Electron pointer path may start the drag and show the receiving state yet omit the final `drop`. Disable native dragging for Material cards, retain a six-pixel movement threshold, render one non-interactive pointer-following ghost, and resolve release coordinates against the inlet/machine, Material canvas, or Material trash. Explorer file drops remain native, Result/ejected cards keep their existing paths, clicks still select, and no media/provider/device boundary changes.

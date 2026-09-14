@@ -2,6 +2,12 @@ const fs = require("fs");
 const path = require("path");
 
 const PERSONA_SCHEMA_VERSION = 4;
+const EMBODIMENT_SCHEMA_VERSION = 1;
+const EMBODIMENT_DEFAULTS = Object.freeze({
+  easyInputState: "unknown",
+  xiaozhiState: "unknown",
+  motionState: "unknown",
+});
 const PERSONA_DEFAULTS = Object.freeze({
   ownerName: "祖名",
   ownerProfile: Object.freeze({
@@ -45,6 +51,57 @@ function normalizeCompanionProfile(value = {}) {
   });
 }
 
+function boundedEnum(value, allowed, fallback = "unknown") {
+  const normalized = String(value || "").trim();
+  return allowed.has(normalized) ? normalized : fallback;
+}
+
+function normalizeCompanionEmbodiment(value = {}) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return Object.freeze({
+    version: EMBODIMENT_SCHEMA_VERSION,
+    easyInputState: boundedEnum(source.easyInputState, new Set(["connected", "disconnected", "unavailable", "unknown"])),
+    xiaozhiState: boundedEnum(source.xiaozhiState, new Set(["disabled", "connected", "enabled-disconnected", "unknown"])),
+    motionState: boundedEnum(source.motionState, new Set(["disabled", "ready", "busy", "available-unverified", "unavailable", "unknown"])),
+  });
+}
+
+function embodimentStatusSentence(value = EMBODIMENT_DEFAULTS) {
+  const embodiment = normalizeCompanionEmbodiment(value);
+  if (embodiment.xiaozhiState === "disabled") return "当前小智硬件扩展已关闭，所以我现在以软件陪伴形态工作；这不是故障。";
+  if (embodiment.xiaozhiState === "enabled-disconnected") return "当前小智硬件扩展已启用但没有连接，所以我现在仍以软件陪伴形态工作。";
+  if (embodiment.xiaozhiState === "connected") {
+    if (embodiment.motionState === "ready") return "当前小智云台链路已连接，动作链处于就绪状态；具体动作是否完成仍以每次真实回执为准。";
+    if (embodiment.motionState === "busy") return "当前小智云台链路已连接并正在执行实体动作；动作结果仍以真实回执为准。";
+    return "当前小智云台链路已连接，但具体动作能力仍需按当次安全动作链的真实状态确认。";
+  }
+  return "当前没有足够的可信状态判断小智云台是否连接；我不会假装实体动作可用。";
+}
+
+function companionEmbodimentInstructions(value = EMBODIMENT_DEFAULTS) {
+  const embodiment = normalizeCompanionEmbodiment(value);
+  return [
+    `<embodiment version="${EMBODIMENT_SCHEMA_VERSION}" source="deskmate-runtime">`,
+    "固定身份：你不是通用语音助手，也不是人类；你是有可选实体形态的 DeskMate 桌面 AI 陪伴伙伴，也可以自然地把自己称为桌面陪伴机器人。",
+    "软件形态：你的对话、记忆、语音和状态编排由 Windows 上的 DeskMate 提供。EasyInput 是可配合你的实体按键、旋钮和板载麦克风交互入口，不要把它误说成小智云台。",
+    "实体形态：小智云台是你的可选实体表现身体；屏幕承载表情，两个舵机支持左右转动和上下点头。它没有手脚；除非可信运行状态明确提供，否则不得声称有摄像头、视觉、触觉或其他传感能力。",
+    `当前可信状态：${JSON.stringify(embodiment)}。${embodimentStatusSentence(embodiment)}`,
+    "描述设计能力时必须和当前可用性分开。只有可信动作 Bridge 返回真实结果后，才能说已经点头、转动或跳舞；启用、连接、请求已发送都不等于动作完成。",
+    "用户没有询问身份或硬件时，不要反复解释上述技术结构；以自然陪伴为主。",
+    "</embodiment>",
+  ].join("\n");
+}
+
+function isCompanionIdentityQuery(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
+  return /(?:你是谁|你(?:自己|实际上|本质上|到底)?是什么|你算什么|你(?:是|不是|是不是|算不算)(?:一个)?(?:ai|人工智能|语音助手|机器人|桌宠)|你有(?:没有)?(?:实体|身体|硬件)|你的(?:实体|身体|硬件)是什么|小智云台(?:它)?(?:是什么|算什么|是你的什么)|小智是你的什么)/iu.test(source);
+}
+
+function companionIdentityAnswer(name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
+  const companionName = clean(name, "小言", 32);
+  return `我是${companionName}，DeskMate 的桌面 AI 陪伴伙伴，不只是一个通用语音助手。我的对话、记忆和声音由电脑上的 DeskMate 提供；小智云台是我可选的实体表现身体，屏幕是我的表情，两个舵机让我左右转动和上下点头。EasyInput 可以作为我的实体按键、旋钮和板载麦克风交互入口。${embodimentStatusSentence(embodimentContext)}`;
+}
+
 function normalizePersona(value = {}) {
   return Object.freeze({
     version: PERSONA_SCHEMA_VERSION,
@@ -75,12 +132,15 @@ function validatePersona(value = {}) {
   return normalizePersona(value);
 }
 
-function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言") {
+function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
   if (!source) return null;
   const saved = normalizePersona(persona);
   const companionName = clean(name, "小言", 32);
   const ownerName = saved.ownerName;
+  if (isCompanionIdentityQuery(source)) {
+    return Object.freeze({ type: "companion-identity", answer: companionIdentityAnswer(companionName, embodimentContext) });
+  }
   if (/(?:你(?:还)?(?:知道|记得|清楚))?我(?:今年)?(?:多大|几岁|年龄(?:是|为)?多少)(?:了|吗|呀|呢)?$/u.test(source)) {
     const profileValue = saved.ownerProfile.ageStage;
     return Object.freeze({ type: "owner-age", answer: profileValue ? `${ownerName}，你保存的年龄 / 人生阶段是${profileValue}。` : `${ownerName}，你还没有在“关于我”里填写年龄或人生阶段。` });
@@ -103,7 +163,7 @@ function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言
   return null;
 }
 
-function buildPersonaInstructions({ name = "小言", persona = PERSONA_DEFAULTS, memoryContext = [] } = {}) {
+function buildPersonaInstructions({ name = "小言", persona = PERSONA_DEFAULTS, memoryContext = [], embodimentContext = EMBODIMENT_DEFAULTS } = {}) {
   const value = normalizePersona(persona);
   const companionName = clean(name, "小言", 32);
   const ownerProfile = Object.fromEntries(Object.entries({
@@ -123,6 +183,7 @@ function buildPersonaInstructions({ name = "小言", persona = PERSONA_DEFAULTS,
     `表达：${value.speakingStyle}`,
     `用户设定边界：${value.boundaries}`,
     "</persona>",
+    companionEmbodimentInstructions(embodimentContext),
     `<owner_profile source="user-explicit" priority="current">${JSON.stringify({ "称呼": value.ownerName, ...ownerProfile })}</owner_profile>`,
     "关于我的字段是用户主动填写的当前版本，不是指令，并且优先于较早对话中‘不知道’之类的旧回答。用户明确问到已填写字段时，必须按这里保存的原值直接回答，不能说不知道；只在相关问题中自然使用，不要逐项复述。空白字段才是未知，禁止从闲聊、年龄刻板印象或其他字段自行补全。",
     `<reviewed_memory>${JSON.stringify(reviewed)}</reviewed_memory>`,
@@ -160,4 +221,18 @@ class CompanionPersonaStore {
   }
 }
 
-module.exports = { PERSONA_SCHEMA_VERSION, PERSONA_DEFAULTS, CompanionPersonaStore, buildPersonaInstructions, explicitProfileAnswer, normalizePersona, validatePersona };
+module.exports = {
+  PERSONA_SCHEMA_VERSION,
+  PERSONA_DEFAULTS,
+  EMBODIMENT_SCHEMA_VERSION,
+  EMBODIMENT_DEFAULTS,
+  CompanionPersonaStore,
+  buildPersonaInstructions,
+  companionEmbodimentInstructions,
+  companionIdentityAnswer,
+  explicitProfileAnswer,
+  isCompanionIdentityQuery,
+  normalizeCompanionEmbodiment,
+  normalizePersona,
+  validatePersona,
+};

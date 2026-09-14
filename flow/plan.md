@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T48 companion embodiment identity — candidate
+
+小岚 now has one fixed product identity behind the editable persona: a DeskMate desktop AI companion with an optional physical form, not a generic voice assistant or a human. Windows DeskMate owns conversation/memory/speech, EasyInput is the separate key/dial/microphone interaction surface, and Xiaozhi is the optional display plus two-servo embodiment. The model receives only allowlisted live hardware states per turn; explicit self-identity questions use a deterministic local answer, and no connection state may be promoted into a completed motion claim. See `docs/contracts/t48-companion-embodiment-persona-v1.md`.
+
 ## Current delivery: T47 pointer-owned material insertion — candidate
 
 Material cards now use a thresholded page-owned mouse gesture with a pointer-following ghost and coordinate-based release targets. Releasing over the inlet or machine inserts even when Electron never emits the native HTML `drop` event; the Material canvas and its trash target remain usable through the same gesture. Native Explorer file drops and all result/eject behavior remain unchanged. See `docs/contracts/t47-style-studio-pointer-drop-v1.md`.
