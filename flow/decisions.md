@@ -1,5 +1,9 @@
 # Decisions
 
+## D157 — Exhibition self-introduction is a local reviewed response
+
+2026-09-15: Route explicit requests for the companion to introduce herself or DeskMate through a deterministic local profile answer before the intent classifier and free-conversation model. Use the saved companion name, enumerate only implemented product areas, keep the full text within the direct-TTS boundary, and select Xiaozhi wording from sanitized live connection and motion readiness. Do not spend a model call, improvise claims, expose user memory content or describe optional hardware as currently working without trusted state.
+
 ## D156 — Explicit stop phrases are fast; ordinary barge-in waits for consistent final evidence
 
 2026-09-15: During a three-stage companion response, accept explicit interruption phrases such as 停下、听一下、等等、暂停播放、住嘴、闭嘴、别讲话、别说话 and 安静 from the first matching partial after a current speech-start item, while retaining assistant-echo rejection. Never cancel speech from an ordinary mutable partial. A non-explicit interruption requires a final of at least five meaningful characters and 900 ms plus agreement with a provider-confirmed partial or two stable partials; a sparse no-partial final requires at least eight characters and 1200 ms. Short or inconsistent finals are discarded from the response path. Export only aggregate decision counters, not hypotheses or transcript content.

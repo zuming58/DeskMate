@@ -1,5 +1,6 @@
 # Documentation index
 
+- [T50 companion exhibition introduction](contracts/t50-companion-exhibition-intro-v1.md)
 - [T49 guarded companion interruption](contracts/t49-guarded-barge-in-v1.md)
 - [T48 companion embodiment identity](contracts/t48-companion-embodiment-persona-v1.md)
 - [T42 Style Studio cleanup and physical-key correction](design/style-studio-t42.md)

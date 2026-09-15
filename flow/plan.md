@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T50 exhibition self-introduction — candidate
+
+Explicit requests such as “小岚小岚，你给大家介绍一下自己吧”, “介绍一下你自己” and “介绍一下 DeskMate 的功能” now use one complete, reviewed local introduction before any free-conversation model call. The script uses the saved companion name, presents the real DeskMate feature set, fits the direct-speech limit and changes Xiaozhi wording from current connection/motion truth. See `docs/contracts/t50-companion-exhibition-intro-v1.md`.
+
 ## Current delivery: T49 guarded companion interruption — candidate
 
 Explicit playback-stop phrases such as 停下、听一下、等等 and 暂停播放 still interrupt on the first matching live ASR partial. Ordinary speech no longer cancels 小岚 from a mutable partial: it waits for a completed utterance, requires sufficient duration and either agreement with provider-confirmed/stable partials or a longer sparse final, and rejects short or revised-away hypotheses. Diagnostics expose only bounded decision counters, never recognized text. See `docs/contracts/t49-guarded-barge-in-v1.md`.

@@ -97,9 +97,27 @@ function isCompanionIdentityQuery(value) {
   return /(?:你是谁|你(?:自己|实际上|本质上|到底)?是什么|你算什么|你(?:是|不是|是不是|算不算)(?:一个)?(?:ai|人工智能|语音助手|机器人|桌宠)|你有(?:没有)?(?:实体|身体|硬件)|你的(?:实体|身体|硬件)是什么|小智云台(?:它)?(?:是什么|算什么|是你的什么)|小智是你的什么)/iu.test(source);
 }
 
+function isCompanionExhibitionIntroductionQuery(value) {
+  const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
+  if (!source || /^(?:我|让我|由我|我来)(?:给大家|给你们|先)?(?:做个|做一下|介绍一下)/u.test(source)) return false;
+  return /(?:介绍一下你自己|你(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?介绍一下自己|(?:小岚|小兰|小蓝)(?:小岚|小兰|小蓝)?(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?介绍一下自己|(?:给(?:大家|我们|现场|朋友们|同学们|老师们))介绍一下你自己|(?:^|你|小岚|小兰|小蓝)(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?做(?:个|一下)自我介绍|自我介绍一下|(?:介绍|讲)(?:一下)?(?:deskmate|这个系统|这个软件|咱们(?:这个)?系统)(?:的功能)?)/iu.test(source);
+}
+
 function companionIdentityAnswer(name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
   const companionName = clean(name, "小言", 32);
   return `我是${companionName}，DeskMate 的桌面 AI 陪伴伙伴，不只是一个通用语音助手。我的对话、记忆和声音由电脑上的 DeskMate 提供；小智云台是我可选的实体表现身体，屏幕是我的表情，两个舵机让我左右转动和上下点头。EasyInput 可以作为我的实体按键、旋钮和板载麦克风交互入口。${embodimentStatusSentence(embodimentContext)}`;
+}
+
+function companionExhibitionIntroduction(name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
+  const companionName = clean(name, "小言", 32);
+  const embodiment = normalizeCompanionEmbodiment(embodimentContext);
+  let physicalClosing = "小智云台是我的可选实体身体，连接后我还可以用屏幕表情、左右转动和上下点头回应大家。";
+  if (embodiment.xiaozhiState === "connected" && embodiment.motionState === "ready") {
+    physicalClosing = "现在小智云台也已连接，我还可以用屏幕表情、左右转动和上下点头回应大家。";
+  } else if (embodiment.xiaozhiState === "connected") {
+    physicalClosing = "现在小智云台已经连接；屏幕表情和云台动作会以现场真实状态为准。";
+  }
+  return `大家好，我叫${companionName}，是 DeskMate 的桌面 AI 陪伴伙伴。我可以陪你连续对话，并把经过确认的重要信息保存为本地记忆。DeskMate 还支持语音输入、快捷按键、提示词切换和风格映像，可以把照片转换成不同视觉风格，也能查看任务和设备状态。配合 EasyInput，还能用实体按键、旋钮和板载麦克风快速操作。${physicalClosing}很高兴认识大家，欢迎来和我聊聊。`;
 }
 
 function normalizePersona(value = {}) {
@@ -138,6 +156,9 @@ function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言
   const saved = normalizePersona(persona);
   const companionName = clean(name, "小言", 32);
   const ownerName = saved.ownerName;
+  if (isCompanionExhibitionIntroductionQuery(source)) {
+    return Object.freeze({ type: "companion-exhibition-introduction", answer: companionExhibitionIntroduction(companionName, embodimentContext) });
+  }
   if (isCompanionIdentityQuery(source)) {
     return Object.freeze({ type: "companion-identity", answer: companionIdentityAnswer(companionName, embodimentContext) });
   }
@@ -229,8 +250,10 @@ module.exports = {
   CompanionPersonaStore,
   buildPersonaInstructions,
   companionEmbodimentInstructions,
+  companionExhibitionIntroduction,
   companionIdentityAnswer,
   explicitProfileAnswer,
+  isCompanionExhibitionIntroductionQuery,
   isCompanionIdentityQuery,
   normalizeCompanionEmbodiment,
   normalizePersona,
