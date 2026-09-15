@@ -1,5 +1,10 @@
 # Lessons learned
 
+## A finite cue and a multi-repeat motion have different lifetimes
+
+- Waiting for motion completion in main does not keep a renderer's one-shot audio playing. Send explicit motion-owned loop intent; do not extend a timer based on guessed dance length.
+- Completion cleanup must check the request it owns. An older asynchronous motion returning after a preview/new dance must not stop the replacement audio.
+
 ## Nonempty parsed titles do not prove reminder semantic completeness
 
 - A fallback model invoked only after parsing failure cannot fix a syntactically valid but semantically polluted title. Separate prepare/extract/validate from durable creation; mixed user replies must reach purpose extraction before persistence.

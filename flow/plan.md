@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T58 motion-owned dance music lifetime
+
+Loop only motion-owned dance accompaniment, using existing actual motion completion/stop/failure to end it. Keep previews and other cues one-shot; protect newer playback from stale finalizers. No motion/firmware protocol changes. Contract: `docs/contracts/t58-dance-music-lifetime-v1.md`.
+
 ## Current work: T57 reminder purpose extraction and deletion
 
 Prevent mixed chat/request wrappers from being persisted before reminder-only semantic title extraction. Preserve locally validated times and the clear-request fast path; failed extraction asks only for purpose. Add confirmed per-reminder deletion, durable removal, timer rearm and explicit in-flight speech protection. Contract: `docs/contracts/t57-reminder-purpose-delete-v1.md`. No migration/deletion of user reminders, no endpointing or KnowledgeOS schedule change.

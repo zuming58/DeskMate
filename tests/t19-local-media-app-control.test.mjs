@@ -127,6 +127,6 @@ test("desktop surface exposes app whitelist and dance music without renderer pat
   assert.match(pages, /直接说“打开网易云音乐”/);
   assert.match(pages, /跳舞配乐/);
   assert.match(pages, /跳舞使用内置电子节拍/);
-  assert.match(main, /startDanceMusic\(\{ preset \}\)/);
+  assert.match(main, /startDanceMusic\(\{ preset, followMotion: true \}\)/);
   assert.doesNotMatch(preload, /danceMusicPath|selectedMusicPath/);
 });

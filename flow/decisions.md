@@ -1,5 +1,9 @@
 # Decisions
 
+## D166 — Dance accompaniment follows motion lifetime, not clip duration
+
+2026-09-16: The built-in 8-second cue or selected local track loops only for a dance/custom choreography owned by an active motion request. Existing terminal completion/stop/failure ends the matching audio generation; old request cleanup cannot stop newer playback. Preview/general playback and non-dance cues stay one-shot. Keep emergency/global stop and media resource release immediate; no guessed duration extensions or firmware changes.
+
 ## D165 — Extract mixed reminder purpose before persistence; deletion is a separate confirmed action
 
 2026-09-16: A locally parseable time/nonempty leftover string does not prove a valid purpose. Defer mixed-purpose creation until a bounded reminder-only extraction is grounded in the original purpose, while keeping local timestamps and simple-reminder latency. Never fall back to saving raw chat on model failure. Per-row deletion uses narrow IPC, selected-record confirmation, durable removal and timer rearm; reject deletion during active delivery rather than claim already-playing audio stopped. No bulk rewrite of existing records or deletion of memory/history.

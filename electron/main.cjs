@@ -83,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t57-reminder-purpose-delete";
+const DESKMATE_BUILD_ID = "t58-dance-music-lifetime";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -653,19 +653,20 @@ function emitDanceMusicStatus() {
   return value;
 }
 
-function startDanceMusic({ force = false, preset = "dance" } = {}) {
+function startDanceMusic({ force = false, preset = "dance", followMotion = false } = {}) {
   const status = localDanceMusicStore?.status?.();
   const normalizedPreset = ["attention", "nod", "search", "dance"].includes(preset) ? preset : "dance";
   const useLocalTrack = normalizedPreset === "dance" && status?.configured && (force || status.enabled);
   const requestId = `dance-music-${Date.now()}-${++danceMusicSequence}`;
   activeDanceMusicRequestId = requestId;
   localDanceMusicStore.notePlayback({ state: "starting", requestId });
-  sendToMain("dance-music-command", { type: useLocalTrack ? "play" : "synthesize", requestId, preset: normalizedPreset, label: useLocalTrack ? status.label : `内置${normalizedPreset}音效` });
+  sendToMain("dance-music-command", { type: useLocalTrack ? "play" : "synthesize", requestId, preset: normalizedPreset, loop: followMotion && normalizedPreset === "dance", label: useLocalTrack ? status.label : `内置${normalizedPreset}音效` });
   emitDanceMusicStatus();
   return { ok: true, requestId, source: useLocalTrack ? "local" : "built-in" };
 }
 
-function stopDanceMusic(reason = "dance-finished") {
+function stopDanceMusic(reason = "dance-finished", expectedRequestId = "") {
+  if (expectedRequestId && expectedRequestId !== activeDanceMusicRequestId) return { ok: true, skipped: true };
   const requestId = activeDanceMusicRequestId;
   activeDanceMusicRequestId = "";
   sendToMain("dance-music-command", { type: "stop", requestId, reason });
@@ -678,7 +679,7 @@ async function runMotionPreset(value = {}) {
   if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult({ endpointReportedComplete: false });
   const preset = String(value.preset || "");
   const source = String(value.source || "");
-  const music = startDanceMusic({ preset });
+  const music = startDanceMusic({ preset, followMotion: true });
   try {
     const result = await choreographyService.executePreset(preset, value.repeat, source);
     const canFallback = ["choreography-interface-unavailable", "choreography-timeout", "choreography-write-failed", "choreography-native-report-rejected", "choreography-hid-write-failed", "choreography-report-invalid", "invalid-response", "malformed", "link-error", "internal"].includes(result?.reason);
@@ -686,15 +687,15 @@ async function runMotionPreset(value = {}) {
     const legacyResult = await motionPresetService.runPreset(preset, value.repeat, source);
     return choreographyService.noteLegacyFallback({ preset, repeat: value.repeat, source, triggerReason: result.reason }, legacyResult);
   } finally {
-    if (music.ok) stopDanceMusic("dance-finished");
+    if (music.ok) stopDanceMusic("dance-finished", music.requestId);
   }
 }
 
 async function runCustomChoreography(value = {}) {
   if (!xiaozhiHardwareEnabled()) return xiaozhiHardwareDisabledResult();
-  const music = startDanceMusic({ preset: "dance" });
+  const music = startDanceMusic({ preset: "dance", followMotion: true });
   try { return await choreographyService.execute(value.action || value, { source: String(value.source || "UI") }); }
-  finally { if (music.ok) stopDanceMusic("dance-finished"); }
+  finally { if (music.ok) stopDanceMusic("dance-finished", music.requestId); }
 }
 
 function createAudioSetupWindow() {

@@ -20,7 +20,7 @@ test("tray and second-instance restore also wait while the main frame is loading
 });
 
 test("the packaged build identifies the current integrated desktop slice", () => {
-  assert.match(main, /DESKMATE_BUILD_ID = "t57-reminder-purpose-delete"/);
+  assert.match(main, /DESKMATE_BUILD_ID = "t58-dance-music-lifetime"/);
 });
 
 test("the packaged smoke test reads the main-owned history store after migration", () => {

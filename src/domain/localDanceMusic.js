@@ -4,6 +4,7 @@ export function createLocalDanceMusicEngine({ bridge, audioFactory = () => new A
   let generation = 0;
   let audio = null;
   let objectUrl = "";
+  let activeRequestId = "";
 
   const report = (value) => bridge?.sendDanceMusicPlaybackEvent?.(value);
   const release = ({ reportStopped = false, requestId = "" } = {}) => {
@@ -11,10 +12,12 @@ export function createLocalDanceMusicEngine({ bridge, audioFactory = () => new A
     if (audio) {
       audio.onended = null;
       audio.onerror = null;
+      audio.loop = false;
       audio.pause?.();
       try { audio.currentTime = 0; } catch { /* read-only media implementation */ }
     }
     audio = null;
+    activeRequestId = "";
     if (objectUrl) revokeObjectURL(objectUrl);
     objectUrl = "";
     if (reportStopped) report({ state: "idle", requestId });
@@ -23,35 +26,40 @@ export function createLocalDanceMusicEngine({ bridge, audioFactory = () => new A
   const handleCommand = async (command = {}) => {
     const requestId = String(command.requestId || "").slice(0, 80);
     if (command.type === "stop") {
+      if (requestId && requestId !== activeRequestId) return { ok: true, skipped: true };
       release({ reportStopped: true, requestId });
       return { ok: true };
     }
     if (!["play", "synthesize"].includes(command.type) || !requestId) return { ok: false, reason: "dance-music-command-invalid" };
     release();
+    activeRequestId = requestId;
     const currentGeneration = generation;
-    const track = command.type === "synthesize"
-      ? { ok: true, label: "内置电子音效", mimeType: "audio/wav", data: createMotionCueWav(command.preset) }
-      : await bridge?.loadDanceMusic?.();
-    if (currentGeneration !== generation) return { ok: false, reason: "dance-music-command-superseded" };
-    if (!track?.ok || !track.data) {
-      report({ state: "error", requestId, reason: track?.reason || "dance-music-read-failed" });
-      return { ok: false, reason: track?.reason || "dance-music-read-failed" };
-    }
     try {
+      const track = command.type === "synthesize"
+        ? { ok: true, label: "内置电子音效", mimeType: "audio/wav", data: createMotionCueWav(command.preset) }
+        : await bridge?.loadDanceMusic?.();
+      if (currentGeneration !== generation) return { ok: false, reason: "dance-music-command-superseded" };
+      if (!track?.ok || !track.data) {
+        release();
+        report({ state: "error", requestId, reason: track?.reason || "dance-music-read-failed" });
+        return { ok: false, reason: track?.reason || "dance-music-read-failed" };
+      }
       const bytes = track.data instanceof Uint8Array ? track.data : new Uint8Array(track.data);
       objectUrl = createObjectURL(new Blob([bytes], { type: track.mimeType || "audio/mpeg" }));
       audio = audioFactory();
       audio.src = objectUrl;
       audio.volume = 0.72;
-      audio.onended = () => { if (currentGeneration === generation) { release(); report({ state: "idle", requestId, reason: "dance-music-ended" }); } };
+      // A dance's lifetime belongs to the motion completion/stop command, not
+      // the eight-second cue (or the selected file's duration).
+      audio.loop = command.loop === true && command.preset === "dance";
+      audio.onended = () => { if (currentGeneration === generation && !audio.loop) { release(); report({ state: "idle", requestId, reason: "dance-music-ended" }); } };
       audio.onerror = () => { if (currentGeneration === generation) { release(); report({ state: "error", requestId, reason: "dance-music-playback-failed" }); } };
       await audio.play();
       if (currentGeneration !== generation) return { ok: false, reason: "dance-music-command-superseded" };
       report({ state: "playing", requestId });
       return { ok: true };
     } catch {
-      if (currentGeneration === generation) release();
-      report({ state: "error", requestId, reason: "dance-music-playback-failed" });
+      if (currentGeneration === generation) { release(); report({ state: "error", requestId, reason: "dance-music-playback-failed" }); }
       return { ok: false, reason: "dance-music-playback-failed" };
     }
   };
