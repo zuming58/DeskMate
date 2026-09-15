@@ -13,7 +13,7 @@ This is a deterministic Windows companion response for live demonstrations. It c
 ## Script contract
 
 - Use the currently saved companion name instead of hard-coding a historical default.
-- Describe the implemented product areas: continuous companion dialogue, confirmed local memory, voice input, shortcut keys, prompt switching, Style Studio (`风格映像`), trusted task/device status and the EasyInput interaction surface.
+- Describe the implemented product areas: continuous companion dialogue, confirmed local memory, personal reminders, voice input, shortcut keys, prompt switching, Style Studio (`风格映像`), trusted task/device status and the EasyInput interaction surface.
 - Describe Xiaozhi as an optional physical embodiment. Say it is currently connected only when the sanitized runtime state says connected; claim ready screen/motion responses only when the trusted motion state is ready.
 - Keep the complete response at or below the existing 240-character direct-speech boundary so TTS does not silently truncate the exhibition introduction.
 

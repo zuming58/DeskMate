@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T51 personal reminders — candidate
+
+The Workbench now owns durable personal reminders and important items, separate from Codex tasks. Users can add, complete and snooze them in the Workbench, or ask 小岚 to create/query them through a deterministic local route. Event time and reminder time remain separate; ambiguous hours are clarified instead of guessed. A main-process local scheduler makes 小岚 speak at the due time without an alarm or continuous API use, and reminders participate in versioned local backup/restore. See `docs/contracts/t51-personal-reminders-v1.md`.
+
 ## Current delivery: T50 exhibition self-introduction — candidate
 
 Explicit requests such as “小岚小岚，你给大家介绍一下自己吧”, “介绍一下你自己” and “介绍一下 DeskMate 的功能” now use one complete, reviewed local introduction before any free-conversation model call. The script uses the saved companion name, presents the real DeskMate feature set, fits the direct-speech limit and changes Xiaozhi wording from current connection/motion truth. See `docs/contracts/t50-companion-exhibition-intro-v1.md`.

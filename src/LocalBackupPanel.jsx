@@ -39,7 +39,7 @@ export function LocalBackupPanel() {
   };
   return <section className="local-backup-panel" aria-labelledby="local-backup-title">
     <h3 id="local-backup-title">本地数据备份</h3>
-    <p>包含语音历史、词库、提示词与场景、本地记忆及来源、输入与陪伴设置。默认不含录音，不导出账号密钥、设备路径和已登记应用的启动路径。</p>
+    <p>包含语音历史、个人提醒、词库、提示词与场景、本地记忆及来源、输入与陪伴设置。默认不含录音，不导出账号密钥、设备路径和已登记应用的启动路径。</p>
     <p>这是私人数据文件，不是脱敏诊断包。备份在后台生成，不暂停语音输入；备份开始后的新内容请在下次备份中保存。</p>
     <label className="local-backup-audio"><input type="checkbox" checked={includeAudio} disabled={Boolean(busy)} onChange={event=>setIncludeAudio(event.target.checked)} />包含受管原始录音（文件可能较大，备份上限 256 MB）</label>
     {!supported && <p role="status">请在新版 DeskMate 桌面端使用此功能。</p>}
@@ -58,6 +58,7 @@ export function LocalBackupPanel() {
       <div><dt>语音历史 / 录音</dt><dd>{preview.history} 条 / {preview.recordings} 份</dd></div>
       <div><dt>原始记忆 / 记忆候选</dt><dd>{preview.turns} 条 / {preview.memories} 条</dd></div>
       <div><dt>日终总结</dt><dd>{preview.journals} 天</dd></div>
+      <div><dt>个人提醒</dt><dd>{preview.reminders || 0} 条</dd></div>
       <div><dt>个人提示词 / 场景</dt><dd>{preview.prompts} 条 / {preview.scenes} 个</dd></div>
     </dl>}
     <p className="local-backup-footnote">恢复会替换当前数据，请先备份需要保留的新内容。预览有效期 10 分钟；确认后重启，失败时回滚。恢复后请重新检查应用绑定、语音服务及自动整理设置；旧日记不会自动重发。启用自动清理后，内部回滚副本保留 7 天，本机文字快照按文字保留天数到期；导出的备份由你自行保管。</p>

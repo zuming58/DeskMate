@@ -1,5 +1,9 @@
 # Decisions
 
+## D158 — Personal reminders are main-owned local records, not Codex tasks
+
+2026-09-15: Put personal reminders and important items on the Workbench and keep them independent from Codex task reports. Store them in a validated main-process file with separate event/reminder timestamps, atomic readback and durable lifecycle states. Route explicit voice creation and queries locally before the free-conversation model; ambiguous hours require clarification. Use one local scheduler that claims due items before a one-shot 小岚 TTS announcement; do not add an alarm, ringtone or Windows notification sound. When dictation owns the voice channel, requeue briefly rather than interrupt or mark the speech complete. Background monitoring itself must not call ASR, model, TTS or KnowledgeOS APIs, reminder titles must not enter diagnostics, and local backup/restore must preserve the records.
+
 ## D157 — Exhibition self-introduction is a local reviewed response
 
 2026-09-15: Route explicit requests for the companion to introduce herself or DeskMate through a deterministic local profile answer before the intent classifier and free-conversation model. Use the saved companion name, enumerate only implemented product areas, keep the full text within the direct-TTS boundary, and select Xiaozhi wording from sanitized live connection and motion readiness. Do not spend a model call, improvise claims, expose user memory content or describe optional hardware as currently working without trusted state.

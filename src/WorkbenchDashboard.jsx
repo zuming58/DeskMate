@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconArrowUpRight, IconActivity, IconBrain, IconCheck, IconChevronRight, IconCode, IconDatabase, IconDeviceDesktop, IconKeyboard, IconLink, IconMessageCircle2, IconMicrophone2, IconRefresh, IconRobot, IconSparkles } from '@tabler/icons-react';
+import { IconArrowUpRight, IconActivity, IconBell, IconBrain, IconCheck, IconChevronRight, IconClock, IconCode, IconDatabase, IconDeviceDesktop, IconKeyboard, IconLink, IconMessageCircle2, IconMicrophone2, IconPlus, IconRefresh, IconRobot, IconSparkles } from '@tabler/icons-react';
 import { BrandLogo } from './BrandLogo.jsx';
 import { useAppStore } from './store/appStore.js';
 import { dashboardHardwareStatus } from './domain/dashboardStatus.js';
@@ -9,6 +9,10 @@ import './workbench-dashboard.css';
 
 const number = value => typeof value === 'number' ? value.toLocaleString('zh-CN') : '—';
 const taskStates = { working: ['工作中', 'demo'], thinking: ['思考中', 'demo'], waiting: ['等你确认', 'warning'], error: ['遇到问题', 'warning'], completed: ['已完成', 'success'], idle: ['待命', 'neutral'] };
+const pad = value => String(value).padStart(2, '0');
+const localInputTime = (value = Date.now() + 60 * 60 * 1000) => { const date = new Date(value); date.setMinutes(0, 0, 0); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`; };
+const reminderTime = value => { if (!Number.isFinite(value)) return ''; const date = new Date(value); const today = new Date(); const same = date.toDateString() === today.toDateString(); const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1); const prefix = same ? '今天' : date.toDateString() === tomorrow.toDateString() ? '明天' : `${date.getMonth() + 1}月${date.getDate()}日`; return `${prefix} ${pad(date.getHours())}:${pad(date.getMinutes())}`; };
+const emptyReminderDraft = () => ({ title: '', remindAt: localInputTime(), eventAt: '', important: false });
 
 function PanelHeading({ icon: Icon, title, link, onClick, children }) {
   return <div className="wb-panel-heading"><h2><Icon size={19} stroke={1.7} />{title}</h2>{children || <button type="button" className="wb-text-link" onClick={onClick}>{link}<IconChevronRight size={15} /></button>}</div>;
@@ -23,6 +27,10 @@ export function DashboardPage({ navigate }) {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [reminderComposer, setReminderComposer] = useState(false);
+  const [reminderDraft, setReminderDraft] = useState(emptyReminderDraft);
+  const [reminderBusy, setReminderBusy] = useState('');
+  const [reminderError, setReminderError] = useState('');
   const mounted = useRef(false); const inFlight = useRef(false);
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -40,7 +48,8 @@ export function DashboardPage({ navigate }) {
     const timer = window.setInterval(update, 15000);
     window.addEventListener('focus', update); document.addEventListener('visibilitychange', update);
     const off = globalThis.desktopBridge?.onPromptWorkbenchState?.(update);
-    return () => { mounted.current = false; window.clearInterval(timer); window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', update); off?.(); };
+    const offReminders = globalThis.desktopBridge?.onPersonalRemindersChanged?.(update);
+    return () => { mounted.current = false; window.clearInterval(timer); window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', update); off?.(); offReminders?.(); };
   }, [refresh]);
   const memory = overview?.memory; const policy = overview?.policy; const knowledge = overview?.knowledge;
   const hardware = dashboardHardwareStatus(state.runtime?.inputBridge);
@@ -48,6 +57,29 @@ export function DashboardPage({ navigate }) {
   const wake = overview?.wake; const services = overview?.services;
   const projects = workbenchProjects(state.runtime?.codexTasks?.tasks || []);
   const scene = overview?.scene;
+  const reminders = overview?.reminders;
+  const saveReminder = async event => {
+    event.preventDefault();
+    const title = reminderDraft.title.trim();
+    if (!title) { setReminderError('请先填写要提醒或记录的事情。'); return; }
+    if (!reminderDraft.remindAt && !reminderDraft.important) { setReminderError('请选择提醒时间，或勾选“重要事项”。'); return; }
+    setReminderBusy('create'); setReminderError('');
+    try {
+      const result = await globalThis.desktopBridge?.createPersonalReminder?.({ title, remindAt: reminderDraft.remindAt ? Date.parse(reminderDraft.remindAt) : null, eventAt: reminderDraft.eventAt ? Date.parse(reminderDraft.eventAt) : null, important: reminderDraft.important });
+      if (!result?.ok) throw Error(result?.reason || 'personal-reminder-save-failed');
+      setOverview(current => current ? { ...current, reminders: result.snapshot } : current); setReminderDraft(emptyReminderDraft()); setReminderComposer(false);
+    } catch (reason) { setReminderError(String(reason?.message || '').includes('past') ? '提醒时间已经过去，请重新选择。' : '提醒没有保存成功，请稍后重试。'); }
+    finally { setReminderBusy(''); }
+  };
+  const mutateReminder = async (id, command) => {
+    setReminderBusy(id); setReminderError('');
+    try {
+      const result = command === 'complete' ? await globalThis.desktopBridge?.completePersonalReminder?.(id) : await globalThis.desktopBridge?.snoozePersonalReminder?.({ id, minutes: 10 });
+      if (!result?.ok) throw Error(result?.reason || 'personal-reminder-save-failed');
+      setOverview(current => current ? { ...current, reminders: result.snapshot } : current);
+    } catch { setReminderError('操作没有保存成功，请重试。'); }
+    finally { setReminderBusy(''); }
+  };
   const activity = memory?.activity || [];
   const maxActivity = Math.max(1, ...activity.map(day => day.dictationCount + day.companionCount));
   const activeDays = activity.filter(day => day.dictationCount + day.companionCount > 0).length;
@@ -71,6 +103,12 @@ export function DashboardPage({ navigate }) {
       <Connection icon={IconMicrophone2} title="AI 语音服务" label={!services ? '待读取' : services.configured ? '已配置' : '待配置'} detail={services ? `识别 ${services.asr ? '✓' : '—'} · 对话 ${services.model ? '✓' : '—'} · 声音 ${services.tts ? '✓' : '—'}` : '识别 · 对话 · 声音'} tone={services?.configured ? 'demo' : 'neutral'} onClick={() => navigate('settings/account')} />
       <Connection icon={IconDatabase} title="KnowledgeOS" label={!knowledge ? '待读取' : knowledge.configured ? '已配置' : '未配置'} detail={knowledge?.configured ? `检索${knowledge.readEnabled ? '开启' : '关闭'} · 同步${knowledge.syncEnabled ? '开启' : '关闭'}` : '连接你的知识与记忆'} tone={knowledge?.configured ? 'demo' : 'neutral'} onClick={() => navigate('memory')} />
     </div></Card>
+    <Card className="wb-reminders-card"><PanelHeading icon={IconBell} title="提醒与重要事项"><div className="wb-reminder-heading"><span>{reminders?.ready ? `${number(reminders.todayCount)} 项今天相关 · ${number(reminders.activeCount)} 项未完成` : reminders ? '数据需要恢复' : '待读取'}</span><Button icon={IconPlus} variant="soft" disabled={reminders?.ready === false} onClick={() => { setReminderComposer(value => !value); setReminderError(''); }}>{reminderComposer ? '收起' : '添加'}</Button></div></PanelHeading>
+      {reminderComposer && <form className="wb-reminder-form" onSubmit={saveReminder}><label className="wb-reminder-title"><span>提醒内容</span><input autoFocus maxLength={160} value={reminderDraft.title} onChange={event => setReminderDraft(value => ({ ...value, title: event.target.value }))} placeholder="例如：准备明天的展会材料" /></label><label><span>提醒时间</span><input type="datetime-local" value={reminderDraft.remindAt} onChange={event => setReminderDraft(value => ({ ...value, remindAt: event.target.value }))} /></label><label><span>事情时间（可选）</span><input type="datetime-local" value={reminderDraft.eventAt} onChange={event => setReminderDraft(value => ({ ...value, eventAt: event.target.value }))} /></label><label className="wb-important-check"><input type="checkbox" checked={reminderDraft.important} onChange={event => setReminderDraft(value => ({ ...value, important: event.target.checked }))} /><span>重要事项</span></label><div className="wb-reminder-form-actions"><Button type="button" variant="ghost" onClick={() => { setReminderComposer(false); setReminderDraft(emptyReminderDraft()); setReminderError(''); }}>取消</Button><Button type="submit" disabled={reminderBusy === 'create'}>{reminderBusy === 'create' ? '保存中' : '保存提醒'}</Button></div></form>}
+      {reminderError && <div className="wb-reminder-error" role="status">{reminderError}</div>}
+      <div className="wb-reminder-list">{reminders?.ready === false ? <div className="wb-reminder-empty is-warning"><IconBell size={25} stroke={1.4} /><div><strong>提醒数据暂时无法读取</strong><p>原文件不会被默认值覆盖，请先从本地备份恢复或重新启动后再试。</p></div></div> : reminders?.items?.length ? reminders.items.slice(0, 6).map(item => <div className={`wb-reminder ${item.status === 'notified' ? 'is-due' : ''}`} key={item.id}><span className="wb-reminder-mark"><IconBell size={17} /></span><div className="wb-reminder-copy"><strong>{item.title}</strong><div>{item.remindAt != null && <span><IconClock size={13} />{item.status === 'notified' ? '已提醒' : reminderTime(item.remindAt)}</span>}{item.eventAt != null && item.eventAt !== item.remindAt && <span>事情：{reminderTime(item.eventAt)}</span>}{item.important && <span className="wb-important-pill">重要</span>}</div></div><div className="wb-reminder-actions">{item.remindAt != null && <button type="button" disabled={reminderBusy === item.id} onClick={() => void mutateReminder(item.id, 'snooze')}>稍后 10 分钟</button>}<button type="button" disabled={reminderBusy === item.id} onClick={() => void mutateReminder(item.id, 'complete')}><IconCheck size={15} />完成</button></div></div>) : <div className="wb-reminder-empty"><IconBell size={25} stroke={1.4} /><div><strong>还没有个人提醒</strong><p>可以在这里添加，也可以对小岚说：“明天下午 4 点有活动，下午 1 点提醒我。”</p></div></div>}</div>
+      {reminders?.activeCount > 6 && <div className="wb-panel-footer"><span>这里只显示最近 6 项，完成后会自动从工作台收起。</span></div>}
+    </Card>
     <div className="wb-main-grid">
       <Card className="wb-activity"><PanelHeading icon={IconActivity} title="最近 7 天" link="历史记录" onClick={() => navigate('history')} /><div className="wb-activity-summary"><div><strong>{memory ? activeDays : '—'}<small>天</small></strong><span>留下了工作与对话记录</span></div><div className="wb-legend"><span><i />语音输入</span><span><i />陪伴交流</span></div></div>
         <div className="wb-chart" role="img" aria-label={activity.length ? activity.map(day => `${day.day}：听写${day.dictationCount}次，陪伴${day.companionCount}条`).join('；') : '暂无使用记录'}>{activity.map((day, index) => <div className={`wb-chart-day ${index === 6 ? 'is-today' : ''}`} key={day.day} title={`${day.day} · 听写 ${day.dictationCount} 次 · 陪伴 ${day.companionCount} 条`}><span>{day.dictationCount + day.companionCount}</span><div className="wb-chart-track"><div className="wb-chart-stack" style={{ height: `${(day.dictationCount + day.companionCount) / maxActivity * 100}%` }}><i style={{ flex: day.companionCount }} /><i style={{ flex: day.dictationCount }} /></div></div><small>{index === 6 ? '今天' : `${Number(day.day.slice(5, 7))}/${Number(day.day.slice(8))}`}</small></div>)}</div>

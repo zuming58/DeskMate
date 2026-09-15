@@ -36,6 +36,42 @@
 .wb-tone-success { color: #248464; } .wb-tone-neutral { color: #69798b; } .wb-tone-demo { color: #3568ce; } .wb-tone-warning { color: #99691f; }
 .wb-connection small { display: block; margin-top: 6px; color: var(--wb-muted); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
 .wb-connection:hover .wb-connection-top { color: var(--blue); }
+.wb-overview .wb-reminders-card { padding-bottom: 14px; }
+.wb-reminder-heading { display: flex; align-items: center; gap: 13px; }
+.wb-reminder-heading > span { color: var(--wb-muted); font-size: 10px; }
+.wb-reminder-heading .button { min-height: 32px; padding: 6px 12px; }
+.wb-reminder-form { display: grid; grid-template-columns: minmax(240px, 1.7fr) minmax(190px, 1fr) minmax(190px, 1fr) auto auto; gap: 10px; align-items: end; padding: 13px; margin-bottom: 12px; border: 1px solid #dce7f4; border-radius: 14px; background: #f7faff; }
+.wb-reminder-form label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wb-reminder-form label > span { color: #61748d; font-size: 10px; }
+.wb-reminder-form input[type='text'], .wb-reminder-form input:not([type]) , .wb-reminder-form input[type='datetime-local'] { width: 100%; height: 38px; padding: 0 11px; border: 1px solid #cfdaea; border-radius: 10px; outline: none; background: #fff; color: #26384e; font: inherit; font-size: 11px; }
+.wb-reminder-form input:focus { border-color: #5785ef; box-shadow: 0 0 0 3px #4b7ff019; }
+.wb-important-check { height: 38px; flex-direction: row !important; align-items: center; padding: 0 9px; white-space: nowrap; }
+.wb-important-check input { accent-color: #356df3; }
+.wb-important-check > span { font-size: 11px !important; }
+.wb-reminder-form-actions { display: flex; gap: 7px; }
+.wb-reminder-form-actions .button { min-height: 38px; padding: 7px 12px; }
+.wb-reminder-error { margin: -3px 0 10px; padding: 8px 11px; border-radius: 9px; background: var(--amber-soft); color: #8b5b1b; font-size: 11px; }
+.wb-reminder-list { display: flex; flex-direction: column; }
+.wb-reminder { display: flex; align-items: center; gap: 11px; min-height: 57px; padding: 9px 2px; border-top: 1px solid #edf1f6; }
+.wb-reminder:first-child { border-top: 0; }
+.wb-reminder.is-due { background: linear-gradient(90deg, #fff7e9 0, transparent 70%); }
+.wb-reminder-mark { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 31px; border-radius: 10px; background: #edf3ff; color: #4774dd; }
+.wb-reminder.is-due .wb-reminder-mark { background: #fff0d7; color: #a16a13; }
+.wb-reminder-copy { flex: 1; min-width: 0; }
+.wb-reminder-copy > strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334860; font-size: 12px; font-weight: 600; }
+.wb-reminder-copy > div { display: flex; align-items: center; gap: 10px; margin-top: 5px; color: var(--wb-muted); font-size: 10px; }
+.wb-reminder-copy > div > span { display: inline-flex; align-items: center; gap: 4px; }
+.wb-important-pill { padding: 2px 7px; border-radius: 999px; background: #fff0d9; color: #986112; }
+.wb-reminder-actions { display: flex; align-items: center; gap: 6px; }
+.wb-reminder-actions button { display: inline-flex; align-items: center; gap: 3px; min-height: 30px; padding: 5px 9px; border: 1px solid #d8e2ef; border-radius: 9px; background: #fff; color: #58718f; font-size: 10px; }
+.wb-reminder-actions button:last-child { border-color: #c9dbfa; color: #3167d5; }
+.wb-reminder-actions button:hover { background: #f3f7fd; }
+.wb-reminder-actions button:disabled { opacity: .5; }
+.wb-reminder-empty { display: flex; align-items: center; justify-content: center; gap: 13px; min-height: 76px; color: #7892b2; }
+.wb-reminder-empty strong { display: block; color: #536a84; font-size: 12px; font-weight: 600; }
+.wb-reminder-empty p { margin-top: 4px; color: var(--wb-muted); font-size: 10px; }
+.wb-reminder-empty.is-warning { color: #ad771c; }
+.wb-reminder-empty.is-warning strong { color: #8b611d; }
 .wb-main-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); gap: 14px; }
 .wb-main-grid > .card { display: flex; flex-direction: column; }
 .wb-activity-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -100,6 +136,8 @@
   .wb-connection { padding-inline: 10px; }
   .wb-memory-totals { gap: 12px; flex-wrap: wrap; }
   .wb-activity-summary { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .wb-reminder-form { grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(170px, 1fr)); }
+  .wb-important-check, .wb-reminder-form-actions { grid-row: 2; }
 }
 @media (max-width: 1000px) {
   .wb-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -110,6 +148,9 @@
   .wb-shortcuts { grid-template-columns: 1fr; }
   .wb-refresh > small { display: none; }
   .wb-activity-summary { flex-direction: row; align-items: center; }
+  .wb-reminder-form { grid-template-columns: 1fr 1fr; }
+  .wb-reminder-title { grid-column: 1 / -1; }
+  .wb-important-check, .wb-reminder-form-actions { grid-row: auto; }
 }
 @media (max-width: 600px) {
   .wb-connections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -124,5 +165,12 @@
   .wb-metric > div { font-size: 11px; }
   .wb-metric svg { display: none; }
   .wb-activity-summary { flex-direction: column; align-items: flex-start; }
+  .wb-reminder-heading > span { display: none; }
+  .wb-reminder-form { grid-template-columns: 1fr; }
+  .wb-reminder-title { grid-column: auto; }
+  .wb-reminder { align-items: flex-start; flex-wrap: wrap; }
+  .wb-reminder-copy { width: calc(100% - 45px); }
+  .wb-reminder-copy > div { flex-wrap: wrap; }
+  .wb-reminder-actions { width: 100%; padding-left: 42px; }
 }
 @media (prefers-reduced-motion: reduce) { .wb-overview { animation: none; } .wb-overview .button { transition: none; } }

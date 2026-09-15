@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { requestTextModelJson } = require("./text-model-json.cjs");
 const { summarizeCodexWork } = require("./codex-work-summary.cjs");
 const { explicitProfileAnswer } = require("./companion-persona.cjs");
+const { isPersonalReminderUtterance } = require("./personal-reminders.cjs");
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TOKEN_TTL_MS = 60_000;
@@ -81,13 +82,14 @@ function shouldClassifyWithModel(value, apps = []) {
 }
 
 class CompanionIntentBridge {
-  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, readPersona = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
+  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, reminderAction = null, readPersona = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
     this.loadSecret = loadSecret;
     this.appActions = appActions;
     this.codexStatus = codexStatus;
     this.codexTasks = codexTasks;
     this.motionAction = motionAction;
     this.mediaAction = mediaAction;
+    this.reminderAction = reminderAction;
     this.readPersona = readPersona;
     this.requestJson = requestJson;
     this.now = now;
@@ -126,6 +128,7 @@ class CompanionIntentBridge {
     const applicationMatch = matchRegisteredApplication(source, this.appActions?.listRegistered?.({ limit: 100 }) || []);
     return Boolean(
       this.profileAnswer(source)
+      || isPersonalReminderUtterance(source)
       || isCodexStatusQuery(source, { hasKnownTasks })
       || namedFollowUp
       || contextualFollowUp
@@ -172,6 +175,7 @@ class CompanionIntentBridge {
       this.last = { status: "completed", type: "query_companion_profile", label: "已按明确保存的资料回答", reason: "", expiresAt: 0 };
       return { ok: true, proposal: null, result: { type: "query_companion_profile", ok: true, field: profile.type, answer: profile.answer } };
     }
+    if (isPersonalReminderUtterance(source)) return this.executePersonalReminder(source);
     const deterministic = this.resolveDeterministic(source);
     if (deterministic) return deterministic;
     if (isMotionNegation(source)) {
@@ -249,6 +253,21 @@ class CompanionIntentBridge {
     const ok = result?.ok === true;
     this.last = { status: ok ? "completed" : "failed", type, label: command === "play" ? "播放本地音乐" : "停止本地音乐", reason: ok ? "" : safeReason(result?.reason), expiresAt: 0 };
     return { ok, reason: ok ? "" : safeReason(result?.reason), proposal: null, result: { type, command, ...result, silent: ok, answer: ok ? "" : command === "play" ? "还没有选择可播放的本地音乐" : "音乐暂时无法停止" } };
+  }
+
+  async executePersonalReminder(source) {
+    const type = "manage_personal_reminder";
+    if (typeof this.reminderAction !== "function") {
+      this.last = { status: "failed", type, label: "个人提醒暂不可用", reason: "personal-reminder-action-unavailable", expiresAt: 0 };
+      return { ok: false, reason: "personal-reminder-action-unavailable", proposal: null, result: { type, ok: false, reason: "personal-reminder-action-unavailable", answer: "个人提醒暂时无法保存，请稍后再试。" } };
+    }
+    let action;
+    try { action = await this.reminderAction(source); }
+    catch { action = { ok: false, reason: "personal-reminder-action-failed", answer: "个人提醒暂时无法保存，请稍后再试。" }; }
+    const ok = action?.ok === true;
+    const reason = ok ? "" : safeReason(action?.reason || "personal-reminder-action-failed");
+    this.last = { status: ok ? "completed" : "failed", type, label: ok ? "个人提醒已处理" : "个人提醒未保存", reason, expiresAt: 0 };
+    return { ok, reason, proposal: null, result: { type, ok, action: String(action?.type || "unknown").slice(0, 40), answer: String(action?.answer || "").slice(0, 500) } };
   }
 
   async executeMotion(preset) {

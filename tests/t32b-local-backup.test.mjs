@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const backup = require('../electron/local-backup.cjs');
 const { LocalHistoryStore } = require('../electron/local-history-store.cjs');
 const { CompanionMemoryStore } = require('../electron/companion-memory.cjs');
+const { PersonalReminderStore } = require('../electron/personal-reminders.cjs');
 const { LocalBackupService } = require('../electron/local-backup-service.cjs');
 const {spawnSync} = require('node:child_process');
 function fixture(t) {
@@ -43,6 +44,14 @@ test('audio is verified and restored into a trusted managed directory', t => {
   assert.equal(preview.summary.recordings,1);
   const store=new LocalHistoryStore({userDataPath:path.join(f.root,'recovery',`staged-${preview.id}`)});
   try{assert.deepEqual([...store.readAudio('audio-1').bytes],[1,2,3]);assert.equal(store.list()[0].createdAt,'2026-01-01T00:00:00.000Z');}finally{store.close();}
+});
+test('personal reminders survive backup preview and restore', t => {
+  const f=fixture(t), reminder=new PersonalReminderStore({userDataPath:f.root});
+  reminder.create({title:'Synthetic reminder',remindAt:Date.now()+3600000,eventAt:Date.now()+7200000,important:true});
+  const b=f.bundle(); assert.equal(b.data.reminders.items.length,1);
+  const preview=backup.prepareRestore(f.root,b); assert.equal(preview.summary.reminders,1);
+  const restored=JSON.parse(fs.readFileSync(path.join(f.root,'recovery',`staged-${preview.id}`,'personal-reminders.json')));
+  assert.equal(restored.items[0].title,'Synthetic reminder'); assert.equal(restored.items[0].important,true);
 });
 test('checksum, schema and audio corruption fail before modifying live data', t => {
   const f=fixture(t), original=fs.readFileSync(path.join(f.root,'voice-history.sqlite3'));

@@ -28,7 +28,7 @@ test("T50 introduction is concise, complete and truthful for connected hardware"
     motionState: "ready",
   });
   assert.match(answer, /^大家好，我叫小岚/);
-  for (const capability of ["连续对话", "本地记忆", "语音输入", "快捷按键", "提示词切换", "风格映像", "任务和设备状态", "EasyInput"]) {
+  for (const capability of ["连续对话", "本地记忆", "个人提醒", "语音输入", "快捷按键", "提示词切换", "风格映像", "任务和设备状态", "EasyInput"]) {
     assert.match(answer, new RegExp(capability));
   }
   assert.match(answer, /现在小智云台也已连接/);

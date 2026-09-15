@@ -63,6 +63,6 @@ export function parseCompanionPreferenceDraft(value = {}) {
   const conversationVolume = value.conversationVolume === undefined ? COMPANION_DEFAULTS.conversationVolume : value.conversationVolume;
   const codexBriefVolume = value.codexBriefVolume === undefined ? COMPANION_DEFAULTS.codexBriefVolume : value.codexBriefVolume;
   if (!isValidCompanionVolume(conversationVolume)) return { ok: false, field: "conversationVolume", reason: "陪伴音量需为 0–100，并以 5 递增" };
-  if (!isValidCompanionVolume(codexBriefVolume)) return { ok: false, field: "codexBriefVolume", reason: "工作提醒音量需为 0–100，并以 5 递增" };
+  if (!isValidCompanionVolume(codexBriefVolume)) return { ok: false, field: "codexBriefVolume", reason: "提醒播报音量需为 0–100，并以 5 递增" };
   return { ok: true, value: { name, wakePhrase, endSmoothWindowMs: Math.round(endSmoothSeconds * 1000), idleTimeoutMs: Math.round(idleTimeoutSeconds * 1000), conversationVolume: Number(conversationVolume), codexBriefVolume: Number(codexBriefVolume), wakeEnabled: value.wakeEnabled === true } };
 }

@@ -1,5 +1,5 @@
 // A read-only home projection. No prompt bodies, transcripts, credentials or paths.
-function createWorkbenchOverview({ memoryStore, policyStore, knowledgeOsSettings, promptStore, serviceStatus, wakeStatus, running = false, now = Date.now() }) {
+function createWorkbenchOverview({ memoryStore, policyStore, knowledgeOsSettings, promptStore, reminderStore, serviceStatus, wakeStatus, running = false, now = Date.now() }) {
   const policy = policyStore.snapshot();
   const knowledge = knowledgeOsSettings.status();
   const prompts = promptStore.snapshot();
@@ -10,6 +10,7 @@ function createWorkbenchOverview({ memoryStore, policyStore, knowledgeOsSettings
     knowledge: { configured: knowledge.configured === true, readEnabled: knowledge.readEnabled === true, syncEnabled: knowledge.syncEnabled === true },
     services: { configured: serviceStatus.configured === true, asr: serviceStatus.stages?.asr?.configured === true, model: serviceStatus.stages?.model?.configured === true, tts: serviceStatus.stages?.tts?.configured === true },
     wake: { available: wakeStatus.available === true, enabled: wakeStatus.enabled === true, desiredEnabled: wakeStatus.desiredEnabled === true, reason: String(wakeStatus.reason || '').slice(0, 80) },
+    reminders: reminderStore?.dashboardSnapshot?.(now, 50) || { ready: false, reason: 'personal-reminders-unavailable', revision: 0, activeCount: 0, todayCount: 0, items: [] },
     scene: scene ? { id: scene.id, title: scene.title, description: scene.description, promptCount: promptStore.rows({ scope: 'scene', filter: 'all' }).length,
       bindings: [5, 6, 7].map(key => ({ key, label: String(scene.bindings[key]?.label || '未设置').slice(0, 50) })) } : null,
   };

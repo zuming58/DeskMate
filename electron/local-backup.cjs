@@ -11,9 +11,11 @@ const { validatePersona, PERSONA_DEFAULTS } = require('./companion-persona.cjs')
 const { validatePolicy: validateMotionPolicy, DEFAULT_MOTION_AUTOMATION_POLICY } = require('./motion-automation.cjs');
 const { validateXiaozhiHardwarePolicy, DEFAULT_XIAOZHI_HARDWARE_POLICY } = require('./xiaozhi-hardware-policy.cjs');
 const { ChoreographyStore, validateChoreography, DEFAULT_MOTION_SETTINGS, MAX_CHOREOGRAPHIES } = require('./choreography-store.cjs');
+const { validateReminderState } = require('./personal-reminders.cjs');
 const MAX_BUNDLE = 256 * 1024 * 1024;
 const MEMORY_TABLES = ['conversation_turns','daily_summaries','memory_candidates','companion_memory_outbox','companion_memory_meta','memory_digest_runs','memory_workday_state','memory_hourly_summaries','memory_daily_journals','memory_journal_outbox'];
-const FIXED_FILES = ['voice-history.sqlite3','companion-memory.sqlite3','prompt-workbench-v1.json','companion-memory-policy.json','companion-preferences.json','companion-persona.json','restored-ui-state.json','motion-automation-policy.json','xiaozhi-hardware-policy.json','choreographies.json'];
+const FIXED_FILES = ['voice-history.sqlite3','companion-memory.sqlite3','prompt-workbench-v1.json','companion-memory-policy.json','companion-preferences.json','companion-persona.json','personal-reminders.json','restored-ui-state.json','motion-automation-policy.json','xiaozhi-hardware-policy.json','choreographies.json'];
+const EMPTY_REMINDERS = {version:1,revision:0,items:[]};
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const json = value => JSON.stringify(value);
 const fail = code => { throw new Error(`backup-${code}`); };
@@ -100,6 +102,7 @@ function buildBundle(root, config, includeAudio = false) {
   if (!history.metadata.some(row=>row.key==='legacy-complete' && row.value==='1')) fail('migration-incomplete');
   const memory = readTables(path.join(root,'companion-memory.sqlite3'),MEMORY_TABLES);
   const prompts = validatePrompts(readJson(path.join(root,'prompt-workbench-v1.json'), new PromptWorkbenchStore().snapshot()));
+  const reminders = validateReminderState(readJson(path.join(root,'personal-reminders.json'),EMPTY_REMINDERS));
   const policies = {
     memory:validateMemoryPolicy(readJson(path.join(root,'companion-memory-policy.json'),DEFAULT_MEMORY_POLICY),{allowRuntime:true}),
     companion:validateCompanionPreferences(readJson(path.join(root,'companion-preferences.json'),COMPANION_PREFERENCES_DEFAULT)),
@@ -108,7 +111,7 @@ function buildBundle(root, config, includeAudio = false) {
     hardware:validateXiaozhiHardwarePolicy(readJson(path.join(root,'xiaozhi-hardware-policy.json'),DEFAULT_XIAOZHI_HARDWARE_POLICY)),
     choreography:safeChoreography(readJson(path.join(root,'choreographies.json'),undefined))
   };
-  const data = {config:safeConfig(config),prompts,policies,history,memory,audio:[],includeAudio:Boolean(includeAudio)};
+  const data = {config:safeConfig(config),prompts,reminders,policies,history,memory,audio:[],includeAudio:Boolean(includeAudio)};
   let size = Buffer.byteLength(json(data));
   if (includeAudio) for(const entry of history.audio) {
     if (!/^[a-f0-9]{64}$/.test(entry.digest)) fail('audio-digest-invalid');
@@ -158,7 +161,8 @@ function validateBundle(bundle) {
       }
     }
   }
-  return d;
+  const reminders = validateReminderState(d.reminders === undefined ? EMPTY_REMINDERS : d.reminders);
+  return {...d,reminders};
 }
 function loadRows(db, tables) {
   db.exec('BEGIN IMMEDIATE');
@@ -222,6 +226,7 @@ function prepareRestore(root, bundle) {
     'companion-memory-policy.json':{...d.policies.memory,schedule:'manual',hourlyEnabled:false},
     'companion-preferences.json':{...d.policies.companion,wakeEnabled:false},
     'companion-persona.json':d.policies.persona,
+    'personal-reminders.json':d.reminders,
     'motion-automation-policy.json':{...(d.policies.motion || DEFAULT_MOTION_AUTOMATION_POLICY),enabled:false,idleEnabled:false},
     'xiaozhi-hardware-policy.json':d.policies.hardware || DEFAULT_XIAOZHI_HARDWARE_POLICY,
     'choreographies.json':{...safeChoreography(d.policies.choreography),defaultDanceName:''},
@@ -231,7 +236,7 @@ function prepareRestore(root, bundle) {
   const names=[...FIXED_FILES,...new Set(d.audio.map(a=>`voice-recordings/${a.digest}.audio`))];
   const manifest=names.map(name=>({name,digest:sha(boundedRead(path.join(stage,name)))}));
   writeAtomic(path.join(stage,'manifest.json'),json({id,manifest}));
-  return {id,summary:{createdAt:bundle.createdAt,history:d.history.history.length,recordings:d.includeAudio?d.audio.length:0,turns:d.memory.conversation_turns.length,memories:d.memory.memory_candidates.length,journals:d.memory.memory_daily_journals.length,prompts:d.prompts.personal.length,scenes:d.prompts.scenes.length,includesAudio:d.includeAudio},expiresAt:Date.now()+10*60*1000};
+  return {id,summary:{createdAt:bundle.createdAt,history:d.history.history.length,recordings:d.includeAudio?d.audio.length:0,turns:d.memory.conversation_turns.length,memories:d.memory.memory_candidates.length,journals:d.memory.memory_daily_journals.length,reminders:d.reminders.items.length,prompts:d.prompts.personal.length,scenes:d.prompts.scenes.length,includesAudio:d.includeAudio},expiresAt:Date.now()+10*60*1000};
 }
 function allowedTarget(name) {return FIXED_FILES.includes(name) || /^(?:voice-history|companion-memory)\.sqlite3-(?:wal|shm)$/.test(name) || /^voice-recordings\/[a-f0-9]{64}\.audio$/.test(name);}
 function checkedTarget(root,name) {

@@ -117,7 +117,7 @@ function companionExhibitionIntroduction(name = "小言", embodimentContext = EM
   } else if (embodiment.xiaozhiState === "connected") {
     physicalClosing = "现在小智云台已经连接；屏幕表情和云台动作会以现场真实状态为准。";
   }
-  return `大家好，我叫${companionName}，是 DeskMate 的桌面 AI 陪伴伙伴。我可以陪你连续对话，并把经过确认的重要信息保存为本地记忆。DeskMate 还支持语音输入、快捷按键、提示词切换和风格映像，可以把照片转换成不同视觉风格，也能查看任务和设备状态。配合 EasyInput，还能用实体按键、旋钮和板载麦克风快速操作。${physicalClosing}很高兴认识大家，欢迎来和我聊聊。`;
+  return `大家好，我叫${companionName}，是 DeskMate 的桌面 AI 陪伴伙伴。我可以陪你连续对话，把经过确认的重要信息保存为本地记忆，也能帮你记录个人提醒。DeskMate 还支持语音输入、快捷按键、提示词切换和风格映像，可以把照片转换成不同视觉风格，也能查看任务和设备状态。配合 EasyInput，还能用实体按键、旋钮和板载麦克风快速操作。${physicalClosing}很高兴认识大家，欢迎来和我聊聊。`;
 }
 
 function normalizePersona(value = {}) {

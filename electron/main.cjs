@@ -27,6 +27,7 @@ const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("
 const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
+const { PersonalReminderScheduler, PersonalReminderStore, executePersonalReminderIntent } = require("./personal-reminders.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
 const { PrestartFallbackCompanionAudioSource } = require("./companion-audio.cjs");
@@ -81,7 +82,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t50-companion-exhibition-intro";
+const DESKMATE_BUILD_ID = "t51-personal-reminders";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -131,6 +132,8 @@ let companionConversationController;
 let companionPreferenceStore;
 let companionPersonaStore;
 let companionIntentBridge;
+let personalReminderStore;
+let personalReminderScheduler;
 let wakeWordAdapter;
 let companionDialogueContext;
 let wakeWordTransitioning = false;
@@ -426,7 +429,7 @@ function companionIntentBridgePublicStatus() {
   if (!companionIntentBridge) return { status: "unavailable", taskCount: 0, lastStatus: "unavailable", lastType: "none", lastReason: "" };
   const current = companionIntentBridge.status?.() || {};
   const lastStatuses = new Set(["idle", "none", "completed", "failed", "expired", "rejected"]);
-  const lastTypes = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "run_motion_preset", "control_local_media"]);
+  const lastTypes = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "manage_personal_reminder", "run_motion_preset", "control_local_media"]);
   return {
     status: "ready",
     taskCount: Math.min(8, Math.max(0, Number(current.taskCount) || 0)),
@@ -1314,6 +1317,56 @@ async function announceCodexTaskBrief(announcement = {}) {
   return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true });
 }
 
+function personalReminderSnapshot() {
+  return personalReminderStore?.dashboardSnapshot?.(Date.now(), 50) || { ready: false, reason: "personal-reminders-unavailable", revision: 0, activeCount: 0, todayCount: 0, items: [] };
+}
+
+function emitPersonalReminderChanged() {
+  const snapshot = personalReminderSnapshot();
+  sendToMain("personal-reminders-changed", snapshot);
+  return snapshot;
+}
+
+function personalReminderMutation(action) {
+  try {
+    const reminder = action();
+    personalReminderScheduler?.reschedule?.();
+    return { ok: true, reminder, snapshot: emitPersonalReminderChanged() };
+  } catch (error) {
+    const raw = String(error?.message || "");
+    const reason = /^personal-reminder[a-z-]+$/u.test(raw) || /^personal-reminders[a-z-]+$/u.test(raw) ? raw : "personal-reminder-save-failed";
+    return { ok: false, reason, snapshot: personalReminderSnapshot() };
+  }
+}
+
+async function handlePersonalReminderVoiceIntent(text) {
+  const result = executePersonalReminderIntent(text, { store: personalReminderStore, now: Date.now() });
+  if (result.changed) {
+    personalReminderScheduler?.reschedule?.();
+    emitPersonalReminderChanged();
+  }
+  return result;
+}
+
+async function deliverPersonalReminder(reminder = {}) {
+  const title = String(reminder.title || "").replace(/[\u0000-\u001f]/gu, " ").trim().slice(0, 160);
+  if (!title) return { ok: false, reason: "personal-reminder-title-invalid" };
+  const text = normalizeTrustedAnnouncement(`提醒你：${title}。`);
+  if (!text) return { ok: false, reason: "personal-reminder-title-invalid" };
+  if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
+    personalReminderStore.deferDelivery(reminder.id, 15_000);
+    emitPersonalReminderChanged();
+    return { ok: true, voice: false, queued: true };
+  }
+  if (companionIsActive()) {
+    const preferences = companionPreferenceStore.get();
+    const spoken = await companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
+    return { ok: true, voice: spoken?.ok === true };
+  }
+  const spoken = await startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true });
+  return { ok: true, voice: spoken?.ok === true };
+}
+
 async function stopCompanionConversation(reason = "user") {
   const result = await companionConversationController.stop(reason);
   await syncWakeWordListener("companion-stopped");
@@ -1360,7 +1413,7 @@ app.whenReady().then(async () => {
         if(!selection.canceled && selection.filePaths[0]) {
           const engine=require('./local-backup.cjs');
           const preview=engine.prepareRestore(root,JSON.parse(engine.boundedRead(selection.filePaths[0])));
-          const confirm=await dialog.showMessageBox({type:'warning',title:'核对恢复内容',message:`备份时间：${preview.summary.createdAt}`,detail:`${preview.summary.history} 条历史，${preview.summary.recordings} 份录音，${preview.summary.turns} 条原始记忆，${preview.summary.journals} 天日终总结。确认后替换当前数据并重新启动。`,buttons:['取消','恢复并重启'],defaultId:0,cancelId:0});
+          const confirm=await dialog.showMessageBox({type:'warning',title:'核对恢复内容',message:`备份时间：${preview.summary.createdAt}`,detail:`${preview.summary.history} 条历史，${preview.summary.recordings} 份录音，${preview.summary.turns} 条原始记忆，${preview.summary.journals} 天日终总结，${preview.summary.reminders || 0} 条个人提醒。确认后替换当前数据并重新启动。`,buttons:['取消','恢复并重启'],defaultId:0,cancelId:0});
           if(confirm.response===1){engine.queueRestore(root,preview.id,{supersedeInterrupted:true});app.relaunch();}
         }
       } catch {dialog.showErrorBox('未能准备恢复','备份校验或磁盘写入失败，当前数据保留。请检查备份和磁盘后重试。');}
@@ -1435,6 +1488,7 @@ app.whenReady().then(async () => {
   knowledgeOsMemoryGateway = new KnowledgeOsMemoryGateway({ settings: knowledgeOsSettings, client: knowledgeOsClient });
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
+  personalReminderStore = new PersonalReminderStore({ userDataPath: app.getPath("userData") });
   localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
   motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });
@@ -1616,8 +1670,10 @@ app.whenReady().then(async () => {
       return runMotionPreset({ preset, repeat, source: "voice" });
     },
     mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
+    reminderAction: (text) => handlePersonalReminderVoiceIntent(text),
     readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona, embodiment: companionEmbodimentContext() }),
   });
+  personalReminderScheduler = new PersonalReminderScheduler({ store: personalReminderStore, onDue: deliverPersonalReminder, onChange: () => emitPersonalReminderChanged() });
   promptWorkbench = new PromptWorkbenchController({
     store: new PromptWorkbenchStore({ userDataPath: app.getPath('userData') }),
     isForeground: () => Boolean(mainWindow?.isFocused() && mainWindow.webContents.getURL().split('#')[1] === '/prompts'),
@@ -1656,6 +1712,7 @@ app.whenReady().then(async () => {
   createWindow();
   createOverlayWindow();
   createTray();
+  personalReminderScheduler.start();
   handleTrusted("style-studio:get-status", () => {
     try { return { ...styleStudioService.status(), library: styleStudioService.list() }; }
     catch (error) { return { ok: false, reason: publicStyleStudioError(error), configured: image2Store.status().configured === true, library: { ok: false, revision: 0, items: [] } }; }
@@ -1929,7 +1986,11 @@ app.whenReady().then(async () => {
   });
   onTrusted("companion:computer-audio-event", (value) => { if (!String(value?.type || "").startsWith("wake.source.")) computerCompanionAudio.handleRendererEvent(value); else handleWakeCaptureEvent(value); });
   handleTrusted("memory:get-status", () => companionMemoryStore.status());
-  handleTrusted("workbench:get-overview", () => createWorkbenchOverview({ memoryStore: companionMemoryStore, policyStore: companionMemoryPolicyStore, knowledgeOsSettings, promptStore: promptWorkbench.store, serviceStatus: threeStageServiceStatus(), wakeStatus: wakeWordAdapter.status(), running: memoryJournalService.active }));
+  handleTrusted("workbench:get-overview", () => createWorkbenchOverview({ memoryStore: companionMemoryStore, policyStore: companionMemoryPolicyStore, knowledgeOsSettings, promptStore: promptWorkbench.store, reminderStore: personalReminderStore, serviceStatus: threeStageServiceStatus(), wakeStatus: wakeWordAdapter.status(), running: memoryJournalService.active }));
+  handleTrusted("reminders:list", () => personalReminderSnapshot());
+  handleTrusted("reminders:create", (value = {}) => personalReminderMutation(() => personalReminderStore.create({ title: value.title, remindAt: value.remindAt, eventAt: value.eventAt, important: value.important === true })));
+  handleTrusted("reminders:complete", (id) => personalReminderMutation(() => personalReminderStore.complete(id)));
+  handleTrusted("reminders:snooze", (value = {}) => personalReminderMutation(() => personalReminderStore.snooze(value.id, value.minutes)));
   handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
   handleTrusted("memory:set-policy", async (value = {}) => {
     const previous = companionMemoryPolicyStore.snapshot();
@@ -2093,6 +2154,6 @@ app.whenReady().then(async () => {
   app.on("second-instance", (_event, argv) => showMain(argv.includes('--show-style-studio') ? 'style-studio' : argv.includes('--show-keymap') ? 'keymap' : argv.includes('--show-prompts') ? 'prompts' : argv.includes('--show-companion') ? 'companion' : undefined));
 });
 
-app.on("before-quit", () => { isQuitting = true; styleStudioInputLease?.release(); styleStudioService?.close(); motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
+app.on("before-quit", () => { isQuitting = true; personalReminderScheduler?.stop(); styleStudioInputLease?.release(); styleStudioService?.close(); motionAutomationCoordinator?.close(); manualControlCoordinator?.end("page-leave"); choreographyService?.close("choreography-operation-cancelled"); motionPresetService?.close("motion-operation-cancelled"); cancelPendingEditShortcut(); if (linkStatusPollTimer) clearInterval(linkStatusPollTimer); linkStatusPollTimer = null; if (memoryDigestTimer) clearInterval(memoryDigestTimer); memoryDigestTimer = null; inputBridge?.stop(); void wakeWordAdapter?.stop(); void codexHookServer?.stop(); void codexTaskBriefServer?.stop(); void hermesHookServer?.stop(); void companionConversationController?.stop("application-quit"); void easyInputVoiceRecorder?.close(); void easyInputAudioManager?.close(); audioSetupWindow?.destroy(); activeBailianRequests.forEach((controller) => controller.abort()); activeBailianRequests.clear(); activeBailianOrganizers.forEach((controller) => controller.abort()); activeBailianOrganizers.clear(); activeRealtimeSessions.forEach((controller) => controller.cancel()); activeRealtimeSessions.clear(); companionMemoryControl?.clear(); companionMemoryControl = null; companionMemoryStore?.close(); companionMemoryStore = null; });
 app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("window-all-closed", () => { if (process.platform === "darwin" && !isQuitting) return; });

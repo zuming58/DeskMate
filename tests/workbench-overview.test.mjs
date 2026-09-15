@@ -91,6 +91,19 @@ test('home projection strips identifiers, credentials, content and paths from al
   assert.equal(data.updatedAt, 123);
 });
 
+test('home projects active personal reminders for the trusted Workbench without mutating them', () => {
+  let calls = 0;
+  const snapshot = { ready: true, reason: '', revision: 4, activeCount: 1, todayCount: 1, items: [{ id: 'local-id', title: '准备展会材料', important: true, remindAt: 1000, eventAt: 2000, status: 'pending' }] };
+  const result = createWorkbenchOverview({
+    memoryStore: { dashboardSummary: () => ({ ready: true }) },
+    policyStore: { snapshot: () => ({ hourlyEnabled: true, enabledSources: [], schedule: 'manual', dailyTime: '23:30', rawRetentionDays: 20 }) },
+    knowledgeOsSettings: { status: () => ({}) }, promptStore: { snapshot: () => ({ activeScene: '', scenes: [] }) },
+    reminderStore: { dashboardSnapshot: (now, limit) => { calls += 1; assert.equal(now, 123); assert.equal(limit, 50); return snapshot; } },
+    serviceStatus: {}, wakeStatus: {}, now: 123,
+  });
+  assert.equal(calls, 1); assert.deepEqual(result.reminders, snapshot);
+});
+
 test('home groups reports by project and respects completed or paused memory schedules', () => {
   const projects = workbenchProjects([{ taskLabel: 'DeskMate', state: 'working', receivedAt: 10 }, { taskLabel: 'DeskMate', state: 'waiting', receivedAt: 20 }, { taskLabel: 'Other', state: 'completed', receivedAt: 30 }]);
   assert.deepEqual(projects[0], { label: 'DeskMate', state: 'waiting', count: 2, receivedAt: 20 });
