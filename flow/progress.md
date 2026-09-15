@@ -1,5 +1,11 @@
 # Progress log
 
+# 2026-09-15 — 按用户要求启动 T52 新版供接话验收
+
+- 启动前已没有运行中的 DeskMate；没有强制关闭或误停其他程序。核对 `release-t52/win-unpacked` 的 EXE/ASAR SHA-256 与 T52 交付记录一致，用原有用户配置启动 `DeskMate.exe --show-companion`，不是 T51 或隔离预览。
+- 主 PID `38436` 响应正常，主窗口句柄 `199356`；观察到的 DeskMate/InputBridge 进程均来自 `release-t52`。初次隐藏启动后窗口未立即显示，随后通过同一程序的 single-instance 打开请求显示主窗口；临时第二实例已退出，原主 PID 未变。分支 `codex/t52-reminder-listening-reliability`，启动时 HEAD `8cbf72785581c20bbd9c8754d9125ed93f83db1e`。
+- 本轮只有启动、只读版本/进程核对和交接记录；没有代码修改、清空历史/设置、改凭据、烧录/Flash/NVS/舵机操作或主动云端语音测试。窗口启动不代表真语音通过。下一步请用户在陪伴页面开始对话，小岚说完后立即接话，连续测试数轮；若仍漏接，导出带 T52 build ID 的新诊断。
+
 # 2026-09-15 — 最新漏接话报告确认仍运行 T51，T52 尚未真语音验收
 
 - 用户提供 19:22:29 生成的新脱敏报告，build ID 仍为 `t51-personal-reminders`；观察到的 7 个 DeskMate 进程均在 `release-t51`，ASAR 与已记录 T51 SHA-256 一致。上轮 T52 候选只完成打包，未重启，因此本次不能写成 T52 真语音修复被否决或已通过。
