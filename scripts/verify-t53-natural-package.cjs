@@ -15,7 +15,7 @@ function load(file) {
   return module.exports;
 }
 async function verify() {
-  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders/);
+  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders|t54-fast-endpoint/);
   const {PersonalReminderConversation,parsePersonalReminderIntent:parse}=load('electron/personal-reminders.cjs');
   const now=new Date(2026,8,15,19,30).getTime();
   assert.equal(parse('你能明天下午六点提醒我开会吗',{now}).title,'开会');
@@ -31,4 +31,5 @@ async function verify() {
   assert.equal(events.filter(e=>e.type==='barge.start').length,1);assert.equal(p.counters.bargeInsAcceptedPartial,1);
   console.log('T53 final-ASAR behavior passed: polite/relative/nearby time, retained correction, ordinary interruption before final.');
 }
-verify().catch(error=>{console.error(error);process.exitCode=1;});
+module.exports={load,verify};
+if(require.main===module) verify().catch(error=>{console.error(error);process.exitCode=1;});

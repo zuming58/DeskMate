@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Playback interruption must not erase the utterance that interrupted it
+
+- Preserve ASR item ownership and speech timing when yielding playback to an accepted partial; otherwise its subsequent stop event cannot shorten final waiting.
+- Track actual hypothesis progress rather than event count. Duplicate partials/stop events cannot restart fallback timers indefinitely.
+- Test provider stop, final, duplicate partials, resumed speech, new items and stale timer callbacks in both orders. Faster fallback must not promote an unconfirmed suffix or silently truncate a confirmed prefix.
+
 ## Don't hide real interaction failures behind stricter gates and passing old tests
 
 - Waiting for a final utterance is a latency policy, not merely a cheap extra check. Restoring early yielding requires explicitly revising old final-only assertions while retaining noisy/echo/mismatched-final test vectors; state the unavoidable early-decision tradeoff.

@@ -49,7 +49,7 @@ function fakeClock() {
 test("T12A preferences migrate to 小言, persist enums, and reject malformed imports", () => {
   const migrated = migrateState({ schemaVersion: 11, settings: {} });
   assert.equal(migrated.schemaVersion, SCHEMA_VERSION);
-  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小言", wake: "你好，小言", pause: 1500, idle: 10000 });
+  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小言", wake: "你好，小言", pause: 500, idle: 10000 });
   assert.throws(() => validateConfig({ settings: { companionEndSmoothWindowMs: 650 } }), /停顿阈值/);
   assert.throws(() => validateConfig({ settings: { companionIdleTimeoutMs: 999 } }), /会话空闲/);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-t12a-preferences-"));
@@ -70,7 +70,7 @@ test("Doubao StartSession receives the companion-only server endpointing and ide
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(payload.dialog.bot_name, "小言");
   assert.match(payload.dialog.system_role, /小言/);
-  assert.deepEqual(normalizeCompanionPreferences({ endSmoothWindowMs: 650 }).endSmoothWindowMs, 1500);
+  assert.deepEqual(normalizeCompanionPreferences({ endSmoothWindowMs: 650 }).endSmoothWindowMs, 500);
 });
 
 test("listening idle timer stops normally, accepted input cancels it, and call resets it", async () => {

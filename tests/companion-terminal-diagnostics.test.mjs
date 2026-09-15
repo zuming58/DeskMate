@@ -151,7 +151,7 @@ test("the strict half-duplex keep-alive request enables custom endpointing and c
   const { DoubaoRealtimeSession } = require("../electron/doubao-realtime.cjs");
   const session = new DoubaoRealtimeSession({ config: { appId: "app", accessKey: "access", resourceId: "resource", model: "model", voice: "voice" } });
   const payload = session.buildSessionPayload();
-  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 1500, enable_custom_vad: true } });
+  assert.deepEqual(payload.asr, { extra: { end_smooth_window_ms: 500, enable_custom_vad: true } });
   assert.equal(payload.dialog.extra.input_mod, "keep_alive");
   assert.equal(Object.hasOwn(payload.asr.extra, "enable_asr_twopass"), false);
   assert.equal(providerFailureBucket(52000042), "audio-idle-timeout");
@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes the integrated Style Studio build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t53-natural-barge-reminders/);
+  assert.match(main, /t54-fast-endpoint/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });

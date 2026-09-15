@@ -214,7 +214,7 @@ export function createDiagnosticReport(input = {}) {
   const asrTimingSource = conversationSource.asrTiming || {};
   const savedEndpointing = {
     revision: Math.max(0, Number(savedPreferencesSource.revision) || 0),
-    endSmoothWindowMs: isValidCompanionEndSmoothWindowMs(savedPreferencesSource.endSmoothWindowMs) ? Number(savedPreferencesSource.endSmoothWindowMs) : 5000,
+    endSmoothWindowMs: isValidCompanionEndSmoothWindowMs(savedPreferencesSource.endSmoothWindowMs) ? Number(savedPreferencesSource.endSmoothWindowMs) : 500,
     idleTimeoutMs: isValidCompanionIdleTimeoutMs(savedPreferencesSource.idleTimeoutMs) ? Number(savedPreferencesSource.idleTimeoutMs) : 60000,
   };
   const sessionApplied = isValidCompanionEndSmoothWindowMs(sessionAppliedSource.endSmoothWindowMs) && isValidCompanionIdleTimeoutMs(sessionAppliedSource.idleTimeoutMs)

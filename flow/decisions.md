@@ -1,5 +1,9 @@
 # Decisions
 
+## D162 — Fast silence endpointing retains interruption ownership and confirmed-text recovery
+
+2026-09-15: User explicitly chooses 500 ms companion silence instead of 1500 ms. Change defaults, preserve existing custom preferences, and apply this user's choice through the validated store. Stopping playback must not erase the accepted interruption's ASR item/timing. Identical partials and duplicate stop events cannot extend a deadline. Use 600 ms final grace after the matching provider stop; real progress may rearm, resumed/new speech invalidates stale recovery. Missing-stop fallback defaults to 2500 ms and can promote only the complete current provider-confirmed hypothesis, never an unconfirmed suffix or truncated prefix. This is a silence policy, not a guarantee of 500 ms total response latency. Dictation and T53 barge-in gates are unchanged.
+
 ## D161 — Yield ordinary speech early; reminders use contextual clarification with local receipts
 
 2026-09-15: T53 supersedes D156's ordinary-final-only gate. Explicit stop stays immediate; ordinary current-item confirmed/stable partial evidence yields playback after a 250 ms observation floor, without an LLM classifier or waiting for final. Preserve captured utterance, echo/noise filtering and inconsistent-final protection; identical partials must neither manufacture nor erase stability. This threshold is not an end-to-end latency guarantee. Reminder creation routes polite/synonym/relative expressions locally; ambiguous 1–12 hours cannot silently become tomorrow morning. Short confirmation/correction retains pending content. Only unresolved contextual reminder expressions use one bounded model extraction with recent context/current time, followed by local validation and a spoken proposal confirmation before persistence. Timers remain local and idle wake does not gain API calls. T52 audible delivery/receipts remain unchanged.

@@ -15,7 +15,7 @@ const COMPANION_VOLUME_STEP = 5;
 const COMPANION_PREFERENCES_DEFAULT = Object.freeze({
   name: COMPANION_NAME_DEFAULT,
   wakePhrase: COMPANION_WAKE_PHRASE_DEFAULT,
-  endSmoothWindowMs: 1500,
+  endSmoothWindowMs: 500,
   idleTimeoutMs: 10000,
   codexBriefAnnouncementsEnabled: true,
   conversationVolume: 75,

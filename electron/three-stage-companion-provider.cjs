@@ -11,7 +11,8 @@ const MIN_NON_EXPLICIT_BARGE_LENGTH = 2;
 const MIN_SPARSE_FINAL_SPEECH_MS = 350;
 const MIN_SPARSE_FINAL_LENGTH = 2;
 const DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS = 6500;
-const DEFAULT_BARGE_FINAL_RECOVERY_MS = 5000;
+const DEFAULT_BARGE_FINAL_RECOVERY_MS = 2500;
+const STOPPED_BARGE_FINAL_GRACE_MS = 600;
 
 function comparisonText(value) {
   return cleanVisibleText(value, 16384).normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -280,12 +281,12 @@ class ThreeStageCompanionProvider {
     return true;
   }
 
-  armPendingBargeInFinal({ text = "", confirmedText = "", itemId = "" } = {}, generation = this.generation) {
+  armPendingBargeInFinal({ text = "", confirmedText = "", itemId = "", stopped = false } = {}, generation = this.generation) {
     this.clearPendingBargeInFinal();
     const confirmed = cleanVisibleText(confirmedText).trim();
     const current = cleanVisibleText(text).trim();
-    const recoveryText = comparisonText(confirmed).length >= 5 ? confirmed : comparisonText(current).length >= 5 ? current : "";
-    const pending = Object.freeze({ generation, itemId: String(itemId || "").slice(0, 160), recoveryText, text: current, explicit: isExplicitBargeIn(current) });
+    const recoveryText = comparisonText(confirmed).length >= 2 && comparisonText(confirmed) === comparisonText(current) ? current : "";
+    const pending = Object.freeze({ generation, itemId: String(itemId || "").slice(0, 160), recoveryText, text: current, confirmedText: confirmed, stopped, explicit: isExplicitBargeIn(current) });
     this.pendingBargeInFinal = pending;
     this.pendingBargeInTimer = this.schedule(() => {
       if (this.pendingBargeInFinal !== pending) return;
@@ -300,7 +301,7 @@ class ThreeStageCompanionProvider {
       this.counters.bargeFinalRecoveries += 1;
       this.handleAsrEvent({ type: "final", text: pending.recoveryText, itemId: pending.itemId, bargeInRecovery: true }, generation);
       this.rememberSettledBargeInItem(pending.itemId);
-    }, this.bargeFinalRecoveryMs);
+    }, stopped ? STOPPED_BARGE_FINAL_GRACE_MS : this.bargeFinalRecoveryMs);
     this.pendingBargeInTimer?.unref?.();
   }
 
@@ -395,6 +396,10 @@ class ThreeStageCompanionProvider {
       if (this.draft && this.draft.itemId && nextItemId !== this.draft.itemId) this.cancelDraft();
       const bargeContext = this.bargeContext();
       if (this.pendingBargeInFinal?.itemId && nextItemId && this.pendingBargeInFinal.itemId !== nextItemId) this.clearPendingBargeInFinal();
+      else if (this.pendingBargeInFinal) {
+        const pending = this.pendingBargeInFinal;
+        this.armPendingBargeInFinal({...pending, stopped: false, confirmedText: ""}, generation);
+      }
       this.resetSpeechEvidence();
       this.speechEvidence.active = true;
       this.speechEvidence.itemId = nextItemId;
@@ -405,10 +410,12 @@ class ThreeStageCompanionProvider {
       return;
     }
     if (event.type === "speech.stopped") {
-      if (this.matchingSpeechEvidence(event.itemId)) {
+      if (this.matchingSpeechEvidence(event.itemId) && this.speechEvidence.receivedStopAt === null) {
         this.speechEvidence.audioEndMs = Math.max(0, Number(event.audioEndMs) || 0);
         this.speechEvidence.receivedStopAt = this.now();
       }
+      const pending = this.pendingBargeInFinal;
+      if (pending && !pending.stopped && event.itemId && String(event.itemId) === pending.itemId) this.armPendingBargeInFinal({...pending, stopped:true}, generation);
       return;
     }
     if (this.dropSettledBargeInEvent(event)) return;
@@ -447,7 +454,9 @@ class ThreeStageCompanionProvider {
       const pending = this.pendingBargeInFinal;
       if (!bargeContext && pending && (!pending.itemId || pending.itemId === String(event.itemId || ""))) {
         // Keep listening through the whole interruption; don't time out halfway through a long sentence.
-        if (speechHypothesesAgree(pending.text, text)) this.armPendingBargeInFinal({text, confirmedText: event.confirmedText, itemId: event.itemId}, generation);
+        const confirmedText = cleanVisibleText(event.confirmedText).trim() || pending.confirmedText;
+        const progressed = comparisonText(text) !== comparisonText(pending.text) || comparisonText(confirmedText) !== comparisonText(pending.confirmedText);
+        if (progressed && speechHypothesesAgree(pending.text, text)) this.armPendingBargeInFinal({text, confirmedText, itemId: event.itemId, stopped:pending.stopped}, generation);
       }
       this.emit({ type: "asr.partial", text });
       this.considerDraft(event);
@@ -689,7 +698,7 @@ class ThreeStageCompanionProvider {
     const hadTail = Boolean(tail);
     if (tail) this.armPostPlaybackEchoTail(tail.assistantText);
     this.playbackTail = null;
-    if (!tail || !this.speechEvidence.active) this.resetSpeechEvidence();
+    if ((!tail || !this.speechEvidence.active) && !this.pendingBargeInFinal) this.resetSpeechEvidence();
     return hadTail;
   }
 
@@ -730,7 +739,7 @@ class ThreeStageCompanionProvider {
     this.playbackTail = null;
     this.clearPostPlaybackEchoTail();
     if (!preservePendingBargeIn) this.clearPendingBargeInFinal();
-    this.resetSpeechEvidence();
+    if (!preservePendingBargeIn) this.resetSpeechEvidence();
     if (turn?.ttsStarted && !turn.ttsEnded) this.emit({ type: "tts.end", diagnostic: { providerEvent: "tts-end" } });
     return true;
   }

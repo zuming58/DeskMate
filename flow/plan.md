@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T54 fast companion endpoint completion
+
+Use a 500 ms companion silence default and apply the user's explicit 500 ms choice on this computer without overwriting other preferences. Preserve the current interruption's speech-end ownership, avoid duplicate-partial timeout rearming, and use a 600 ms final grace after a provider stop. Missing-stop recovery remains bounded and may promote only fully provider-confirmed text. Ordinary dictation and T53 early-barge acceptance are unchanged. Contract: `docs/contracts/t54-fast-endpoint-v1.md`. Reminder follow-up remains unresolved; no claim of a new reminder fix.
+
 ## Current work: T53 natural interruption and contextual reminders
 
 Restore early ordinary interruption alongside the explicit stop fast path. Repair polite and relative reminders, current-clock AM/PM handling, retained short clarification replies, and bounded contextual extraction with local confirmation/persistence. T53 supersedes the T49 final-only gate and T52 reminder phrase limitations; it preserves local scheduling and audible delivery confirmation. Contract: `docs/contracts/t53-natural-barge-reminders-v1.md`. Build and real voice acceptance are recorded in the latest progress entry, not inferred from this plan.
