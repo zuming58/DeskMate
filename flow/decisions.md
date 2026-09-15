@@ -1,5 +1,9 @@
 # Decisions
 
+## D164 — Reminder purpose cleanup and speech presentation are separate from scheduling
+
+2026-09-15: Clean bounded standalone hesitation tokens and reminder-request wrappers before saving voice purposes, not arbitrary substrings or ordinary dictation. Preserve substantive 一下, negation, numbers and names. Format due speech locally with current saved persona ownerName; use natural simple-action templates only when reminder/event times coincide, neutral reminder framing otherwise. Do not hardcode a name, add a model call or rewrite old records. Legacy separated filler tokens may be cleaned non-destructively during speech; store receipt and audio-drain completion still own success.
+
 ## D163 — Reminder corrections retain fields and trusted ownership through persistence
 
 2026-09-15: Normalize clock-attached Chinese minutes with optional 分 and colon/quarter forms before parsing; malformed times cannot silently truncate into elapsed/valid hours. Pending reminder corrections retain date, reminder clock, event clock and purpose; relevant natural time-only and Workbench-save replies stay in the trusted route, but unrelated chat, negation and expired drafts cannot confirm. Requests to save do not override missing/past times. Distinguish awaiting-details from actual persistence failure; only durable local receipts authorize saved confirmations. Decide provider bypass before dispatching final because synchronous saving can clear the draft; never send the same trusted confirmation into free chat afterward. Keep T54 timing and T52 audio-drain-based delivery semantics.

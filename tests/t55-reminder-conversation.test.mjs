@@ -6,7 +6,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {createDiagnosticReport} from '../src/services/diagnostics.js';
 const require=createRequire(import.meta.url);
-const {PersonalReminderConversation,PersonalReminderStore,PersonalReminderScheduler,parsePersonalReminderIntent:parse}=require('../electron/personal-reminders.cjs');
+const {PersonalReminderConversation,PersonalReminderStore,PersonalReminderScheduler,parsePersonalReminderIntent:parse,formatPersonalReminderAnnouncement}=require('../electron/personal-reminders.cjs');
 const {CompanionIntentBridge}=require('../electron/companion-intent-bridge.cjs');
 const {CompanionConversationController}=require('../electron/companion-conversation.cjs');
 const {ThreeStageCompanionProvider}=require('../electron/three-stage-companion-provider.cjs');
@@ -114,7 +114,7 @@ test('T55 voice bridge persists and due scheduler waits for controller audio dra
   let emit,captures=0,releaseDrain;const source=new SimulatedCompanionAudioSource();source.start=async()=>{captures++;return {ok:true};};
   const sink=new SimulatedCompanionAudioSink();sink.drain=()=>new Promise(resolve=>{releaseDrain=()=>resolve({ok:true});});
   const controller=new CompanionConversationController({providerLabel:'three-stage',audioSource:source,audioSink:sink,providerFactory:options=>{emit=options.onEvent;return {connect:async()=>({ok:true}),sayHello:()=>true,close(){}};}});
-  const scheduler=new PersonalReminderScheduler({store,now:()=>clock,schedule:()=>({unref(){}}),cancel(){},onDue:item=>controller.start({initialAnnouncement:`提醒你：${item.title}。`,closeAfterAnnouncement:true,waitForAnnouncement:true})});
+  const scheduler=new PersonalReminderScheduler({store,now:()=>clock,schedule:()=>({unref(){}}),cancel(){},onDue:item=>controller.start({initialAnnouncement:formatPersonalReminderAnnouncement(item,{ownerName:'朋友'}),closeAfterAnnouncement:true,waitForAnnouncement:true})});
   t.after(()=>{scheduler.stop();return controller.stop();});scheduler.start();await scheduler.tick();assert.equal(emit,undefined);
   clock+=60000;const delivery=scheduler.tick();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(store.snapshot().items[0].status,'delivering');emit({type:'tts.start'});emit({type:'audio',audio:Buffer.from([1,2])});emit({type:'tts.end'});

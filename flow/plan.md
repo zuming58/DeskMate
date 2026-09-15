@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T56 clean reminder titles and natural speech
+
+User confirms T55 reminder creation and actual due speech succeeded. Remove bounded spoken filler/request wrappers from new reminder purposes and use deterministic current-owner-addressed due wording; retain substantive actions and amounts. Old stored records are not rewritten, and advance notification must not claim the later event has begun. Keep T54/T55 timing, persistence and delivery behavior. Contract: `docs/contracts/t56-reminder-wording-v1.md`.
+
 ## Current work: T55 reliable reminder conversation completion
 
 Repair informal clock minutes and natural pending-date/time corrections through the trusted voice route; preserve reminder/event fields and distinguish clarification from persistence failure. Freeze trusted ownership before a handler can clear its draft. T54 500 ms voice timing and interruption are unchanged. Verify persisted Workbench records and scheduler/controller audio completion with isolated fixtures, then let the user test real speech and one-minute audible delivery. Contract: `docs/contracts/t55-reminder-conversation-v1.md`.

@@ -127,6 +127,7 @@ test("T51 due delivery speaks through 小岚 without a Windows alarm and queues 
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
   const delivery = main.slice(main.indexOf("async function deliverPersonalReminder"), main.indexOf("async function stopCompanionConversation"));
   assert.doesNotMatch(delivery, /new Notification|notification\.show|silent:/);
-  assert.match(delivery, /提醒你：\$\{title\}/);
+  assert.match(delivery, /formatPersonalReminderAnnouncement\(reminder, \{ ownerName \}\)/);
+  assert.match(delivery, /companionPersonaStore\?\.snapshot\?\.\(\)\?\.persona\?\.ownerName/);
   assert.match(delivery, /deferDelivery\(reminder\.id, 15_000\)/);
 });

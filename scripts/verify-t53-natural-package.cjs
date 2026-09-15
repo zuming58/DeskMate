@@ -15,7 +15,7 @@ function load(file) {
   return module.exports;
 }
 async function verify() {
-  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders|t54-fast-endpoint|t55-reminder-conversation/);
+  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders|t54-fast-endpoint|t55-reminder-conversation|t56-reminder-wording/);
   const {PersonalReminderConversation,parsePersonalReminderIntent:parse}=load('electron/personal-reminders.cjs');
   const now=new Date(2026,8,15,19,30).getTime();
   assert.equal(parse('你能明天下午六点提醒我开会吗',{now}).title,'开会');

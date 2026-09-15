@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Spoken reminder purpose is not the literal reminder command
+
+- A regex alternative `(我|一下)?` removes only one branch; “提醒我一下喝水” leaves 一下. Parse the optional pieces sequentially and clean bounded hesitation tokens.
+- Do not globally remove 一下 or single Chinese characters: 看一下合同 and names such as 啊哈实验室 carry real content.
+- Use separate title and delivery presentation rules. A notification before an event must not say that the event's time has arrived; address the user from current saved persona rather than hardcoded transcription.
+
 ## A valid reminder parser is not yet a working voice reminder flow
 
 - Compare colloquial clock variants such as 九点四十五 and 九点四十五分 at a clock after 21:00. Unit-anchored number conversion can silently drop minutes and falsely report a past time.

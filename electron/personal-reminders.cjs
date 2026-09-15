@@ -291,18 +291,35 @@ function timestampFor(day, mention, hour) {
   const date = new Date(day.getTime()); date.setHours(hour, mention.minute, 0, 0); return date.getTime();
 }
 
+function cleanReminderFillers(value) {
+  // Only standalone hesitation tokens; never delete letters inside a name or action.
+  return String(value || "").replace(/(^|[\s，,。.!！?？、；;：:])(?:嗯+|呃+|啊+|哦+)(?=$|[\s，,。.!！?？、；;：:])/gu, "$1");
+}
+
 function cleanReminderTitle(source) {
-  return cleanText(source
+  return cleanText(cleanReminderFillers(source)
     .replace(/^(?:(?:小岚|小兰|小蓝)[，,、\s]*)+/u, "")
     .replace(/^(?:你)?(?:能不能|可以不可以|能|可以)?(?:请|麻烦)?(?:你)?(?:帮我)?/u, "")
     .replace(TIME_PATTERN, " ")
     .replace(/(?:(?:\d{4})年)?\d{1,2}月\d{1,2}[日号]?|大后天|后天|明天|今天|今日|今晚|今早|明早|明晚|(?:下周|下星期|本周|这周|周|星期)[一二三四五六日天]/gu, " ")
-    .replace(/(?:请|麻烦)?(?:你)?(?:到时候)?(?:记得|要|帮我)?提醒(?:我|一下)?/gu, " ")
+    .replace(/(?:请|麻烦)?(?:你)?(?:到时候)?(?:记得|要|帮我)?提醒[\s，,、]*(?:我[\s，,、]*)?(?:一下)?/gu, " ")
     .replace(/(?:然后|到时候|对吧|好不好|可以吗|行吗)/gu, " ")
     .replace(/一会儿?|等会儿?|待会儿?|稍后/gu, " ")
     .replace(/(?:吗|呀|呢|吧)[。？！?!]*$/u, "")
     .replace(/^[\s，,。.!！?？]*(?:我)?(?:有|安排|约了)(?:一个|个|一场)?/u, "")
-    .replace(/[，,。.!！?？、；;：:]+/gu, " "));
+    .replace(/[，,。.!！?？、；;：:]+/gu, " ")
+    .replace(/^\s*(?:一下\s+)+/u, ""));
+}
+
+function formatPersonalReminderAnnouncement(reminder = {}, { ownerName = "" } = {}) {
+  // Existing saved records stay untouched. Do not re-parse dates/actions at delivery.
+  const title = cleanText(cleanReminderFillers(reminder.title).replace(/^\s*(?:一下\s+)+/u, ""), 160);
+  if (!title) return "";
+  const name = cleanText(ownerName, 32);
+  const prefix = name ? `${name}，` : "";
+  const isEventTime = reminder.eventAt == null || reminder.eventAt === reminder.remindAt;
+  if (isEventTime && /^(?:喝水|休息|吃饭|午休|睡觉|起床|散步|开会)$/u.test(title)) return `${prefix}${title}时间到了。`;
+  return `${prefix}提醒时间到了：${title.replace(/[。！!]+$/u, "")}。`;
 }
 
 function cleanImportantTitle(source) {
@@ -632,6 +649,7 @@ module.exports = {
   PersonalReminderConversation,
   PersonalReminderStore,
   executePersonalReminderIntent,
+  formatPersonalReminderAnnouncement,
   formatReminderTime,
   isPersonalReminderUtterance,
   normalizeReminder,

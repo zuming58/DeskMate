@@ -27,7 +27,7 @@ const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("
 const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
-const { PersonalReminderScheduler, PersonalReminderStore, PersonalReminderConversation } = require("./personal-reminders.cjs");
+const { PersonalReminderScheduler, PersonalReminderStore, PersonalReminderConversation, formatPersonalReminderAnnouncement } = require("./personal-reminders.cjs");
 const { requestTextModelJson } = require("./text-model-json.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
@@ -83,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t55-reminder-conversation";
+const DESKMATE_BUILD_ID = "t56-reminder-wording";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1354,9 +1354,8 @@ async function handlePersonalReminderVoiceIntent(text) {
 }
 
 async function deliverPersonalReminder(reminder = {}) {
-  const title = String(reminder.title || "").replace(/[\u0000-\u001f]/gu, " ").trim().slice(0, 160);
-  if (!title) return { ok: false, reason: "personal-reminder-title-invalid" };
-  const text = normalizeTrustedAnnouncement(`提醒你：${title}。`);
+  const ownerName = companionPersonaStore?.snapshot?.()?.persona?.ownerName || "";
+  const text = normalizeTrustedAnnouncement(formatPersonalReminderAnnouncement(reminder, { ownerName }));
   if (!text) return { ok: false, reason: "personal-reminder-title-invalid" };
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     personalReminderStore.deferDelivery(reminder.id, 15_000);
