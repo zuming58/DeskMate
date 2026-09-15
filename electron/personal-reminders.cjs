@@ -245,12 +245,13 @@ function dateForText(source, now) {
 
 const TIME_PATTERN = /(上午|早上|早晨|中午|下午|晚上|傍晚|凌晨)?\s*(\d{1,2})\s*(?:点|时)(?:钟)?(?:(半)|(\d{1,2})\s*分?)?/gu;
 
-function timeMentions(source) {
+function timeMentions(source, includeInvalid = false) {
   const mentions = [];
   for (const match of source.matchAll(TIME_PATTERN)) {
     const hour = Number(match[2]), minute = match[3] ? 30 : Number(match[4] || 0);
-    if (hour > 23 || minute > 59) continue;
-    mentions.push({ start: match.index, end: match.index + match[0].length, text: match[0], period: match[1] || "", hour, minute });
+    if (!includeInvalid && (hour > 23 || minute > 59)) continue;
+    const suffix = includeInvalid ? source.slice(match.index + match[0].length).match(/^[零〇一二两三四五六七八九十百]+(?:分)?/u)?.[0] || "" : "";
+    mentions.push({ start: match.index, end: match.index + match[0].length + suffix.length, text: match[0] + suffix, period: match[1] || "", hour, minute });
   }
   return mentions;
 }
@@ -330,10 +331,39 @@ function isPersonalReminderUtterance(value) {
 
 function normalizeReminderSpeech(value) {
   const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
-  return cleanText(value, 1000).replace(/叫我|通知我|到点告诉我/gu, "提醒我").replace(/[零〇一二两三四五六七八九十]{1,3}(?=[点时分月日号个小])/gu, token => {
+  const number = token => {
     if (token.includes("十")) { const [left, right] = token.split("十"); return String((left ? digits[left] : 1) * 10 + (right ? digits[right] : 0)); }
     return [...token].map(char => digits[char]).join("");
-  });
+  };
+  return cleanText(value, 1000).replace(/叫我|通知我|到点告诉我/gu, "提醒我")
+    .replace(/[零〇一二两三四五六七八九十]{1,3}(?=[点时分月日号个小])/gu, number)
+    // Convert only numerals attached to a clock, never arbitrary numbers in the purpose.
+    .replace(/(\d{1,2}(?:点|时)(?:钟)?)[\s]*([零〇一二两三四五六七八九十]{1,3})(?:分)?(?=[，。！？、,.!?\s]|提醒|帮我|叫我|通知我|$)/gu, (_, clock, minute) => `${clock}${number(minute)}分`)
+    .replace(/(\d{1,2})[：:](\d{2})(?!\d)/gu, "$1点$2分")
+    .replace(/(\d{1,2}(?:点|时))(?:一刻|1刻)/gu, (_, clock) => `${clock}15分`)
+    .replace(/(\d{1,2}(?:点|时))(?:三刻|3刻)/gu, (_, clock) => `${clock}45分`)
+    .replace(/(?:过|再过)\s*(半|\d+(?:\.\d+)?)\s*(?:个)?\s*(分钟|小时)(?!后|以|之)/gu, "$1$2后");
+}
+
+const REMINDER_DAY_PATTERN = /(?:(?:\d{4})年)?\d{1,2}月\d{1,2}[日号]?|大后天|后天|明天|今天|今日|前天|昨天|(?:下周|下星期|本周|这周|周|星期)[一二三四五六日天]/u;
+function reminderReply(value) {
+  return normalizeReminderSpeech(value)
+    .replace(/^(?:(?:小岚|小兰|小蓝)[，,、\s]*)+/u, "")
+    .replace(/^(?:嗯|呃)[，,、\s]*/u, "")
+    .replace(/^(?:对[，,、\s]+|不对[，,、\s]+|不是[，,\s]*)?/u, "")
+    .replace(/^(?:我说的是|我的意思是|我说|应该是|就是|那就|改成|改到|就|是)[，,\s]*/u, "")
+    .replace(/^(?:那你|请你|麻烦你|你)?(?:帮我)?/u, "")
+    .replace(/(?:吧|就行|就好|的)[。！!]*$/u, "")
+    .replace(/明早/gu,"明天早上").replace(/明晚/gu,"明天晚上").replace(/今晚/gu,"今天晚上").replace(/今早/gu,"今天早上");
+}
+function isDraftTimeReply(source) {
+  const residue = source.replace(REMINDER_DAY_PATTERN, "").replace(TIME_PATTERN, "")
+    .replace(/上午|下午|晚上|早上|早晨|中午|凌晨|傍晚|(?:的)?(?:这个|那个|同一)?时间|时候|(?:半|\d+(?:\.\d+)?)(?:个)?(?:分钟|小时)(?:后|以后|之后)/gu, "")
+    .replace(/[，。！、,.!\s]/gu, "");
+  return Boolean(source) && residue === "" && /\d|今天|明天|后天|月|周|星期|上午|下午|晚上|早上|早晨|中午|凌晨|傍晚/u.test(source);
+}
+function isDraftSaveReply(source) {
+  return /^(?:请|麻烦)?(?:你)?(?:帮我)?(?:把它|把这个|把这件事)?(?:加|添加|写|写入|保存|放|记)(?:一下)?(?:到|在|入)?(?:我们的|我的)?工作台(?:里|里面|上)?(?:吧)?[。！!]*$/u.test(source);
 }
 
 function parsePersonalReminderIntent(value, { now = Date.now() } = {}) {
@@ -341,6 +371,11 @@ function parsePersonalReminderIntent(value, { now = Date.now() } = {}) {
   if (!isPersonalReminderUtterance(source)) return Object.freeze({ recognized: false, type: "none" });
   if (isReminderListQuery(source)) return Object.freeze({ recognized: true, type: "list" });
   if (/(?:不要|不用|别|取消).{0,5}提醒/u.test(source)) return Object.freeze({recognized: true, type: "cancel-draft"});
+  const clocks = [...source.matchAll(/(\d+)\s*(?:点|时)(?:钟)?\s*(\d+)?\s*分?/gu)];
+  if (clocks.some(match => Number(match[1]) > 23 || Number(match[2] || 0) > 59)
+      || /\d+(?:点|时)(?:钟)?\s*[零〇一二两三四五六七八九十百]/u.test(source)) {
+    return Object.freeze({recognized:true,type:"clarify",reason:"personal-reminder-time-invalid"});
+  }
   const absoluteDate = source.match(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]?/u);
   if (absoluteDate) {
     const date = new Date(Number(absoluteDate[1] || new Date(now).getFullYear()),Number(absoluteDate[2])-1,Number(absoluteDate[3]));
@@ -397,6 +432,7 @@ function voiceReminderAnswer(result, now = Date.now()) {
   if (result.type === "capability") return "可以。你可以告诉我事情发生的时间和希望几点提醒，我会把它保存在本机，并显示在工作台的提醒区。";
   if (result.type === "clarify") {
     if (result.reason === "personal-reminder-date-invalid") return "这个日期不存在，请确认一下日期，事情内容我会保留。";
+    if (result.reason === "personal-reminder-time-invalid") return "这个时间还没识别完整，请补充几点几分，事情内容我会保留。";
     if (result.reason === "personal-reminder-time-missing") return "好的，什么时候提醒你？";
     if (result.reason === "personal-reminder-time-ambiguous") return "你说的是上午还是晚上？只补充这一点就好。";
     if (result.reason === "personal-reminder-time-in-past") return "这个提醒时间已经过去了，请告诉我一个新的时间。";
@@ -439,6 +475,8 @@ class PersonalReminderConversation {
     if (isPersonalReminderUtterance(source)) return true;
     const draft = this.activeDraft();
     if (!draft) return false;
+    const reply = reminderReply(source);
+    if (isDraftTimeReply(reply) || isDraftSaveReply(reply)) return true;
     const concise = source.replace(/^(?:嗯[，,、\s]*)?(?:对[，,、\s]+|不对[，,、\s]+)?(?:就是|那就|改成|改到|就|是)?/u, "");
     if (concise && concise !== source && this.claims(concise)) return true;
     if (/^(?:过)?(?:半|\d+(?:\.\d+)?)(?:个)?(?:分钟|小时)(?:后|以后|之后)[。！!]*$/u.test(source)) return true;
@@ -452,6 +490,14 @@ class PersonalReminderConversation {
     this.generation += 1;
     let source = normalizeReminderSpeech(value);
     const draft = this.activeDraft();
+    if (draft && isPersonalReminderUtterance(source)) {
+      const timeOnly = reminderReply(source).replace(/(?:再)?提醒(?:我|一下)?[。！!]*$/u, "").trim();
+      if (isDraftTimeReply(timeOnly)) source = timeOnly;
+    }
+    if (draft && isDraftSaveReply(reminderReply(source))) {
+      if (draft.proposedText) source = draft.proposedText;
+      else return {ok:false,type:"clarify",changed:false,reason:draft.reason,answer:`还没有保存到工作台。${voiceReminderAnswer({type:"clarify",reason:draft.reason})}`};
+    }
     if (draft && /^(?:算了|不用了|取消|取消提醒|别记了)[。！!]*$/u.test(source)) { this.draft = null; this.lastAction = "cancel-draft"; this.lastReason = ""; return { ok: true, type: "cancel-draft", changed: false, answer: "好，这条未完成的提醒不保存了。" }; }
     if (draft && /^(?:对|是的|没错|好|好的|可以|就这个|就这时候)[。！!]*$/u.test(source)) {
       if (draft.proposedText) source = draft.proposedText;
@@ -463,29 +509,31 @@ class PersonalReminderConversation {
       return {ok:false,type:"clarify",changed:false,reason:draft.reason,answer:"那你希望哪一天、几点提醒？事情内容我还留着。"};
     }
     source = source.replace(/明早/gu,"明天早上").replace(/明晚/gu,"明天晚上").replace(/今晚/gu,"今天晚上").replace(/今早/gu,"今天早上");
-    if (draft && !isPersonalReminderUtterance(source)) source = source.replace(/^(?:嗯[，,、\s]*)?(?:对[，,、\s]+|不对[，,、\s]+|不是[，,\s]*)?(?:就是|那就|改成|改到|就|是)?/u, "").replace(/(?:的|吧|就行|就好)[。！!]*$/u, "");
+    if (draft && !isPersonalReminderUtterance(source)) source = reminderReply(source);
     let text = source;
     if (draft && this.claims(source) && !isPersonalReminderUtterance(source)) {
       if (draft.reason === "personal-reminder-title-missing") text = `${draft.text} ${source}`;
       else {
-        const mentions = timeMentions(draft.text);
-        const selected = mentions[reminderMentionIndex(draft.text, mentions)];
+        const selected = draft.fields?.reminderTime || (() => { const mentions = timeMentions(draft.text); return mentions[reminderMentionIndex(draft.text, mentions)]; })();
         const replyMentions = timeMentions(source);
         if (selected) {
           const period = source.match(/上午|下午|晚上|早上|中午|凌晨/u)?.[0];
           const relativeReply = source.match(/(?:半|\d+(?:\.\d+)?)(?:个)?(?:分钟|小时)(?:后|以后|之后)/u)?.[0];
-          const replacement = relativeReply || replyMentions[0]?.text || (period ? `${period}${selected.hour}点${selected.minute}分` : selected.text);
+          const replyTime = replyMentions[0];
+          const replacement = relativeReply || (replyTime ? `${replyTime.period || selected.period}${replyTime.hour}点${replyTime.minute}分` : (period ? `${period}${selected.hour}点${selected.minute}分` : selected.text));
           text = draft.text.slice(0, selected.start) + replacement + draft.text.slice(selected.end);
         } else text = `${draft.text} ${source}`;
-        const replyDay = source.match(/今天|明天|后天/u)?.[0];
-        if (replyDay) text = /今天|明天|后天/u.test(text) ? text.replace(/今天|明天|后天/u, replyDay) : `${replyDay} ${text}`;
+        const replyDay = source.match(REMINDER_DAY_PATTERN)?.[0];
+        if (replyDay) text = REMINDER_DAY_PATTERN.test(text) ? text.replace(REMINDER_DAY_PATTERN, replyDay) : `${replyDay} ${text}`;
       }
     }
     const result = executePersonalReminderIntent(text, { store: this.store, now: this.now() });
     this.lastAction = result.type || "none";
     this.lastReason = result.reason || "";
     if (result.type === "clarify") {
-      this.draft = { text, reason: result.reason, expiresAt: this.now() + 120_000 };
+      const mentions = timeMentions(text, true);
+      const index = reminderMentionIndex(text, mentions);
+      this.draft = { text, fields: {day: text.match(REMINDER_DAY_PATTERN)?.[0] || "", reminderTime: mentions[index] || null, eventTime: mentions.find((_, i) => i !== index) || null, title: cleanReminderTitle(text)}, reason: result.reason, expiresAt: this.now() + 120_000 };
       if (result.reason === "personal-reminder-time-ambiguous") {
         const mentions = timeMentions(text), selected = mentions[reminderMentionIndex(text, mentions)];
         if (selected) {

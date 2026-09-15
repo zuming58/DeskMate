@@ -83,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t54-fast-endpoint";
+const DESKMATE_BUILD_ID = "t55-reminder-conversation";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -430,7 +430,7 @@ function updateCompanionOverlay(event = {}) {
 function companionIntentBridgePublicStatus() {
   if (!companionIntentBridge) return { status: "unavailable", taskCount: 0, lastStatus: "unavailable", lastType: "none", lastReason: "" };
   const current = companionIntentBridge.status?.() || {};
-  const lastStatuses = new Set(["idle", "none", "completed", "failed", "expired", "rejected"]);
+  const lastStatuses = new Set(["idle", "none", "completed", "failed", "expired", "rejected", "awaiting-details"]);
   const lastTypes = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "manage_personal_reminder", "run_motion_preset", "control_local_media"]);
   return {
     status: "ready",

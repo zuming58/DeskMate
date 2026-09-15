@@ -527,9 +527,11 @@ class ThreeStageCompanionProvider {
         playbackStartedMs: null,
         turnCompletedMs: null,
       };
-      this.emit({ type: "asr.final", text, bargeIn });
       let bypass = false;
       try { bypass = this.shouldBypassModel(text) === true; } catch { bypass = false; }
+      // A trusted handler can synchronously save and clear a reminder draft.
+      // Decide ownership first; the same confirmation must not also start free chat.
+      this.emit({ type: "asr.final", text, bargeIn });
       if (bypass) {
         this.cancelDraft();
         this.draftAttempts = 0;

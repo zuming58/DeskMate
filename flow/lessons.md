@@ -1,5 +1,12 @@
 # Lessons learned
 
+## A valid reminder parser is not yet a working voice reminder flow
+
+- Compare colloquial clock variants such as 九点四十五 and 九点四十五分 at a clock after 21:00. Unit-anchored number conversion can silently drop minutes and falsely report a past time.
+- Test through the actual claims gate, not only executeAsync: a powerful fallback cannot help a correction that never reaches it.
+- Trusted operations may synchronously clear transient state. Freeze per-final routing before emitting the event; checking after dispatch can turn a successful local confirmation into an unwanted model request.
+- Awaiting clarification is not disk failure. Test actual isolated persistence, Workbench projection and scheduler/controller audio drain as one chain, while clearly reserving microphone/speaker evidence for real acceptance.
+
 ## Playback interruption must not erase the utterance that interrupted it
 
 - Preserve ASR item ownership and speech timing when yielding playback to an accepted partial; otherwise its subsequent stop event cannot shorten final waiting.

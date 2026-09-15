@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T55 reliable reminder conversation completion
+
+Repair informal clock minutes and natural pending-date/time corrections through the trusted voice route; preserve reminder/event fields and distinguish clarification from persistence failure. Freeze trusted ownership before a handler can clear its draft. T54 500 ms voice timing and interruption are unchanged. Verify persisted Workbench records and scheduler/controller audio completion with isolated fixtures, then let the user test real speech and one-minute audible delivery. Contract: `docs/contracts/t55-reminder-conversation-v1.md`.
+
 ## Current work: T54 fast companion endpoint completion
 
 Use a 500 ms companion silence default and apply the user's explicit 500 ms choice on this computer without overwriting other preferences. Preserve the current interruption's speech-end ownership, avoid duplicate-partial timeout rearming, and use a 600 ms final grace after a provider stop. Missing-stop recovery remains bounded and may promote only fully provider-confirmed text. Ordinary dictation and T53 early-barge acceptance are unchanged. Contract: `docs/contracts/t54-fast-endpoint-v1.md`. Reminder follow-up remains unresolved; no claim of a new reminder fix.

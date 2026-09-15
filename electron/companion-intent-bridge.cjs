@@ -267,8 +267,9 @@ class CompanionIntentBridge {
     catch { action = { ok: false, reason: "personal-reminder-action-failed", answer: "个人提醒暂时无法保存，请稍后再试。" }; }
     const ok = action?.ok === true;
     const reason = ok ? "" : safeReason(action?.reason || "personal-reminder-action-failed");
-    this.last = { status: ok ? "completed" : "failed", type, label: ok ? "个人提醒已处理" : "个人提醒未保存", reason, expiresAt: 0 };
-    return { ok, reason, proposal: null, result: { type, ok, action: String(action?.type || "unknown").slice(0, 40), answer: String(action?.answer || "").slice(0, 500) } };
+    const waiting = action?.type === "clarify";
+    this.last = { status: waiting ? "awaiting-details" : ok ? "completed" : "failed", type, label: waiting ? "个人提醒等待补充" : ok ? "个人提醒已处理" : "个人提醒未保存", reason, expiresAt: 0 };
+    return { ok: ok || waiting, reason, proposal: null, result: { type, ok, waiting, action: String(action?.type || "unknown").slice(0, 40), answer: String(action?.answer || "").slice(0, 500) } };
   }
 
   async executeMotion(preset) {
