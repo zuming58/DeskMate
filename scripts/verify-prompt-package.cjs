@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t52-reminder-listening-reliability'));
+assert(main.includes('t53-natural-barge-reminders'));
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
 for (const name of ['store', 'worker', 'service']) {
@@ -53,4 +53,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T52 packaged resource check passed: reminder completion/retries, TTS-only announcements, fresh listening boundary, Workbench UI, backup/restore, exhibition introduction, guarded barge-in, Style Studio, renderer, companion videos, recovery, voice resources and exact native bridge.');
+console.log('T53 packaged resource check passed: natural reminders and early interruption, reminder completion/retries, TTS-only announcements, Workbench UI, backup/restore, Style Studio, renderer, companion videos and exact native bridge.');

@@ -28,6 +28,7 @@ const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./c
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
 const { PersonalReminderScheduler, PersonalReminderStore, PersonalReminderConversation } = require("./personal-reminders.cjs");
+const { requestTextModelJson } = require("./text-model-json.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
 const { PrestartFallbackCompanionAudioSource } = require("./companion-audio.cjs");
@@ -82,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t52-reminder-listening-reliability";
+const DESKMATE_BUILD_ID = "t53-natural-barge-reminders";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1344,7 +1345,7 @@ function personalReminderMutation(action) {
 }
 
 async function handlePersonalReminderVoiceIntent(text) {
-  const result = personalReminderConversation.execute(text);
+  const result = await personalReminderConversation.executeAsync(text);
   if (result.changed) {
     personalReminderScheduler?.reschedule?.();
     emitPersonalReminderChanged();
@@ -1491,7 +1492,7 @@ app.whenReady().then(async () => {
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
   personalReminderStore = new PersonalReminderStore({ userDataPath: app.getPath("userData") });
-  personalReminderConversation = new PersonalReminderConversation({ store: personalReminderStore });
+  personalReminderConversation = new PersonalReminderConversation({ store: personalReminderStore, requestJson: requestTextModelJson, loadSecret: () => loadTextModelSecret(), recentContext: () => companionDialogueContext.messages() });
   localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
   motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });

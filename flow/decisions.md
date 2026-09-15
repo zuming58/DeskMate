@@ -1,5 +1,9 @@
 # Decisions
 
+## D161 — Yield ordinary speech early; reminders use contextual clarification with local receipts
+
+2026-09-15: T53 supersedes D156's ordinary-final-only gate. Explicit stop stays immediate; ordinary current-item confirmed/stable partial evidence yields playback after a 250 ms observation floor, without an LLM classifier or waiting for final. Preserve captured utterance, echo/noise filtering and inconsistent-final protection; identical partials must neither manufacture nor erase stability. This threshold is not an end-to-end latency guarantee. Reminder creation routes polite/synonym/relative expressions locally; ambiguous 1–12 hours cannot silently become tomorrow morning. Short confirmation/correction retains pending content. Only unresolved contextual reminder expressions use one bounded model extraction with recent context/current time, followed by local validation and a spoken proposal confirmation before persistence. Timers remain local and idle wake does not gain API calls. T52 audible delivery/receipts remain unchanged.
+
 ## D160 — A fresh ASR media start supersedes residual playback echo identity
 
 2026-09-15: Compare a new ASR speech-start timestamp with the cumulative accepted 16 kHz mono PCM upload boundary captured at playback drain. A proven post-boundary start clears the old residual echo tail, even if recognized words repeat or the provider reuses an item identifier. Missing or pre-boundary timing cannot clear this protection. Keep T49 explicit-stop and ordinary-final evidence rules intact. Export only fresh-start and item/text-rejection counts, never timeline identifiers, text or audio.

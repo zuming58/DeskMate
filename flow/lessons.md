@@ -1,5 +1,12 @@
 # Lessons learned
 
+## Don't hide real interaction failures behind stricter gates and passing old tests
+
+- Waiting for a final utterance is a latency policy, not merely a cheap extra check. Restoring early yielding requires explicitly revising old final-only assertions while retaining noisy/echo/mismatched-final test vectors; state the unavoidable early-decision tradeoff.
+- Repeated identical ASR hypotheses must not reset already accumulated stability or count as new independent evidence.
+- Test natural polite reminder commands through the real intent bridge, retained draft, store, dashboard projection and scheduler. A capability regex before creation can swallow valid requests even when isolated timer tests pass.
+- Freeze test clocks around AM/PM boundaries. “一会儿八点” at 19:30 must not silently roll to next-day 08:00. Persistence receipts, not model promises, own success messages.
+
 ## Enqueue success is not audible reminder completion
 
 - Keep durable due claiming separate from delivery confirmation. Provider start or text enqueue cannot prove any audio reached the output sink; require accepted audio and successful playback drain, with bounded retry and a visible failure outcome.

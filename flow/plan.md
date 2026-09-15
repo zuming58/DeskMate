@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T53 natural interruption and contextual reminders
+
+Restore early ordinary interruption alongside the explicit stop fast path. Repair polite and relative reminders, current-clock AM/PM handling, retained short clarification replies, and bounded contextual extraction with local confirmation/persistence. T53 supersedes the T49 final-only gate and T52 reminder phrase limitations; it preserves local scheduling and audible delivery confirmation. Contract: `docs/contracts/t53-natural-barge-reminders-v1.md`. Build and real voice acceptance are recorded in the latest progress entry, not inferred from this plan.
+
 ## Current delivery: T52 reminder and listening reliability — candidate
 
 Chinese time numerals and a bounded two-minute reminder clarification draft now complete local creation across turns. Notification is confirmed only after accepted audio and successful playback drain; busy reminders queue locally and playback failure has bounded retries without changing the original due time. Standalone announcements use only TTS, with no microphone, ASR or model. New post-playback speech proven after the uploaded-audio boundary clears residual echo rejection, while delayed echo and T49 guarded interruption stay protected. See `docs/contracts/t52-reminder-listening-reliability-v1.md`. Real microphone/speaker acceptance remains pending.

@@ -392,7 +392,7 @@ test("T21 accepts a new microphone utterance that starts after loudspeaker playb
   assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "我还有另外一个问题"));
 });
 
-test("T49 defers ordinary partials and accepts only a consistent completed human interruption", async () => {
+test("T53 ordinary stable partials yield before final while a short noise item does not", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -415,18 +415,18 @@ test("T49 defers ordinary partials and accepts only a consistent completed human
   assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
   now = 600;
   fixture.emitAsr({ type: "partial", text: "我想问另外一个问题", itemId: "human" });
-  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), true);
   fixture.emitAsr({ type: "speech.stopped", itemId: "human", audioEndMs: 3100 });
   fixture.emitAsr({ type: "final", text: "我想问另外一个问题", itemId: "human" });
   await tick();
   await tick();
   assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), true);
   assert.equal(fixture.modelCalls(), 2);
-  assert.equal(fixture.provider.diagnostics().counters.bargeInsAcceptedFinal, 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeInsAcceptedPartial, 1);
   assert.ok(fixture.provider.diagnostics().counters.bargePartialsDeferred >= 2);
 });
 
-test("T49 provider-confirmed ordinary partial waits for a matching final before interrupting", async () => {
+test("T53 provider-confirmed ordinary partial interrupts without waiting for final", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -437,7 +437,7 @@ test("T49 provider-confirmed ordinary partial waits for a matching final before 
   fixture.emitAsr({ type: "speech.started", itemId: "confirmed-human", audioStartMs: 1000 });
   now = 550;
   fixture.emitAsr({ type: "partial", text: "我想换一个问题", confirmedText: "我想换一个", itemId: "confirmed-human" });
-  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
   fixture.emitAsr({ type: "speech.stopped", itemId: "confirmed-human", audioEndMs: 2000 });
   fixture.emitAsr({ type: "final", text: "我想换一个问题", itemId: "confirmed-human" });
   await tick();
@@ -460,7 +460,7 @@ test("T21 completed human utterance can interrupt even when the provider emitted
   assert.equal(fixture.modelCalls(), 2);
 });
 
-test("T49 mismatched short final cannot inherit a longer ordinary partial and stop playback", async () => {
+test("T53 early yielding cannot turn a mismatched numeric final into a new model request", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -475,14 +475,13 @@ test("T49 mismatched short final cannot inherit a longer ordinary partial and st
   fixture.emitAsr({ type: "final", text: "六五六", itemId: "false-short" });
   await tick();
 
-  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
   assert.equal(fixture.modelCalls(), 1);
-  assert.equal(fixture.provider.diagnostics().counters.bargeInsAccepted, 0);
-  assert.equal(fixture.provider.diagnostics().counters.bargePartialsDeferred, 1);
-  assert.ok(fixture.provider.diagnostics().counters.bargeInsRejectedWeak >= 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeInsAcceptedPartial, 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeFinalsRejectedInconsistent, 1);
 });
 
-test("T49 unrelated long final is rejected when it disagrees with the preceding partial", async () => {
+test("T53 unrelated final cannot replace an already accepted early interruption", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -497,7 +496,7 @@ test("T49 unrelated long final is rejected when it disagrees with the preceding 
   fixture.emitAsr({ type: "final", text: "请介绍今天的天气情况", itemId: "false-long" });
   await tick();
 
-  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
   assert.equal(fixture.modelCalls(), 1);
   assert.equal(fixture.provider.diagnostics().counters.bargeFinalsRejectedInconsistent, 1);
 });
