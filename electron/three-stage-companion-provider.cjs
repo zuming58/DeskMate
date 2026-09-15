@@ -69,9 +69,11 @@ function stablePipelineReason(value) {
 }
 
 class ThreeStageCompanionProvider {
-  constructor({ asrFactory, modelFactory, ttsFactory, shouldBypassModel = () => false, preemptive = false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, bargeFinalRecoveryMs = DEFAULT_BARGE_FINAL_RECOVERY_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
+  constructor({ asrFactory, modelFactory, ttsFactory, announcementOnly = false, shouldBypassModel = () => false, preemptive = false, onEvent = () => {}, now = Date.now, postPlaybackEchoGraceMs = DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, bargeFinalRecoveryMs = DEFAULT_BARGE_FINAL_RECOVERY_MS, schedule = setTimeout, cancelSchedule = clearTimeout } = {}) {
     if (![asrFactory, modelFactory, ttsFactory].every((value) => typeof value === "function")) throw new Error("three-stage-provider-factory-required");
     this.asrFactory = asrFactory;
+    this.announcementOnly = announcementOnly === true;
+    this.asrAudioMs = 0;
     this.modelFactory = modelFactory;
     this.ttsFactory = ttsFactory;
     this.shouldBypassModel = shouldBypassModel;
@@ -110,6 +112,7 @@ class ThreeStageCompanionProvider {
       turnsCompleted: 0, cancellations: 0, errors: 0,
       bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
       bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0, postPlaybackEchoDrops: 0,
+      postPlaybackFreshSpeechStarts: 0, postPlaybackEchoItemDrops: 0, postPlaybackEchoTextDrops: 0,
       bargeFinalTimeouts: 0, bargeFinalRecoveries: 0, lateBargeFinalDrops: 0,
       bargeInsAcceptedExplicit: 0, bargeInsAcceptedFinal: 0, bargePartialsDeferred: 0, bargeFinalsRejectedInconsistent: 0,
       draftsStarted: 0, draftsReused: 0, draftsCancelled: 0, modelRecoveries: 0,
@@ -144,10 +147,10 @@ class ThreeStageCompanionProvider {
     if (this.closed) return { ok: false, reason: "three-stage-session-failed" };
     const generation = this.generation;
     try {
-      this.model = this.modelFactory();
+      if (!this.announcementOnly) this.model = this.modelFactory();
       this.tts = this.ttsFactory();
-      this.asr = this.asrFactory({ onEvent: (event) => this.handleAsrEvent(event, generation) });
-      await Promise.all([this.asr.connect(), this.tts.connect()]);
+      if (!this.announcementOnly) this.asr = this.asrFactory({ onEvent: (event) => this.handleAsrEvent(event, generation) });
+      await Promise.all([this.asr?.connect(), this.tts.connect()]);
       if (this.closed || generation !== this.generation) throw new Error("three-stage-session-failed");
       this.ready = true;
       this.emit({ type: "session.ready", diagnostic: { providerEvent: "session-ready" } });
@@ -165,7 +168,11 @@ class ThreeStageCompanionProvider {
 
   sendAudio(value) {
     if (!this.ready || this.closed) return false;
-    return this.asr?.sendAudio?.(value) === true;
+    const accepted = this.asr?.sendAudio?.(value) === true;
+    // ASR input contract: 16 kHz mono signed 16-bit PCM. This is a media
+    // boundary, not wall time; delayed VAD events can arrive after drain.
+    if (accepted) this.asrAudioMs += Buffer.from(value || []).length / 32;
+    return accepted;
   }
 
   cancelDraft() {
@@ -308,6 +315,7 @@ class ThreeStageCompanionProvider {
     const tail = Object.freeze({
       assistantText: cleanVisibleText(assistantText),
       itemId: this.speechEvidence.active ? String(this.speechEvidence.itemId || "").slice(0, 160) : "",
+      audioBoundaryMs: this.asrAudioMs,
     });
     this.postPlaybackEchoTail = tail;
     this.postPlaybackEchoTimer = this.schedule(() => {
@@ -328,6 +336,8 @@ class ThreeStageCompanionProvider {
   dropPostPlaybackEcho(event = {}) {
     if (!this.isPostPlaybackEchoEvent(event)) return false;
     this.counters.postPlaybackEchoDrops += 1;
+    const itemMatch = this.postPlaybackEchoTail.itemId && event.itemId && String(event.itemId) === this.postPlaybackEchoTail.itemId;
+    this.counters[itemMatch ? "postPlaybackEchoItemDrops" : "postPlaybackEchoTextDrops"] += 1;
     if (event.type === "final") this.clearPostPlaybackEchoTail();
     return true;
   }
@@ -368,6 +378,12 @@ class ThreeStageCompanionProvider {
     if (this.closed || generation !== this.generation) return;
     if (event.type === "speech.started") {
       const nextItemId = String(event.itemId || "").slice(0, 160);
+      const tail = this.postPlaybackEchoTail;
+      const audioStart = Number(event.audioStartMs);
+      if (tail && event.audioStartMs != null && Number.isFinite(audioStart) && tail.audioBoundaryMs > 0 && audioStart >= tail.audioBoundaryMs) {
+        this.clearPostPlaybackEchoTail();
+        this.counters.postPlaybackFreshSpeechStarts += 1;
+      }
       if (this.draftTimer) this.cancelSchedule(this.draftTimer);
       this.draftTimer = null;
       // A new ASR item cannot inherit a preceding item's private candidate.

@@ -27,7 +27,7 @@ const { CompanionMemoryDigestScheduler, CompanionMemoryPolicyStore } = require("
 const { CompanionMemoryGenerationCoordinator, skippedProjection } = require("./companion-memory-generation.cjs");
 const { CompanionPersonaStore } = require("./companion-persona.cjs");
 const { CompanionIntentBridge } = require("./companion-intent-bridge.cjs");
-const { PersonalReminderScheduler, PersonalReminderStore, executePersonalReminderIntent } = require("./personal-reminders.cjs");
+const { PersonalReminderScheduler, PersonalReminderStore, PersonalReminderConversation } = require("./personal-reminders.cjs");
 const { sanitizedProviderStatus, sourceVersionForProvider } = require("./agent-provider-status.cjs");
 const { CompanionConversationController } = require("./companion-conversation.cjs");
 const { PrestartFallbackCompanionAudioSource } = require("./companion-audio.cjs");
@@ -82,7 +82,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t51-personal-reminders";
+const DESKMATE_BUILD_ID = "t52-reminder-listening-reliability";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -134,6 +134,7 @@ let companionPersonaStore;
 let companionIntentBridge;
 let personalReminderStore;
 let personalReminderScheduler;
+let personalReminderConversation;
 let wakeWordAdapter;
 let companionDialogueContext;
 let wakeWordTransitioning = false;
@@ -436,6 +437,7 @@ function companionIntentBridgePublicStatus() {
     lastStatus: lastStatuses.has(current.status) ? current.status : "unavailable",
     lastType: lastTypes.has(current.type) ? current.type : "none",
     lastReason: /^[a-z0-9-]{0,80}$/.test(String(current.reason || "")) ? String(current.reason || "") : "intent-bridge-failed",
+    reminders: personalReminderConversation?.status() || {},
   };
 }
 
@@ -1262,7 +1264,9 @@ async function startCompanionConversation(value = {}) {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
   }
   if (easyInputAudioManager?.status?.().micTest) return { ok: false, reason: "easyinput-mic-test-active", status: companionConversationStatus() };
-  if (!threeStageServiceStatus().configured) return { ok: false, reason: "three-stage-service-not-configured", status: companionConversationStatus() };
+  const announcementOnly = Boolean(value.initialAnnouncement && value.closeAfterAnnouncement);
+  const services = threeStageServiceStatus();
+  if (!(announcementOnly ? services.stages.tts.configured : services.configured)) return { ok: false, reason: "three-stage-service-not-configured", status: companionConversationStatus() };
   if (companionIsActive()) return { ok: false, reason: "companion-session-active", status: companionConversationStatus() };
   await wakeWordAdapter?.pause?.("companion-active");
   const sessionId = `companion-${randomUUID()}`;
@@ -1296,9 +1300,9 @@ async function startCompanionConversation(value = {}) {
   const greeting = value.wakeGreeting === true ? wakeGreeting(savedPersona.persona) : "";
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext(), hotwords: options.hotwords, rules: options.rules } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start({ ...lease, initialAnnouncement: initialAnnouncement || greeting, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false });
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement: initialAnnouncement || greeting, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false, waitForAnnouncement: value.waitForAnnouncement === true });
   if (!result.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); }
-  else void motionAutomationCoordinator?.onCompanionStarted();
+  else if (!announcementOnly) void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
 }
 
@@ -1340,7 +1344,7 @@ function personalReminderMutation(action) {
 }
 
 async function handlePersonalReminderVoiceIntent(text) {
-  const result = executePersonalReminderIntent(text, { store: personalReminderStore, now: Date.now() });
+  const result = personalReminderConversation.execute(text);
   if (result.changed) {
     personalReminderScheduler?.reschedule?.();
     emitPersonalReminderChanged();
@@ -1360,11 +1364,9 @@ async function deliverPersonalReminder(reminder = {}) {
   }
   if (companionIsActive()) {
     const preferences = companionPreferenceStore.get();
-    const spoken = await companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
-    return { ok: true, voice: spoken?.ok === true };
+    return companionConversationController.announceAndWait(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
   }
-  const spoken = await startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true });
-  return { ok: true, voice: spoken?.ok === true };
+  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true, waitForAnnouncement: true });
 }
 
 async function stopCompanionConversation(reason = "user") {
@@ -1489,6 +1491,7 @@ app.whenReady().then(async () => {
   companionPreferenceStore = new CompanionPreferenceStore({ userDataPath: app.getPath("userData") });
   companionPersonaStore = new CompanionPersonaStore({ userDataPath: app.getPath("userData") });
   personalReminderStore = new PersonalReminderStore({ userDataPath: app.getPath("userData") });
+  personalReminderConversation = new PersonalReminderConversation({ store: personalReminderStore });
   localDanceMusicStore = new LocalDanceMusicStore({ userDataPath: app.getPath("userData"), dialog, safeStorage });
   choreographyStore = new ChoreographyStore({ userDataPath: app.getPath("userData") });
   motionAutomationPolicyStore = new MotionAutomationPolicyStore({ userDataPath: app.getPath("userData") });
@@ -1604,8 +1607,9 @@ app.whenReady().then(async () => {
   });
   companionConversationController = new CompanionConversationController({
     providerLabel: "three-stage",
-    providerFactory: ({ onEvent, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
+    providerFactory: ({ onEvent, announcementOnly, sessionPreferences, sessionPersona, sessionMemoryContext, sessionTranscriptContext }) => new ThreeStageCompanionProvider({
       onEvent,
+      announcementOnly,
       preemptive: true,
       postPlaybackEchoGraceMs: Math.max(6000, Math.min(12000, Number(sessionPreferences.endSmoothWindowMs) + 2000)),
       bargeFinalRecoveryMs: Math.max(5000, Math.min(6000, Number(sessionPreferences.endSmoothWindowMs) + 1000)),
@@ -1671,6 +1675,7 @@ app.whenReady().then(async () => {
     },
     mediaAction: (command) => command === "play" ? startDanceMusic({ force: true }) : stopDanceMusic("voice-stop"),
     reminderAction: (text) => handlePersonalReminderVoiceIntent(text),
+    reminderClaims: (text) => personalReminderConversation?.claims(text) === true,
     readPersona: () => ({ name: companionPreferenceStore.get().name, persona: companionPersonaStore.snapshot().persona, embodiment: companionEmbodimentContext() }),
   });
   personalReminderScheduler = new PersonalReminderScheduler({ store: personalReminderStore, onDue: deliverPersonalReminder, onChange: () => emitPersonalReminderChanged() });

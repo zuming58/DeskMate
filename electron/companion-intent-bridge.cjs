@@ -82,7 +82,7 @@ function shouldClassifyWithModel(value, apps = []) {
 }
 
 class CompanionIntentBridge {
-  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, reminderAction = null, readPersona = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
+  constructor({ loadSecret, appActions, codexStatus, codexTasks = null, motionAction = null, mediaAction = null, reminderAction = null, reminderClaims = isPersonalReminderUtterance, readPersona = null, requestJson = requestTextModelJson, now = () => Date.now(), createToken = () => crypto.randomUUID() } = {}) {
     this.loadSecret = loadSecret;
     this.appActions = appActions;
     this.codexStatus = codexStatus;
@@ -90,6 +90,7 @@ class CompanionIntentBridge {
     this.motionAction = motionAction;
     this.mediaAction = mediaAction;
     this.reminderAction = reminderAction;
+    this.reminderClaims = reminderClaims;
     this.readPersona = readPersona;
     this.requestJson = requestJson;
     this.now = now;
@@ -128,7 +129,7 @@ class CompanionIntentBridge {
     const applicationMatch = matchRegisteredApplication(source, this.appActions?.listRegistered?.({ limit: 100 }) || []);
     return Boolean(
       this.profileAnswer(source)
-      || isPersonalReminderUtterance(source)
+      || this.reminderClaims(source)
       || isCodexStatusQuery(source, { hasKnownTasks })
       || namedFollowUp
       || contextualFollowUp
@@ -175,7 +176,7 @@ class CompanionIntentBridge {
       this.last = { status: "completed", type: "query_companion_profile", label: "已按明确保存的资料回答", reason: "", expiresAt: 0 };
       return { ok: true, proposal: null, result: { type: "query_companion_profile", ok: true, field: profile.type, answer: profile.answer } };
     }
-    if (isPersonalReminderUtterance(source)) return this.executePersonalReminder(source);
+    if (this.reminderClaims(source)) return this.executePersonalReminder(source);
     const deterministic = this.resolveDeterministic(source);
     if (deterministic) return deterministic;
     if (isMotionNegation(source)) {

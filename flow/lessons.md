@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Enqueue success is not audible reminder completion
+
+- Keep durable due claiming separate from delivery confirmation. Provider start or text enqueue cannot prove any audio reached the output sink; require accepted audio and successful playback drain, with bounded retry and a visible failure outcome.
+- Delivery retry time is not the user's reminder time. Keep it in a separate field and attempt-check completion so late callbacks cannot overwrite snooze/completion. Interrupted durable attempts need restart recovery and an explicit at-least-once limitation.
+- For post-playback echo, compare ASR media-start time with accepted PCM upload time, not just event arrival, text similarity or item identity. Aggregate echo-drop counts do not establish how many human sentences were lost.
+
 ## A physical key label is a position, not a permanent shortcut
 
 - Page-specific S1-S8 semantics must be resolved against the configuration currently stored on the board. A static Ctrl+A/C/V/Z table becomes wrong as soon as the product keymap assigns Host Actions or moves paste.

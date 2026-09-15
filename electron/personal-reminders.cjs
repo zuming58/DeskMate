@@ -4,7 +4,7 @@ const { randomUUID } = require("node:crypto");
 
 const PERSONAL_REMINDERS_VERSION = 1;
 const MAX_REMINDERS = 1000;
-const REMINDER_STATUSES = new Set(["pending", "notified", "completed", "cancelled"]);
+const REMINDER_STATUSES = new Set(["pending", "delivering", "failed", "notified", "completed", "cancelled"]);
 const MAX_TIMER_DELAY_MS = 2_147_000_000;
 
 function cleanText(value, maxLength = 160) {
@@ -35,6 +35,10 @@ function normalizeReminder(value = {}) {
     createdAt: validTimestamp(value.createdAt),
     updatedAt: validTimestamp(value.updatedAt),
     notifiedAt: validTimestamp(value.notifiedAt, true),
+    deliveryAttempt: value.deliveryAttempt == null ? 0 : validTimestamp(value.deliveryAttempt),
+    failureCount: value.failureCount == null ? 0 : validTimestamp(value.failureCount),
+    nextAttemptAt: validTimestamp(value.nextAttemptAt, true),
+    deliveryError: ["", "busy", "playback-failed", "retry-exhausted"].includes(value.deliveryError || "") ? value.deliveryError || "" : "playback-failed",
   };
   if (reminder.remindAt == null && reminder.eventAt == null && !reminder.important) throw new Error("personal-reminder-purpose-invalid");
   if (reminder.status === "notified" && reminder.notifiedAt == null) throw new Error("personal-reminder-notified-invalid");
@@ -85,6 +89,9 @@ class PersonalReminderStore {
     this.createId = createId;
     this.failure = "";
     this.state = this.load();
+    if (!this.failure && this.state.items.some(item => item.status === "delivering")) {
+      this.persist(this.state.items.map(item => item.status === "delivering" ? { ...item, status: "pending", nextAttemptAt: this.now() + 15_000, deliveryError: "" } : item));
+    }
   }
 
   load() {
@@ -99,6 +106,10 @@ class PersonalReminderStore {
 
   status() {
     return Object.freeze({ ready: !this.failure, reason: this.failure, revision: this.state.revision, count: this.state.items.length });
+  }
+
+  deliveryStatus() {
+    return Object.fromEntries(["pending", "delivering", "failed", "notified"].map(status => [status, this.state.items.filter(item => item.status === status).length]));
   }
 
   persist(items) {
@@ -151,26 +162,41 @@ class PersonalReminderStore {
   snooze(id, minutes = 10) {
     const duration = Number(minutes);
     if (!Number.isInteger(duration) || duration < 1 || duration > 1440) throw new Error("personal-reminder-snooze-invalid");
-    return this.updateStatus(id, "pending", { remindAt: this.now() + duration * 60_000, notifiedAt: null });
+    return this.updateStatus(id, "pending", { remindAt: this.now() + duration * 60_000, notifiedAt: null, nextAttemptAt: null, deliveryError: "", failureCount: 0 });
   }
 
   deferDelivery(id, delayMs = 15_000) {
     const delay = Number(delayMs);
     if (!Number.isInteger(delay) || delay < 1_000 || delay > 300_000) throw new Error("personal-reminder-defer-invalid");
-    return this.updateStatus(id, "pending", { remindAt: this.now() + delay, notifiedAt: null });
+    return this.updateStatus(id, "pending", { nextAttemptAt: this.now() + delay, notifiedAt: null, deliveryError: "" });
   }
 
   nextPendingDue() {
-    return this.state.items.filter((item) => item.status === "pending" && item.remindAt != null).sort((left, right) => left.remindAt - right.remindAt)[0] || null;
+    if (this.failure) return null;
+    return this.state.items.filter(item => item.remindAt != null && (item.status === "pending" || (item.status === "failed" && item.nextAttemptAt != null))).sort((left, right) => (left.nextAttemptAt ?? left.remindAt) - (right.nextAttemptAt ?? right.remindAt))[0] || null;
+  }
+
+  isDeliveryCurrent(id, attempt) {
+    return this.state.items.some(item => item.id === id && item.status === "delivering" && item.deliveryAttempt === attempt);
   }
 
   claimDue(at = this.now(), limit = 20) {
-    const due = this.state.items.filter((item) => item.status === "pending" && item.remindAt != null && item.remindAt <= at).sort((left, right) => left.remindAt - right.remindAt).slice(0, limit);
+    if (this.failure) return [];
+    const due = this.state.items.filter(item => item.remindAt != null && (item.nextAttemptAt ?? item.remindAt) <= at && (item.status === "pending" || (item.status === "failed" && item.nextAttemptAt != null))).sort((left, right) => (left.nextAttemptAt ?? left.remindAt) - (right.nextAttemptAt ?? right.remindAt)).slice(0, limit);
     if (!due.length) return [];
     const ids = new Set(due.map((item) => item.id));
-    const updated = this.state.items.map((item) => ids.has(item.id) ? normalizeReminder({ ...item, status: "notified", notifiedAt: at, updatedAt: at }) : item);
+    const updated = this.state.items.map((item) => ids.has(item.id) ? normalizeReminder({ ...item, status: "delivering", deliveryAttempt: item.deliveryAttempt + 1, notifiedAt: null, nextAttemptAt: null, updatedAt: at }) : item);
     this.persist(updated);
     return updated.filter((item) => ids.has(item.id)).map(publicReminder);
+  }
+
+  finishDelivery(id, attempt, result = {}) {
+    const item = this.state.items.find(value => value.id === id);
+    if (!item || item.status !== "delivering" || item.deliveryAttempt !== attempt) return { ignored: true };
+    if (result.ok === true && result.voice === true) return this.updateStatus(id, "notified", { notifiedAt: this.now(), nextAttemptAt: null, deliveryError: "" });
+    if (result.queued === true) return this.updateStatus(id, "pending", { nextAttemptAt: this.now() + 15_000, deliveryError: "busy" });
+    const failures = (item.failureCount || 0) + 1;
+    return this.updateStatus(id, "failed", { failureCount: failures, notifiedAt: null, nextAttemptAt: failures < 3 ? this.now() + failures * 30_000 : null, deliveryError: failures < 3 ? "playback-failed" : "retry-exhausted" });
   }
 
   dashboardSnapshot(at = this.now(), limit = 50) {
@@ -297,8 +323,16 @@ function isPersonalReminderUtterance(value) {
     || /(?:记一下|记录一下|记下来|记录下来).{0,20}(?:重要事项|很重要)/u.test(source);
 }
 
+function normalizeReminderSpeech(value) {
+  const digits = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  return cleanText(value, 1000).replace(/[零〇一二两三四五六七八九十]{1,3}(?=[点时分月日号])/gu, token => {
+    if (token.includes("十")) { const [left, right] = token.split("十"); return String((left ? digits[left] : 1) * 10 + (right ? digits[right] : 0)); }
+    return [...token].map(char => digits[char]).join("");
+  });
+}
+
 function parsePersonalReminderIntent(value, { now = Date.now() } = {}) {
-  const source = cleanText(value, 1000);
+  const source = normalizeReminderSpeech(value);
   if (!isPersonalReminderUtterance(source)) return Object.freeze({ recognized: false, type: "none" });
   if (isReminderListQuery(source)) return Object.freeze({ recognized: true, type: "list" });
   if (/(?:你|小岚|小兰|小蓝).{0,8}(?:有没有|有没|能不能|可以不可以|会不会|能|可以|会).{0,8}提醒(?:功能)?/u.test(source)) {
@@ -372,6 +406,48 @@ function executePersonalReminderIntent(value, { store, now = Date.now() } = {}) 
   }
 }
 
+class PersonalReminderConversation {
+  constructor({ store, now = Date.now } = {}) { this.store = store; this.now = now; this.draft = null; this.lastAction = "none"; this.lastReason = ""; }
+  status() { return { draftActive: Boolean(this.activeDraft()), lastAction: this.lastAction, lastReason: this.lastReason, delivery: this.store.deliveryStatus() }; }
+  activeDraft() { if (this.draft && this.draft.expiresAt <= this.now()) this.draft = null; return this.draft; }
+  claims(value) {
+    const source = normalizeReminderSpeech(value);
+    if (isPersonalReminderUtterance(source)) return true;
+    const draft = this.activeDraft();
+    if (!draft) return false;
+    if (/^(?:算了|不用了|取消|取消提醒|别记了)[。！!]*$/u.test(source)) return true;
+    if (/^(?:(?:今天|明天|后天)[，,\s]*)?(?:(?:上午|下午|晚上|早上|中午|凌晨)|(?:上午|下午|晚上|早上|中午|凌晨)?\s*\d{1,2}(?:点|时)(?:钟)?(?:半|\d{1,2}分?)?)[。！!]*$/u.test(source)) return true;
+    return draft.reason === "personal-reminder-title-missing" && source.length <= 80 && !/[？?]|(?:吗|呢|介绍|你是谁|什么功能|打开|浏览器|讲个|笑话|天气)/u.test(source) && !/^(?:好的?|嗯+|谢谢|没事|知道了)[。！!]*$/u.test(source);
+  }
+  execute(value) {
+    const source = normalizeReminderSpeech(value);
+    const draft = this.activeDraft();
+    if (draft && /^(?:算了|不用了|取消|取消提醒|别记了)[。！!]*$/u.test(source)) { this.draft = null; this.lastAction = "cancel-draft"; this.lastReason = ""; return { ok: true, type: "cancel-draft", changed: false, answer: "好，这条未完成的提醒不保存了。" }; }
+    let text = source;
+    if (draft && this.claims(source) && !isPersonalReminderUtterance(source)) {
+      if (draft.reason === "personal-reminder-title-missing") text = `${draft.text} ${source}`;
+      else {
+        const mentions = timeMentions(draft.text);
+        const selected = mentions[reminderMentionIndex(draft.text, mentions)];
+        const replyMentions = timeMentions(source);
+        if (selected) {
+          const period = source.match(/上午|下午|晚上|早上|中午|凌晨/u)?.[0];
+          const replacement = replyMentions[0]?.text || (period ? `${period}${selected.hour}点${selected.minute}分` : selected.text);
+          text = draft.text.slice(0, selected.start) + replacement + draft.text.slice(selected.end);
+        } else text = `${draft.text} ${source}`;
+        const replyDay = source.match(/今天|明天|后天/u)?.[0];
+        if (replyDay) text = /今天|明天|后天/u.test(text) ? text.replace(/今天|明天|后天/u, replyDay) : `${replyDay} ${text}`;
+      }
+    }
+    const result = executePersonalReminderIntent(text, { store: this.store, now: this.now() });
+    this.lastAction = result.type || "none";
+    this.lastReason = result.reason || "";
+    if (result.type === "clarify") this.draft = { text, reason: result.reason, expiresAt: this.now() + 120_000 };
+    else if (result.type !== "list" && result.type !== "capability") this.draft = null;
+    return result;
+  }
+}
+
 class PersonalReminderScheduler {
   constructor({ store, now = () => Date.now(), schedule = setTimeout, cancel = clearTimeout, onDue = async () => {}, onChange = () => {} } = {}) {
     this.store = store; this.now = now; this.schedule = schedule; this.cancel = cancel; this.onDue = onDue; this.onChange = onChange;
@@ -386,8 +462,8 @@ class PersonalReminderScheduler {
     if (this.stopped) return;
     const next = this.store.nextPendingDue();
     if (!next) return;
-    const delay = Math.max(0, Math.min(MAX_TIMER_DELAY_MS, next.remindAt - this.now()));
-    this.timer = this.schedule(() => { this.timer = null; void this.tick(); }, delay);
+    const delay = Math.max(0, Math.min(MAX_TIMER_DELAY_MS, (next.nextAttemptAt ?? next.remindAt) - this.now()));
+    this.timer = this.schedule(() => { this.timer = null; return this.tick().catch(() => {}); }, delay);
     this.timer?.unref?.();
   }
   async tick() {
@@ -396,7 +472,13 @@ class PersonalReminderScheduler {
     try {
       const due = this.store.claimDue(this.now());
       if (due.length) this.onChange(this.store.dashboardSnapshot(this.now()));
-      for (const reminder of due) await this.onDue(reminder);
+      for (const reminder of due) {
+        if (this.stopped || !this.store.isDeliveryCurrent(reminder.id, reminder.deliveryAttempt)) continue;
+        let result;
+        try { result = await this.onDue(reminder); } catch { result = { ok: false }; }
+        this.store.finishDelivery(reminder.id, reminder.deliveryAttempt, result);
+        this.onChange(this.store.dashboardSnapshot(this.now()));
+      }
     } finally { this.running = false; this.reschedule(); }
   }
 }
@@ -405,6 +487,7 @@ module.exports = {
   PERSONAL_REMINDERS_VERSION,
   MAX_REMINDERS,
   PersonalReminderScheduler,
+  PersonalReminderConversation,
   PersonalReminderStore,
   executePersonalReminderIntent,
   formatReminderTime,

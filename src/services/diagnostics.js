@@ -24,7 +24,7 @@ const HALF_DUPLEX_PHASES = new Set(["idle", "connecting", "listening", "thinking
 const TTS_TURN_OUTCOMES = new Set(["none", "completed", "manual", "recognized-speech", "stop", "provider", "drain-timeout"]);
 const SINK_CANCEL_REASONS = ["none", "asr-final", "manual", "stop", "renderer", "provider", "drain-timeout", "other"];
 const INTENT_BRIDGE_LAST_STATUSES = new Set(["unavailable", "idle", "none", "completed", "failed", "expired", "rejected"]);
-const INTENT_BRIDGE_LAST_TYPES = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "run_motion_preset", "control_local_media"]);
+const INTENT_BRIDGE_LAST_TYPES = new Set(["none", "open_application", "query_codex_status", "query_companion_profile", "manage_personal_reminder", "run_motion_preset", "control_local_media"]);
 const MANUAL_CALIBRATION_TRANSPORTS = new Set(["completed", "malformed", "busy", "stale", "conflict", "link-not-ready", "link-queue-busy", "timeout", "link-error", "peer-disconnected-or-restarted", "invalid-response", "internal", "unavailable"]);
 const MANUAL_CALIBRATION_LINK_ERRORS = new Map([[0, "NONE"], [1, "UNKNOWN_TYPE"], [2, "BAD_PAYLOAD"], [3, "NOT_READY"], [4, "BUSY"], [5, "SEQUENCE_CONFLICT"], [6, "INTERNAL"]]);
 const MANUAL_CALIBRATION_ENDPOINT_RESULTS = new Set(["completed", "duplicate", "not-ready", "bad-payload", "wrong-session", "stale-action", "arm-required", "arm-expired", "wrong-axis", "step-out-of-range", "center-required", "emergency-stopped", "faulted", "adapter-unavailable", "adapter-failure", "action-conflict", "safety-not-confirmed"]);
@@ -276,7 +276,7 @@ export function createDiagnosticReport(input = {}) {
         timings: Object.fromEntries(MODEL_TIMINGS.map(key => [key, typeof pipelineSource.context?.timings?.[key] === 'number' && Number.isFinite(pipelineSource.context.timings[key]) ? Math.max(0, Math.min(120000, pipelineSource.context.timings[key])) : null])),
         lastFailure: safeModelFailure(pipelineSource.context?.lastFailure),
       },
-      counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsAcceptedExplicit", "bargeInsAcceptedFinal", "bargeInsRejectedEcho", "bargeInsRejectedWeak", "bargeSpeechStarts", "bargeInsRejectedUnstable", "bargePartialsDeferred", "bargeFinalsRejectedInconsistent", "postPlaybackEchoDrops", "bargeFinalTimeouts", "bargeFinalRecoveries", "lateBargeFinalDrops"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
+      counters: Object.fromEntries(["asrPartials", "asrFinals", "duplicateFinals", "trustedBypasses", "modelRequests", "assistantDeltas", "ttsRequests", "ttsAudioChunks", "turnsCompleted", "cancellations", "errors", "bargeInCandidates", "bargeInsAccepted", "bargeInsAcceptedExplicit", "bargeInsAcceptedFinal", "bargeInsRejectedEcho", "bargeInsRejectedWeak", "bargeSpeechStarts", "bargeInsRejectedUnstable", "bargePartialsDeferred", "bargeFinalsRejectedInconsistent", "postPlaybackEchoDrops", "postPlaybackFreshSpeechStarts", "postPlaybackEchoItemDrops", "postPlaybackEchoTextDrops", "bargeFinalTimeouts", "bargeFinalRecoveries", "lateBargeFinalDrops"].map((key) => [key, Math.max(0, Number(pipelineCountersSource[key]) || 0)])),
       timing: Object.fromEntries(["speechStarted", "firstAsrPartialMs", "asrFinalMs", "speechStopToFinalMs", "modelRequestStartedMs", "firstAssistantDeltaMs", "firstTtsRequestMs", "firstTtsAudioMs", "playbackStartedMs", "playbackQueuedMs", "turnCompletedMs"].map((key) => [key, typeof pipelineTimingSource[key] === "number" && Number.isFinite(pipelineTimingSource[key]) ? Math.max(0, Math.min(120000, pipelineTimingSource[key])) : null])),
       preemptiveEnabled: pipelineSource.preemptiveEnabled === true,
       speculation: Object.fromEntries(['draftsStarted', 'draftsReused', 'draftsCancelled', 'modelRecoveries'].map(key => [key, Math.max(0, Math.min(1000000, Number(pipelineCountersSource[key]) || 0))])),
@@ -309,6 +309,12 @@ export function createDiagnosticReport(input = {}) {
       lastStatus: INTENT_BRIDGE_LAST_STATUSES.has(intentBridgeSource.lastStatus) ? intentBridgeSource.lastStatus : "unavailable",
       lastType: INTENT_BRIDGE_LAST_TYPES.has(intentBridgeSource.lastType) ? intentBridgeSource.lastType : "none",
       lastReason: /^[a-z0-9-]{0,80}$/.test(String(intentBridgeSource.lastReason || "")) ? String(intentBridgeSource.lastReason || "") : "intent-bridge-failed",
+      reminders: {
+        draftActive: intentBridgeSource.reminders?.draftActive === true,
+        lastAction: ["none", "create", "clarify", "list", "capability", "cancel-draft"].includes(intentBridgeSource.reminders?.lastAction) ? intentBridgeSource.reminders.lastAction : "none",
+        lastReason: /^personal-reminders?-[a-z-]{1,60}$/.test(String(intentBridgeSource.reminders?.lastReason || "")) ? intentBridgeSource.reminders.lastReason : "",
+        delivery: Object.fromEntries(["pending", "delivering", "failed", "notified"].map(key => [key, Math.max(0, Math.min(1000, Number(intentBridgeSource.reminders?.delivery?.[key]) || 0))])),
+      },
     },
     sinkCancellation: {
       reasons: Object.fromEntries(SINK_CANCEL_REASONS.map((reason) => [reason, Math.max(0, Number(sinkCancelSource[reason]) || 0)])),

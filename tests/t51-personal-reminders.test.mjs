@@ -76,14 +76,15 @@ test("T51 due scheduler claims once before delivery and supports local snooze", 
   const store = new PersonalReminderStore({ userDataPath: directory, now: () => clock, createId: ids() });
   const item = store.create({ title: "拿资料", remindAt: now + 60_000, eventAt: now + 60_000 });
   const delivered = [];
-  const scheduler = new PersonalReminderScheduler({ store, now: () => clock, schedule: (fn) => { callback = fn; return { unref() {} }; }, cancel: () => {}, onDue: async (value) => delivered.push(value.id) });
+  const scheduler = new PersonalReminderScheduler({ store, now: () => clock, schedule: (fn) => { callback = fn; return { unref() {} }; }, cancel: () => {}, onDue: async (value) => { delivered.push(value.id); return { ok: true, voice: true }; } });
   scheduler.start(); clock += 60_000; await callback();
   assert.deepEqual(delivered, [item.id]);
   assert.equal(store.snapshot().items[0].status, "notified");
   await scheduler.tick(); assert.deepEqual(delivered, [item.id]);
   store.deferDelivery(item.id, 15_000); scheduler.reschedule();
   assert.equal(store.snapshot().items[0].status, "pending");
-  assert.equal(store.snapshot().items[0].remindAt, clock + 15_000);
+  assert.equal(store.snapshot().items[0].remindAt, clock);
+  assert.equal(store.snapshot().items[0].nextAttemptAt, clock + 15_000);
   store.snooze(item.id, 10); scheduler.reschedule();
   assert.equal(store.snapshot().items[0].status, "pending");
   assert.equal(store.snapshot().items[0].remindAt, clock + 600_000);

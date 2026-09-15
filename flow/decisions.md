@@ -1,5 +1,13 @@
 # Decisions
 
+## D160 — A fresh ASR media start supersedes residual playback echo identity
+
+2026-09-15: Compare a new ASR speech-start timestamp with the cumulative accepted 16 kHz mono PCM upload boundary captured at playback drain. A proven post-boundary start clears the old residual echo tail, even if recognized words repeat or the provider reuses an item identifier. Missing or pre-boundary timing cannot clear this protection. Keep T49 explicit-stop and ordinary-final evidence rules intact. Export only fresh-start and item/text-rejection counts, never timeline identifiers, text or audio.
+
+## D159 — Reminder clarification is local; notification requires audible completion
+
+2026-09-15: Normalize Chinese time numerals and retain missing reminder fields in a main-owned two-minute draft, with bounded completion replies, cancellation and expiry. Never guess missing purpose or ambiguous morning/afternoon. A durable attempt enters `delivering`; only an accepted audio write and successful sink drain can mark `notified`. Busy attempts retry after 15 seconds without consuming failure budget; failed playback retries after 30/60 seconds and stops after three failures with a visible Workbench action. Retry timing must not rewrite reminder/event time. Attempt/status checks protect concurrent snooze/completion. Restart recovers interrupted delivery with possible at-least-once replay. A standalone announcement shares the existing controller/sink but creates only TTS and never captures a microphone or opens ASR/model.
+
 ## D158 — Personal reminders are main-owned local records, not Codex tasks
 
 2026-09-15: Put personal reminders and important items on the Workbench and keep them independent from Codex task reports. Store them in a validated main-process file with separate event/reminder timestamps, atomic readback and durable lifecycle states. Route explicit voice creation and queries locally before the free-conversation model; ambiguous hours require clarification. Use one local scheduler that claims due items before a one-shot 小岚 TTS announcement; do not add an alarm, ringtone or Windows notification sound. When dictation owns the voice channel, requeue briefly rather than interrupt or mark the speech complete. Background monitoring itself must not call ASR, model, TTS or KnowledgeOS APIs, reminder titles must not enter diagnostics, and local backup/restore must preserve the records.

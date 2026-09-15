@@ -347,7 +347,7 @@ test("diagnostic export whitelists terminal metadata and rejects provider conten
 
 test("current package exposes the integrated Style Studio build identity", () => {
   const main = fs.readFileSync(new URL("../electron/main.cjs", import.meta.url), "utf8");
-  assert.match(main, /t51-personal-reminders/);
+  assert.match(main, /t52-reminder-listening-reliability/);
   assert.match(main, /pipeline: snapshot\?\.pipeline/);
   assert.doesNotMatch(main, /const DESKMATE_BUILD_ID = "unknown"/);
 });
@@ -395,7 +395,7 @@ test("turn and sink cancellation diagnostics are bounded and contain no conversa
   assert.equal(report.conversation.turnLifecycle.bridgeOwnedTurns, 2);
   assert.equal(report.conversation.turnLifecycle.bridgePassThroughTurns, 5);
   assert.deepEqual({ starts: report.conversation.turnLifecycle.listeningSpeechStarts, partials: report.conversation.turnLifecycle.listeningPartials, refreshes: report.conversation.turnLifecycle.idleTimerRefreshes }, { starts: 3, partials: 8, refreshes: 11 });
-  assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1, lastStatus: "failed", lastType: "run_motion_preset", lastReason: "choreography-active" });
+  assert.deepEqual(report.conversation.intentBridge, { status: "ready", taskCount: 1, lastStatus: "failed", lastType: "run_motion_preset", lastReason: "choreography-active", reminders: { draftActive: false, lastAction: "none", lastReason: "", delivery: { pending: 0, delivering: 0, failed: 0, notified: 0 } } });
   assert.deepEqual(report.codexTaskBrief, { receiver: "listening", taskCount: 1, announcementsEnabled: true });
   assert.equal(report.conversation.sinkCancellation.reasons.manual, 7);
   assert.equal(report.conversation.sinkCancellation.reasons["asr-final"], 0);

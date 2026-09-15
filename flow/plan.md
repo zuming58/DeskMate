@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T52 reminder and listening reliability — candidate
+
+Chinese time numerals and a bounded two-minute reminder clarification draft now complete local creation across turns. Notification is confirmed only after accepted audio and successful playback drain; busy reminders queue locally and playback failure has bounded retries without changing the original due time. Standalone announcements use only TTS, with no microphone, ASR or model. New post-playback speech proven after the uploaded-audio boundary clears residual echo rejection, while delayed echo and T49 guarded interruption stay protected. See `docs/contracts/t52-reminder-listening-reliability-v1.md`. Real microphone/speaker acceptance remains pending.
+
 ## Current delivery: T51 personal reminders — candidate
 
 The Workbench now owns durable personal reminders and important items, separate from Codex tasks. Users can add, complete and snooze them in the Workbench, or ask 小岚 to create/query them through a deterministic local route. Event time and reminder time remain separate; ambiguous hours are clarified instead of guessed. A main-process local scheduler makes 小岚 speak at the due time without an alarm or continuous API use, and reminders participate in versioned local backup/restore. See `docs/contracts/t51-personal-reminders-v1.md`.

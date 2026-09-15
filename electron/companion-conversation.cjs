@@ -162,6 +162,8 @@ class CompanionConversationController {
     this.trustedSpeechTimerGeneration = 0;
     this.restoreSinkVolumeAfterAnnouncement = null;
     this.closeAfterTrustedAnnouncement = false;
+    this.announcementOnly = false;
+    this.announcementCompletion = null;
     this.echoGuardCounters = { echoGuardDroppedChunks: 0, ignoredAsrDuringPlayback: 0, playbackDrainTimeouts: 0, teardownTimeouts: 0 };
     this.turnLifecycle = {
       ttsTurnStarted: 0, ttsTurnCompleted: 0, ttsTurnAbandoned: 0,
@@ -374,6 +376,29 @@ class CompanionConversationController {
     return Math.max(this.trustedSpeechTimeoutMs, Math.min(60000, estimated));
   }
 
+  beginAnnouncementCompletion() {
+    if (this.announcementCompletion) throw new Error("companion-announcement-busy");
+    return new Promise(resolve => { this.announcementCompletion = { resolve, audioSeen: false }; });
+  }
+
+  settleAnnouncement(ok, reason = "") {
+    const pending = this.announcementCompletion;
+    if (!pending) return;
+    this.announcementCompletion = null;
+    const audible = ok === true && pending.audioSeen;
+    pending.resolve({ ok: audible, voice: audible, reason: audible ? "" : reason || "companion-announcement-not-played" });
+  }
+
+  async announceAndWait(value, options = {}) {
+    if (!this.active || this.stopPromise || this.state !== "listening" || this.announcementCompletion) return { ok: false, queued: true, reason: "companion-announcement-busy" };
+    const completion = this.beginAnnouncementCompletion();
+    try {
+      const started = await this.announce(value, options);
+      if (!started.ok) this.settleAnnouncement(false, started.reason);
+    } catch { this.settleAnnouncement(false, "companion-announcement-unavailable"); }
+    return completion;
+  }
+
   armTrustedSpeechTimer(text, token, phase = "response-start") {
     this.clearTrustedSpeechTimer();
     if (!this.isCurrent(token)) return false;
@@ -391,6 +416,7 @@ class CompanionConversationController {
     if (!this.isCurrent(token) || generation !== this.trustedSpeechTimerGeneration) return { ignored: true, reason: "companion-trusted-speech-timeout-stale" };
     this.trustedSpeechTimerGeneration += 1;
     this.turnLifecycle.trustedSpeechTimeouts += 1;
+    this.settleAnnouncement(false, "companion-announcement-timeout");
     if (phase === "audio-quiet") {
       this.turnLifecycle.trustedAudioQuietRecoveries += 1;
       this.playbackDraining = true;
@@ -475,12 +501,14 @@ class CompanionConversationController {
     });
   }
 
-  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume, closeAfterAnnouncement = false } = {}) {
+  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume, closeAfterAnnouncement = false, waitForAnnouncement = false } = {}) {
     if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     const sinkStatus = availability(this.audioSink, "audio-sink-unavailable");
-    if (!sourceStatus.available) return { ok: false, reason: sourceStatus.reason || "audio-source-unavailable", status: this.snapshot() };
+    this.announcementOnly = Boolean(initialAnnouncement && closeAfterAnnouncement);
+    if (!this.announcementOnly && !sourceStatus.available) return { ok: false, reason: sourceStatus.reason || "audio-source-unavailable", status: this.snapshot() };
     if (!sinkStatus.available) return { ok: false, reason: sinkStatus.reason || "audio-sink-unavailable", status: this.snapshot() };
+    const completion = waitForAnnouncement && initialAnnouncement ? this.beginAnnouncementCompletion() : null;
     this.active = Object.freeze({ sessionId: boundedText(sessionId, 128), generation: Math.max(1, Number(generation) || 1), token: Symbol("companion-session") });
     this.lastPipelineDiagnostics = null;
     this.turnSequence = 0;
@@ -505,7 +533,7 @@ class CompanionConversationController {
       if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale" };
       const sink = await this.audioSink.start();
       if (!sink?.ok) throw new Error(sink?.reason || "audio-sink-start-failed");
-      const source = await this.audioSource.start({
+      const source = this.announcementOnly ? { ok: true } : await this.audioSource.start({
         onAudio: (chunk) => { this.forwardSourceAudio(chunk, token); },
         onError: (error) => { if (this.isCurrent(token)) void this.fail(error?.message || "audio-source-error", token); },
       });
@@ -519,7 +547,7 @@ class CompanionConversationController {
         this.trustedResponseActive = true;
         this.armTrustedSpeechTimer(announcement, token);
       } else await this.transition("listening");
-      return { ok: true, status: this.snapshot() };
+      return completion || { ok: true, status: this.snapshot() };
     } catch (error) {
       await this.fail(error?.message || "companion-start-failed", token);
       return { ok: false, reason: this.lastError || "companion-start-failed", status: this.snapshot() };
@@ -531,11 +559,18 @@ class CompanionConversationController {
     if (!content) return { ok: false, reason: "companion-announcement-empty", status: this.snapshot() };
     if (!this.active || this.stopPromise || this.state !== "listening") return { ok: false, reason: "companion-announcement-busy", status: this.snapshot() };
     const token = this.active.token;
-    if (Number.isFinite(Number(volume)) && typeof this.audioSink?.setVolume === "function") await this.audioSink.setVolume(Number(volume));
     this.restoreSinkVolumeAfterAnnouncement = Number.isFinite(Number(restoreVolume)) ? Number(restoreVolume) : null;
+    try {
+      if (Number.isFinite(Number(volume)) && typeof this.audioSink?.setVolume === "function") await this.audioSink.setVolume(Number(volume));
+    } catch {
+      await this.restoreAnnouncementVolume().catch(() => {});
+      return { ok: false, reason: "companion-announcement-volume-failed", status: this.snapshot() };
+    }
     await this.transition("thinking", { reason: "trusted-proactive-announcement" });
     if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale", status: this.snapshot() };
-    if (!this.provider?.speakText?.(content)) {
+    let accepted = false;
+    try { accepted = this.provider?.speakText?.(content) === true; } catch { /* Treat synchronous provider rejection like an unavailable send. */ }
+    if (!accepted) {
       this.clearTrustedSpeechTimer();
       this.trustedResponseActive = false;
       await this.restoreAnnouncementVolume();
@@ -635,6 +670,7 @@ class CompanionConversationController {
     this.pendingTrustedResponse = null;
     this.trustedResponseActive = false;
     this.clearTrustedSpeechTimer();
+    this.settleAnnouncement(false, "companion-announcement-interrupted");
     this.markTtsTurnInterrupted("recognized-speech");
     if (event.hadTts) {
       this.discardResponseUntilTtsEnd = true;
@@ -648,7 +684,7 @@ class CompanionConversationController {
 
   createProvider(token) {
     const providerEpoch = ++this.providerEpoch;
-    return this.providerFactory({ sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, sessionTranscriptContext: this.sessionTranscriptContext, onEvent: (event) => {
+    return this.providerFactory({ announcementOnly: this.announcementOnly, sessionPreferences: this.sessionProviderPreferences, sessionPersona: this.sessionPersona, sessionMemoryContext: this.sessionMemoryContext, sessionTranscriptContext: this.sessionTranscriptContext, onEvent: (event) => {
       const bargeSinkInterrupt = this.prepareRecognizedBargeIn(event, token);
       const providerArrival = this.recordProviderArrival(event, this.isCurrent(token) && providerEpoch === this.providerEpoch);
       const arrival = Object.freeze({
@@ -689,6 +725,7 @@ class CompanionConversationController {
   async reconnect(token, { reason = "provider-reconnect" } = {}) {
     const cancelled = () => ({ ok: false, ignored: true, reason: "companion-session-stale" });
     if (!this.isCurrent(token)) return cancelled();
+    if (this.announcementOnly) return this.fail("companion-announcement-connection-lost", token);
     if (this.reconnecting) return this.reconnecting;
     this.reconnecting = (async () => {
       this.clearTrustedSpeechTimer();
@@ -827,6 +864,7 @@ class CompanionConversationController {
         throw error;
       }
       if (written !== true) throw new Error("computer-audio-playback-write-failed");
+      if (this.announcementCompletion && this.isCurrent(token)) this.announcementCompletion.audioSeen = true;
       if (this.isCurrent(token) && arrival.providerEpoch === this.providerEpoch && !this.discardResponseUntilTtsEnd) this.provider?.playbackQueued?.(event.turnId);
       if (this.trustedResponseActive) this.armTrustedSpeechTimer("", token, "audio-quiet");
       return { ok: true };
@@ -951,6 +989,7 @@ class CompanionConversationController {
         await this.boundedOperation(() => this.audioSink.interrupt("drain-timeout"), this.teardownStepTimeoutMs, "companion-audio-interrupt-timeout");
       }
       this.provider?.playbackDrained?.();
+      this.settleAnnouncement(Boolean(drainResult?.ok), "companion-audio-drain-failed");
       this.finishTtsTurn();
       this.playbackDraining = false;
       const shouldClose = this.closeAfterTrustedAnnouncement && this.trustedResponseActive;
@@ -989,6 +1028,7 @@ class CompanionConversationController {
 
   async fail(reason, token = this.active?.token) {
     if (!this.isCurrent(token)) return { ignored: true, reason: "companion-failure-stale" };
+    this.settleAnnouncement(false, "companion-announcement-failed");
     const session = this.active;
     const provider = this.provider;
     this.active = null;
@@ -1036,6 +1076,7 @@ class CompanionConversationController {
     const session = this.active;
     const provider = this.provider;
     await this.transition("stopping", { reason });
+    this.settleAnnouncement(false, "companion-announcement-stopped");
     this.active = null;
     this.abandonOpenTurn("stop");
     this.discardResponseUntilTtsEnd = false;
@@ -1060,6 +1101,7 @@ class CompanionConversationController {
   async interrupt(reason = "user") {
     if (!this.active) return { ok: false, reason: "companion-session-inactive", status: this.snapshot() };
     if (!['thinking', 'speaking', 'completed'].includes(this.state)) return { ok: false, reason: "companion-response-not-active", status: this.snapshot() };
+    this.settleAnnouncement(false, "companion-announcement-interrupted");
     this.discardResponseUntilTtsEnd = true;
     this.postInterruptState = "listening";
     this.pendingTrustedResponse = null;
