@@ -15,7 +15,7 @@ app.setPath('userData', path.join(output, 'profile'));
 app.disableHardwareAcceleration();
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assertions = []; const errors = []; const calls = [];
-let window; let failOverview = false; let empty = false;
+let window; let failOverview = false; let empty = false; let failDelete = false;
 const promptStore = new PromptWorkbenchStore({ userDataPath: output });
 const controller = new PromptWorkbenchController({ store: promptStore });
 const now = Date.now();
@@ -53,6 +53,7 @@ app.whenReady().then(async () => {
     if (channel === 'desktop:get-codex-task-brief-status') return tasks();
     if (channel === 'reminders:create') { reminderItems = [...reminderItems, { id: '00000000-0000-4000-8000-000000000002', ...payload, status: 'pending', createdAt: now, updatedAt: now, notifiedAt: null }]; return { ok: true, snapshot: reminderSnapshot() }; }
     if (channel === 'reminders:complete') { reminderItems = reminderItems.filter(item => item.id !== payload); return { ok: true, snapshot: reminderSnapshot() }; }
+    if (channel === 'reminders:delete') { if (failDelete) return {ok:false,reason:'personal-reminder-save-failed'}; reminderItems=reminderItems.filter(item=>item.id!==payload); return {ok:true,snapshot:reminderSnapshot()}; }
     if (channel === 'reminders:snooze') return { ok: true, snapshot: reminderSnapshot() };
     if (channel === 'desktop:register-shortcut') return { registered: false, shortcut: 'Ctrl+Shift+Space' };
     if (channel === 'desktop:list-registered-applications' || channel === 'desktop:list-applications') return [];
@@ -80,6 +81,12 @@ app.whenReady().then(async () => {
   record('personal reminders are a first-class Workbench panel', await run(`document.querySelector('.wb-reminders-card')?.textContent.includes('准备展会材料') && document.querySelector('.wb-reminders-card')?.textContent.includes('稍后 10 分钟')`));
   await click('添加'); record('reminder composer keeps event and reminder times separate', await run(`document.querySelectorAll('.wb-reminder-form input[type="datetime-local"]').length===2`)); await click('收起');
   const pendingReminderItems = reminderItems;
+  await click('删除'); record('delete confirmation identifies the selected reminder', await run(`document.querySelector('[role="dialog"]').textContent.includes('准备展会材料')`));
+  await click('取消'); record('cancel deletion keeps reminder',reminderItems.length===1);
+  await click('删除'); failDelete=true; await click('确认删除');
+  record('failed deletion stays visible with retry feedback',await run(`document.querySelector('[role="dialog"]').textContent.includes('重试')`));
+  failDelete=false; await click('确认删除'); record('confirmed deletion removes only selected fixture',reminderItems.length===0);
+  reminderItems=pendingReminderItems; await click('刷新');
   reminderItems = [{...reminderItems[0], status: 'failed', failureCount: 3, nextAttemptAt: null}];
   await click('刷新');
   record('failed speech remains actionable and is not labelled notified', await run(`document.querySelector('.wb-reminders-card').textContent.includes('尚未播报成功') && document.querySelector('.wb-reminders-card').textContent.includes('自动重试已停止') && document.querySelector('.wb-reminders-card').textContent.includes('稍后 10 分钟') && !document.querySelector('.wb-reminders-card').textContent.includes('已提醒')`));
@@ -91,6 +98,7 @@ app.whenReady().then(async () => {
   reminderItems = [{...reminderItems[0], status: 'delivering'}];
   await click('刷新');
   record('in-flight playback is not reported as a completed reminder', await run(`document.querySelector('.wb-reminders-card').textContent.includes('提醒播报中') && !document.querySelector('.wb-reminder-copy').textContent.includes('已提醒')`));
+  record('cannot delete audio already being delivered',await run(`Array.from(document.querySelectorAll('.wb-reminder-actions button')).find(b=>b.textContent==='删除').disabled`));
   await shot('reminder-delivering-1440-synthetic');
   reminderItems = pendingReminderItems; await click('刷新'); await run('window.scrollTo(0,0)');
   await shot('overview-1440-synthetic');

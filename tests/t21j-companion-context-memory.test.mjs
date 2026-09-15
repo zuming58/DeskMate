@@ -132,7 +132,8 @@ test("T21J playback interruption marks generated answer without pretending it wa
 });
 
 test("T21J cold restart seeds only recent companion finals, never dictation or old sessions", () => temporary(async (directory) => {
-  const now = Date.now();
+  // The six-hour-old fixture must be today under T30's calendar-day boundary.
+  const now = new Date(2026, 8, 16, 12).getTime();
   const store = new CompanionMemoryStore({ userDataPath: directory, now: () => now });
   try {
     for (const [index, source, age, text] of [[1, "companion", 6 * 3600000, "上午决定校对发布说明"], [2, "dictation", 1000, "不可作为陪伴上下文的听写"], [3, "companion", CONTEXT_AGE_MS + 1, "过期的对话"]]) {
@@ -143,6 +144,16 @@ test("T21J cold restart seeds only recent companion finals, never dictation or o
     assert.match(JSON.stringify(store.earlierCompanionContextForQuery("上午发布说明做什么")), /校对发布说明/);
     assert.doesNotMatch(JSON.stringify(store.earlierCompanionContextForQuery("听写过期对话")), /不可作为|过期的对话/);
   } finally { store.close(); }
+}));
+
+test("T21J midnight restart does not seed yesterday even within six hours", () => temporary(async directory => {
+  const now = new Date(2026, 8, 16, 0, 30).getTime();
+  const store = new CompanionMemoryStore({userDataPath:directory,now:()=>now});
+  try {
+    for (const [id,age,content] of [['previous',6*3600000,'昨天的测试闲聊'],['current',1000,'今天的新话题']]) store.commitConversationTurn({eventId:id,sessionId:id,role:'user',source:'companion',content,createdAt:new Date(now-age).toISOString()});
+    const context = new CompanionDialogueContext({now:()=>now,seed:store.recentCompanionContext()});
+    assert.deepEqual(context.messages(),[{role:'user',content:'今天的新话题'}]);
+  } finally {store.close();}
 }));
 
 test("T21J context limits and forget invalidate active entries without repopulation", () => {

@@ -1,5 +1,9 @@
 # Decisions
 
+## D165 — Extract mixed reminder purpose before persistence; deletion is a separate confirmed action
+
+2026-09-16: A locally parseable time/nonempty leftover string does not prove a valid purpose. Defer mixed-purpose creation until a bounded reminder-only extraction is grounded in the original purpose, while keeping local timestamps and simple-reminder latency. Never fall back to saving raw chat on model failure. Per-row deletion uses narrow IPC, selected-record confirmation, durable removal and timer rearm; reject deletion during active delivery rather than claim already-playing audio stopped. No bulk rewrite of existing records or deletion of memory/history.
+
 ## D164 — Reminder purpose cleanup and speech presentation are separate from scheduling
 
 2026-09-15: Clean bounded standalone hesitation tokens and reminder-request wrappers before saving voice purposes, not arbitrary substrings or ordinary dictation. Preserve substantive 一下, negation, numbers and names. Format due speech locally with current saved persona ownerName; use natural simple-action templates only when reminder/event times coincide, neutral reminder framing otherwise. Do not hardcode a name, add a model call or rewrite old records. Legacy separated filler tokens may be cleaned non-destructively during speech; store receipt and audio-drain completion still own success.

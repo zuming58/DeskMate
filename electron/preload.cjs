@@ -136,6 +136,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   listPersonalReminders: () => ipcRenderer.invoke("reminders:list"),
   createPersonalReminder: (value) => ipcRenderer.invoke("reminders:create", value),
   completePersonalReminder: (id) => ipcRenderer.invoke("reminders:complete", id),
+  deletePersonalReminder: (id) => ipcRenderer.invoke("reminders:delete", id),
   snoozePersonalReminder: (value) => ipcRenderer.invoke("reminders:snooze", value),
   onPersonalRemindersChanged: (listener) => { const handler = (_event, payload) => listener(payload); ipcRenderer.on("personal-reminders-changed", handler); return () => ipcRenderer.removeListener("personal-reminders-changed", handler); },
   getMemoryPolicy: () => ipcRenderer.invoke("memory:get-policy"),

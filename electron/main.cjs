@@ -83,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t56-reminder-wording";
+const DESKMATE_BUILD_ID = "t57-reminder-purpose-delete";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1995,6 +1995,7 @@ app.whenReady().then(async () => {
   handleTrusted("reminders:list", () => personalReminderSnapshot());
   handleTrusted("reminders:create", (value = {}) => personalReminderMutation(() => personalReminderStore.create({ title: value.title, remindAt: value.remindAt, eventAt: value.eventAt, important: value.important === true })));
   handleTrusted("reminders:complete", (id) => personalReminderMutation(() => personalReminderStore.complete(id)));
+  handleTrusted("reminders:delete", (id) => personalReminderMutation(() => personalReminderStore.remove(id)));
   handleTrusted("reminders:snooze", (value = {}) => personalReminderMutation(() => personalReminderStore.snooze(value.id, value.minutes)));
   handleTrusted("memory:get-policy", () => ({ ...companionMemoryPolicyStore.snapshot(), scheduler: companionMemoryDigestScheduler.status() }));
   handleTrusted("memory:set-policy", async (value = {}) => {

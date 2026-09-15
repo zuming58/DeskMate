@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T57 reminder purpose extraction and deletion
+
+Prevent mixed chat/request wrappers from being persisted before reminder-only semantic title extraction. Preserve locally validated times and the clear-request fast path; failed extraction asks only for purpose. Add confirmed per-reminder deletion, durable removal, timer rearm and explicit in-flight speech protection. Contract: `docs/contracts/t57-reminder-purpose-delete-v1.md`. No migration/deletion of user reminders, no endpointing or KnowledgeOS schedule change.
+
 ## Current work: T56 clean reminder titles and natural speech
 
 User confirms T55 reminder creation and actual due speech succeeded. Remove bounded spoken filler/request wrappers from new reminder purposes and use deterministic current-owner-addressed due wording; retain substantive actions and amounts. Old stored records are not rewritten, and advance notification must not claim the later event has begun. Keep T54/T55 timing, persistence and delivery behavior. Contract: `docs/contracts/t56-reminder-wording-v1.md`.

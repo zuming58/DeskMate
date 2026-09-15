@@ -4,7 +4,7 @@ import { BrandLogo } from './BrandLogo.jsx';
 import { useAppStore } from './store/appStore.js';
 import { dashboardHardwareStatus } from './domain/dashboardStatus.js';
 import { workbenchProjects, workbenchSchedule, workbenchTime } from './domain/workbenchOverview.js';
-import { Button, Card, StatusBadge } from './ui.jsx';
+import { Button, Card, StatusBadge, ConfirmationDialog } from './ui.jsx';
 import './workbench-dashboard.css';
 
 const number = value => typeof value === 'number' ? value.toLocaleString('zh-CN') : '—';
@@ -31,6 +31,8 @@ export function DashboardPage({ navigate }) {
   const [reminderDraft, setReminderDraft] = useState(emptyReminderDraft);
   const [reminderBusy, setReminderBusy] = useState('');
   const [reminderError, setReminderError] = useState('');
+  const [reminderDelete, setReminderDelete] = useState(null);
+  const reminderMutationLock = useRef(false);
   const mounted = useRef(false); const inFlight = useRef(false);
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
@@ -72,13 +74,16 @@ export function DashboardPage({ navigate }) {
     finally { setReminderBusy(''); }
   };
   const mutateReminder = async (id, command) => {
+    if (reminderMutationLock.current) return;
+    reminderMutationLock.current = true;
     setReminderBusy(id); setReminderError('');
     try {
-      const result = command === 'complete' ? await globalThis.desktopBridge?.completePersonalReminder?.(id) : await globalThis.desktopBridge?.snoozePersonalReminder?.({ id, minutes: 10 });
+      const result = command === 'delete' ? await globalThis.desktopBridge?.deletePersonalReminder?.(id) : command === 'complete' ? await globalThis.desktopBridge?.completePersonalReminder?.(id) : await globalThis.desktopBridge?.snoozePersonalReminder?.({ id, minutes: 10 });
       if (!result?.ok) throw Error(result?.reason || 'personal-reminder-save-failed');
       setOverview(current => current ? { ...current, reminders: result.snapshot } : current);
-    } catch { setReminderError('操作没有保存成功，请重试。'); }
-    finally { setReminderBusy(''); }
+      if (command === 'delete') setReminderDelete(null);
+    } catch (error) { setReminderError(error.message === 'personal-reminder-delivering' ? '这条提醒正在播报，请等播报结束后再删除。' : '操作没有保存成功，请重试。'); }
+    finally { reminderMutationLock.current = false; setReminderBusy(''); }
   };
   const activity = memory?.activity || [];
   const maxActivity = Math.max(1, ...activity.map(day => day.dictationCount + day.companionCount));
@@ -106,7 +111,8 @@ export function DashboardPage({ navigate }) {
     <Card className="wb-reminders-card"><PanelHeading icon={IconBell} title="提醒与重要事项"><div className="wb-reminder-heading"><span>{reminders?.ready ? `${number(reminders.todayCount)} 项今天相关 · ${number(reminders.activeCount)} 项未完成` : reminders ? '数据需要恢复' : '待读取'}</span><Button icon={IconPlus} variant="soft" disabled={reminders?.ready === false} onClick={() => { setReminderComposer(value => !value); setReminderError(''); }}>{reminderComposer ? '收起' : '添加'}</Button></div></PanelHeading>
       {reminderComposer && <form className="wb-reminder-form" onSubmit={saveReminder}><label className="wb-reminder-title"><span>提醒内容</span><input autoFocus maxLength={160} value={reminderDraft.title} onChange={event => setReminderDraft(value => ({ ...value, title: event.target.value }))} placeholder="例如：准备明天的展会材料" /></label><label><span>提醒时间</span><input type="datetime-local" value={reminderDraft.remindAt} onChange={event => setReminderDraft(value => ({ ...value, remindAt: event.target.value }))} /></label><label><span>事情时间（可选）</span><input type="datetime-local" value={reminderDraft.eventAt} onChange={event => setReminderDraft(value => ({ ...value, eventAt: event.target.value }))} /></label><label className="wb-important-check"><input type="checkbox" checked={reminderDraft.important} onChange={event => setReminderDraft(value => ({ ...value, important: event.target.checked }))} /><span>重要事项</span></label><div className="wb-reminder-form-actions"><Button type="button" variant="ghost" onClick={() => { setReminderComposer(false); setReminderDraft(emptyReminderDraft()); setReminderError(''); }}>取消</Button><Button type="submit" disabled={reminderBusy === 'create'}>{reminderBusy === 'create' ? '保存中' : '保存提醒'}</Button></div></form>}
       {reminderError && <div className="wb-reminder-error" role="status">{reminderError}</div>}
-      <div className="wb-reminder-list">{reminders?.ready === false ? <div className="wb-reminder-empty is-warning"><IconBell size={25} stroke={1.4} /><div><strong>提醒数据暂时无法读取</strong><p>原文件不会被默认值覆盖，请先从本地备份恢复或重新启动后再试。</p></div></div> : reminders?.items?.length ? reminders.items.slice(0, 6).map(item => <div className={`wb-reminder ${item.status === 'notified' ? 'is-due' : ''}`} key={item.id}><span className="wb-reminder-mark"><IconBell size={17} /></span><div className="wb-reminder-copy"><strong>{item.title}</strong><div>{item.remindAt != null && <span><IconClock size={13} />{item.status === 'notified' ? '已提醒' : reminderTime(item.remindAt)}</span>}{item.eventAt != null && item.eventAt !== item.remindAt && <span>事情：{reminderTime(item.eventAt)}</span>}{item.important && <span className="wb-important-pill">重要</span>}</div></div><div className="wb-reminder-actions">{item.remindAt != null && <button type="button" disabled={reminderBusy === item.id} onClick={() => void mutateReminder(item.id, 'snooze')}>稍后 10 分钟</button>}<button type="button" disabled={reminderBusy === item.id} onClick={() => void mutateReminder(item.id, 'complete')}><IconCheck size={15} />完成</button></div></div>) : <div className="wb-reminder-empty"><IconBell size={25} stroke={1.4} /><div><strong>还没有个人提醒</strong><p>可以在这里添加，也可以对小岚说：“明天下午 4 点有活动，下午 1 点提醒我。”</p></div></div>}</div>
+      <div className="wb-reminder-list">{reminders?.ready === false ? <div className="wb-reminder-empty is-warning"><IconBell size={25} stroke={1.4} /><div><strong>提醒数据暂时无法读取</strong><p>原文件不会被默认值覆盖，请先从本地备份恢复或重新启动后再试。</p></div></div> : reminders?.items?.length ? reminders.items.slice(0, 6).map(item => <div className={`wb-reminder ${item.status === 'notified' ? 'is-due' : ''}`} key={item.id}><span className="wb-reminder-mark"><IconBell size={17} /></span><div className="wb-reminder-copy"><strong>{item.title}</strong><div>{item.remindAt != null && <span><IconClock size={13} />{item.status === 'notified' ? '已提醒' : item.status === 'delivering' ? '提醒播报中' : item.status === 'failed' ? '尚未播报成功' : reminderTime(item.remindAt)}</span>}{item.eventAt != null && item.eventAt !== item.remindAt && <span>事情：{reminderTime(item.eventAt)}</span>}{item.status === 'failed' && <span>{item.nextAttemptAt ? '等待自动重试' : '自动重试已停止'}</span>}{item.important && <span className="wb-important-pill">重要</span>}</div></div><div className="wb-reminder-actions">{item.remindAt != null && <button type="button" disabled={Boolean(reminderBusy)} onClick={() => void mutateReminder(item.id, 'snooze')}>稍后 10 分钟</button>}<button type="button" disabled={Boolean(reminderBusy)} onClick={() => void mutateReminder(item.id, 'complete')}><IconCheck size={15} />完成</button><button type="button" disabled={Boolean(reminderBusy) || item.status === 'delivering'} onClick={() => { setReminderDelete(item); setReminderError(''); }}>删除</button></div></div>) : <div className="wb-reminder-empty"><IconBell size={25} stroke={1.4} /><div><strong>还没有个人提醒</strong><p>可以在这里添加，也可以对小岚说：“明天下午 4 点有活动，下午 1 点提醒我。”</p></div></div>}</div>
+      <ConfirmationDialog open={Boolean(reminderDelete)} eyebrow="PERSONAL REMINDER" title="删除这条提醒？" description={reminderDelete?.title || ''} notice={reminderError || '只删除这条提醒并取消后续播报。不会删除对话历史或 KnowledgeOS 记忆；已播放的声音无法撤回。'} confirmLabel="确认删除" busyLabel="正在删除…" busy={Boolean(reminderBusy)} onCancel={() => { if (!reminderBusy) setReminderDelete(null); }} onConfirm={() => void mutateReminder(reminderDelete.id, 'delete')} />
       {reminders?.activeCount > 6 && <div className="wb-panel-footer"><span>这里只显示最近 6 项，完成后会自动从工作台收起。</span></div>}
       {reminders?.items?.slice(0, 6).filter(item => item.status === 'failed').map(item => <p className="wb-reminder-error" role="status" key={`failed-${item.id}`}>“{item.title}”尚未播报成功，{item.nextAttemptAt ? '会自动重试；原提醒时间保留。' : '自动重试已停止，可点“稍后 10 分钟”重新提醒。'}</p>)}
       {reminders?.items?.some(item => item.status === 'delivering') && <p role="status">提醒播报中，播放完成后才会标记“已提醒”。</p>}

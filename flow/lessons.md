@@ -1,5 +1,11 @@
 # Lessons learned
 
+## Nonempty parsed titles do not prove reminder semantic completeness
+
+- A fallback model invoked only after parsing failure cannot fix a syntactically valid but semantically polluted title. Separate prepare/extract/validate from durable creation; mixed user replies must reach purpose extraction before persistence.
+- Keep validated dates outside model authority. On extraction failure, retain both event/reminder timestamps for a short purpose reply and reject stale completion after cancellation or expiry.
+- Removing a reminder must rearm its timer and protect delivery already in flight. Show a selected-record confirmation and actual failure/retry state; do not silently batch-edit earlier user records.
+
 ## Spoken reminder purpose is not the literal reminder command
 
 - A regex alternative `(我|一下)?` removes only one branch; “提醒我一下喝水” leaves 一下. Parse the optional pieces sequentially and clean bounded hesitation tokens.
