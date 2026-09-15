@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-15 — T50 小岚展会自我介绍已实现、打包并运行
+
+- 新增确定性的展会自我介绍入口。说“小岚小岚，你给大家介绍一下自己吧”“介绍一下你自己”“做个自我介绍”或“介绍一下 DeskMate 的功能”时，现有可信意图 Bridge 会在分类器和自由对话模型之前直接返回审核文案；不会为这段介绍额外调用文字大模型，也不会临场编造功能。第一人称“我来给大家介绍一下自己”不会误触发。
+- 介绍使用当前保存的陪伴姓名，不硬编码旧默认名；覆盖连续对话、经过确认的本地记忆、语音输入、快捷按键、提示词切换、风格映像、任务/设备状态与 EasyInput。小智云台只有在受信运行状态为 connected 且动作链 ready 时才说“现在已连接并可表情/转动/点头”；其他状态改为可选实体或现场真实状态说明。完整文案保持在现有 240 字直读上限内。
+- 合同 `docs/contracts/t50-companion-exhibition-intro-v1.md`，稳定决策 D157；分支 `codex/t50-companion-exhibition-intro`，实现提交 `895d5f8a215e73665fb924b67956fc19d95485ee`，build ID `t50-companion-exhibition-intro`。定向相关回归 **35/35**，完整 `npm test` **728/728**，无失败/跳过；`npm run build:desktop`、原生 InputBridge 发布、Vite/Windows 目录包、精确包内资源校验、最终 ASAR 文案探针和 `git diff --check` 均通过。
+- 候选 `release-t50/win-unpacked`；EXE SHA-256 `6FF2D11869B1310F8672F956EA02EA1C26CA6F2675F79995ACAE461817F05B94`，ASAR `BE10294D482247FE457E19EA7F7A0BEAB41E2E79D388E1EEA76B7023E3AE97F2`，InputBridge `8D0DCAA1CCC63F7DD3F13F26C8E704989280440145A950540761B2238E637417`。
+- 只停止经完整路径确认属于 `release-t49` 的进程族，保留 `%APPDATA%/deskmate` 内现有姓名、记忆、语音配置和设备设置；已启动 `release-t50/DeskMate.exe --show-companion`，主 PID `44164` 响应正常，可见窗口句柄 `396450`，观察到的 DeskMate/InputBridge 进程均来自 T50。未改固件、Flash、NVS、按键映射、凭据或用户数据，未主动发起云端语音/模型请求。下一步由用户现场说一次上述完整口令，验收姓名、文案完整性、真实硬件措辞与 TTS 播放效果。
+
 # 2026-09-15 — T49 AI 陪伴误打断防护已修复、打包并运行
 
 - 根据 T48 脱敏诊断确认的 `recognized-speech` 误打断，T49 将插话分为快速明确口令和普通语音证据两条路径。停下、听一下、等等、暂停播放、住嘴、闭嘴、别讲话、别说话、不要讲话、不要说话、先别说、安静等明确口令，在 ASR 已建立当前 speech item 且不是回答回声时，可由首个匹配 partial 立即停止；原有停一下、别说了、打住、我来说、换个问题等同类口令继续支持。
