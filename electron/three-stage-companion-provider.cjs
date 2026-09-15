@@ -3,10 +3,13 @@ const { CompanionSpeechSegmenter, cleanVisibleText } = require("./companion-spee
 const MAX_SPEECH_SEGMENTS = 12;
 const TRUNCATED_RESPONSE_CLOSING = "回答有点长，我先说到这里。";
 const BARGE_IN_FILLERS = new Set(["嗯", "啊", "呃", "哦", "诶", "哎", "喂", "嗯嗯", "啊啊", "哦哦"]);
-const EXPLICIT_BARGE_IN = /(停一下|停下来|先停|暂停|等等|等一下|别说了|别讲了|打住|我来说|让我说|换个问题)/;
+const EXPLICIT_BARGE_IN = /(停下|停一下|停下来|先停|听一下|先听我说|暂停|暂停播放|等等|等一下|等一等|住嘴|闭嘴|别讲话|不要讲话|别说话|不要说话|先别说|先别讲|安静|别说了|别讲了|打住|我来说|让我说|换个问题)/;
 const NON_SPEECH_LABEL = /^(?:掌声|拍手|拍手声|咳嗽|咳嗽声|噪音|杂音|音乐|背景音)$/;
 const MIN_PARTIAL_SPEECH_MS = 500;
-const MIN_FINAL_SPEECH_MS = 650;
+const MIN_FINAL_SPEECH_MS = 900;
+const MIN_NON_EXPLICIT_BARGE_LENGTH = 5;
+const MIN_SPARSE_FINAL_SPEECH_MS = 1200;
+const MIN_SPARSE_FINAL_LENGTH = 8;
 const DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS = 6500;
 const DEFAULT_BARGE_FINAL_RECOVERY_MS = 5000;
 
@@ -23,8 +26,8 @@ function classifyRecognizedBargeIn(candidate, assistantText = "") {
   const normalized = comparisonText(candidate);
   if (!normalized || BARGE_IN_FILLERS.has(normalized) || NON_SPEECH_LABEL.test(normalized)) return Object.freeze({ accepted: false, reason: "weak" });
   const meaningfulLength = [...normalized].length;
-  const explicitShortInterrupt = /^(停|等等|等一下|先停|别说|不是)$/.test(normalized);
-  if (meaningfulLength < 3 && !explicitShortInterrupt) return Object.freeze({ accepted: false, reason: "weak" });
+  const explicitInterrupt = EXPLICIT_BARGE_IN.test(normalized);
+  if (meaningfulLength < MIN_NON_EXPLICIT_BARGE_LENGTH && !explicitInterrupt) return Object.freeze({ accepted: false, reason: "weak" });
   const assistant = comparisonText(assistantText);
   if (assistant && (assistant.includes(normalized) || (normalized.length >= 6 && normalized.includes(assistant)))) {
     return Object.freeze({ accepted: false, reason: "echo" });
@@ -35,6 +38,17 @@ function classifyRecognizedBargeIn(candidate, assistantText = "") {
     if (overlap >= 0.75) return Object.freeze({ accepted: false, reason: "echo" });
   }
   return Object.freeze({ accepted: true, reason: "recognized-speech" });
+}
+
+function speechHypothesesAgree(previousValue, finalValue) {
+  const previous = comparisonText(previousValue);
+  const final = comparisonText(finalValue);
+  if (previous.length < MIN_NON_EXPLICIT_BARGE_LENGTH || final.length < MIN_NON_EXPLICIT_BARGE_LENGTH) return false;
+  if (previous.includes(final) || final.includes(previous)) return true;
+  const previousBigrams = new Set(Array.from({ length: previous.length - 1 }, (_, index) => previous.slice(index, index + 2)));
+  const finalBigrams = new Set(Array.from({ length: final.length - 1 }, (_, index) => final.slice(index, index + 2)));
+  const overlap = [...previousBigrams].filter((gram) => finalBigrams.has(gram)).length;
+  return overlap / Math.max(1, Math.min(previousBigrams.size, finalBigrams.size)) >= 0.5;
 }
 
 function isExplicitBargeIn(value) {
@@ -82,7 +96,7 @@ class ThreeStageCompanionProvider {
     this.pendingBargeInTimer = null;
     this.settledBargeInItemId = "";
     this.settledBargeInTimer = null;
-    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, receivedStopAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, receivedStopAt: null, lastPartial: "", lastConfirmedPartial: "", stablePartials: 0, meaningfulPartials: 0 };
     this.utteranceStartedAt = null;
     this.lastFinal = { text: "", at: 0 };
     this.preemptive = preemptive === true;
@@ -97,6 +111,7 @@ class ThreeStageCompanionProvider {
       bargeInCandidates: 0, bargeInsAccepted: 0, bargeInsRejectedEcho: 0, bargeInsRejectedWeak: 0,
       bargeSpeechStarts: 0, bargeInsRejectedUnstable: 0, postPlaybackEchoDrops: 0,
       bargeFinalTimeouts: 0, bargeFinalRecoveries: 0, lateBargeFinalDrops: 0,
+      bargeInsAcceptedExplicit: 0, bargeInsAcceptedFinal: 0, bargePartialsDeferred: 0, bargeFinalsRejectedInconsistent: 0,
       draftsStarted: 0, draftsReused: 0, draftsCancelled: 0, modelRecoveries: 0,
     };
     this.lastTiming = {
@@ -223,7 +238,7 @@ class ThreeStageCompanionProvider {
   }
 
   resetSpeechEvidence() {
-    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, lastPartial: "", stablePartials: 0, meaningfulPartials: 0 };
+    this.speechEvidence = { active: false, itemId: "", audioStartMs: null, audioEndMs: null, receivedStartAt: null, receivedStopAt: null, lastPartial: "", lastConfirmedPartial: "", stablePartials: 0, meaningfulPartials: 0 };
   }
 
   clearPendingBargeInFinal() {
@@ -330,17 +345,23 @@ class ThreeStageCompanionProvider {
     if (normalized && normalized !== previous) this.speechEvidence.meaningfulPartials += 1;
     this.speechEvidence.stablePartials = consistentPartial(previous, normalized) ? this.speechEvidence.stablePartials + 1 : normalized ? 1 : 0;
     this.speechEvidence.lastPartial = normalized;
+    if (confirmed) this.speechEvidence.lastConfirmedPartial = confirmed;
     const observedMs = this.speechEvidence.receivedStartAt === null ? 0 : Math.max(0, this.now() - this.speechEvidence.receivedStartAt);
     const linguisticEvidence = confirmed.length >= 5 || (this.speechEvidence.meaningfulPartials >= 2 && normalized.length >= 5);
     return linguisticEvidence && observedMs >= MIN_PARTIAL_SPEECH_MS;
   }
 
-  finalSpeechConfirmed(text, itemId = "") {
-    if (!this.matchingSpeechEvidence(itemId)) return false;
+  finalSpeechEvidence(text, itemId = "") {
+    if (!this.matchingSpeechEvidence(itemId)) return Object.freeze({ accepted: false, reason: "item-mismatch" });
+    const normalized = comparisonText(text);
     const duration = this.speechEvidence.audioStartMs !== null && this.speechEvidence.audioEndMs !== null
       ? Math.max(0, this.speechEvidence.audioEndMs - this.speechEvidence.audioStartMs)
       : 0;
-    return comparisonText(text).length >= 5 && duration >= MIN_FINAL_SPEECH_MS;
+    if (normalized.length < MIN_NON_EXPLICIT_BARGE_LENGTH || duration < MIN_FINAL_SPEECH_MS) return Object.freeze({ accepted: false, reason: "unstable" });
+    if (this.speechEvidence.lastConfirmedPartial && speechHypothesesAgree(this.speechEvidence.lastConfirmedPartial, normalized)) return Object.freeze({ accepted: true, reason: "confirmed-partial" });
+    if (this.speechEvidence.stablePartials >= 2 && speechHypothesesAgree(this.speechEvidence.lastPartial, normalized)) return Object.freeze({ accepted: true, reason: "stable-partials" });
+    if (this.speechEvidence.meaningfulPartials === 0 && normalized.length >= MIN_SPARSE_FINAL_LENGTH && duration >= MIN_SPARSE_FINAL_SPEECH_MS) return Object.freeze({ accepted: true, reason: "sparse-final" });
+    return Object.freeze({ accepted: false, reason: "inconsistent" });
   }
 
   handleAsrEvent(event = {}, generation = this.generation) {
@@ -387,15 +408,17 @@ class ThreeStageCompanionProvider {
         this.counters.bargeInCandidates += 1;
         const classification = classifyRecognizedBargeIn(text, bargeContext.assistantText);
         if (classification.accepted) {
-          const confirmed = isExplicitBargeIn(text) && this.matchingSpeechEvidence(event.itemId)
-            ? true
-            : this.recordPartialEvidence(text, event.itemId, event.confirmedText);
-          if (confirmed) {
+          const explicit = isExplicitBargeIn(text) && this.matchingSpeechEvidence(event.itemId);
+          if (explicit) {
             this.counters.bargeInsAccepted += 1;
+            this.counters.bargeInsAcceptedExplicit += 1;
             this.emit({ type: "barge.start", hadTts: bargeContext.hadTts, diagnostic: { providerEvent: "other" } });
             this.armPendingBargeInFinal({ text, confirmedText: event.confirmedText, itemId: event.itemId }, generation);
             this.interrupt({ preservePendingBargeIn: true });
-          } else this.counters.bargeInsRejectedUnstable += 1;
+          } else {
+            this.recordPartialEvidence(text, event.itemId, event.confirmedText);
+            this.counters.bargePartialsDeferred += 1;
+          }
         } else if (classification.reason === "echo") this.counters.bargeInsRejectedEcho += 1;
         else this.counters.bargeInsRejectedWeak += 1;
       }
@@ -419,15 +442,21 @@ class ThreeStageCompanionProvider {
         if (!classification.accepted) {
           if (classification.reason === "echo") this.counters.bargeInsRejectedEcho += 1;
           else this.counters.bargeInsRejectedWeak += 1;
+          this.resetSpeechEvidence();
           return;
         }
-        const confirmed = (isExplicitBargeIn(text) && this.matchingSpeechEvidence(event.itemId)) || this.finalSpeechConfirmed(text, event.itemId);
+        const explicit = isExplicitBargeIn(text) && this.matchingSpeechEvidence(event.itemId);
+        const evidence = explicit ? Object.freeze({ accepted: true, reason: "explicit" }) : this.finalSpeechEvidence(text, event.itemId);
+        const confirmed = evidence.accepted;
         if (!confirmed) {
           this.counters.bargeInsRejectedUnstable += 1;
+          if (evidence.reason === "inconsistent") this.counters.bargeFinalsRejectedInconsistent += 1;
           this.resetSpeechEvidence();
           return;
         }
         this.counters.bargeInsAccepted += 1;
+        if (explicit) this.counters.bargeInsAcceptedExplicit += 1;
+        else this.counters.bargeInsAcceptedFinal += 1;
         bargeIn = true;
         this.emit({ type: "barge.start", hadTts: bargeContext.hadTts, diagnostic: { providerEvent: "other" } });
         this.interrupt();
@@ -714,4 +743,4 @@ class ThreeStageCompanionProvider {
   }
 }
 
-module.exports = { DEFAULT_BARGE_FINAL_RECOVERY_MS, DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_PARTIAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, stablePipelineReason };
+module.exports = { DEFAULT_BARGE_FINAL_RECOVERY_MS, DEFAULT_POST_PLAYBACK_ECHO_GRACE_MS, MAX_SPEECH_SEGMENTS, MIN_FINAL_SPEECH_MS, MIN_NON_EXPLICIT_BARGE_LENGTH, MIN_PARTIAL_SPEECH_MS, MIN_SPARSE_FINAL_LENGTH, MIN_SPARSE_FINAL_SPEECH_MS, ThreeStageCompanionProvider, classifyRecognizedBargeIn, comparisonText, consistentPartial, isExplicitBargeIn, speechHypothesesAgree, stablePipelineReason };

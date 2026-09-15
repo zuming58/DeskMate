@@ -198,7 +198,7 @@ test('T28 model failure before speech keeps provider ready and preceding success
   f.provider.close();
 });
 
-test('T28 valid speech during confirmed model computation cancels it; clap alone cannot', async () => {
+test('T49 consistent completed speech during model computation cancels it; clap and partial alone cannot', async () => {
   const f = fixture(); await f.provider.connect();
   f.final('讲一个有趣的故事'); await tick();
   f.emit({ type: 'speech.started', itemId: 'clap', audioStartMs: 0 });
@@ -207,7 +207,9 @@ test('T28 valid speech during confirmed model computation cancels it; clap alone
   assert.equal(f.requests[0].options.signal.aborted, false);
   f.emit({ type: 'speech.started', itemId: 'correction', audioStartMs: 200 });
   await f.advance(650);
+  f.partial('不要讲小猫', 'correction');
   f.partial('不要讲小猫要讲小狗', 'correction');
+  assert.equal(f.requests[0].options.signal.aborted, false);
   f.emit({ type: 'speech.stopped', itemId: 'correction', audioEndMs: 1100 });
   f.final('不要讲小猫要讲小狗', 'correction'); await tick();
   assert.equal(f.requests[0].options.signal.aborted, true);

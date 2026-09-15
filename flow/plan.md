@@ -1,5 +1,9 @@
 # Development plan
 
+## Current delivery: T49 guarded companion interruption — candidate
+
+Explicit playback-stop phrases such as 停下、听一下、等等 and 暂停播放 still interrupt on the first matching live ASR partial. Ordinary speech no longer cancels 小岚 from a mutable partial: it waits for a completed utterance, requires sufficient duration and either agreement with provider-confirmed/stable partials or a longer sparse final, and rejects short or revised-away hypotheses. Diagnostics expose only bounded decision counters, never recognized text. See `docs/contracts/t49-guarded-barge-in-v1.md`.
+
 ## Current delivery: T48 companion embodiment identity — candidate
 
 小岚 now has one fixed product identity behind the editable persona: a DeskMate desktop AI companion with an optional physical form, not a generic voice assistant or a human. Windows DeskMate owns conversation/memory/speech, EasyInput is the separate key/dial/microphone interaction surface, and Xiaozhi is the optional display plus two-servo embodiment. The model receives only allowlisted live hardware states per turn; explicit self-identity questions use a deterministic local answer, and no connection state may be promoted into a completed motion claim. See `docs/contracts/t48-companion-embodiment-persona-v1.md`.

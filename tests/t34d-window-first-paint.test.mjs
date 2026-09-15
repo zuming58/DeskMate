@@ -20,7 +20,7 @@ test("tray and second-instance restore also wait while the main frame is loading
 });
 
 test("the packaged build identifies the current integrated desktop slice", () => {
-  assert.match(main, /DESKMATE_BUILD_ID = "t48-companion-embodiment-persona"/);
+  assert.match(main, /DESKMATE_BUILD_ID = "t49-guard-false-barge-in"/);
 });
 
 test("the packaged smoke test reads the main-owned history store after migration", () => {

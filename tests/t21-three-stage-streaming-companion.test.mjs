@@ -8,7 +8,7 @@ const { CompanionSpeechSegmenter } = require("../electron/companion-speech-segme
 const { OpenAiStreamingCompanionModelAdapter, visibleDelta } = require("../electron/companion-model-adapter.cjs");
 const { BailianStreamingAsrAdapter } = require("../electron/streaming-asr-adapter.cjs");
 const { DoubaoStreamingTtsAdapter } = require("../electron/streaming-tts-adapter.cjs");
-const { ThreeStageCompanionProvider, classifyRecognizedBargeIn } = require("../electron/three-stage-companion-provider.cjs");
+const { ThreeStageCompanionProvider, classifyRecognizedBargeIn, isExplicitBargeIn, speechHypothesesAgree } = require("../electron/three-stage-companion-provider.cjs");
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -194,8 +194,15 @@ test("T21 partial text never reaches the model and duplicate final submits once"
 test("T21 recognized-speech barge-in rejects weak noise and spoken-answer echo", () => {
   assert.deepEqual(classifyRecognizedBargeIn("嗯", "这里是回答"), { accepted: false, reason: "weak" });
   assert.deepEqual(classifyRecognizedBargeIn("掌声", "这里是回答"), { accepted: false, reason: "weak" });
+  assert.deepEqual(classifyRecognizedBargeIn("六五六", "这里是回答"), { accepted: false, reason: "weak" });
   assert.deepEqual(classifyRecognizedBargeIn("这里是回答", "祖名，这里是回答。后面还有一句。"), { accepted: false, reason: "echo" });
   assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "祖名，这里是回答。"), { accepted: true, reason: "recognized-speech" });
+  for (const command of ["停下", "听一下", "等等", "暂停播放", "住嘴", "闭嘴", "别讲话", "别说话", "不要讲话", "不要说话", "先别说", "安静"]) {
+    assert.equal(isExplicitBargeIn(command), true);
+    assert.deepEqual(classifyRecognizedBargeIn(command, "这里是回答"), { accepted: true, reason: "recognized-speech" });
+  }
+  assert.equal(speechHypothesesAgree("我想问另外一个问题", "我想问另一个问题"), true);
+  assert.equal(speechHypothesesAgree("我听到一段数字", "六五六"), false);
 });
 
 test('T27 audio arrival and renderer queue acceptance are separate; stale acknowledgement is rejected', async () => {
@@ -321,7 +328,7 @@ test("T21I promotes one accepted barge partial when the provider never returns i
 
   fixture.emitAsr({ type: "speech.started", itemId: "barge-without-final", audioStartMs: 1000 });
   now = 600;
-  fixture.emitAsr({ type: "partial", text: "我想继续问另外一个问题", confirmedText: "我想继续问另外一个问题", itemId: "barge-without-final" });
+  fixture.emitAsr({ type: "partial", text: "听一下，我想继续问另外一个问题", confirmedText: "听一下，我想继续问另外一个问题", itemId: "barge-without-final" });
   assert.equal(fixture.provider.diagnostics().awaitingBargeFinal, true);
   const recovery = scheduled.find((item) => item.milliseconds === 2200 && !item.cancelled);
   assert.ok(recovery);
@@ -330,12 +337,12 @@ test("T21I promotes one accepted barge partial when the provider never returns i
   await tick();
 
   assert.equal(fixture.modelCalls(), 2);
-  assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "我想继续问另外一个问题" && event.bargeIn === true));
+  assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "听一下，我想继续问另外一个问题" && event.bargeIn === true));
   assert.equal(fixture.provider.diagnostics().counters.bargeFinalTimeouts, 1);
   assert.equal(fixture.provider.diagnostics().counters.bargeFinalRecoveries, 1);
   assert.equal(fixture.provider.diagnostics().awaitingBargeFinal, false);
 
-  fixture.emitAsr({ type: "final", text: "我想继续问另外一个问题", itemId: "barge-without-final" });
+  fixture.emitAsr({ type: "final", text: "听一下，我想继续问另外一个问题", itemId: "barge-without-final" });
   await tick();
   assert.equal(fixture.modelCalls(), 2);
   assert.equal(fixture.provider.diagnostics().counters.lateBargeFinalDrops, 1);
@@ -385,7 +392,7 @@ test("T21 accepts a new microphone utterance that starts after loudspeaker playb
   assert.ok(fixture.events.some((event) => event.type === "asr.final" && event.text === "我还有另外一个问题"));
 });
 
-test("T21 ignores one short noise item but accepts two meaningful human hypotheses even when ASR revises text", async () => {
+test("T49 defers ordinary partials and accepts only a consistent completed human interruption", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -407,16 +414,19 @@ test("T21 ignores one short noise item but accepts two meaningful human hypothes
   fixture.emitAsr({ type: "partial", text: "我想问另外", itemId: "human" });
   assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
   now = 600;
-  fixture.emitAsr({ type: "partial", text: "换一个完全不同的问题", itemId: "human" });
+  fixture.emitAsr({ type: "partial", text: "我想问另外一个问题", itemId: "human" });
+  assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), false);
+  fixture.emitAsr({ type: "speech.stopped", itemId: "human", audioEndMs: 3100 });
   fixture.emitAsr({ type: "final", text: "我想问另外一个问题", itemId: "human" });
   await tick();
   await tick();
   assert.equal(fixture.events.slice(beforeNoise).some((event) => event.type === "barge.start"), true);
   assert.equal(fixture.modelCalls(), 2);
-  assert.ok(fixture.provider.diagnostics().counters.bargeInsRejectedUnstable >= 2);
+  assert.equal(fixture.provider.diagnostics().counters.bargeInsAcceptedFinal, 1);
+  assert.ok(fixture.provider.diagnostics().counters.bargePartialsDeferred >= 2);
 });
 
-test("T21 provider-confirmed partial interrupts without waiting for a second hypothesis", async () => {
+test("T49 provider-confirmed ordinary partial waits for a matching final before interrupting", async () => {
   let now = 0;
   const fixture = fakePipeline({ now: () => now });
   await fixture.provider.connect();
@@ -427,6 +437,10 @@ test("T21 provider-confirmed partial interrupts without waiting for a second hyp
   fixture.emitAsr({ type: "speech.started", itemId: "confirmed-human", audioStartMs: 1000 });
   now = 550;
   fixture.emitAsr({ type: "partial", text: "我想换一个问题", confirmedText: "我想换一个", itemId: "confirmed-human" });
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  fixture.emitAsr({ type: "speech.stopped", itemId: "confirmed-human", audioEndMs: 2000 });
+  fixture.emitAsr({ type: "final", text: "我想换一个问题", itemId: "confirmed-human" });
+  await tick();
   assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
 });
 
@@ -438,12 +452,69 @@ test("T21 completed human utterance can interrupt even when the provider emitted
   await tick();
   const before = fixture.events.length;
   fixture.emitAsr({ type: "speech.started", itemId: "sparse-human", audioStartMs: 1000 });
-  fixture.emitAsr({ type: "speech.stopped", itemId: "sparse-human", audioEndMs: 1700 });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "sparse-human", audioEndMs: 2300 });
   fixture.emitAsr({ type: "final", text: "我来问另外一个问题", itemId: "sparse-human" });
   await tick();
   await tick();
   assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true);
   assert.equal(fixture.modelCalls(), 2);
+});
+
+test("T49 mismatched short final cannot inherit a longer ordinary partial and stop playback", async () => {
+  let now = 0;
+  const fixture = fakePipeline({ now: () => now });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
+  await tick();
+  await tick();
+  const before = fixture.events.length;
+  fixture.emitAsr({ type: "speech.started", itemId: "false-short", audioStartMs: 1000 });
+  now = 600;
+  fixture.emitAsr({ type: "partial", text: "我听到一段数字", confirmedText: "我听到一段", itemId: "false-short" });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "false-short", audioEndMs: 2200 });
+  fixture.emitAsr({ type: "final", text: "六五六", itemId: "false-short" });
+  await tick();
+
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.modelCalls(), 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeInsAccepted, 0);
+  assert.equal(fixture.provider.diagnostics().counters.bargePartialsDeferred, 1);
+  assert.ok(fixture.provider.diagnostics().counters.bargeInsRejectedWeak >= 1);
+});
+
+test("T49 unrelated long final is rejected when it disagrees with the preceding partial", async () => {
+  let now = 0;
+  const fixture = fakePipeline({ now: () => now });
+  await fixture.provider.connect();
+  fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
+  await tick();
+  await tick();
+  const before = fixture.events.length;
+  fixture.emitAsr({ type: "speech.started", itemId: "false-long", audioStartMs: 1000 });
+  now = 600;
+  fixture.emitAsr({ type: "partial", text: "我听到一段数字信息", confirmedText: "我听到一段数字", itemId: "false-long" });
+  fixture.emitAsr({ type: "speech.stopped", itemId: "false-long", audioEndMs: 2300 });
+  fixture.emitAsr({ type: "final", text: "请介绍今天的天气情况", itemId: "false-long" });
+  await tick();
+
+  assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), false);
+  assert.equal(fixture.modelCalls(), 1);
+  assert.equal(fixture.provider.diagnostics().counters.bargeFinalsRejectedInconsistent, 1);
+});
+
+test("T49 explicit pause commands still interrupt on the first matching partial", async () => {
+  for (const command of ["停下", "听一下", "等等", "暂停播放", "住嘴", "闭嘴", "别讲话", "别说话", "不要讲话", "不要说话", "先别说", "安静"]) {
+    const fixture = fakePipeline();
+    await fixture.provider.connect();
+    fixture.emitAsr({ type: "final", text: "请先给我一个回答" });
+    await tick();
+    await tick();
+    const before = fixture.events.length;
+    fixture.emitAsr({ type: "speech.started", itemId: `explicit-${command}`, audioStartMs: 1000 });
+    fixture.emitAsr({ type: "partial", text: command, itemId: `explicit-${command}` });
+    assert.equal(fixture.events.slice(before).some((event) => event.type === "barge.start"), true, command);
+    assert.equal(fixture.provider.diagnostics().counters.bargeInsAcceptedExplicit, 1, command);
+  }
 });
 
 test("T21 overlong model speech is closed gracefully instead of failing the conversation", async () => {
@@ -529,11 +600,12 @@ test("T21 diagnostic export keeps pipeline metrics and strips all content fields
     provider: "three-stage",
     ready: true,
     active: false,
-    counters: { asrFinals: 2, modelRequests: 1, ttsRequests: 2, turnsCompleted: 1, transcript: "私人问题", assistantText: "私人回答" },
+    counters: { asrFinals: 2, modelRequests: 1, ttsRequests: 2, turnsCompleted: 1, bargeInsAcceptedExplicit: 3, bargeInsAcceptedFinal: 2, bargePartialsDeferred: 7, bargeFinalsRejectedInconsistent: 4, transcript: "私人问题", assistantText: "私人回答" },
     lastTiming: { firstAssistantDeltaMs: 240, firstTtsAudioMs: 510, turnCompletedMs: 1400, text: "不要导出" },
   } } });
   assert.equal(report.conversation.pipeline.provider, "three-stage");
   assert.equal(report.conversation.pipeline.counters.modelRequests, 1);
+  assert.deepEqual({ explicit: report.conversation.pipeline.counters.bargeInsAcceptedExplicit, final: report.conversation.pipeline.counters.bargeInsAcceptedFinal, deferred: report.conversation.pipeline.counters.bargePartialsDeferred, inconsistent: report.conversation.pipeline.counters.bargeFinalsRejectedInconsistent }, { explicit: 3, final: 2, deferred: 7, inconsistent: 4 });
   assert.equal(report.conversation.pipeline.timing.firstTtsAudioMs, 510);
   assert.doesNotMatch(JSON.stringify(report), /私人|不要导出/);
 });

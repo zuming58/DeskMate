@@ -1,5 +1,9 @@
 # Decisions
 
+## D156 — Explicit stop phrases are fast; ordinary barge-in waits for consistent final evidence
+
+2026-09-15: During a three-stage companion response, accept explicit interruption phrases such as 停下、听一下、等等、暂停播放、住嘴、闭嘴、别讲话、别说话 and 安静 from the first matching partial after a current speech-start item, while retaining assistant-echo rejection. Never cancel speech from an ordinary mutable partial. A non-explicit interruption requires a final of at least five meaningful characters and 900 ms plus agreement with a provider-confirmed partial or two stable partials; a sparse no-partial final requires at least eight characters and 1200 ms. Short or inconsistent finals are discarded from the response path. Export only aggregate decision counters, not hypotheses or transcript content.
+
 ## D155 — Companion identity separates software mind, interaction surface and optional body
 
 2026-09-15: Define 小岚 as a DeskMate desktop AI companion with an optional physical form, not a generic voice assistant or a human. Windows DeskMate owns conversation, memory, speech and state orchestration; EasyInput is a separate key/dial/configured-microphone interaction surface; Xiaozhi is the optional screen-expression and two-servo physical embodiment. Append this immutable identity after editable persona fields, but refresh only allowlisted EasyInput/Xiaozhi/motion states per model turn. Explicit identity questions use a deterministic local answer. Never turn “enabled”, “connected” or “request sent” into a completed physical-action claim; only the existing trusted motion result can do that. No identity wording grants hardware authority or invents limbs, camera vision or sensors.
