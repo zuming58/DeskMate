@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-15 — T49 AI 陪伴误打断防护已修复、打包并运行
+
+- 根据 T48 脱敏诊断确认的 `recognized-speech` 误打断，T49 将插话分为快速明确口令和普通语音证据两条路径。停下、听一下、等等、暂停播放、住嘴、闭嘴、别讲话、别说话、不要讲话、不要说话、先别说、安静等明确口令，在 ASR 已建立当前 speech item 且不是回答回声时，可由首个匹配 partial 立即停止；原有停一下、别说了、打住、我来说、换个问题等同类口令继续支持。
+- 普通 partial 现在只累计证据，不再取消模型、TTS 或扬声器。普通 final 至少需 5 个有效字符、900 ms，并与 provider-confirmed partial 或两次稳定演进 partial 一致；完全没有 partial 时需至少 8 字、1200 ms。较长中间假设随后收缩成短数字串，或 final 与先前假设不一致时，会被拒绝且不进入替代模型轮次。脱敏诊断新增的仅是明确接受、final 接受、partial 延后和不一致拒绝计数，不保存候选正文、item ID 或音频。
+- 合同 `docs/contracts/t49-guarded-barge-in-v1.md`，稳定决策 D156；分支 `codex/t49-guard-false-barge-in`，实现提交 `9dfa4e6172ba1de37eb3c2ef02a2d80b68a2ddac`，build ID `t49-guard-false-barge-in`。第一次完整回归只暴露一个要求普通 partial 立即取消的旧 T28 测试；按新合同改为 partial 不取消、匹配 final 才取消后，定向 T21/T28 **38/38** 与最终完整 `npm test` **724/724** 均通过，无失败/跳过。
+- `npm run build:desktop`、原生 InputBridge 发布、Vite/Windows 目录包、精确包内资源校验和 `git diff --check` 均通过。候选 `release-t49/win-unpacked`；EXE SHA-256 `3C8E3EB32A516046378B6954B10ADD015D7BC8708D8299E79B43310F99CD929E`，ASAR `C1A5DFF4A212050921D98AE100B71DD5012A4F93268F207D9E2EF0456A3A0E2A`，InputBridge `B78F6AED14C0616EC8020B9F24F4BCCC888D5FA1FA83AA54A5186750D8F71EDF`。
+- 只停止经精确路径核实的 `release-t48` 进程族，并用保留的 `%APPDATA%/deskmate` 配置启动 `release-t49/DeskMate.exe --show-companion`。主 PID `42184` 响应正常，可见窗口句柄 `1116552`，观察到的 8 个 DeskMate/InputBridge 进程均来自 T49。未改固件、Flash、NVS、麦克风选择、端点等待、按键配置、凭据或用户数据，未发起云端测试请求。下一步真机人工验收：让小岚持续说一段话，保持安静确认不再误停；随后分别说普通完整插话与任一明确停止口令，检查 final 打断和快速打断。
+
 # 2026-09-15 — T48 电脑音频短误识别触发误打断，根因已定位（未修改代码）
 
 - 用户报告小岚尚未说完就停止，并把未说过的短数字串当作新输入。只读取用户明确提供的脱敏诊断包；运行版本确认为 `t48-companion-embodiment-persona`。服务本身无错误：provider/transport/dialog errors 均为 0，队列丢弃与 drain timeout 均为 0；但 6 次 TTS turn 中仅 3 次 completed，另 3 次均 abandoned 且最后结果为 `recognized-speech`，pipeline 同时记录 3 次 accepted barge-in 与 3 次 cancellation，音频 sink 最后取消原因是 `asr-final`。因此这是本地打断策略主动停止播报，不是模型或 TTS 自行截断。
