@@ -44,6 +44,16 @@ test("Bailian parses text and sends authorization only as a header", async () =>
   assert.equal(parseResponse({ choices: [{ message: { content: " 文本 " } }] }).text, "文本");
 });
 
+test("Bailian applies configured hotword normalization after provider transcription", async () => {
+  const value = await transcribe({
+    apiKey: "sk-12345678",
+    audio: Buffer.from("audio"),
+    hotwords: ["WaytoAGI"],
+    fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: "V two A G I社区" } }] }) }),
+  });
+  assert.equal(value.text, "WaytoAGI社区");
+});
+
 test("Bailian request can be cancelled by the voice session", async () => {
   const controller = new AbortController();
   const pending = transcribe({ apiKey: "sk-12345678", audio: Buffer.from("audio"), signal: controller.signal, fetchImpl: (_url, options) => new Promise((_resolve, reject) => options.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })) });

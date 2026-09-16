@@ -1,6 +1,7 @@
 const DEFAULT_MODEL = "qwen3-asr-flash";
 const DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+const { normalizeTranscript } = require("./transcript-normalizer.cjs");
 
 function validateApiKey(value) {
   const key = String(value || "").trim();
@@ -77,7 +78,9 @@ async function transcribe({ apiKey, workspaceId = "", audio, mimeType, hotwords 
       const message = data?.error?.message || data?.message || `HTTP ${response.status}`;
       throw new Error(`千问 ASR 请求失败：${message}`);
     }
-    return parseResponse(data);
+    const parsed = parseResponse(data);
+    const normalized = normalizeTranscript(parsed.text, { hotwords });
+    return normalized.changed ? { ...parsed, text: normalized.normalized } : parsed;
   } catch (error) {
     if (controller.signal.aborted) throw new Error(signal?.aborted ? "千问 ASR 转写已取消" : "千问 ASR 请求超时");
     throw error;

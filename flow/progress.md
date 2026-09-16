@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-16 — T60 热词已升级为云端提示加本地确定性校正
+
+- 用户确认继续修复 `WaytoAGI` 热词未纠正“V two A G I”的问题。保留千问 ASR glossary，不增加模型调用；成功转写后在普通听写链路运行与陪伴对话共用的本地 normalizer，再进入整理、历史与目标窗口写入。
+- 配置中的 ASCII 技术热词现在可确定性收敛大小写、字母间空格/分隔符和数字口述形式，并以 ASCII 标识符边界避免改写更长单词。`WaytoAGI` 额外接受用户实测及邻近的 `Way/Wei/V/维/威/微 + to/two/too/2/图/兔 + A G I`；没有配置该热词时不改。中文同音词不做自动模糊猜测，仍使用显式替换规则，避免把普通句子误改。
+- 针对性 17/17；完整 `npm test` 846/846；`npm run build:desktop`、精确包资源、T58+ 舞蹈生命周期和 T53 语音/提醒最终 ASAR 回归均通过。T60 包内探针实证 `V two A G I社区` → `WaytoAGI社区`、`E S P 3 2 - S 3` → `ESP32-S3`，无热词和较长标识符保持原样。
+- 交付 `release-t60/win-unpacked`，build ID `t60-hotword-normalization`。EXE SHA256 `BABC17323B33D0979FE6979FB962CC43AA99B001407C751AF2EAC0D92F7C5F1C`；ASAR `F25D19885D78947D9186807309BFD0555F71BE7E3D3439D01EF3429CFC553C22`；输入桥 `2B2F97A82E1A5D7690F30D91E50C202B9610977B1467A107652DFCF79D597665`。
+- 未修改用户现有词库、历史、设置或凭据，未调用真实 API、麦克风或硬件。已核对并停止精确 T59 根进程 36392，启动 `release-t60/win-unpacked/DeskMate.exe`；主 PID 21580、Responding=true、窗口句柄 3148068，观察到的 DeskMate 进程均来自 T60 路径。下一步由用户用现有 `WaytoAGI` 热词做真实语音复测。
+
 # 2026-09-16 — 自定义热词实际链路核对：已传入，但不是确定性纠正
 
 - 用户在词库加入 `WaytoAGI` 后，真实语音输入仍得到“V two A G I”。截图确认热词已保存；只读核对 T59 最终 ASAR 也确认 `WaytoAGI` 会进入千问 ASR 的 system glossary 提示，因此不是页面未保存或请求漏传。

@@ -1,6 +1,10 @@
 # Development plan
 
-## Current work: T59 vocabulary UI polish
+## Current work: T60 deterministic custom hotword normalization
+
+Keep the provider glossary hint, then normalize only bounded configured technical-token variants after transcription. Support safe ASCII spacing/case/digit forms and the user-observed WaytoAGI spoken forms without another model call, added latency, Chinese homophone guessing or changes to explicit replacement rules. Apply the same normalizer to ordinary dictation and companion transcription. Contract: `docs/contracts/t60-hotword-normalization-v1.md`.
+
+## Previous work: T59 vocabulary UI polish
 
 Keep the existing vocabulary behavior and two-column structure while preventing the add action from wrapping vertically. Reduce replacement-field type and control density to match the surrounding DeskMate hierarchy, with responsive checks at the main and compact desktop sizes. No vocabulary migration, rule rewrite, speech behavior, API, or firmware change.
 
