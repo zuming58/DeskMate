@@ -16,6 +16,20 @@ export const STUDIO_STYLES = [
 ].map(style => ({ ...style, image: asset(style.id) }));
 export const STUDIO_EFFECTS = ['原图 / 作品', '彩色点阵', '像素切片', '字符诗篇', '双色印记', '线条回声'];
 export const STUDIO_EFFECT_PARAMETERS = ['无颗粒', '点大小', '像素大小', '字符大小', '色阶大小', '线条间距'];
+const STUDIO_MEDIA_NAMES = Object.freeze({
+  'robot-teal-curious': '青绿好奇',
+  'robot-coral-happy': '珊瑚开心',
+  'robot-cobalt-focused': '钴蓝专注',
+  'robot-lavender-sleepy': '淡紫小憩',
+});
+export function studioMediaDisplayName(value, kind = 'source') {
+  const name = String(value || '').trim();
+  if (!name) return kind === 'result' ? '本地作品' : '本地素材';
+  if (STUDIO_MEDIA_NAMES[name.toLocaleLowerCase('en-US')]) return STUDIO_MEDIA_NAMES[name.toLocaleLowerCase('en-US')];
+  if (/\p{Script=Han}/u.test(name)) return name;
+  if (/^(?:exec|rec|img|image|source)-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu.test(name)) return kind === 'result' ? '本地作品' : '本地素材';
+  return name;
+}
 export const wrapStudioIndex = (value, length = STUDIO_STYLES.length) => ((value % length) + length) % length;
 export const clampStudioStrength = value => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
 export const clampStudioRadius = value => Math.max(10, Math.min(90, Math.round(Number(value) || 0)));

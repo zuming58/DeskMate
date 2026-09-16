@@ -20,7 +20,7 @@ test("tray and second-instance restore also wait while the main frame is loading
 });
 
 test("the packaged build identifies the current integrated desktop slice", () => {
-  assert.match(main, /DESKMATE_BUILD_ID = "t61-style-studio-s4-return"/);
+  assert.match(main, /DESKMATE_BUILD_ID = "t62-style-studio-chinese-labels"/);
 });
 
 test("the packaged smoke test reads the main-owned history store after migration", () => {

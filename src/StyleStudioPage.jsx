@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick, IconTrash } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
-import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioKey, validStudioUpload } from './domain/styleStudio.js';
+import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioMediaDisplayName, studioKey, validStudioUpload } from './domain/styleStudio.js';
 import { createStyleStudioDetentSound } from './domain/styleStudioDetentSound.js';
 import { createStyleStudioMotionSound } from './domain/styleStudioMotionSound.js';
 import { StyleStudioWheelRouter, styleStudioWheelStep } from './domain/styleStudioWheel.js';
@@ -112,7 +112,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       for (const record of records.filter(item => item.kind === 'source')) {
         const payload = await api.readStyleStudioMedia({ id: record.id, kind: 'source' });
         if (!alive.current) return;
-        if (payload.ok) hydrated.set(record.id, { ...record, image: mediaUrl(payload.bytes, record.mime, urls), sample: false });
+        if (payload.ok) hydrated.set(record.id, { ...record, name: studioMediaDisplayName(record.name, 'source'), image: mediaUrl(payload.bytes, record.mime, urls), sample: false });
       }
       const sourceItems = [...hydrated.values()];
       const resultItems = [];
@@ -120,7 +120,7 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
         const payload = await api.readStyleStudioMedia({ id: record.id, kind: 'result' });
         if (!alive.current) return;
         const original = hydrated.get(record.sourceId);
-        if (payload.ok && original) resultItems.push({ ...record, name: record.styleName || record.name, image: mediaUrl(payload.bytes, record.mime, urls), source: original, sample: false });
+        if (payload.ok && original) resultItems.push({ ...record, name: studioMediaDisplayName(record.styleName || record.name, 'result'), image: mediaUrl(payload.bytes, record.mime, urls), source: original, sample: false });
       }
       setMaterials([starter, ...sourceItems]);
       setResults([...exampleResults, ...resultItems]);
@@ -261,13 +261,13 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       catch { URL.revokeObjectURL(image); urls.current.delete(image); if (alive.current) setStatus('图片无法读取，或超过 4000 万像素。'); continue; }
       if (!alive.current) { URL.revokeObjectURL(image); urls.current.delete(image); return; }
       const api = bridge();
-      if (!api?.importStyleStudioSource) { const item = { id: crypto.randomUUID(), name: file.name.replace(/\.[^.]+$/, ''), image, sample: false }; setMaterials(items => [...items, item]); if (insertIntoMachine && !inserted) { loadSourceIntoMachine(item, '照片已插入机器；浏览器预览只保留到本次页面关闭。'); inserted = true; } else if (!insertIntoMachine) setSource(item); if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) })); placementIndex++; remaining--; setStatus(insertIntoMachine ? '照片已插入机器；浏览器预览只保留到本次页面关闭。' : '浏览器预览：素材只保留到本次页面关闭。'); continue; }
+      if (!api?.importStyleStudioSource) { const item = { id: crypto.randomUUID(), name: studioMediaDisplayName(file.name.replace(/\.[^.]+$/, ''), 'source'), image, sample: false }; setMaterials(items => [...items, item]); if (insertIntoMachine && !inserted) { loadSourceIntoMachine(item, '照片已插入机器；浏览器预览只保留到本次页面关闭。'); inserted = true; } else if (!insertIntoMachine) setSource(item); if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) })); placementIndex++; remaining--; setStatus(insertIntoMachine ? '照片已插入机器；浏览器预览只保留到本次页面关闭。' : '浏览器预览：素材只保留到本次页面关闭。'); continue; }
       const response = await api.importStyleStudioSource({ name: file.name.replace(/\.[^.]+$/, ''), mime: file.type, bytes: await file.arrayBuffer() });
       if (!alive.current) return;
       if (!response.ok) { URL.revokeObjectURL(image); urls.current.delete(image); setStatus(response.reason || '素材没有导入，请检查图片。'); continue; }
       const existing = materials.find(item => item.id === response.record.id);
       if (existing) { URL.revokeObjectURL(image); urls.current.delete(image); if (insertIntoMachine && !inserted) { loadSourceIntoMachine(existing, '这张素材已在本地库中，并已插入机器。'); inserted = true; } else setSource(existing); if (placement) setMaterialPositions(items => ({ ...items, [existing.id]: clampStudioPosition(placement) })); setStatus(insertIntoMachine ? '这张素材已在本地库中，并已插入机器。' : '这张素材已在本地素材库中。'); continue; }
-      const item = { ...response.record, image, sample: false };
+      const item = { ...response.record, name: studioMediaDisplayName(response.record.name, 'source'), image, sample: false };
       setMaterials(items => [...items, item]); if (insertIntoMachine && !inserted) { loadSourceIntoMachine(item, '照片已保存到本地库，并插入机器。'); inserted = true; } else if (!insertIntoMachine) setSource(item); remaining--;
       if (placement) setMaterialPositions(items => ({ ...items, [item.id]: clampStudioPosition({ x: placement.x + placementIndex * 4, y: placement.y + placementIndex * 3, tilt: (placementIndex % 3 - 1) * 4 }) }));
       placementIndex++;

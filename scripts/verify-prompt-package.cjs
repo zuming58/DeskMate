@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t61-style-studio-s4-return'));
+assert(main.includes('t62-style-studio-chinese-labels'));
 for (const file of ['personal-reminders.cjs','preload.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale reminder resource: ${file}`);
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
@@ -43,6 +43,8 @@ for (const asset of fs.readdirSync(path.join(root, 'dist/client/assets'), { with
   const file = `dist/client/assets/${asset.name}`;
   assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale renderer asset: ${file}`);
 }
+const rendererText = fs.readdirSync(path.join(root, 'dist/client/assets')).filter(name => /^index-.*\.js$/.test(name)).map(name => fs.readFileSync(path.join(root, 'dist/client/assets', name), 'utf8')).join('\n');
+for (const label of ['青绿好奇', '珊瑚开心', '钴蓝专注', '淡紫小憩', '本地素材']) assert(rendererText.includes(label), `missing Chinese Style Studio label: ${label}`);
 assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/input-bridge/DeskMate.InputBridge.exe')).equals(fs.readFileSync(path.join(root, 'native/DeskMate.InputBridge/publish/DeskMate.InputBridge.exe'))));
 for (const file of ['assets/branding/deskmate-logo.png', 'assets/expressions/soft/open.png', 'assets/expressions/soft/closed.png', 'assets/expressions/soft/transparent-open.png', 'assets/expressions/soft/transparent-closed.png', 'assets/companion/home-desk/open.png', 'assets/companion/home-desk/blink.png']) {
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale brand asset: ${file}`);
@@ -54,4 +56,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T61 packaged resource check passed: Style Studio S4 return, deterministic hotword normalization, vocabulary UI polish, motion-owned dance audio build, reminder purpose/deletion, Workbench UI, backup/restore, renderer, companion videos and exact native bridge.');
+console.log('T62 packaged resource check passed: Chinese Style Studio labels, S4 return, deterministic hotword normalization, vocabulary UI polish, motion-owned dance audio build, reminder purpose/deletion, Workbench UI, backup/restore, renderer, companion videos and exact native bridge.');

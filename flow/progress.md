@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-16 — T62 风格映像素材名称中文化，已打包待切换
+
+- 用户截图指出素材卡片显示 `robot-coral-happy`、`robot-cobalt-focused`、`robot-lavender-sleepy`、`robot-teal-curious` 和随机任务 ID。T62 只在渲染时显示为“珊瑚开心、钴蓝专注、淡紫小憩、青绿好奇、本地素材”；已有中文名保持，无法可靠翻译的用户文件名不猜测。
+- 未重命名或迁移 `style-studio/library.json`、图片文件、ID、摘要与 source/result 关系，不影响去重、删除、备份和 Image 2 请求。新导入的同名演示图片也复用同一显示映射；T61 S4 行为和硬件输入不变。
+- 风格映像专项 23/23，完整 `npm test` 848/848；`npm run build:desktop`、T62 精确包资源/五个中文标签、T58+ 舞蹈生命周期及 T53 语音/提醒最终 ASAR 均通过。没有调用生图 API、修改用户媒体或执行硬件动作。
+- 交付 `release-t62/win-unpacked`，build ID `t62-style-studio-chinese-labels`。EXE SHA256 `231BB150749207BCCE156C471EA188BE9077791560F687B8F59F1FE8CD8D9FDA`；ASAR `5CB0AF05C784199712821562B15D7B431F1690D13666FD53E49574593AA4E056`；输入桥 `D6142CC060962E9CD48D8537FC1F409E8AE9E51CBF690C8208EFA5C042865D74`。
+- 当前仍运行 T61；下一步精确切换到 T62 并打开风格映像，由用户核对当前五张保留素材的实际中文显示。合同与验证：`docs/contracts/t62-style-studio-chinese-labels-v1.md`、`docs/reviews/t62-style-studio-chinese-labels-2026-09-16.md`。
+
 # 2026-09-16 — 用户确认 T61 风格映像 S4 人工验收通过
 
 - 用户在当前运行的 T61 中复测 S4，明确反馈“没问题”。该反馈补齐风格映像 S4 逐层收起且不跳工作台的人工验收，不再标记为仅自动测试通过。

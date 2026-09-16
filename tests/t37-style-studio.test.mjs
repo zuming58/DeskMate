@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
+import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioMediaDisplayName, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
 test('T42 ten provenance-backed styles and bounded generation/reveal controls', () => {
   assert.equal(STUDIO_STYLES.length, 10);
   for (const s of STUDIO_STYLES) assert(fs.existsSync(new URL(`../public/assets/style-studio/${s.id}.png`, import.meta.url)));
@@ -91,6 +91,19 @@ test('T61 S4 collapses Studio layers without navigating to the Workbench', () =>
   assert(closeStart >= 0 && closeEnd > closeStart);
   assert.doesNotMatch(source.slice(closeStart, closeEnd), /navigate\(/);
   assert.match(source, /返回工作台请使用左上角按钮/);
+});
+test('T62 retained Style Studio media uses Chinese display labels without changing stored identity', () => {
+  assert.equal(studioMediaDisplayName('robot-teal-curious'), '青绿好奇');
+  assert.equal(studioMediaDisplayName('robot-coral-happy'), '珊瑚开心');
+  assert.equal(studioMediaDisplayName('robot-cobalt-focused'), '钴蓝专注');
+  assert.equal(studioMediaDisplayName('robot-lavender-sleepy'), '淡紫小憩');
+  assert.equal(studioMediaDisplayName('exec-c1b92281-9406-4cb4-bd94-b1e7252f1270'), '本地素材');
+  assert.equal(studioMediaDisplayName('rec-c1b92281-9406-4cb4-bd94-b1e7252f1270', 'result'), '本地作品');
+  assert.equal(studioMediaDisplayName('生活中的我'), '生活中的我');
+  assert.equal(studioMediaDisplayName('family-trip'), 'family-trip');
+  const source = fs.readFileSync(new URL('../src/StyleStudioPage.jsx',import.meta.url),'utf8');
+  assert.match(source, /studioMediaDisplayName\(record\.name, 'source'\)/);
+  assert.match(source, /studioMediaDisplayName\(record\.styleName \|\| record\.name, 'result'\)/);
 });
 test('T37 upload types and limits exclude SVG, executables and empty files', () => {
   assert(validStudioUpload({type:'image/png',size:1024}));
