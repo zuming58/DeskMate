@@ -1392,7 +1392,7 @@ export function VocabularyPage({ notify }) {
         <Card>
           <SectionTitle index="01" title={`热词 · ${hotwords.length} 个`} description="让语音识别更容易听对人名、产品名和项目名。" />
           <div className="chips">{hotwords.map((word) => <button key={word} className="chip" onClick={() => setHotwords(hotwords.filter((entry) => entry !== word))}>{word}<span>×</span></button>)}</div>
-          <div className="inline-form"><input value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="添加新的专业词汇" onKeyDown={(e) => e.key === "Enter" && addWord()} /><Button icon={Plus} onClick={addWord}>添加</Button></div>
+          <div className="inline-form vocabulary-add-form"><input value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="添加新的专业词汇" onKeyDown={(e) => e.key === "Enter" && addWord()} /><Button icon={Plus} onClick={addWord}>添加</Button></div>
         </Card>
         <Card>
           <SectionTitle index="02" title={`替换规则 · ${rules.length} 条`} description="识别完成后自动把左侧词语替换为右侧。" />

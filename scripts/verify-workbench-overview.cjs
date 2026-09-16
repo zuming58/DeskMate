@@ -102,6 +102,15 @@ app.whenReady().then(async () => {
   await shot('reminder-delivering-1440-synthetic');
   reminderItems = pendingReminderItems; await click('刷新'); await run('window.scrollTo(0,0)');
   await shot('overview-1440-synthetic');
+  await run(`location.hash='#/vocabulary'`); await waitFor(() => run(`Boolean(document.querySelector('.vocabulary-add-form') && document.querySelector('.rule-row'))`), 'vocabulary ready'); await pause(300);
+  record('vocabulary add button stays on one line', await run(`(()=>{const b=document.querySelector('.vocabulary-add-form .button');const s=b?.querySelector('span');return b?.getBoundingClientRect().width>=90&&s?.getClientRects().length===1&&getComputedStyle(s).whiteSpace==='nowrap'})()`));
+  record('replacement rules use compact readable type', await run(`Array.from(document.querySelectorAll('.rule-row input')).every(input=>getComputedStyle(input).fontSize==='12px'&&input.getBoundingClientRect().height<=44)`));
+  record('vocabulary has no horizontal overflow at 1440', await run(`document.documentElement.scrollWidth<=innerWidth`));
+  await shot('vocabulary-1440-synthetic');
+  window.setContentSize(960,680); await pause(300);
+  record('vocabulary remains usable at 960', await run(`document.documentElement.scrollWidth<=innerWidth&&document.querySelector('.vocabulary-add-form .button span').getClientRects().length===1`));
+  await shot('vocabulary-960-synthetic');
+  window.setContentSize(1440,1024); await load();
   record('DM brand loaded in header and sidebar without another shell', await run(`Array.from(document.querySelectorAll('.brand-logo')).length===2 && Array.from(document.querySelectorAll('.brand-logo')).every(i=>i.complete && i.naturalWidth===512) && getComputedStyle(document.querySelector('.wb-face')).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(document.querySelector('.brand-mark')).borderWidth==='0px'`));
   const brandImage = nativeImage.createFromPath(path.join(root, 'public/assets/branding/deskmate-logo.png'));
   const pixels = brandImage.toBitmap();

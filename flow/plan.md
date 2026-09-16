@@ -1,5 +1,9 @@
 # Development plan
 
+## Current work: T59 vocabulary UI polish
+
+Keep the existing vocabulary behavior and two-column structure while preventing the add action from wrapping vertically. Reduce replacement-field type and control density to match the surrounding DeskMate hierarchy, with responsive checks at the main and compact desktop sizes. No vocabulary migration, rule rewrite, speech behavior, API, or firmware change.
+
 ## Current work: T58 motion-owned dance music lifetime
 
 Loop only motion-owned dance accompaniment, using existing actual motion completion/stop/failure to end it. Keep previews and other cues one-shot; protect newer playback from stale finalizers. No motion/firmware protocol changes. Contract: `docs/contracts/t58-dance-music-lifetime-v1.md`.

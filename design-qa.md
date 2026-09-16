@@ -1,3 +1,22 @@
+# T59 vocabulary UI polish QA — 2026-09-16
+
+- Source visual truth: the user's annotated vocabulary screenshot `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-60a596e5-c69b-4176-a976-2e69368ec985.png` at 1815×876. It identifies the wrapped vertical “添加” label and oversized replacement-rule text as the defects while retaining the current two-card layout.
+- Rendered implementation: isolated production React/preload capture `C:/Users/Administrator/AppData/Local/Temp/deskmate-workbench-qa-egftOg/vocabulary-1440-synthetic.png` at 2160×1536 pixels for a 1440×1024 CSS viewport and device scale 1.5; compact capture `vocabulary-960-synthetic.png` at 1440×1020 pixels for a 960×680 CSS viewport. The source and matching content region were normalized to 1815×876 and opened together in `C:/Users/Administrator/AppData/Local/Temp/deskmate-t59-vocabulary-comparison.png`.
+- State: vocabulary page with five default hotwords and two replacement rules. The isolated fixture's top history-save warning is deliberately injected by the harness and is outside this page correction.
+
+## Findings and comparison history
+
+1. Initial source P1: the hotword action shrank until the two-character label wrapped vertically. Fix: the vocabulary add row now reserves a 94 px action column and keeps its label on one line; at the small breakpoint it becomes a full-width horizontal-label button. Post-fix evidence shows one readable “添加” line at both 1440×1024 and 960×680 with no horizontal overflow.
+2. Initial source P2: replacement values inherited the application's larger default control type and visually competed with the card heading. Fix: only vocabulary rule inputs use 12 px type, 42 px controls and tighter row rhythm; explanatory copy uses the page's muted 11 px hierarchy. Post-fix comparison shows the rules aligned with the compact hotword chips and unchanged delete/arrow affordances.
+3. No remaining P0/P1/P2 finding. Fonts use the existing Inter/Noto Sans SC stack; card spacing, border/radius, blue/graphite tokens and source copy remain consistent. No image asset, icon library, vocabulary content or interaction behavior changed, so image-quality and asset fidelity are unchanged. Focused comparison was required for the button label and rule text; the full-page captures also confirm preserved composition and responsive overflow.
+
+## Interaction and responsive evidence
+
+- Isolated native UI checks pass for the add label, 12 px rule type, 1440 overflow and 960 overflow. Existing import/export, add/remove hotwords and rules, auto-save state and all navigation paths continue through the same components.
+- The implementation preserves the exact functional inputs and Tabler icons. No user vocabulary, production profile, API, microphone, hardware or firmware was used by visual QA.
+
+final result: passed
+
 # T42 Style Studio deletion and S1/S2 routing QA — 2026-09-14
 
 - Reference: the user's annotated Works screenshot `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-46cface5-7e23-4cfb-a330-6b6190b201cc.png` at 2460×1056. Implementation: production-renderer `C:/Users/Administrator/AppData/Local/Temp/deskmate-t38-functional-FYDfpE/trash-result-hover-1440.png` at 1440×1024. Both were opened in the same visual comparison `D:/CodexData/home/visualizations/2026/09/13/01a09b5c-9220-7d51-8952-f29968487205/t42-trash-s2-reference-vs-implementation.png`.
