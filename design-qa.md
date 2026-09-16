@@ -1,3 +1,22 @@
+# T63 Style Studio restrained drag feedback QA — 2026-09-16
+
+- Source visual truth: the user's rejected drag-state screenshot `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-08e2a602-9d37-40dd-aa50-22944af3b800.png` at 1994×1014. The accompanying correction is authoritative: retain a small lift on the dragged photo and the upper inlet hint, but remove the lower machine's lift, wash, large dashed box and release instruction.
+- Rendered implementation: final packaged-ASAR pointer-drag capture `C:/Users/ADMINI~1/AppData/Local/Temp/deskmate-t47-pointer-drag-Wyq8b0/drag-hover-1440.png` at 1440×1024 for a 1440×1024 CSS content viewport. Capture density was normalized to 1× by the existing production-renderer probe. State: one Material card actively follows the pointer over the complete machine before mouse release.
+- The source and final implementation were opened together in one visual comparison input at original resolution. Because the source is a cropped, differently scaled retained-profile screen and describes a rejected state rather than a full-page mock, the focused drag/machine region is the fidelity truth; a pixel-level whole-page overlay would create false differences.
+
+## Findings and comparison history
+
+1. Initial P1: the complete lower machine changed into a pale dashed drop box with an oversized ring and “松开放入机器”, obscuring its controls and breaking the stable appliance metaphor. Fix: the machine no longer receives a drag-state class; the overlay, outer ring, scale and translation rules were removed. Post-fix packaged evidence shows the machine at opacity `1` and transform `none`, with normal border, shadow, content and controls throughout the drag.
+2. Initial P2: the release instruction replaced the inlet label and the pointer card lift was visually heavy. Fix: the inlet keeps the static `原图进片口` label, its dashed outline stays local, and the source photo rises 4 px with a restrained border/shadow. The pointer ghost now rises 3 px at scale 1.018 with a two-pixel halo.
+3. No remaining P0/P1/P2 finding. Fonts and typography are unchanged from the existing DeskMate stack; spacing/layout rhythm stays stable because the machine no longer transforms; cobalt/graphite/white tokens and existing raster image quality are preserved; copy is reduced to the persistent inlet label. No asset, crop, icon, provider or media identity changed.
+
+## Interaction evidence
+
+- The final packaged pointer probe confirms one ghost, local inlet `is-over`, no machine `is-receiving`, zero renderer errors, and successful release over the unchanged complete-machine hit region with `素材已插入进片槽。`.
+- The final packaged functional Style Studio probe passes insertion, synthetic configured generation, ejection, Works placement, deletion and input-lease release with zero renderer errors. No paid provider call, user-media mutation, production-profile write, hardware command or firmware action was used.
+
+final result: passed
+
 # T59 vocabulary UI polish QA — 2026-09-16
 
 - Source visual truth: the user's annotated vocabulary screenshot `C:/Users/ADMINI~1/AppData/Local/Temp/codex-clipboard-60a596e5-c69b-4176-a976-2e69368ec985.png` at 1815×876. It identifies the wrapped vertical “添加” label and oversized replacement-rule text as the defects while retaining the current two-card layout.

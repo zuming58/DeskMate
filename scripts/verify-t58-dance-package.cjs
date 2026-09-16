@@ -6,7 +6,7 @@ const release=process.argv[2]||'release-t58';
 assert(/^release(?:-[a-z0-9-]+)?$/.test(release));
 const archive=path.resolve(__dirname,'..',release,'win-unpacked/resources/app.asar');
 const main=asar.extractFile(archive,'electron/main.cjs').toString();
-assert(/t58-dance-music-lifetime|t59-vocabulary-ui-polish|t60-hotword-normalization|t61-style-studio-s4-return|t62-style-studio-chinese-labels/.test(main));
+assert(/t58-dance-music-lifetime|t59-vocabulary-ui-polish|t60-hotword-normalization|t61-style-studio-s4-return|t62-style-studio-chinese-labels|t63-style-studio-drag-feedback/.test(main));
 let finish;
 const pending=new Promise(resolve=>finish=resolve),commands=[];
 const context=vm.createContext({Date,activeDanceMusicRequestId:'',danceMusicSequence:0,

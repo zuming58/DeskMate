@@ -605,9 +605,9 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
       </div>
       {materialPullVisual && <div className="ss-photo ss-material-pull-ghost" style={{ left: materialPullVisual.left, top: materialPullVisual.top, width: materialPullVisual.width }} aria-hidden="true"><img src={materialPullVisual.item.image} alt="" /><span>{materialPullVisual.item.name}</span></div>}
       <div className={`ss-inlet ${dragOver ? 'is-over' : ''} ${insertPulse ? 'is-inserting' : ''}`} onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
-        <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">{dragOver ? '松开放入' : '原图进片口'}</span>
+        <Photo item={source} className="ss-loaded" onClick={() => setModal('source')} /><span className="ss-slot-label">原图进片口</span>
       </div>
-      <div className={`ss-machine ${adjusting ? 'is-adjusting' : ''} ${dragOver ? 'is-receiving' : ''} ${insertPulse ? 'is-inserting' : ''}`} aria-label="风格映像机器，可拖入素材" onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
+      <div className={`ss-machine ${adjusting ? 'is-adjusting' : ''} ${insertPulse ? 'is-inserting' : ''}`} aria-label="风格映像机器，可拖入素材" onDragEnter={dragIntoMachine} onDragOver={dragIntoMachine} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }} onDrop={dropIntoMachine}>
         <div className="ss-description"><span className="ss-eyebrow"><IconPhoto size={15} />风格映像</span><h1>{adjusting ? '调整风格强度' : style.name}</h1><p>{adjusting ? '旋转调节，按下旋钮确认。' : style.description}</p><button className="ss-outline" onClick={() => setModal('prompt')}>查看提示词<IconChevronRight size={15} /></button></div>
         <img className="ss-style-preview" src={style.image} alt={`${style.name}预制样片`} />
         <div className="ss-control">

@@ -14,6 +14,7 @@ const deadline = setTimeout(() => app.exit(2), 30_000);
 app.whenReady().then(async () => {
   let window;
   try {
+    const errors = [];
     window = new BrowserWindow({
       show: false,
       width: 1440,
@@ -28,6 +29,7 @@ app.whenReady().then(async () => {
         backgroundThrottling: false,
       },
     });
+    window.webContents.on('console-message', (_event, level, message) => { if (level >= 3 && !message.includes('fonts.googleapis.com')) errors.push(message); });
     await window.loadFile(path.join(product, 'dist/client/index.html'), { hash: '/style-studio' });
     await wait(900);
     const js = code => window.webContents.executeJavaScript(code);
@@ -44,11 +46,20 @@ app.whenReady().then(async () => {
       await wait(18);
     }
     await wait(120);
+    const visual = await js(`(()=>{const machine=document.querySelector('.ss-machine'),inlet=document.querySelector('.ss-inlet'),ghost=document.querySelector('.ss-material-pull-ghost'),style=getComputedStyle(machine);return{ghost:Boolean(ghost),inletOver:inlet.classList.contains('is-over'),machineReceiving:machine.classList.contains('is-receiving'),slotLabel:document.querySelector('.ss-slot-label')?.textContent?.trim(),machineOpacity:style.opacity,machineTransform:style.transform}})()`);
+    const screenshot = path.join(output, 'drag-hover-1440.png');
+    fs.writeFileSync(screenshot, (await window.webContents.capturePage()).resize({ width: 1440 }).toPNG());
+    assert.equal(visual.ghost, true, 'one restrained photo ghost follows the pointer');
+    assert.equal(visual.inletOver, true, 'only the upper inlet exposes the valid drop hint');
+    assert.equal(visual.machineReceiving, false, 'the complete machine never enters a receiving visual state');
+    assert.equal(visual.slotLabel, '原图进片口');
+    assert.equal(visual.machineOpacity, '1');
+    assert.equal(errors.length, 0, errors.join('\n'));
     send({ type: 'mouseUp', button: 'left', clickCount: 1, ...points.to });
     await wait(250);
     const result = await js(`({loaded:document.querySelector('.ss-inlet .ss-photo span')?.textContent?.trim(),status:document.querySelector('.ss-footer [role=status]')?.textContent?.trim(),events:window.__dragEvents})`);
-    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
-    console.log(JSON.stringify({ output, result }, null, 2));
+    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ visual, result, screenshot, errors }, null, 2));
+    console.log(JSON.stringify({ output, visual, result, screenshot, errors }, null, 2));
     assert.equal(result.loaded, '我的本地照片');
     assert(!result.events.some(event => event.name === 'dragstart'), 'material cards use the reliable page pointer path instead of Chromium native drag');
     window.destroy(); clearTimeout(deadline); app.exit(0);

@@ -18,7 +18,7 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t62-style-studio-chinese-labels'));
+assert(main.includes('t63-style-studio-drag-feedback'));
 for (const file of ['personal-reminders.cjs','preload.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale reminder resource: ${file}`);
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
@@ -56,4 +56,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T62 packaged resource check passed: Chinese Style Studio labels, S4 return, deterministic hotword normalization, vocabulary UI polish, motion-owned dance audio build, reminder purpose/deletion, Workbench UI, backup/restore, renderer, companion videos and exact native bridge.');
+console.log('T63 packaged resource check passed: restrained Style Studio drag feedback, Chinese labels, S4 return, deterministic hotword normalization, vocabulary UI polish, motion-owned dance audio build, reminder purpose/deletion, Workbench UI, backup/restore, renderer, companion videos and exact native bridge.');

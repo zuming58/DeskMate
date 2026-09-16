@@ -105,6 +105,19 @@ test('T62 retained Style Studio media uses Chinese display labels without changi
   assert.match(source, /studioMediaDisplayName\(record\.name, 'source'\)/);
   assert.match(source, /studioMediaDisplayName\(record\.styleName \|\| record\.name, 'result'\)/);
 });
+test('T63 material dragging keeps feedback local to the card and inlet', () => {
+  const source = fs.readFileSync(new URL('../src/StyleStudioPage.jsx',import.meta.url),'utf8');
+  const css = fs.readFileSync(new URL('../src/style-studio.css',import.meta.url),'utf8');
+  assert.match(source, /className=\{`ss-inlet \$\{dragOver \? 'is-over' : ''\}/);
+  assert.match(source, /<span className="ss-slot-label">原图进片口<\/span>/);
+  assert.doesNotMatch(source, /dragOver \? 'is-receiving'/);
+  assert.doesNotMatch(source, /松开放入机器|松开放入<\/span>/);
+  assert.doesNotMatch(css, /\.ss-machine\.is-receiving/);
+  assert.doesNotMatch(css, /松开放入机器/);
+  assert.match(css, /\.ss-inlet\.is-over \.ss-photo \{[^}]*translateY\(-4px\)[^}]*scale\(1\.012\)/);
+  assert.match(css, /\.ss-material-pull-ghost \{[^}]*translateY\(-3px\)[^}]*scale\(1\.018\)/);
+  assert.match(source, /aria-label="风格映像机器，可拖入素材" onDragEnter=\{dragIntoMachine\} onDragOver=\{dragIntoMachine\}/);
+});
 test('T37 upload types and limits exclude SVG, executables and empty files', () => {
   assert(validStudioUpload({type:'image/png',size:1024}));
   assert(!validStudioUpload({type:'image/svg+xml',size:100}));

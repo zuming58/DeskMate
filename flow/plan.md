@@ -1,6 +1,10 @@
 # Development plan
 
-## Current work: T62 Style Studio Chinese media labels
+## Current work: T63 restrained Style Studio drag feedback
+
+Keep material insertion reliable while limiting its drag feedback to the pointer-following photo card and the upper inlet. The lower machine remains visually stable: no full-machine lift, fade, dashed overlay or “松开放入机器” instruction. Contract: `docs/contracts/t63-style-studio-drag-feedback-v1.md`.
+
+## Previous work: T62 Style Studio Chinese media labels
 
 Replace the retained English demo filenames and opaque task identifiers shown under Style Studio cards with concise Chinese display labels. Keep stored names, media identities, files, hashes, deletion, deduplication and provider payloads unchanged. Unknown meaningful user filenames remain visible instead of being guessed. Contract: `docs/contracts/t62-style-studio-chinese-labels-v1.md`.
 
