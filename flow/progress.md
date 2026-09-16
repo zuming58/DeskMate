@@ -6,7 +6,7 @@
 - T61 将 S4 固定为风格映像内部的逐层返回：生成中仍走原取消路径；弹层只关闭弹层；模式选择/强度调整只取消当前编辑；揭示模式回到生成界面；基础页收起临时环形菜单/对比并回到页首。S4 分支不再包含工作台导航，素材、作品和持久化媒体保持不变。
 - 风格映像专项 22/22，完整 `npm test` 847/847；`npm run build:desktop`、精确包资源、T58+ 舞蹈生命周期、T53 语音/提醒最终 ASAR 及 T61 最终渲染包标记均通过。没有触发 API、麦克风、实体 S4、舵机或固件操作，实体按键仍待用户验收。
 - 交付 `release-t61/win-unpacked`，build ID `t61-style-studio-s4-return`。EXE SHA256 `AF54AE561DE481F002B4AEAC9BA993DED5FA7BF687094CC7F282D004C5AA15EA`；ASAR `52C55B58444EF09E97DB5758F40837271F1FCA8927561EBBF4C561BB02B8DA73`；输入桥 `C7A1D05B3480ABE2191E52E879F4AE63AB932EDC13B85658EA9C2852ED174E7A`。
-- 当前运行仍为 T60，下一步精确核对并切换到 T61；切换后由用户在基础作品页、结果/查看层和揭示模式分别按 S4，确认始终留在风格映像，并用左上角按钮验证仍可显式返回工作台。合同与验证：`docs/contracts/t61-style-studio-s4-return-v1.md`、`docs/reviews/t61-style-studio-s4-return-2026-09-16.md`。
+- 已核对并停止 T60 主 PID 21580；其视频采集子进程 PID 42940 未随主进程退出，路径确认属于同一 T60 后单独停止，避免新旧混跑。已启动 `release-t61/win-unpacked/DeskMate.exe`，主 PID 37108、Responding=true、窗口句柄 659798；观察到的 7 个 DeskMate 进程及输入桥均来自 T61 路径。下一步由用户在基础作品页、结果/查看层和揭示模式分别按 S4，确认始终留在风格映像，并用左上角按钮验证仍可显式返回工作台。合同与验证：`docs/contracts/t61-style-studio-s4-return-v1.md`、`docs/reviews/t61-style-studio-s4-return-2026-09-16.md`。
 
 # 2026-09-16 — 用户确认 T60 WaytoAGI 热词真实语音验收通过
 
