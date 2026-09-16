@@ -68,6 +68,15 @@ export function resolveStudioDraggedCard(dataTransfer, activeCard) {
   } catch { /* Chromium may omit custom data while an internal card drag is active. */ }
   return valid(activeCard) ? { kind: activeCard.kind, id: activeCard.id } : null;
 }
+export function resolveStudioCloseAction({ modal = null, modeSelecting = false, adjusting = false, mode = 'generate', orbitOpen = false, compare = false } = {}) {
+  if (modal === 'progress') return 'cancel-generation';
+  if (modal) return 'close-modal';
+  if (modeSelecting) return 'cancel-mode';
+  if (adjusting) return 'cancel-adjustment';
+  if (mode === 'reveal') return 'return-generate';
+  if (orbitOpen || compare) return 'collapse-transient';
+  return 'return-studio';
+}
 const STUDIO_PAGE_COMMANDS = ['strength', 'view', 'save', 'close', 'compare', 'inspiration', 'reset', 'mode'];
 const KEYBOARD_ACTION_SHORTCUTS = { 'select-all': 'Ctrl+A', copy: 'Ctrl+C', paste: 'Ctrl+V', undo: 'Ctrl+Z', enter: 'Enter', backspace: 'Backspace' };
 const SHORTCUT_CODES = { Return: 'Enter', Enter: 'Enter', Space: 'Space', Tab: 'Tab', Escape: 'Escape', Backspace: 'Backspace', Delete: 'Delete', Left: 'ArrowLeft', Right: 'ArrowRight', Up: 'ArrowUp', Down: 'ArrowDown', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown' };

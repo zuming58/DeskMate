@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconArrowLeft, IconPlus, IconChevronLeft, IconChevronRight, IconDownload, IconX, IconLayoutGrid, IconInfoCircle, IconArrowsExchange, IconPhoto, IconCopy, IconHandClick, IconTrash } from '@tabler/icons-react';
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
-import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, studioKey, validStudioUpload } from './domain/styleStudio.js';
+import { STUDIO_SOURCE, STUDIO_DIAL, STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioKey, validStudioUpload } from './domain/styleStudio.js';
 import { createStyleStudioDetentSound } from './domain/styleStudioDetentSound.js';
 import { createStyleStudioMotionSound } from './domain/styleStudioMotionSound.js';
 import { StyleStudioWheelRouter, styleStudioWheelStep } from './domain/styleStudioWheel.js';
@@ -516,11 +516,18 @@ export function StyleStudioPage({ navigate, notify = () => {} }) {
   }
   function action(name) {
     if (name === 'close') {
-      if (modal === 'progress') { void cancelGeneration(); return; }
-      if (modal) { const returnAfterClose = modal === 'result'; setModal(null); setDeleteTarget(null); setCompare(false); if (returnAfterClose) navigate('dashboard'); return; }
-      if (modeSelecting) { setModeSelecting(false); setStatus('已取消模式选择。'); return; }
-      if (adjusting) { setAdjusting(false); setStatus('已退出当前强度调整。'); return; }
-      hideOrbit(); setCompare(false); navigate('dashboard'); return;
+      const closeAction = resolveStudioCloseAction({ modal, modeSelecting, adjusting, mode, orbitOpen, compare });
+      if (closeAction === 'cancel-generation') { void cancelGeneration(); return; }
+      if (closeAction === 'close-modal') { setModal(null); setDeleteTarget(null); setCompare(false); setStatus('已收起当前查看，仍留在风格映像。'); return; }
+      if (closeAction === 'cancel-mode') { setModeSelecting(false); setStatus('已取消模式选择。'); return; }
+      if (closeAction === 'cancel-adjustment') { setAdjusting(false); setStatus('已退出当前强度调整。'); return; }
+      hideOrbit(); setCompare(false);
+      if (closeAction === 'return-generate') {
+        setMode('generate'); setModeChoice('generate'); setRevealConfirmed(false); setRevealControl('effect');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setStatus('已收回到风格映像主界面；返回工作台请使用左上角按钮。');
+      return;
     }
     if (modal && !['save', 'compare', 'view'].includes(name)) return;
     if (name === 'previous') move(-1);

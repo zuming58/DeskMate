@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
-import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
+import { STUDIO_STYLES, STUDIO_EFFECTS, STUDIO_EFFECT_PARAMETERS, wrapStudioIndex, clampStudioStrength, clampStudioRadius, clampStudioDetail, studioPrompt, studioOrbit, studioScatter, clampStudioPosition, resolveStudioDraggedCard, resolveStudioCloseAction, studioKey, validStudioUpload } from '../src/domain/styleStudio.js';
 test('T42 ten provenance-backed styles and bounded generation/reveal controls', () => {
   assert.equal(STUDIO_STYLES.length, 10);
   for (const s of STUDIO_STYLES) assert(fs.existsSync(new URL(`../public/assets/style-studio/${s.id}.png`, import.meta.url)));
@@ -75,6 +75,22 @@ test('T44 page keyboard resolves keyboard-emulated keys by their current physica
   assert.equal(studioKey({code:'KeyC',ctrlKey:true}, compiledSafeKeymap), 'inspiration');
   assert.equal(studioKey({code:'KeyV',ctrlKey:true}, compiledSafeKeymap), 'reset');
   assert.equal(studioKey({code:'KeyZ',ctrlKey:true}, compiledSafeKeymap), 'mode');
+});
+test('T61 S4 collapses Studio layers without navigating to the Workbench', () => {
+  assert.equal(resolveStudioCloseAction({ modal: 'progress' }), 'cancel-generation');
+  for (const modal of ['result', 'source', 'prompt', 'consent', 'delete']) assert.equal(resolveStudioCloseAction({ modal }), 'close-modal');
+  assert.equal(resolveStudioCloseAction({ modeSelecting: true }), 'cancel-mode');
+  assert.equal(resolveStudioCloseAction({ adjusting: true }), 'cancel-adjustment');
+  assert.equal(resolveStudioCloseAction({ mode: 'reveal' }), 'return-generate');
+  assert.equal(resolveStudioCloseAction({ orbitOpen: true }), 'collapse-transient');
+  assert.equal(resolveStudioCloseAction({ compare: true }), 'collapse-transient');
+  assert.equal(resolveStudioCloseAction(), 'return-studio');
+  const source = fs.readFileSync(new URL('../src/StyleStudioPage.jsx',import.meta.url),'utf8');
+  const closeStart = source.indexOf("if (name === 'close')");
+  const closeEnd = source.indexOf("if (modal &&", closeStart);
+  assert(closeStart >= 0 && closeEnd > closeStart);
+  assert.doesNotMatch(source.slice(closeStart, closeEnd), /navigate\(/);
+  assert.match(source, /返回工作台请使用左上角按钮/);
 });
 test('T37 upload types and limits exclude SVG, executables and empty files', () => {
   assert(validStudioUpload({type:'image/png',size:1024}));

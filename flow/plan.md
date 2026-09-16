@@ -1,6 +1,10 @@
 # Development plan
 
-## Current work: T60 deterministic custom hotword normalization
+## Current work: T61 Style Studio S4 layered return
+
+Make S4/Close collapse the current Style Studio transient layer and return to the Style Studio Generate surface instead of navigating to the Workbench. The explicit top-left Back to Workbench control remains the only route exit. Preserve generation cancellation, S1-S3/S5-S8 behavior, media state, provider boundaries and physical key routing. Contract: `docs/contracts/t61-style-studio-s4-return-v1.md`.
+
+## Previous work: T60 deterministic custom hotword normalization
 
 Keep the provider glossary hint, then normalize only bounded configured technical-token variants after transcription. Support safe ASCII spacing/case/digit forms and the user-observed WaytoAGI spoken forms without another model call, added latency, Chinese homophone guessing or changes to explicit replacement rules. Apply the same normalizer to ordinary dictation and companion transcription. Contract: `docs/contracts/t60-hotword-normalization-v1.md`.
 
