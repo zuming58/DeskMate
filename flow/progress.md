@@ -6,7 +6,7 @@
 - 未重命名或迁移 `style-studio/library.json`、图片文件、ID、摘要与 source/result 关系，不影响去重、删除、备份和 Image 2 请求。新导入的同名演示图片也复用同一显示映射；T61 S4 行为和硬件输入不变。
 - 风格映像专项 23/23，完整 `npm test` 848/848；`npm run build:desktop`、T62 精确包资源/五个中文标签、T58+ 舞蹈生命周期及 T53 语音/提醒最终 ASAR 均通过。没有调用生图 API、修改用户媒体或执行硬件动作。
 - 交付 `release-t62/win-unpacked`，build ID `t62-style-studio-chinese-labels`。EXE SHA256 `231BB150749207BCCE156C471EA188BE9077791560F687B8F59F1FE8CD8D9FDA`；ASAR `5CB0AF05C784199712821562B15D7B431F1690D13666FD53E49574593AA4E056`；输入桥 `D6142CC060962E9CD48D8537FC1F409E8AE9E51CBF690C8208EFA5C042865D74`。
-- 当前仍运行 T61；下一步精确切换到 T62 并打开风格映像，由用户核对当前五张保留素材的实际中文显示。合同与验证：`docs/contracts/t62-style-studio-chinese-labels-v1.md`、`docs/reviews/t62-style-studio-chinese-labels-2026-09-16.md`。
+- 已核对并停止 T61 主 PID 37108，无残留子进程；启动 `release-t62/win-unpacked/DeskMate.exe --show-style-studio`。T62 主 PID 5292、Responding=true、窗口句柄 2560214，观察到的 7 个 DeskMate 进程及输入桥均来自 T62 路径。下一步由用户核对当前五张保留素材的实际中文显示。合同与验证：`docs/contracts/t62-style-studio-chinese-labels-v1.md`、`docs/reviews/t62-style-studio-chinese-labels-2026-09-16.md`。
 
 # 2026-09-16 — 用户确认 T61 风格映像 S4 人工验收通过
 
