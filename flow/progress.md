@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-16 — T63 风格映像拖拽反馈收敛，已打包并运行
+
+- 用户截图指出拖动素材经过中间机器时，整台下方工作台会抬升、发白并变成带“松开放入机器”的大虚线框；明确要求只保留照片卡轻微浮起和上方进片口的小范围虚线提示。T63 删除机器 `is-receiving` 视觉状态及其遮罩/文案，进片口保持 `原图进片口`，拖动照片改为 3 px / 1.018 的轻微浮起。完整机器仍是有效释放区域，T47 指针拖放合同未改变。
+- 风格映像/构建标识专项 31/31，完整 `npm test` 849/849；InputBridge 发布、Vite、Windows 目录包、精确 T63 包资源、T58+ 舞蹈生命周期及 T53 语音/提醒最终 ASAR 均通过。最终包指针拖动探针确认 ghost=true、inletOver=true、machineReceiving=false、机器 opacity=1/transform=none、静态进片口文案、释放后素材写入成功且 renderer error=0；功能探针也通过插入、模拟生成、出片、作品落位、删除和租约释放。
+- 交付 `release-t63/win-unpacked`，build ID `t63-style-studio-drag-feedback`。EXE SHA256 `BAF428D8E511B6915BB6B9DD8862BF928DFE11B1F3BF9F5B17A5ABC600C74C1E`；ASAR `8EE1140B80D071438320F880D5358653E781BDA639A0A0787EF3D3E862AB09A4`；输入桥 `A2B072871A499E663085B09C6276B3A7F918148BABA0176EAAADDC04CB4AFB08`。实现提交 `43c1e44`。
+- 已精确停止 T62 的 7 个 DeskMate 进程和 1 个输入桥进程，无旧路径残留；启动 `release-t63/win-unpacked/DeskMate.exe --show-style-studio`。T63 可见主窗口 PID 55224、Responding=true、HWND 988368，当前观察到的 DeskMate/输入桥均来自 T63 路径。未重置 retained profile、调用付费生图、改动用户媒体、发送硬件命令或写入固件。
+- 用户随后只提供一张 `{"detail":"Bad Request"}` 截图。保留配置的 Style Studio `generation-journal.json` 最新仍为 2026-09-14 成功项，本轮没有新 Image 2 任务；Style Studio 400 也会经 `publicStyleStudioError` 转成中文，故当前证据不足以把截图归因于生图。若再次出现，需要记录触发它的页面和按钮再沿对应调用链诊断。合同/评审：`docs/contracts/t63-style-studio-drag-feedback-v1.md`、`docs/reviews/t63-style-studio-drag-feedback-2026-09-16.md`、根级 `design-qa.md`。
+
 # 2026-09-16 — T62 风格映像素材名称中文化，已打包待切换
 
 - 用户截图指出素材卡片显示 `robot-coral-happy`、`robot-cobalt-focused`、`robot-lavender-sleepy`、`robot-teal-curious` 和随机任务 ID。T62 只在渲染时显示为“珊瑚开心、钴蓝专注、淡紫小憩、青绿好奇、本地素材”；已有中文名保持，无法可靠翻译的用户文件名不猜测。
