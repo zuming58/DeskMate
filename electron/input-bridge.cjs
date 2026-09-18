@@ -49,8 +49,16 @@ class InputBridgeManager extends EventEmitter {
       const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
       lines.on("line", (line) => this.handleLine(line));
       child.stderr?.on("data", () => {});
-      child.once("error", (error) => this.handleExit(error));
-      child.once("exit", (code) => this.handleExit(code === 0 ? null : new Error(`input-bridge-exit-${code}`)));
+      let childFinished = false;
+      const finishChild = (error) => {
+        if (childFinished) return;
+        childFinished = true;
+        if (this.child !== child) return;
+        this.handleExit(error);
+      };
+      child.stdin?.on?.("error", (error) => finishChild(error));
+      child.once("error", (error) => finishChild(error));
+      child.once("exit", (code) => finishChild(code === 0 ? null : new Error(`input-bridge-exit-${code}`)));
     } catch (error) {
       this.handleExit(error);
     }

@@ -1,5 +1,9 @@
 # Decisions
 
+## D167 — Child pipe failures stay inside their owning adapter
+
+2026-09-18: Attach stdin error ownership before writing to every long-lived InputBridge and one-shot Codex App Server child. Treat InputBridge `EPIPE` as that exact child's exit and use the existing bounded restart path; late errors from stale/stopped children are consumed without affecting a replacement. Catalog write failure returns a bounded unavailable result. Do not hide arbitrary Electron main errors with a global uncaught-exception handler.
+
 ## D166 — Dance accompaniment follows motion lifetime, not clip duration
 
 2026-09-16: The built-in 8-second cue or selected local track loops only for a dance/custom choreography owned by an active motion request. Existing terminal completion/stop/failure ends the matching audio generation; old request cleanup cannot stop newer playback. Preview/general playback and non-dance cues stay one-shot. Keep emergency/global stop and media resource release immediate; no guessed duration extensions or firmware changes.

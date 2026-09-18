@@ -353,6 +353,31 @@ test("input bridge manager schedules an automatic restart after a crash", () => 
   manager.stop();
 });
 
+test("input bridge consumes asynchronous stdin EPIPE and restarts without crashing Electron", () => {
+  let scheduled;
+  let spawnCount = 0;
+  const children = [];
+  const spawnImpl = () => {
+    spawnCount += 1;
+    const child = new EventEmitter();
+    child.stdin = new PassThrough();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => {};
+    children.push(child);
+    return child;
+  };
+  const manager = new InputBridgeManager({ executable: "bridge.exe", spawnImpl, setTimer: (callback) => { scheduled = callback; return 1; }, clearTimer: () => {} });
+  manager.start();
+  children[0].stdin.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" }));
+  assert.equal(manager.snapshot().process, "restarting");
+  assert.equal(manager.snapshot().error, "write EPIPE");
+  assert.equal(typeof scheduled, "function");
+  scheduled();
+  assert.equal(spawnCount, 2);
+  manager.stop();
+});
+
 test("voice session enforces the complete phase-3 state sequence", () => {
   let state = transitionVoiceSession(initialVoiceSession, "recording");
   state = transitionVoiceSession(state, "transcribing");

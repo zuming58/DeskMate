@@ -1,5 +1,19 @@
 # Progress log
 
+# 2026-09-18 — T64 子进程写管道 EPIPE 已修复、打包并运行
+
+- 用户报告 DeskMate 每次启动都会弹出 Electron 主进程原生错误框，堆栈为异步 `Error: write EPIPE`。根因是 `InputBridgeManager` 和一次性 Codex App Server 目录客户端会向子进程 stdin 写命令，但没有在该可写流上接管异步 `error`；子进程在 writable 检查与实际写入之间退出时，错误越过适配器成为主进程未捕获异常。
+- T64 在 InputBridge 的每个具体 child 上先注册 stdin error ownership，再注册 process error/exit；一次故障只结算一次并进入现有有限退避重启，旧 child 在停止或被替换后的迟到错误只会被消费，不会清空新 child。Codex 目录客户端同样把异步写失败收敛为 `codex-app-server-write-failed`。未添加全局 `uncaughtException` 抑制器，未改设备命令、硬件协议、用户数据、KnowledgeOS 或固件。
+- 新增两个真实异步 `write EPIPE` 回归夹具；专项 47/47、完整 `npm test` 851/851、`npm run build:desktop`、T64 精确包资源、T53 提醒/插话最终 ASAR 和 T58 舞蹈生命周期最终 ASAR 全部通过。合同与决策：`docs/contracts/t64-child-pipe-recovery-v1.md`、D167。
+- 交付 `release-t64/win-unpacked`，build ID `t64-child-pipe-recovery`。EXE SHA256 `442EB406A4C7531180339CFCA65F7431B0B97A4C30F85AA7AA6A43738C5EE83A`；ASAR `F14952B04B49124916AC87FA654C031950BF219BB24A4D936171B8ED4FA65B02`；输入桥 `BB43C66170BD87EDE243F3458088F27847297090830ABADC18340004FF72A9ED`。
+- 已精确停止 T63 的 7 个 DeskMate 进程及 1 个输入桥，无 T63 路径残留；连续两次冷启动 T64 均稳定得到 7 个 Electron 进程和 1 个输入桥。最终可见主窗口 PID 34660、标题 `DeskMate · AI 工作台伙伴`、Responding=true、唯一输入桥来自 T64 路径，`tasklist` 未出现 `Error` 窗口。未触发硬件动作或写入固件。
+
+# 2026-09-17 — KnowledgeOS 当前 Core 与 DeskMate T63 已启动
+
+- 用户要求启动服务和软件。启动前没有运行中的 DeskMate；KnowledgeOS 旧的 9 月 6 日桌面壳调用旧 `knowledgeos-core.exe` 时因不认识现有数据库迁移 `0022_t09_steward_commands` 进入重启循环，未把该状态误报为服务已启动。
+- 精确停止上述失败进程后，改用 KnowledgeOS 仓内 9 月 16 日的当前正式 sidecar `apps/desktop/src-tauri/binaries/knowledgeos-core-x86_64-pc-windows-msvc.exe` 隐藏启动，保留既有 `F:\ZumingKB`、激活记录与密钥配置，不迁移或修改知识库。运行时描述符与 `/api/v1/health` 一致返回 `ready`，Core PID 32692。
+- 启动 `release-t63/win-unpacked/DeskMate.exe`，可见主窗口 PID 33400、Responding=true、HWND 1837402；观察到的 DeskMate 子进程及 `DeskMate.InputBridge.exe` 均来自 T63 路径。未重置用户配置、触发硬件动作或写入固件。昨晚 9/16 日终仍由启动后的后台重试链继续处理，本条只证明服务和软件已就绪，不冒充记忆已完成同步。
+
 # 2026-09-16 — T63 风格映像拖拽反馈收敛，已打包并运行
 
 - 用户截图指出拖动素材经过中间机器时，整台下方工作台会抬升、发白并变成带“松开放入机器”的大虚线框；明确要求只保留照片卡轻微浮起和上方进片口的小范围虚线提示。T63 删除机器 `is-receiving` 视觉状态及其遮罩/文案，进片口保持 `原图进片口`，拖动照片改为 3 px / 1.018 的轻微浮起。完整机器仍是有效释放区域，T47 指针拖放合同未改变。

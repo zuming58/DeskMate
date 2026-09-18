@@ -86,6 +86,7 @@ function listCodexThreadCatalog({ spawnImpl = spawn, command = resolveCodexExecu
     };
     child.once("error", () => finish({ ok: false, reason: "codex-app-server-start-failed", entries: new Map() }));
     child.once("exit", () => { if (!settled) finish({ ok: false, reason: "codex-app-server-exited", entries: new Map() }); });
+    child.stdin?.on?.("error", () => finish({ ok: false, reason: "codex-app-server-write-failed", entries: new Map() }));
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       stdout += chunk;

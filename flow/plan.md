@@ -1,6 +1,10 @@
 # Development plan
 
-## Current work: T63 restrained Style Studio drag feedback
+## Current work: T64 child pipe recovery
+
+Prevent asynchronous `EPIPE` errors from child-process stdin streams from escaping into Electron main and opening a native JavaScript error dialog. Consume the error at the owning adapter, fail/restart only that child operation, and preserve all existing device, Codex catalog, UI and hardware behavior. Contract: `docs/contracts/t64-child-pipe-recovery-v1.md`.
+
+## Previous work: T63 restrained Style Studio drag feedback
 
 Keep material insertion reliable while limiting its drag feedback to the pointer-following photo card and the upper inlet. The lower machine remains visually stable: no full-machine lift, fade, dashed overlay or “松开放入机器” instruction. Contract: `docs/contracts/t63-style-studio-drag-feedback-v1.md`.
 

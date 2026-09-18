@@ -47,6 +47,21 @@ test("Codex App Server catalog requests thread metadata without turns or preview
   assert.doesNotMatch(JSON.stringify(writes), /turn|preview/i);
 });
 
+test("Codex App Server catalog consumes asynchronous stdin EPIPE", async () => {
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stdin = new EventEmitter();
+    child.stdin.write = () => true;
+    child.stdout = new EventEmitter();
+    child.stdout.setEncoding = () => {};
+    child.kill = () => {};
+    queueMicrotask(() => child.stdin.emit("error", Object.assign(new Error("write EPIPE"), { code: "EPIPE" })));
+    return child;
+  };
+  const result = await listCodexThreadCatalog({ spawnImpl, command: "codex", timeoutMs: 1000 });
+  assert.deepEqual({ ok: result.ok, reason: result.reason, count: result.entries.size }, { ok: false, reason: "codex-app-server-write-failed", count: 0 });
+});
+
 test("Codex task catalog preserves the last safe title map when refresh fails", async () => {
   let fail = false;
   let now = 10_000;
