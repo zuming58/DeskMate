@@ -1,5 +1,11 @@
 # Progress log
 
+# 2026-09-19 — Codex 任务结束误报与两晚 KnowledgeOS 日终只读核对
+
+- 用户报告仍在运行的 Codex 任务被 DeskMate 播报为“任务已结束”。诊断中任务简报接收器仍有 8 个任务、Codex LED 目标为 working，但主动播报已完成 4 次；源码确认 Hook `Stop` 被映射为 `completed`，随后生成“一个任务已结束”。Codex `Stop` 只表示本轮响应结束，不等于整个任务/会话终止；这是现有状态语义及测试合同的误报，不是任务真的停止。本轮只诊断，尚未修改映射或打包。
+- 日终核对按工作日归档日期区分：9 月 18 日晚完成的是 `2026-09-17` 日志，含 37 条听写，work/personal 两份均被 DeskMate 网关受理；使用 DeskMate 保存的 KnowledgeOS 身份只读查询，两份提交目前均为 `completed / raw_sealed / 100%`。9 月 19 日晚处理的 `2026-09-18` 日志仍为 `closing`，本地没有对应 outbox；截至 23:30，策略记录为 `text-model-request-timeout`，因此该晚尚未提交 KnowledgeOS。陪伴源当日无待处理内容，记录为 `no-pending`。
+- 本轮未触发重跑、模型调用、写入 KnowledgeOS、删除用户数据、硬件动作或固件操作。后续若获用户要求：将 `Stop` 改为非终态且不播报完成，仅由明确会话终止/任务完成信号进入终态；为日终超时增加清晰状态、有限重试和手动补跑入口。
+
 # 2026-09-18 — T64 子进程写管道 EPIPE 已修复、打包并运行
 
 - 用户报告 DeskMate 每次启动都会弹出 Electron 主进程原生错误框，堆栈为异步 `Error: write EPIPE`。根因是 `InputBridgeManager` 和一次性 Codex App Server 目录客户端会向子进程 stdin 写命令，但没有在该可写流上接管异步 `error`；子进程在 writable 检查与实际写入之间退出时，错误越过适配器成为主进程未捕获异常。
