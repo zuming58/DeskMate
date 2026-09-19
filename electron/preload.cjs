@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   generatePendingMemories: () => ipcRenderer.invoke("memory:generate-pending"),
   getMemoryJournalStatus: () => ipcRenderer.invoke("memory:get-journal-status"),
   closeMemoryWorkday: () => ipcRenderer.invoke("memory:close-workday"),
+  retryMemoryJournals: () => ipcRenderer.invoke("memory:retry-journals"),
   syncKnowledgeOsMemory: () => ipcRenderer.invoke("memory:sync-knowledgeos"),
   getKnowledgeOsStatus: () => ipcRenderer.invoke("memory:get-knowledgeos-status"),
   setKnowledgeOsSettings: (value) => ipcRenderer.invoke("memory:set-knowledgeos-settings", value),

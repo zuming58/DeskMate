@@ -1,6 +1,10 @@
 # Development plan
 
-## Current work: T64 child pipe recovery
+## Current work: T65 task status and journal recovery
+
+Correct turn-stop versus task-completion semantics. Consolidate automatic memory processing, bound summary requests and retries, persist review checkpoints, expose daily failures and retry, and recover pending KnowledgeOS journals. Contract: `docs/contracts/t65-task-status-journal-recovery-v1.md`.
+
+## Previous work: T64 child pipe recovery
 
 Prevent asynchronous `EPIPE` errors from child-process stdin streams from escaping into Electron main and opening a native JavaScript error dialog. Consume the error at the owning adapter, fail/restart only that child operation, and preserve all existing device, Codex catalog, UI and hardware behavior. Contract: `docs/contracts/t64-child-pipe-recovery-v1.md`.
 

@@ -18,7 +18,8 @@ for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg'
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t64-child-pipe-recovery'));
+assert(main.includes('t65-task-status-journal-recovery'));
+for (const file of ['text-model-json.cjs', 'companion-memory-pipeline.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root, 'electron', file))), `stale memory resource: ${file}`);
 for (const file of ['personal-reminders.cjs','preload.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale reminder resource: ${file}`);
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
 for (const file of ['electron/local-backup.cjs', 'electron/local-backup-worker.cjs', 'electron/local-backup-service.cjs', 'electron/restore-lifecycle.cjs']) assert(packagedFile(file).equals(fs.readFileSync(path.join(root, file))), `stale backup resource: ${file}`);
@@ -56,4 +57,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T64 packaged resource check passed: child pipe recovery, restrained Style Studio drag feedback, Chinese labels, S4 return, deterministic hotword normalization, vocabulary UI polish, motion-owned dance audio build, reminder purpose/deletion, Workbench UI, backup/restore, renderer, companion videos and exact native bridge.');
+console.log('T65 packaged resource check passed: task lifecycle, journal recovery, child pipe recovery, Style Studio, hotwords, dance audio, reminders, Workbench, backup/restore, renderer, companion videos and exact native bridge.');

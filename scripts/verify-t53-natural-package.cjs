@@ -15,7 +15,7 @@ function load(file) {
   return module.exports;
 }
 async function verify() {
-  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders|t54-fast-endpoint|t55-reminder-conversation|t56-reminder-wording|t57-reminder-purpose-delete|t58-dance-music-lifetime|t59-vocabulary-ui-polish|t60-hotword-normalization|t61-style-studio-s4-return|t62-style-studio-chinese-labels|t63-style-studio-drag-feedback|t64-child-pipe-recovery/);
+  assert.match(asar.extractFile(archive,'electron/main.cjs').toString(),/t53-natural-barge-reminders|t54-fast-endpoint|t55-reminder-conversation|t56-reminder-wording|t57-reminder-purpose-delete|t58-dance-music-lifetime|t59-vocabulary-ui-polish|t60-hotword-normalization|t61-style-studio-s4-return|t62-style-studio-chinese-labels|t63-style-studio-drag-feedback|t64-child-pipe-recovery|t65-task-status-journal-recovery/);
   const {PersonalReminderConversation,parsePersonalReminderIntent:parse}=load('electron/personal-reminders.cjs');
   const now=new Date(2026,8,15,19,30).getTime();
   assert.equal(parse('你能明天下午六点提醒我开会吗',{now}).title,'开会');

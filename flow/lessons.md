@@ -1,5 +1,13 @@
 # Lessons learned
 
+## A task turn, daily synthesis and remote receipt need distinct evidence
+
+- Codex Stop only proves that a response turn ended. Treating it as task completion creates false speech and motion even while other work continues.
+- Two independent memory schedulers can generate competing requests and misleading last-error records. Persist the journal owner's stage and failure; the old source digest is a manual compatibility path.
+- Bound both input and output. A short chat deadline and a provider's default thinking mode are unsuitable for daily review; retain successful chunk checkpoints when final JSON fails, and reject truncated output rather than fabricating an empty day.
+- A completed local journal can still fail submission if the adapter or Core is unavailable. An adapter exit alone does not prove a stale binary; the user may have closed KnowledgeOS. Test the official adapter with the same identity, retry the original payload/key, and verify server-side raw-sealed receipts.
+- Keep packaged inputs immutable throughout ASAR creation. Editing a source file between size calculation and archive writing can corrupt offsets; discard that candidate and rebuild, then compare every changed packaged module with source.
+
 ## A finite cue and a multi-repeat motion have different lifetimes
 
 - Waiting for motion completion in main does not keep a renderer's one-shot audio playing. Send explicit motion-owned loop intent; do not extend a timer based on guessed dance length.

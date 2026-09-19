@@ -69,7 +69,8 @@ app.whenReady().then(async () => {
     await input('.rule-row input', 'recovered');
     assert.equal(await js(`document.querySelector('.storage-warning[role=alert]') === null`), true);
     await js(`window.desktopBridge = {
-      getMemoryStatus: async () => ({ready:true, turns:0, sourceCounts:{}}), listMemories: async()=>[], getKnowledgeBaseStatus: async()=>({}), getMemoryJournalStatus: async()=>({active:{day:'2099-01-01'}}),
+      getMemoryStatus: async () => ({ready:true, turns:0, sourceCounts:{}}), listMemories: async()=>[], getKnowledgeBaseStatus: async()=>({}), getMemoryJournalStatus: async()=>({active:{day:'2099-01-01'},pendingJournals:window.journalRetried?[]:['2098-12-31'],jobs:window.journalRetried?[]:[{day:'2098-12-31',state:'failed',stage:'synthesis',attempts:3,reason:'text-model-request-timeout'}]}),
+      retryMemoryJournals: async()=>{window.journalRetried=true;return {ok:true,day:'2098-12-31',sync:{accepted:2}};},
       getMemoryPolicy: async()=>({version:3,enabledSources:['companion'],schedule:'daily',dailyTime:'23:30',hourlyEnabled:true,audioRetentionDays:7,rawRetentionDays:20,lastResults:{}}),
       getKnowledgeOsStatus: async()=>({configured:false,credentialId:'',projectId:null,readEnabled:false,syncEnabled:false,sensitivity:'private'}),
       getLocalRetentionStatus: async()=>({ok:true,enabled:false,pending:0,lastRunAt:null,lastResult:null}),
@@ -79,6 +80,9 @@ app.whenReady().then(async () => {
       acknowledgeLocalRetention: async()=>({ok:true})
     }; true;`);
     await route('memory'); await pause(250);
+    assert.equal(await js(`document.body.textContent.includes('总结模型响应超时') && document.body.textContent.includes('自动重试已暂停')`), true);
+    await click('重试未完成日终');
+    assert.equal(await js(`window.journalRetried===true && !document.body.textContent.includes('还有 1 天日终未完成')`), true);
     await js(`document.querySelector('.memory-advanced').open=true; window.confirm=()=>true; true;`);
     assert.equal(await js(`document.body.textContent.includes('录音 7 天 · 文字 20 天')`), true);
     await click('预览清理范围');

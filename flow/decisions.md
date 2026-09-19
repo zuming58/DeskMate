@@ -1,5 +1,9 @@
 # Decisions
 
+## D168 — Turn closure is not task completion; one owner runs recoverable journals
+
+2026-09-20: Codex Stop becomes local idle and SessionEnd becomes local closed, both silent; only an explicit task report proves completion. Automatic memory processing belongs to MemoryJournalService alone. Persist reviewed chunks and bounded failure/retry state, protect today's cutoff from older failures, and resume immutable outbox payloads on manual retry without resending accepted rows. The official DeepSeek V4 non-thinking setting and longer memory-only deadlines avoid changing live conversation latency. Contract: `docs/contracts/t65-task-status-journal-recovery-v1.md`.
+
 ## D167 — Child pipe failures stay inside their owning adapter
 
 2026-09-18: Attach stdin error ownership before writing to every long-lived InputBridge and one-shot Codex App Server child. Treat InputBridge `EPIPE` as that exact child's exit and use the existing bounded restart path; late errors from stale/stopped children are consumed without affecting a replacement. Catalog write failure returns a bounded unavailable result. Do not hide arbitrary Electron main errors with a global uncaught-exception handler.

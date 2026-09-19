@@ -83,7 +83,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t64-child-pipe-recovery";
+const DESKMATE_BUILD_ID = "t65-task-status-journal-recovery";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -1574,7 +1574,8 @@ app.whenReady().then(async () => {
   const tickMemoryServices = async () => {
     if (restoreMaintenance) return;
     try { await memoryJournalService.tick(); } catch { /* persisted state will retry */ }
-    try { await companionMemoryDigestScheduler.tick(); } catch { /* per-source digest retries later */ }
+    // The journal service owns automatic processing. The legacy per-source
+    // pipeline remains available only for explicit manual backlog generation.
     if (!retentionBusy()) {
       try { const result = await localRetentionService.call("tick"); emitRetentionCleanup(result); } catch { /* journaled cleanup retries later */ }
     }
@@ -2028,7 +2029,8 @@ app.whenReady().then(async () => {
   handleTrusted("memory:generate-pending", () => generateConfiguredMemories());
   handleTrusted("memory:get-journal-status", () => memoryJournalService.status());
   handleTrusted("memory:close-workday", () => memoryJournalService.closeCurrentWorkday({ manual: true }));
-  handleTrusted("memory:sync-knowledgeos", () => memoryJournalService.syncPending());
+  handleTrusted("memory:retry-journals", () => memoryJournalService.retryPending());
+  handleTrusted("memory:sync-knowledgeos", () => memoryJournalService.syncPending({ force: true }));
   handleTrusted("memory:get-knowledgeos-status", () => knowledgeOsSettings.status());
   handleTrusted("memory:set-knowledgeos-settings", (value = {}) => knowledgeOsSettings.save(value));
   handleTrusted("memory:test-knowledgeos", () => knowledgeOsClient.testConnection());

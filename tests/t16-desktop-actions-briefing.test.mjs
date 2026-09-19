@@ -132,7 +132,7 @@ test("automatic hook lifecycle creates separate real tasks and can later hydrate
   assert.equal(store.query("DeskMate 项目怎么样").answer, "DeskMate 正在等你回复：需要你确认");
 });
 
-test("automatic terminal announcements require a real active transition and speak once", () => {
+test("turn and session closure never announce task completion, including legacy Stop senders", () => {
   const store = new CodexTaskBriefStore();
   assert.equal(store.ingest(task({ state: "completed" })).announcement, null);
   const freshStop = store.ingestHook({ event: "Stop", state: "completed", taskKey: "codex_fresh_terminal", taskLabel: "无活动任务" });
@@ -140,9 +140,14 @@ test("automatic terminal announcements require a real active transition and spea
 
   store.ingestHook({ event: "UserPromptSubmit", state: "thinking", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
   const completed = store.ingestHook({ event: "Stop", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
-  assert.equal(completed.announcement.text, "真实任务 项目的一个任务已结束。");
+  assert.equal(completed.task.state, 'idle');
+  assert.equal(completed.announcement, null);
+  assert.match(store.query('真实任务').answer, /尚未确认/);
   const repeated = store.ingestHook({ event: "SessionEnd", state: "completed", taskKey: "codex_active_terminal", taskLabel: "真实任务" });
   assert.equal(repeated.announcement, null);
+  assert.equal(repeated.task.state, 'closed');
+  store.ingestHook({ event: 'UserPromptSubmit', state: 'thinking', taskKey: 'codex_active_terminal', taskLabel: '真实任务' });
+  assert.equal(store.ingest({ version: 'codex-task-brief-v1', provider: 'codex', taskKey: 'codex_active_terminal', taskLabel: '真实任务', state: 'completed', sequence: 99 }).announcement.state, 'completed');
 });
 
 test("task lookup tolerates spoken spacing, matches a unique project term, and keeps similar names ambiguous", () => {

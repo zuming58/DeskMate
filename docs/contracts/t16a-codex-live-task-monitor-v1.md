@@ -2,6 +2,8 @@
 
 Status: `T16A_CODEX_LIVE_TASK_MONITOR_V1_FROZEN`
 
+T65 amendment: per-task `Stop` is `idle` (between turns), `SessionEnd` is `closed` (session closure), and neither automatically announces completed. Only an explicit task report can assert accomplishment. See [T65](t65-task-status-journal-recovery-v1.md).
+
 Source versions: `codex-hook-v2`, `codex-app-server-catalog-v1`, `codex-task-brief-v1`
 
 ## Purpose

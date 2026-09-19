@@ -73,7 +73,7 @@ function mapCodexHookEvent(value = {}) {
   if (event === "PermissionRequest") return { event, toolName, state: "waiting", ...metadata };
   if (event === "PreToolUse") return { event, toolName, state: toolName === "request_user_input" ? "waiting" : "working", ...metadata };
   if (event === "PostToolUse") return { event, toolName, state: "working", ...metadata };
-  if (event === "Stop") return { event, toolName: "", state: "completed", ...metadata };
+  if (event === "Stop") return { event, toolName: "", state: "idle", ...metadata };
   return null;
 }
 

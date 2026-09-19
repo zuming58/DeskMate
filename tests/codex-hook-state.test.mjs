@@ -27,7 +27,7 @@ test("Codex lifecycle events map to the frozen seven-state subset without readin
   assert.equal(mapCodexHookEvent({ hook_event_name: "PreToolUse", tool_name: "request_user_input" }).state, "waiting");
   assert.equal(mapCodexHookEvent({ hook_event_name: "PermissionRequest", tool_name: "Bash" }).state, "waiting");
   assert.equal(mapCodexHookEvent({ hook_event_name: "PostToolUse", tool_name: "request_user_input", tool_response: "private" }).state, "working");
-  assert.equal(mapCodexHookEvent({ hook_event_name: "Stop", last_assistant_message: "private response" }).state, "completed");
+  assert.equal(mapCodexHookEvent({ hook_event_name: "Stop", last_assistant_message: "private response" }).state, "idle");
   assert.equal(mapCodexHookEvent({ hook_event_name: "SessionEnd" }).state, "idle");
   assert.equal(mapCodexHookEvent({ hook_event_name: "Unknown" }), null);
 });

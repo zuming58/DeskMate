@@ -191,6 +191,17 @@ class CompanionMemoryStore {
         accepted_at INTEGER,
         UNIQUE(day, memory_class)
       );
+      CREATE TABLE IF NOT EXISTS memory_journal_jobs (
+        day TEXT PRIMARY KEY,
+        input_digest TEXT NOT NULL DEFAULT '',
+        checkpoints_json TEXT NOT NULL DEFAULT '{}',
+        state TEXT NOT NULL DEFAULT 'pending',
+        stage TEXT NOT NULL DEFAULT '',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        reason TEXT NOT NULL DEFAULT '',
+        next_retry_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
       INSERT OR IGNORE INTO companion_memory_meta (key, value) VALUES ('revision', 0);
     `);
     const turnColumns = new Set(this.db.prepare("PRAGMA table_info(conversation_turns)").all().map((column) => column.name));
@@ -490,6 +501,8 @@ class CompanionMemoryStore {
     return {
       active,
       latest,
+      pendingJournals: this.journalDaysPending({ beforeDay: active.day }).filter(day => !this.isRestoredDay(day)),
+      jobs: this.db.prepare("SELECT day, state, stage, attempts, reason, next_retry_at AS nextRetryAt, updated_at AS updatedAt FROM memory_journal_jobs ORDER BY day DESC LIMIT 14").all(),
       hourlySummaries: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_hourly_summaries").get()?.value || 0),
       completedJournals: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_daily_journals WHERE status='completed'").get()?.value || 0),
       pendingJournalSync: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status IN ('pending','failed')").get()?.value || 0),
@@ -573,6 +586,18 @@ class CompanionMemoryStore {
     return { ...row, sourceCounts };
   }
 
+  journalJob(day) {
+    const row = this.db.prepare("SELECT input_digest AS inputDigest, checkpoints_json AS checkpoints, state, stage, attempts, reason, next_retry_at AS nextRetryAt FROM memory_journal_jobs WHERE day=?").get(String(day));
+    return row ? { ...row, checkpoints: JSON.parse(row.checkpoints) } : { inputDigest: '', checkpoints: {}, attempts: 0, nextRetryAt: 0 };
+  }
+
+  saveJournalJob(day, value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) throw new Error('memory-day-invalid');
+    const job = { ...this.journalJob(day), ...value };
+    this.db.prepare("INSERT INTO memory_journal_jobs (day,input_digest,checkpoints_json,state,stage,attempts,reason,next_retry_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(day) DO UPDATE SET input_digest=excluded.input_digest,checkpoints_json=excluded.checkpoints_json,state=excluded.state,stage=excluded.stage,attempts=excluded.attempts,reason=excluded.reason,next_retry_at=excluded.next_retry_at,updated_at=excluded.updated_at").run(day, job.inputDigest, JSON.stringify(job.checkpoints), job.state || 'pending', job.stage || '', job.attempts, job.reason || '', job.nextRetryAt, this.now());
+    return job;
+  }
+
   saveDailyJournal({ day, periodStart, periodEnd, inputDigest, workMarkdown, personalMarkdown, combinedMarkdown, sourceCounts = {}, turnIds = [], candidates = [] } = {}) {
     const current = this.dailyJournal(day);
     if (!current || current.status !== "closing") throw new Error("memory-workday-not-closing");
@@ -586,6 +611,8 @@ class CompanionMemoryStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare("UPDATE memory_daily_journals SET period_start=?, period_end=?, status='completed', work_markdown=?, personal_markdown=?, combined_markdown=?, input_digest=?, source_turn_count=?, source_counts_json=?, updated_at=?, completed_at=? WHERE day=? AND status='closing'").run(periodStart, periodEnd, work, personal, combined, inputDigest, ids.length, JSON.stringify(normalizedSourceCounts), at, at, day);
+      const markCovered = this.db.prepare('UPDATE conversation_turns SET summary_day=? WHERE id=?');
+      for (const id of ids) markCovered.run(day, id);
       const insert = this.db.prepare("INSERT OR IGNORE INTO memory_candidates (id, day, kind, summary, source_turn_ids, state, created_at, updated_at, source) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, 'mixed')");
       for (const item of candidates.slice(0, 40)) {
         const summary = String(item?.summary || "").trim().slice(0, 10000);
@@ -614,8 +641,8 @@ class CompanionMemoryStore {
     return { ok: true, id, day, memoryClass };
   }
 
-  pendingJournalDeliveries({ limit = 4, at = this.now() } = {}) {
-    return this.db.prepare("SELECT id, day, memory_class AS memoryClass, project_id AS projectId, payload_json AS payloadJson, idempotency_key AS idempotencyKey, attempts FROM memory_journal_outbox WHERE status IN ('pending','failed') AND next_attempt_at<=? AND NOT EXISTS (SELECT 1 FROM companion_memory_meta WHERE key='restore-hold:' || memory_journal_outbox.day) ORDER BY day, memory_class LIMIT ?").all(Number(at), Math.max(1, Math.min(20, Number(limit) || 4))).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) }));
+  pendingJournalDeliveries({ limit = 4, at = this.now(), force = false, day = '' } = {}) {
+    return this.db.prepare("SELECT id, day, memory_class AS memoryClass, project_id AS projectId, payload_json AS payloadJson, idempotency_key AS idempotencyKey, attempts FROM memory_journal_outbox WHERE status IN ('pending','failed') AND (? OR next_attempt_at<=?) AND (?='' OR day=?) AND NOT EXISTS (SELECT 1 FROM companion_memory_meta WHERE key='restore-hold:' || memory_journal_outbox.day) ORDER BY day, memory_class LIMIT ?").all(force ? 1 : 0, Number(at), String(day), String(day), Math.max(1, Math.min(20, Number(limit) || 4))).map((row) => ({ ...row, payload: JSON.parse(row.payloadJson) }));
   }
 
   isRestoredDay(day) { return Boolean(this.db.prepare("SELECT 1 FROM companion_memory_meta WHERE key=?").get(`restore-hold:${day}`)); }
@@ -766,7 +793,7 @@ class CompanionMemoryStore {
     const before = this.status();
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      this.db.exec("DELETE FROM memory_chunk_embeddings; DELETE FROM memory_chunks; DELETE FROM memory_embeddings; DELETE FROM memory_candidates; DELETE FROM daily_summaries; DELETE FROM conversation_turns; DELETE FROM companion_memory_outbox; DELETE FROM memory_digest_runs; DELETE FROM memory_hourly_summaries; DELETE FROM memory_daily_journals; DELETE FROM memory_journal_outbox;");
+      this.db.exec("DELETE FROM memory_chunk_embeddings; DELETE FROM memory_chunks; DELETE FROM memory_embeddings; DELETE FROM memory_candidates; DELETE FROM daily_summaries; DELETE FROM conversation_turns; DELETE FROM companion_memory_outbox; DELETE FROM memory_digest_runs; DELETE FROM memory_hourly_summaries; DELETE FROM memory_daily_journals; DELETE FROM memory_journal_outbox; DELETE FROM memory_journal_jobs;");
       this.bumpRevision();
       this.db.exec("COMMIT");
     } catch (error) {

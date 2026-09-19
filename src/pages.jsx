@@ -804,6 +804,24 @@ export function MemoryManagementPage({ notify }) {
     } catch (error) { notify(`自动清理失败：${retentionReasonLabel(error.message)}`); }
     finally { endAction(); }
   };
+  const journalReasonLabel = (reason) => ({
+    'text-model-request-timeout': '总结模型响应超时，已保留原文和分段进度',
+    'text-model-request-failed': '总结模型服务请求失败',
+    'text-model-output-truncated': '总结内容超过模型单次输出长度，已保留分段进度',
+    'text-model-json-invalid': '总结返回格式不完整，已保留分段进度',
+    'memory-generation-active': '记忆整理正在进行，请稍后查看',
+    'memory-generation-interrupted': '上次整理被中断，已保留分段进度',
+    'memory-retry-needs-manual': '自动尝试已达上限，请点击重试未完成日终',
+    'memory-retry-delayed': '正在等待下一次自动重试',
+  }[reason] || '日终整理未完成，请稍后重试');
+  const retryJournals = async () => {
+    if (!beginAction()) return;
+    try {
+      const result = await globalThis.desktopBridge?.retryMemoryJournals?.();
+      notify(!result?.ok ? journalReasonLabel(result?.reason) : result.skipped ? '没有待补跑的日终总结，已检查同步队列' : result.sync?.accepted === 2 ? `${result.day} 日终已补齐，KnowledgeOS 已接收两份日记` : `${result.day} 日终已补齐，同步结果请查看下方状态`);
+    } catch { notify('日终重试失败，请稍后再试'); }
+    finally { await refreshMemory(); endAction(); }
+  };
   const closeWorkday = async () => {
     if(!beginAction())return;
     try {
@@ -811,8 +829,8 @@ export function MemoryManagementPage({ notify }) {
       if (!result?.ok) throw new Error(result?.reason || "memory-workday-close-failed");
       notify(result.skipped ? "今天已经提前收尾过，不会重复关闭下一工作日" : result.sync?.accepted === 2 ? `已完成 ${result.day} 日终总结，KnowledgeOS 已接收工作与个人两份日记` : result.sync?.reason === "knowledgeos-sync-disabled" ? `已完成 ${result.day} 本地日终总结；KnowledgeOS 同步当前未启用` : `已完成 ${result.day} 日终总结；KnowledgeOS 尚未接收的部分会自动重试`);
       await refreshMemory();
-    } catch (error) { notify(`提前收尾失败：${error.message}`); }
-    finally { endAction(); }
+    } catch (error) { notify(`提前收尾失败：${journalReasonLabel(error.message)}`); }
+    finally { await refreshMemory(); endAction(); }
   };
   const chooseKnowledgeOsAdapter = async () => {
     try {
@@ -864,6 +882,10 @@ export function MemoryManagementPage({ notify }) {
       </div>
       <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedDays || 0} 天、${memoryStatus.unprocessedTurns || 0} 条待整理。每日摘要可以直接查看；长期记忆候选须由你审核后，才供 AI 陪伴长期检索。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       {/* Configuration appears after the results. */}
+      {(journalStatus.pendingJournals?.length > 0 || journalStatus.running) && <Notice tone="warning" title={journalStatus.running ? '日终正在整理，请稍候' : `还有 ${journalStatus.pendingJournals.length} 天日终未完成`}>
+        {(journalStatus.jobs || []).filter(job => job.state !== 'completed').map(job => <p key={job.day}>{job.day} · {job.state === 'running' ? (job.stage === 'synthesis' ? '正在合并当日总结' : '正在分段复核原文') : journalReasonLabel(job.reason)}{job.state === 'failed' && (job.attempts >= 3 ? '；自动重试已暂停' : `；预计 ${new Date(job.nextRetryAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重试`)}</p>)}
+        <Button variant="soft" disabled={busy || journalStatus.running} onClick={() => { void retryJournals(); }}>重试未完成日终</Button>
+      </Notice>}
       <div className="memory-metrics">
         <Metric label="日终综合" value={String(journalStatus.completedJournals || 0)} unit="天" trend={journalStatus.active?.day ? `当前 ${journalStatus.active.day}` : "等待记录"} tone="blue" />
         <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />

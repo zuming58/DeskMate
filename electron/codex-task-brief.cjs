@@ -8,7 +8,7 @@ const CODEX_TASK_BRIEF_PIPE_NAME = "deskmate-codex-task-brief-v1";
 const MAX_MESSAGE_BYTES = 768;
 const MAX_RECENT_TASKS = 8;
 const PROGRESS_THROTTLE_MS = 15_000;
-const STATES = new Set(["thinking", "working", "waiting", "completed", "error"]);
+const STATES = new Set(["thinking", "working", "waiting", "idle", "closed", "completed", "error"]);
 const IMMEDIATE_STATES = new Set(["waiting", "completed", "error"]);
 const OPAQUE_KEY = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -80,6 +80,8 @@ function deterministicTaskAnswer(task) {
     thinking: `${task.taskLabel} 正在理解任务${suffix}`,
     working: `${task.taskLabel} 正在执行${suffix}`,
     waiting: `${task.taskLabel} 正在等你回复${suffix}`,
+    idle: `${task.taskLabel} 本轮响应已结束，等待后续输入；任务是否完成尚未确认`,
+    closed: `${task.taskLabel} 会话已关闭；任务是否完成尚未确认`,
     completed: `${task.taskLabel} 已完成${suffix}`,
     error: `${task.taskLabel} 遇到问题${suffix}`,
   };
@@ -119,7 +121,8 @@ function isAggregateTaskQuery(value) {
 function aggregateTaskAnswer(tasks) {
   const active = tasks.filter((task) => ["thinking", "working", "waiting"].includes(task.state));
   const candidates = (active.length ? active : tasks).slice(0, MAX_RECENT_TASKS);
-  const prefix = active.length ? `目前有 ${active.length} 个 Codex 任务正在运行。` : "目前没有正在运行的 Codex 任务。";
+  const idle = tasks.filter((task) => task.state === "idle").length;
+  const prefix = (active.length ? `目前有 ${active.length} 个 Codex 任务正在运行。` : "目前没有收到 Codex 正在执行的状态。") + (idle ? `另有 ${idle} 个任务本轮响应已结束，等待后续输入，尚未确认完成。` : "");
   if (!candidates.length) return prefix;
   const projects = [...new Set(candidates.map((task) => task.taskLabel))];
   const scope = active.length ? "涉及" : "最近涉及";
@@ -137,6 +140,8 @@ function projectTaskAnswer(tasks) {
     return `${label} 项目有 ${active.length} 个任务正在运行${waitingSuffix}。`;
   }
   const latest = candidates[0];
+  if (candidates.some((task) => task.state === "idle")) return `${label} 项目有任务本轮响应已结束，等待后续输入，尚未确认完成。`;
+  if (latest.state === "closed") return `${label} 项目最近的会话已关闭，任务是否完成尚未确认。`;
   const latestCopy = latest.state === "error" ? "最近一个任务遇到问题" : latest.state === "completed" ? "最近一个任务已结束" : "最近有任务状态更新";
   return `${label} 项目目前没有运行中的任务，${latestCopy}。`;
 }
@@ -193,7 +198,9 @@ class CodexTaskBriefStore {
     const previous = this.tasks.get(taskKey);
     if (value.event === "SessionStart") return { ok: true, registered: true, task: previous ? this.sanitize(previous) : null, announcement: null };
     if (value.event === "SessionEnd" && !previous) return { ok: true, registered: false, task: null, announcement: null };
-    const state = value.event === "SessionEnd" ? "completed" : value.state;
+    // Lifecycle closure is not evidence that the user's task was accomplished.
+    // Override legacy senders that still label Stop as completed.
+    const state = value.event === "Stop" ? "idle" : value.event === "SessionEnd" ? "closed" : value.state;
     if (!STATES.has(state)) return { ok: false, reason: "codex-hook-task-state-unavailable" };
     const terminalWithoutActiveTask = ["Stop", "SessionEnd"].includes(value.event)
       && !["thinking", "working", "waiting"].includes(previous?.state);
@@ -205,7 +212,7 @@ class CodexTaskBriefStore {
       state,
       milestone: hookMilestone(value),
       sequence: (previous?.sequence || 0) + 1,
-    }, { allowAnnouncement: !terminalWithoutActiveTask });
+    }, { allowAnnouncement: !["Stop", "SessionEnd"].includes(value.event) && !terminalWithoutActiveTask });
   }
 
   relabel(taskKey, taskLabel) {

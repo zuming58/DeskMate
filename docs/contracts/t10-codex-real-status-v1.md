@@ -2,6 +2,8 @@
 
 Status: `CODEX_REAL_STATUS_V1_FROZEN`
 
+T65 amendment: `Stop` now maps to `idle`, without completion speech/motion. Turn closure does not prove task accomplishment. The historical mapping below is superseded only for that event; see [T65](t65-task-status-journal-recovery-v1.md).
+
 Source version: `codex-hook-v1`
 
 ## Purpose
