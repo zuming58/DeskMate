@@ -1,5 +1,12 @@
 # Progress log
 
+# 2026-09-24 — T72 代码与 Windows 包已完成回归，发布前核验
+
+- 产品提交 `53120d5`；历史汇总提交 `7c395c5bc7555a4a72de338fb520df6a33e86bf1`，分支 `codex/t72-community-release`。13 个旧侧分支按审计用保留当前树的历史合并汇总，合并前后 tree 完全一致，现有 local/remote refs 均已纳入；没有删除分支/工作树。fetch 后确认远端 main 仍是本产品祖先，可正常快进，不需要 force push。
+- 完整首轮 932/933 的唯一 Vite SSR 模块加载超时，独立复测 11/11 通过；最终全量复跑 **933/933，13.25 秒**。Vite、Release InputBridge、NSIS 全部构建成功。最终 ASAR 的 125 个 Electron 文件逐一等于源码，前端/视频/native 一致；T53/T58/T69/T70/T71 包内行为全部通过。T72 默认与长期保存单测包括在全量中；未据此宣称实际语音/硬件验收。
+- `release-t72/DeskMate-0.1.7-setup.exe` SHA256 `3C8B64203D93A9CA4774CC828D89749F3E813580FF14404F71496E91790991A6`；ASAR SHA256 `C65527C3DEC57793D156AA34D018D84031FE3CD5833E899F96C1BA50C8372DBB`。安装器 Authenticode=NotSigned，builder 日志中的 signing 步骤不等于有商业签名。LICENSE/第三方 notices 已逐一核验，未包含用户配置/数据库输入。
+- 暂存及合并后全历史 Gitleaks 复查无未审查命中。正在做隔离原生/UI 探针和上传；本条时尚未 push、建 tag 或发布 Release，不改实际 D 安装版。Mac 原生适配/测试仍缺失，不能提供虚假的 Mac 成品。下一步记录真实远端与下载回执。
+
 # 2026-09-24 — T72 社区发布准备：可选扩展默认关闭、个人资料与许可边界
 
 - role：Windows 发布工作机；canonical source `F:\Codex\deskmate\build-t10dc-work`；branch `codex/t72-community-release`；base/本条前 HEAD `95b8dafb29a7048661bbf1e220b430f9e1a07692`。用户授权公开脱敏源码和安装包、汇总到 main；保留此前 T66～T71 工作，不从旧外层工作树打包，不改 D 安装版或实际个人数据。

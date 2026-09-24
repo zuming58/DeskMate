@@ -17,7 +17,7 @@ Gitleaks 8.30.1 official Windows archive was downloaded with a matching upstream
 1. `electron/doubao-realtime.cjs`: published shared protocol application constant, not the user's access token.
 2. Two provenance lines: public reference identifiers alongside SHA-256 values, not access credentials.
 
-Exact historical fingerprints are documented in `.gitleaksignore`; no folder-wide exclusions were added. A staged/current-tree scan and final post-merge scan are required before push. Regex scans and selected screenshot inspection are bounded evidence, not a proof that all possible historical personal information is absent. This release does not rewrite already-public history or pretend past copies can be withdrawn.
+Exact historical fingerprints are documented in `.gitleaksignore`; no folder-wide exclusions were added. The staged scan additionally identified a synthetic secret-rejection fixture; it now generates the same artificial value at runtime and is not allowlisted. Staged and final post-merge history scans completed with no unreviewed findings. Regex scans and selected screenshot inspection are bounded evidence, not a proof that all possible historical personal information is absent. This release does not rewrite already-public history or pretend past copies can be withdrawn.
 
 ## Branch reconciliation
 
@@ -41,7 +41,7 @@ No branches or worktrees are deleted. The closure entry in flow/progress.md must
 
 Windows uses .NET 8 Windows Forms, user32/Raw Input and PowerShell for native input operations. macOS is not a relabeled NSIS package. Native input/hardware adapters, permissions, architecture testing and signing/notarization are not verified; no Mac installer is released as feature-complete.
 
-T72 behavior tests cover clean/saved profile, off-state transport, cancellation, mid-batch gate, local long-term memory/Markdown after retention and reopen, and license packaging configuration. Final full suite, final-ASAR equality/native/UI probes and actual installer hashes are recorded at closure. No real paid model, microphone, reminder, hardware movement or nightly task was exercised by these tests.
+T72 behavior tests cover clean/saved profile, off-state transport, cancellation, mid-batch gate, local long-term memory/Markdown after retention and reopen, and license packaging configuration. The initial full run passed 932/933 with a Vite module-fetch timeout; isolated retry passed 11/11, and the final full rerun passed **933/933**. Production renderer, self-contained input bridge and NSIS builds succeeded. Exact final-ASAR/source checks (125 Electron files), license resource checks and T53/T58/T69/T70/T71 package behavior probes passed. Isolated native/UI runtime probes and actual publication receipts are recorded at closure. No real paid model, microphone, reminder, hardware movement or nightly task was exercised by these tests.
 
 ## Primary references
 

@@ -2,7 +2,7 @@
 
 ## Current work: T72 community release
 
-Prepare a sanitized source-visible personal-noncommercial release and Windows 0.1.7 installer; consolidate branch history on main without restoring obsolete implementations. Fresh profile uses 小明, KnowledgeOS disabled/local durable memories, Xiaozhi disabled; preserve saved configurations. Targeted tests initially 43/43; final full regression, installer validation and GitHub publication still pending. macOS needs platform adaptation and test access; no Mac acceptance claimed. See docs/contracts/t72-community-release-v1.md.
+Prepare a sanitized source-visible personal-noncommercial release and Windows 0.1.7 installer; consolidate branch history on main without restoring obsolete implementations. Fresh profile uses 小明, KnowledgeOS disabled/local durable memories, Xiaozhi disabled; preserve saved configurations. Final full regression 933/933, source/ASAR and license checks plus package behavior probes passed; runtime probes and GitHub publication still pending. macOS needs platform adaptation and test access; no Mac acceptance claimed. See docs/contracts/t72-community-release-v1.md.
 
 ## Current work: T71 automatic memory curation
 
