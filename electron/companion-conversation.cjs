@@ -501,7 +501,8 @@ class CompanionConversationController {
     });
   }
 
-  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume, closeAfterAnnouncement = false, waitForAnnouncement = false } = {}) {
+  async start({ sessionId = randomUUID(), generation = 1, initialAnnouncement = "", restoreVolume, closeAfterAnnouncement = false, waitForAnnouncement = false, announcementIsCurrent = () => true } = {}) {
+    if (initialAnnouncement && !announcementIsCurrent()) return { ok: false, reason: "companion-announcement-stale" };
     if (this.active || this.stopPromise) return { ok: false, reason: "companion-session-active", status: this.snapshot() };
     const sourceStatus = availability(this.audioSource, "audio-source-unavailable");
     const sinkStatus = availability(this.audioSink, "audio-sink-unavailable");
@@ -543,6 +544,11 @@ class CompanionConversationController {
         this.closeAfterTrustedAnnouncement = closeAfterAnnouncement === true;
         this.restoreSinkVolumeAfterAnnouncement = Number.isFinite(Number(restoreVolume)) ? Number(restoreVolume) : null;
         await this.transition("thinking", { reason: "trusted-proactive-announcement" });
+        if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale" };
+        if (!announcementIsCurrent()) {
+          await this.stop("announcement-stale");
+          return { ok: false, reason: "companion-announcement-stale" };
+        }
         if (!this.provider?.sayHello?.(announcement)) throw new Error("companion-announcement-unavailable");
         this.trustedResponseActive = true;
         this.armTrustedSpeechTimer(announcement, token);
@@ -554,7 +560,8 @@ class CompanionConversationController {
     }
   }
 
-  async announce(value, { volume, restoreVolume } = {}) {
+  async announce(value, { volume, restoreVolume, announcementIsCurrent = () => true } = {}) {
+    if (!announcementIsCurrent()) return { ok: false, reason: "companion-announcement-stale" };
     const content = boundedText(value, 240).trim();
     if (!content) return { ok: false, reason: "companion-announcement-empty", status: this.snapshot() };
     if (!this.active || this.stopPromise || this.state !== "listening") return { ok: false, reason: "companion-announcement-busy", status: this.snapshot() };
@@ -568,6 +575,11 @@ class CompanionConversationController {
     }
     await this.transition("thinking", { reason: "trusted-proactive-announcement" });
     if (!this.isCurrent(token)) return { ok: false, reason: "companion-session-stale", status: this.snapshot() };
+    if (!announcementIsCurrent()) {
+      await this.restoreAnnouncementVolume();
+      if (this.isCurrent(token)) await this.transition("listening", { reason: "announcement-stale" });
+      return { ok: false, reason: "companion-announcement-stale" };
+    }
     let accepted = false;
     try { accepted = this.provider?.speakText?.(content) === true; } catch { /* Treat synchronous provider rejection like an unavailable send. */ }
     if (!accepted) {

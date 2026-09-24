@@ -25,9 +25,9 @@ function streamResponse(frames) {
 
 test("T21 speech segmenter emits stable sentences and fails closed on a mismatched final", () => {
   const segmenter = new CompanionSpeechSegmenter();
-  assert.deepEqual(segmenter.push("祖名，早"), []);
-  assert.deepEqual(segmenter.push("安。今天继续工作。"), ["祖名，早安。", "今天继续工作。"]);
-  assert.deepEqual(segmenter.finish("祖名，早安。今天继续工作。"), []);
+  assert.deepEqual(segmenter.push("小林，早"), []);
+  assert.deepEqual(segmenter.push("安。今天继续工作。"), ["小林，早安。", "今天继续工作。"]);
+  assert.deepEqual(segmenter.finish("小林，早安。今天继续工作。"), []);
 
   const mismatch = new CompanionSpeechSegmenter();
   mismatch.push("真实答案。 ");
@@ -195,8 +195,8 @@ test("T21 recognized-speech barge-in rejects weak noise and spoken-answer echo",
   assert.deepEqual(classifyRecognizedBargeIn("嗯", "这里是回答"), { accepted: false, reason: "weak" });
   assert.deepEqual(classifyRecognizedBargeIn("掌声", "这里是回答"), { accepted: false, reason: "weak" });
   assert.deepEqual(classifyRecognizedBargeIn("六五六", "这里是回答"), { accepted: false, reason: "weak" });
-  assert.deepEqual(classifyRecognizedBargeIn("这里是回答", "祖名，这里是回答。后面还有一句。"), { accepted: false, reason: "echo" });
-  assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "祖名，这里是回答。"), { accepted: true, reason: "recognized-speech" });
+  assert.deepEqual(classifyRecognizedBargeIn("这里是回答", "小林，这里是回答。后面还有一句。"), { accepted: false, reason: "echo" });
+  assert.deepEqual(classifyRecognizedBargeIn("等一下，我想换个问题", "小林，这里是回答。"), { accepted: true, reason: "recognized-speech" });
   for (const command of ["停下", "听一下", "等等", "暂停播放", "住嘴", "闭嘴", "别讲话", "别说话", "不要讲话", "不要说话", "先别说", "安静"]) {
     assert.equal(isExplicitBargeIn(command), true);
     assert.deepEqual(classifyRecognizedBargeIn(command, "这里是回答"), { accepted: true, reason: "recognized-speech" });

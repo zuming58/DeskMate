@@ -34,7 +34,7 @@ function journalHarness(directory, { syncEnabled = false } = {}) {
   const projection = new KnowledgeBaseProjection({ root, now: () => new Date(now).toISOString() });
   const calls = [];
   const knowledgeOsSettings = fakeKnowledgeOs({ syncEnabled });
-  const knowledgeOsClient = { callTool: async (name, args) => { calls.push({ name, args }); return { ok: true, data: { submission_id: `01900000-0000-7000-8000-${String(calls.length).padStart(12, "0")}` } }; } };
+  const knowledgeOsClient = { callTool: async (name, args) => { if (name === 'submission.get_status') return { ok: true, data: { status: 'completed', stage: 'raw_sealed' } }; calls.push({ name, args }); return { ok: true, data: { submission_id: `01900000-0000-7000-8000-${String(calls.length).padStart(12, "0")}` } }; } };
   const modelInputs = [];
   const requestJson = async ({ messages }) => {
     const input = JSON.parse(messages.at(-1).content);
@@ -100,6 +100,7 @@ test("T25 remote synchronization submits exactly one sealed work journal and one
     assert.equal(harness.calls.find((call) => call.args.memory_class === "personal").args.project_id, null);
     assert.equal(harness.calls.every((call) => call.args.is_open === false && /^deskmate:/.test(call.args.idempotency_key)), true);
     assert.equal(harness.calls.every((call) => /deskmate_schema: knowledgeos-journal-v1/.test(call.args.markdown)), true);
+    assert.equal((await harness.service.syncPending()).receipts.filter(item => item.sealed).length, 2);
     assert.equal((await harness.service.syncPending()).skipped, true);
   } finally { harness.store.close(); }
 }));
@@ -119,6 +120,7 @@ test("T25 raw cleanup waits for a completed local journal and, when enabled, bot
       const key = `deskmate:test:${memoryClass}`;
       const queued = store.queueJournalDelivery({ day: "2026-09-01", memoryClass, projectId: memoryClass === "work" ? "01900000-0000-7000-8000-000000000001" : null, idempotencyKey: key, payload: { memory_class: memoryClass } });
       store.markJournalDelivery(queued.id, { ok: true, submissionId: `submission-${memoryClass}` });
+      store.markJournalReceipt(queued.id, { sealed: true });
     }
     assert.equal(store.cleanupExpiredRaw({ retentionDays: 20, at: now, requireRemoteAccepted: true }).removed, 1);
     assert.equal(store.db.prepare("SELECT COUNT(*) AS value FROM companion_memory_outbox").get().value, 0);

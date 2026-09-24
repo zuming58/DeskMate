@@ -25,6 +25,8 @@ recordings/
 audio-captures/
 user-data/
 diagnostics-private/
+# Author's presentation draft is not part of the distributed product.
+docs/product/deskmate-demo-narration.md
 pending-delete-*/
 firmware/**/build/
 firmware/**/sdkconfig

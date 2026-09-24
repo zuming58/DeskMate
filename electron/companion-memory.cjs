@@ -3,6 +3,8 @@ const { createHash, randomUUID } = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { fingerprintEvent, normalizeEvent } = require("./companion-memory-outbox.cjs");
 const { MODEL: LOCAL_EMBEDDING_MODEL, DIMENSIONS: LOCAL_EMBEDDING_DIMENSIONS, cosine, decode, embed, encode } = require("./local-memory-embedding.cjs");
+const { fingerprint: candidateFingerprint, groupCandidates, classify: classifyCandidate } = require('./memory-candidate-review.cjs');
+const { initializeCurationStore, curationStoreMethods, pendingSql: pendingCurationSql } = require('./memory-curation-store.cjs');
 
 const ROLES = new Set(["user", "assistant"]);
 const TURN_SOURCES = new Set(["companion", "dictation"]);
@@ -91,6 +93,14 @@ class CompanionMemoryStore {
         source TEXT NOT NULL DEFAULT 'companion'
       );
       CREATE INDEX IF NOT EXISTS idx_candidates_state ON memory_candidates(state, updated_at DESC);
+      CREATE TABLE IF NOT EXISTS memory_candidate_reviews (
+        candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id) ON DELETE CASCADE,
+        fingerprint TEXT NOT NULL,
+        bucket TEXT NOT NULL CHECK(bucket IN ('reference','review')),
+        topic TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        method TEXT NOT NULL DEFAULT 'local'
+      );
       CREATE TABLE IF NOT EXISTS memory_embeddings (
         candidate_id TEXT PRIMARY KEY REFERENCES memory_candidates(id) ON DELETE CASCADE,
         model TEXT NOT NULL,
@@ -217,6 +227,7 @@ class CompanionMemoryStore {
       } catch (error) { try { this.db.exec("ROLLBACK"); } catch { /* original error wins */ } throw error; }
     }
     const candidateColumns = new Set(this.db.prepare("PRAGMA table_info(memory_candidates)").all().map((column) => column.name));
+    if (!this.db.prepare('PRAGMA table_info(memory_candidate_reviews)').all().some(column => column.name === 'method')) this.db.exec("ALTER TABLE memory_candidate_reviews ADD COLUMN method TEXT NOT NULL DEFAULT 'local'");
     if (!candidateColumns.has("source")) this.db.exec("ALTER TABLE memory_candidates ADD COLUMN source TEXT NOT NULL DEFAULT 'companion'");
     const journalColumns = new Set(this.db.prepare("PRAGMA table_info(memory_daily_journals)").all().map((column) => column.name));
     if (!journalColumns.has("source_counts_json")) this.db.exec("ALTER TABLE memory_daily_journals ADD COLUMN source_counts_json TEXT NOT NULL DEFAULT '{}'");
@@ -230,6 +241,7 @@ class CompanionMemoryStore {
     this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_source_event_id ON conversation_turns(source_event_id) WHERE source_event_id IS NOT NULL;");
     const recovered = this.db.prepare("UPDATE companion_memory_outbox SET status='pending' WHERE status='processing'").run();
     if (recovered.changes) this.bumpRevision();
+    initializeCurationStore(this);
   }
 
   bumpRevision() { this.db.prepare("UPDATE companion_memory_meta SET value=value+1 WHERE key='revision'").run(); }
@@ -507,6 +519,7 @@ class CompanionMemoryStore {
       completedJournals: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_daily_journals WHERE status='completed'").get()?.value || 0),
       pendingJournalSync: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status IN ('pending','failed')").get()?.value || 0),
       acceptedJournalSync: Number(this.db.prepare("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status='accepted'").get()?.value || 0),
+      delivery: this.journalDeliveryStatus(),
     };
   }
 
@@ -620,6 +633,8 @@ class CompanionMemoryStore {
         const kind = String(item?.kind || "fact").slice(0, 60);
         const id = createHash("sha256").update(JSON.stringify([day, inputDigest, kind, summary])).digest("hex").slice(0, 32);
         insert.run(id, day, kind, summary, JSON.stringify(ids.slice(0, 200)), at, at);
+        const annotation = classifyCandidate({ id, day, kind, content: summary, source: 'mixed' }, { bucket: 'reference' });
+        this.db.prepare('INSERT OR IGNORE INTO memory_candidate_reviews(candidate_id,fingerprint,bucket,topic,reason) VALUES(?,?,?,?,?)').run(id, annotation.fingerprint, annotation.bucket, annotation.topic, annotation.reason);
       }
       this.bumpRevision();
       this.db.exec("COMMIT");
@@ -636,8 +651,8 @@ class CompanionMemoryStore {
     const at = this.now();
     const id = createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32);
     const serialized = JSON.stringify(payload);
-    this.db.prepare("INSERT INTO memory_journal_outbox (id, day, memory_class, project_id, payload_json, idempotency_key, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?) ON CONFLICT(day, memory_class) DO NOTHING").run(id, day, memoryClass, projectId || null, serialized, idempotencyKey, at, at);
-    this.bumpRevision();
+    const inserted = this.db.prepare("INSERT INTO memory_journal_outbox (id, day, memory_class, project_id, payload_json, idempotency_key, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?) ON CONFLICT(day, memory_class) DO NOTHING").run(id, day, memoryClass, projectId || null, serialized, idempotencyKey, at, at);
+    if (inserted.changes) this.bumpRevision();
     return { ok: true, id, day, memoryClass };
   }
 
@@ -646,6 +661,32 @@ class CompanionMemoryStore {
   }
 
   isRestoredDay(day) { return Boolean(this.db.prepare("SELECT 1 FROM companion_memory_meta WHERE key=?").get(`restore-hold:${day}`)); }
+
+  syncMeta(key) { return Number(this.db.prepare('SELECT value FROM companion_memory_meta WHERE key=?').get(`journal-sync:${key}`)?.value || 0); }
+  setSyncMeta(key, value) { this.db.prepare('INSERT OR REPLACE INTO companion_memory_meta(key,value) VALUES(?,?)').run(`journal-sync:${key}`, Math.max(0, Number(value) || 0)); }
+
+  journalDeliveryStatus() {
+    const rows = this.db.prepare("SELECT id,status FROM memory_journal_outbox").all();
+    return { sealed: rows.filter(row => row.status === 'accepted' && this.syncMeta(`sealed:${row.id}`)).length,
+      awaitingReceipt: rows.filter(row => row.status === 'accepted' && !this.syncMeta(`sealed:${row.id}`)).length,
+      receiptFailed: rows.filter(row => row.status === 'accepted' && this.syncMeta(`receipt-failed:${row.id}`)).length,
+      failed: rows.filter(row => row.status === 'failed').length,
+      nextRetryAt: this.syncMeta('next-at') };
+  }
+
+  pendingJournalReceipts({ at = this.now(), force = false, day = '' } = {}) {
+    return this.db.prepare("SELECT id,day,memory_class AS memoryClass,submission_id AS submissionId FROM memory_journal_outbox WHERE status='accepted' AND submission_id!='' AND (?='' OR day=?) AND NOT EXISTS (SELECT 1 FROM companion_memory_meta WHERE key='restore-hold:' || memory_journal_outbox.day) ORDER BY day,memory_class").all(String(day), String(day))
+      .filter(row => !this.syncMeta(`sealed:${row.id}`) && (force || this.syncMeta(`receipt-next:${row.id}`) <= at))
+      .sort((a, b) => this.syncMeta(`receipt-next:${a.id}`) - this.syncMeta(`receipt-next:${b.id}`)).slice(0, 4);
+  }
+
+  markJournalReceipt(id, { sealed = false, failed = false, nextAt = 0 } = {}) {
+    boundedId(id, '投递 ID');
+    this.setSyncMeta(`sealed:${id}`, sealed ? this.now() : 0);
+    this.setSyncMeta(`receipt-failed:${id}`, failed ? this.now() : 0);
+    this.setSyncMeta(`receipt-next:${id}`, nextAt);
+    this.bumpRevision();
+  }
 
   markJournalDelivery(id, { ok, submissionId = "", reason = "", retryAt = 0 } = {}) {
     const normalizedId = boundedId(id, "投递 ID");
@@ -662,7 +703,7 @@ class CompanionMemoryStore {
   cleanupExpiredRaw({ retentionDays = 20, at = this.now(), requireRemoteAccepted = false } = {}) {
     const days = Math.max(1, Math.min(365, Number(retentionDays) || 20));
     const cutoff = Number(at) - days * 86400000;
-    const eligible = this.db.prepare("SELECT t.id, t.source_event_id AS sourceEventId FROM conversation_turns t JOIN memory_daily_journals j ON j.day=t.workday_day AND j.status='completed' WHERE t.created_at<? AND (NOT ? OR ((SELECT COUNT(*) FROM memory_journal_outbox o WHERE o.day=j.day AND o.status='accepted')=2))").all(cutoff, requireRemoteAccepted ? 1 : 0);
+    const eligible = this.db.prepare("SELECT t.id, t.source_event_id AS sourceEventId FROM conversation_turns t JOIN memory_daily_journals j ON j.day=t.workday_day AND j.status='completed' WHERE t.created_at<? AND t.summary_day=j.day AND (NOT ? OR ((SELECT COUNT(*) FROM memory_journal_outbox o JOIN companion_memory_meta m ON m.key='journal-sync:sealed:' || o.id AND m.value>0 WHERE o.day=j.day AND o.status='accepted')=2))").all(cutoff, requireRemoteAccepted ? 1 : 0);
     if (!eligible.length) return { ok: true, removed: 0, retentionDays: days };
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -750,14 +791,66 @@ class CompanionMemoryStore {
     return { ok: true };
   }
 
+  candidateReview() {
+    const items = this.db.prepare(`SELECT id,day,kind,summary AS content,source FROM memory_candidates WHERE ${pendingCurationSql} ORDER BY day DESC,id`).all();
+    const annotations = this.db.prepare('SELECT candidate_id AS id,fingerprint,bucket,topic,reason,method FROM memory_candidate_reviews').all();
+    return groupCandidates(items, annotations);
+  }
+
+  candidateReviewCounts() {
+    const { groups, ...counts } = this.candidateReview();
+    return { ...counts, groups: groups.length };
+  }
+
+  hasCandidateReview(item, { modelOnly = false } = {}) {
+    const annotation = this.db.prepare('SELECT fingerprint,method FROM memory_candidate_reviews WHERE candidate_id=?').get(item.id);
+    return annotation?.fingerprint === candidateFingerprint(item) && (!modelOnly || annotation.method === 'model');
+  }
+
+  saveCandidateReview(items, annotations) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const current = new Map(this.candidateReview().groups.flatMap(group => group.items).map(item => [item.id, item]));
+      if (items.some(item => !current.has(item.id) || candidateFingerprint(item) !== candidateFingerprint(current.get(item.id)))) {
+        this.db.exec('ROLLBACK'); return { ok: false, reason: 'memory-review-source-changed' };
+      }
+      const save = this.db.prepare('INSERT OR REPLACE INTO memory_candidate_reviews(candidate_id,fingerprint,bucket,topic,reason,method) VALUES(?,?,?,?,?,?)');
+      for (const item of annotations) save.run(item.id, item.fingerprint, item.bucket, item.topic, item.reason, item.method === 'model' ? 'model' : 'local');
+      this.bumpRevision(); this.db.exec('COMMIT');
+      return { ok: true };
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+
+  reviewCandidateBatch({ items, state } = {}) {
+    if (!['accepted', 'rejected'].includes(state) || !Array.isArray(items) || !items.length || items.length > 200 || new Set(items.map(item => item?.id)).size !== items.length) return { ok: false, reason: 'memory-review-selection-invalid' };
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const item of items) {
+        const current = this.db.prepare("SELECT id,day,kind,summary AS content,source FROM memory_candidates WHERE id=? AND state='pending'").get(boundedId(item.id));
+        if (!current || candidateFingerprint(current) !== item.fingerprint) {
+          this.db.exec('ROLLBACK'); return { ok: false, reason: 'memory-review-source-changed' };
+        }
+      }
+      const update = this.db.prepare("UPDATE memory_candidates SET state=?,updated_at=? WHERE id=? AND state='pending'");
+      for (const item of items) update.run(state, this.now(), item.id);
+      this.bumpRevision(); this.db.exec('COMMIT');
+      return { ok: true, reviewed: items.length };
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+
   updateCandidate({ id, summary } = {}) {
     const candidateId = boundedId(id, "候选 ID");
     const text = boundedText(summary, "记忆内容", 10000);
     const current = this.db.prepare("SELECT state FROM memory_candidates WHERE id=?").get(candidateId);
     if (!current) return { ok: false, reason: "memory-item-not-found" };
     if (!["pending", "accepted"].includes(current.state)) return { ok: false, reason: "memory-item-not-editable" };
-    this.db.prepare("UPDATE memory_candidates SET summary=?, updated_at=? WHERE id=?").run(text, this.now(), candidateId);
-    this.bumpRevision();
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.invalidateCurationSource(candidateId);
+      this.db.prepare("UPDATE memory_curation_items SET origin='human' WHERE memory_id=?").run(candidateId);
+      this.db.prepare("UPDATE memory_candidates SET summary=?, updated_at=? WHERE id=?").run(text, this.now(), candidateId);
+      this.bumpRevision(); this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     return { ok: true, state: current.state };
   }
 
@@ -784,6 +877,7 @@ class CompanionMemoryStore {
       if (deleted) this.bumpRevision();
       return { ok: deleted, scope: "item", type };
     }
+    this.invalidateCurationSource(boundedId(id), { forgotten: true });
     const deleted = this.db.prepare("DELETE FROM memory_candidates WHERE id=?").run(boundedId(id)).changes === 1;
     if (deleted) this.bumpRevision();
     return { ok: deleted, scope: "item", type };
@@ -794,6 +888,9 @@ class CompanionMemoryStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.exec("DELETE FROM memory_chunk_embeddings; DELETE FROM memory_chunks; DELETE FROM memory_embeddings; DELETE FROM memory_candidates; DELETE FROM daily_summaries; DELETE FROM conversation_turns; DELETE FROM companion_memory_outbox; DELETE FROM memory_digest_runs; DELETE FROM memory_hourly_summaries; DELETE FROM memory_daily_journals; DELETE FROM memory_journal_outbox; DELETE FROM memory_journal_jobs;");
+      this.db.prepare("DELETE FROM companion_memory_meta WHERE key LIKE 'journal-sync:%'").run();
+      this.setCurationMeta('enabled', 0);
+      this.setCurationMeta('consentRevision', this.curationMeta('consentRevision') + 1);
       this.bumpRevision();
       this.db.exec("COMMIT");
     } catch (error) {
@@ -835,8 +932,10 @@ class CompanionMemoryStore {
     const scalar = sql => Number(this.db.prepare(sql).get()?.value || 0);
     return {
       ready: true, today: activity.at(-1), activity, firstCompanionDay: first,
+      candidateReview: this.candidateReviewCounts(),
+      curation: this.curationStatus(),
       companionDays: first ? Math.max(1, Math.round((calendarNumber(localDayAt(now)) - calendarNumber(first)) / 86400000) + 1) : 0,
-      pendingCandidates: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='pending'"),
+      pendingCandidates: scalar(`SELECT COUNT(*) AS value FROM memory_candidates WHERE ${pendingCurationSql}`),
       longTermMemories: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='accepted'"),
       completedJournals: scalar("SELECT COUNT(*) AS value FROM memory_daily_journals WHERE status='completed'"),
       pendingSync: scalar("SELECT COUNT(*) AS value FROM memory_journal_outbox WHERE status IN ('pending','sending','failed')"),
@@ -857,9 +956,11 @@ class CompanionMemoryStore {
     return {
       ready: true,
       storage: "sqlite-wal",
+      candidateReview: this.candidateReviewCounts(),
+      curation: this.curationStatus(),
       turns: scalar("SELECT COUNT(*) AS value FROM conversation_turns"),
       dailySummaries: scalar("SELECT COUNT(*) AS value FROM daily_summaries"),
-      pendingCandidates: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='pending'"),
+      pendingCandidates: scalar(`SELECT COUNT(*) AS value FROM memory_candidates WHERE ${pendingCurationSql}`),
       longTermMemories: scalar("SELECT COUNT(*) AS value FROM memory_candidates WHERE state='accepted'"),
       embeddings: scalar("SELECT COUNT(*) AS value FROM memory_chunk_embeddings") + scalar("SELECT COUNT(*) AS value FROM memory_embeddings"),
       unprocessedTurns: scalar("SELECT COUNT(*) AS value FROM conversation_turns WHERE summary_day IS NULL"),
@@ -878,8 +979,8 @@ class CompanionMemoryStore {
     const journals = ["all", "daily"].includes(filter) && ["all", "mixed"].includes(normalizedSource) ? this.db.prepare("SELECT 'journal:' || day AS id, 'journal' AS type, day, 'mixed' AS source, combined_markdown AS content, updated_at AS updatedAt FROM memory_daily_journals WHERE status='completed' AND (?='' OR combined_markdown LIKE ? ESCAPE '\\') ORDER BY day DESC LIMIT ?").all(normalizedQuery, like, boundedLimit) : [];
     const states = filter === "long-term" ? ["accepted"] : filter === "candidates" ? ["pending"] : ["pending", "accepted", "rejected"];
     const placeholders = states.map(() => "?").join(",");
-    const candidates = ["all", "candidates", "long-term"].includes(filter) ? this.db.prepare(`SELECT id, 'candidate' AS type, day, kind, summary AS content, state, source, updated_at AS updatedAt FROM memory_candidates WHERE state IN (${placeholders}) AND (? = '' OR summary LIKE ? ESCAPE '\\') AND (?='all' OR source=? OR source='mixed') ORDER BY updated_at DESC LIMIT ?`).all(...states, normalizedQuery, like, normalizedSource, normalizedSource, boundedLimit) : [];
-    return [...journals, ...summaries, ...candidates].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, boundedLimit);
+    const candidates = ["all", "candidates", "long-term", "archive"].includes(filter) ? this.db.prepare(`SELECT id, 'candidate' AS type, day, kind, summary AS content, state, source, updated_at AS updatedAt, (SELECT origin FROM memory_curation_items r WHERE r.memory_id=memory_candidates.id AND r.outcome='remember' LIMIT 1) AS curationOrigin, (SELECT outcome FROM memory_curation_items r WHERE r.candidate_id=memory_candidates.id) AS curationOutcome FROM memory_candidates WHERE state IN (${placeholders}) AND ${filter === 'archive' ? "EXISTS(SELECT 1 FROM memory_curation_items r WHERE r.candidate_id=memory_candidates.id AND r.outcome<>'review')" : "NOT EXISTS(SELECT 1 FROM memory_curation_items r WHERE r.candidate_id=memory_candidates.id AND r.outcome<>'review')"} AND (? = '' OR summary LIKE ? ESCAPE '\\') AND (?='all' OR source=? OR source='mixed') ORDER BY updated_at DESC LIMIT ?`).all(...states, normalizedQuery, like, normalizedSource, normalizedSource, boundedLimit) : [];
+    return [...journals, ...summaries, ...candidates].sort((a, b) => Number(b.updatedAt) - Number(a.updatedAt)).slice(0, boundedLimit).map(item => item.curationOrigin ? { ...item, provenance: this.db.prepare("SELECT c.day,c.summary AS content,r.reason FROM memory_curation_items r JOIN memory_candidates c ON c.id=r.candidate_id WHERE r.memory_id=? AND r.outcome='remember' ORDER BY c.day").all(item.id) } : item);
   }
 
   listTurns({ source = "all", query = "", limit = 100 } = {}) {
@@ -895,4 +996,5 @@ class CompanionMemoryStore {
   close() { this.db.close(); }
 }
 
+Object.assign(CompanionMemoryStore.prototype, curationStoreMethods);
 module.exports = { CompanionMemoryStore, localDayAt };

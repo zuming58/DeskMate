@@ -14,7 +14,8 @@ async function pasteIntoCapturedWindow({ text, targetWindow, writeClipboard, run
   if (!/^[1-9]\d{0,19}$/.test(normalizedTarget)) return { ok: false, reason: "no-captured-target" };
   if (typeof writeClipboard !== "function" || typeof runPaste !== "function") return { ok: false, reason: "active-window-output-unavailable" };
 
-  writeClipboard(value);
+  try { await writeClipboard(value); }
+  catch { return { ok: false, reason: "clipboard-write-failed" }; }
   let result;
   try { result = await runPaste(normalizedTarget); }
   catch (error) { result = { ok: false, reason: error?.message || "active-window-output-failed" }; }

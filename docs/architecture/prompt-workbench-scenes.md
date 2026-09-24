@@ -1,5 +1,9 @@
 # T22 Prompt workbench and scene routing
 
+## T68 Electron 44 clipboard compatibility (2026-09-22)
+
+T22E verification must await both `clipboard.writeText` and `clipboard.readText`; Electron 44 returns Promises. Comparing a Promise with prompt text falsely rejects every copy. The shared main-owned adapter preserves exact verification and fail-closed page retention. Do not hide unconditionally or change KEY4 bindings to mask this regression. See `docs/contracts/t68-async-clipboard-v1.md`.
+
 ## T22F prompt ordering and scene action presets (2026-09-11)
 
 - Prompt order is a main-process-owned list per scene. The UI exposes adjacent up/down buttons only for the complete, unfiltered current-scene list. Search, favorites, recent, personal, trash, category and cross-scene projections cannot mutate canonical order. A move retains the moved selection; order survives restart and JSON backup roundtrip. Built-in forks retain the built-in ordering identity, and restored personal prompts can return to their saved position.

@@ -1,5 +1,60 @@
 # Lessons learned
 
+## Personal development defaults are not community defaults
+
+- Never ship the author's saved profile, keys, recordings, databases or presentation drafts. Empty-profile tests must verify default names and integration switches as well as packaging exclusions.
+- A sync switch must gate transport and each queued item, not only the start of a batch or its UI; cancellation cannot retract already sent remote data.
+- Private source, public source, free use and open-source permissions are distinct decisions. License the original work explicitly and retain third-party rights. A public repository's prior history remains public evidence unless separately and deliberately rewritten.
+
+## Curation is not classification, and model formatting is not factual proof
+
+- Renaming 430 pending candidates as optional references does not produce usable long-term memory. Separate preserved originals, derived memories, routine archives and genuine review questions.
+- A real model may return empty labels for archived records or rephrase a quoted sentence. Empty archive labels can use a neutral local label; a mismatched quotation must remain unconfirmed. Fail closed per questionable group rather than repeatedly paying to retry all unrelated routine records. Keep full-batch identity/coverage checks strict.
+- Windows worker-backed SQLite fixtures must await worker termination before deleting their temporary directories. Product outcomes should be tested with exact final packaged code and isolated UI, not only source regex assertions.
+
+## Empty Vite warmup arrays do not override configured arrays
+
+- `createServer({ server: { warmup: { clientFiles: [] } } })` still resolved to the project's main.jsx warmup because Vite concatenates arrays. The old SSR smoke test therefore competed with a client graph despite claiming to disable it.
+- For a one-shot SSR test, explicitly reuse the real config/plugins with configFile=false, override warmup in that object and set watch=null. Keep the real App render assertion. Final bundled Electron UI tests remain separate; a development transport timeout is not proof of an installed-app failure.
+
+## Bundled renderer dependencies can dominate installer time
+
+- Electron Builder includes production dependency trees even when the renderer is already bundled. T70 exposed more than 23,000 redundant Tabler source files, dominating resource enumeration and ASAR small-file writes.
+- Keep build-only React/Vite/icon dependencies in devDependencies. Preserve the lock's versions, resolved URLs and integrity values, and verify the packaged renderer plus native runtime before installing. A stopped partial package is not a release artifact.
+
+## One missing receipt can starve an entire queue
+
+- Do not conflate an item-level `resource_not_found` with a network outage. Preserve safe error codes (including snake_case normalization) rather than masking every failure as request-failed.
+- Forced receipt polling needs fair ordering; repeatedly selecting the oldest four missing receipts blocks visibility of newer successes even when transport works.
+- A synthesis prompt that says “ten candidates” does not constrain code that appends forty intermediate observations afterward. Apply the final-selection boundary in code and test empty synthesis explicitly.
+- Grouping is not approval. Preserve original evidence and put optional profile selection apart from daily evidence storage. Batch review needs an exact snapshot check, not a blanket approve-all operation.
+
+## Validate the actionable condition, not just a lifecycle event name
+
+- A permission hook can occur during automatic review or child-agent work. Its name alone does not prove the user must reply. Without authoritative ownership/outcome fields, keep a neutral state rather than inventing one.
+- Task notifications need state-episode identity and a final check after asynchronous speech setup. Processing task state after awaited hardware delivery can also reorder events. Synthetic rapid transitions and delayed adapters catch races that steady-state tests miss.
+
+## Major runtime upgrades require actual API-contract probes, not only synchronous mocks
+
+- T66 upgraded Electron 36 to 44 while clipboard consumers still assumed synchronous reads/writes. KEY4 compared a Promise to a string, reporting failure even when text was written. Voice paste raced write completion and voice-edit called removed format methods. Earlier unit tests mocked the old contract and passed.
+- Audit every call site of changed runtime APIs; test delayed/rejected operations, and run the real packaged runtime with isolated userData before release. A matching ASAR and green mocked tests do not establish desktop integration correctness.
+- Electron 44 may return an empty ClipboardItem for an empty clipboard. Skip zero-type entries when materializing snapshots; constructing a zero-type ClipboardItem throws. Preserve all exposed non-empty MIME payloads and do not log clipboard contents.
+
+## An installed copy is evidence and runtime output, not the development source
+
+- A stale Electron build with the same app identity can open the current retained profile and persist older defaults even when the installed release itself was healthy. Verify branch, HEAD and build ID before launch; do not identify “newest” by directory name alone.
+- Repair the canonical source, run regression and package from that exact tree. Patch an installed ASAR only as an explicitly labelled emergency recovery with a backup, never as the source of future releases.
+- Keep credentials and renderer preferences as independent evidence. A secure-store “configured” status can safely repair a lost provider selector, but must not reveal the key, manufacture credentials or override an explicit provider.
+- Package checks that assert a release build ID must advance with the release; a source build, exact ASAR comparison and runtime smoke are separate gates.
+
+## Storage acceptance, summary coverage and upgrade tests are independent
+
+- A gateway receipt is not a completed storage receipt. Query its status before describing data as sealed or allowing remote-protected retention cleanup.
+- A completed day does not prove every source record was summarized: disabled sources need a per-record coverage guard, not just a day-level join.
+- Per-row retries multiply offline work. Persist shared backoff across restart, while keeping manual retries idempotent and accepted submissions non-replayable.
+- Protect encrypted configuration from partial writes using flush plus same-directory atomic replacement; simulated disk/write errors must leave the previous ciphertext intact.
+- A successful JavaScript suite does not verify an Electron runtime upgrade. Test real renderer/video decoding, SQLite, encrypted storage, native module loading and the exact packaged files separately.
+
 ## A task turn, daily synthesis and remote receipt need distinct evidence
 
 - Codex Stop only proves that a response turn ended. Treating it as task completion creates false speech and motion even while other work continues.

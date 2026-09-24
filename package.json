@@ -1,6 +1,7 @@
 {
   "name": "deskmate",
-  "version": "0.1.0",
+  "version": "0.1.7",
+  "license": "SEE LICENSE IN LICENSE",
   "description": "DeskMate Windows AI voice input and desktop companion",
   "author": "zuming58",
   "repository": {
@@ -11,7 +12,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "allowScripts": {
-    "electron@36.9.5": true,
+    "electron@44.4.3": true,
     "electron-winstaller@5.4.0": true,
     "esbuild@0.25.12": true
   },
@@ -28,19 +29,19 @@
     "test:sites": "node --test tests/sites-worker.test.mjs"
   },
   "dependencies": {
-    "@tabler/icons-react": "^3.46.0",
-    "@vitejs/plugin-react": "5.0.4",
     "pinyin-pro": "3.29.3",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
     "sherpa-onnx-node": "1.13.7",
-    "vite": "6.4.2",
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@tabler/icons-react": "^3.46.0",
+    "@vitejs/plugin-react": "5.0.4",
     "concurrently": "^9.2.0",
-    "electron": "^36.4.0",
+    "electron": "44.4.3",
     "electron-builder": "^26.0.12",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.3",
     "wait-on": "^8.0.3"
   },
   "build": {
@@ -52,6 +53,9 @@
       "package.json"
     ],
     "extraResources": [
+      { "from": "LICENSE", "to": "LICENSE.txt" },
+      { "from": "THIRD_PARTY_NOTICES.md", "to": "THIRD_PARTY_NOTICES.md" },
+      { "from": "resources/licenses", "to": "licenses", "filter": ["**/*"] },
       {
         "from": "native/DeskMate.InputBridge/publish",
         "to": "input-bridge",
@@ -91,10 +95,17 @@
       "icon": "electron/assets/deskmate-dm.ico"
     },
     "nsis": {
+      "license": "LICENSE",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "DeskMate-${version}-beta-setup.${ext}"
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeskMate",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": ["zh_CN"],
+      "artifactName": "DeskMate-${version}-setup.${ext}"
     }
   }
 }

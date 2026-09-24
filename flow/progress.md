@@ -1,5 +1,128 @@
 # Progress log
 
+# 2026-09-24 — T72 社区发布准备：可选扩展默认关闭、个人资料与许可边界
+
+- role：Windows 发布工作机；canonical source `F:\Codex\deskmate\build-t10dc-work`；branch `codex/t72-community-release`；base/本条前 HEAD `95b8dafb29a7048661bbf1e220b430f9e1a07692`。用户授权公开脱敏源码和安装包、汇总到 main；保留此前 T66～T71 工作，不从旧外层工作树打包，不改 D 安装版或实际个人数据。
+- 0.1.7 / `t72-community-release`：新个人资料称呼小明，年龄/职业/背景为空；已有用户资料优先。小岚为新陪伴默认名称。小智云台新安装默认关闭，已有明确选择保留。KnowledgeOS 可见总开关同时控制检索/同步，默认关闭；禁用拦截新请求、取消在途 adapter、停止批次后续投递。已发送内容不能撤回。本地 SQLite/Markdown 摘要与长期记忆不按原文保留天数删除。
+- 用户选择个人非商业免费使用、禁止未经许可修改/套壳/商用；新增根 LICENSE、安装许可页、随包许可和第三方 notices。属于源码可查看，不宣称 OSI 开源；第三方许可与 GitHub 平台权限不被覆盖。公开说明 README、docs/setup/community-release.md、docs/releases/0.1.7.md；私人口播稿保留本地并忽略，不发布真实配置、记忆、录音和密钥。
+- Gitleaks 8.30.1 初查全部 509 个可达历史提交的 3 个结果，确认为公开协议常量/公开来源标识，仅加入精确指纹排除。暂存扫描另发现一条人工测试假密钥，已改为运行时生成的同值 fixture，不新增排除；复扫无命中。扫描不能证明所有历史隐私绝对不存在，不重写或强推已有公开历史。
+- 当前验证：新增相关组合 43/43；生产 Vite 构建及 Release Windows 输入桥成功。完整 933 项首轮 932 通过、1 项 Vite SSR fetchModule 60 秒超时；独立首屏复测、生产界面、最终 NSIS/ASAR 检查仍在进行，暂不声明全量通过或发布完成。未调用实际付费模型、实际麦克风、硬件、夜间任务或 KnowledgeOS 历史同步。
+- 分支审计：104 refs 已在主产品历史，13 个侧分支是被后续取代或等价拣选的旧实现；证据见 docs/reviews/t72-public-release-audit.md。仍需按审计结果汇总历史，保留当前产品树，不删除分支/工作树。下一步完成独立验证与包核验，记录实际 SHA256、提交/合并/远端回执后发布 Windows；Mac 仍需原生适配和真机验证，未提供伪兼容包。
+
+# 2026-09-24 — T71 已完成历史自动整理，D 盘 0.1.6 已更新并启动
+
+- 全部 **430 条原始候选**已处理，当前 **159 条自动整理长期记忆、136 条流水归档、35 条等价候选合并、36 组需核对问题、0 条待自动处理**。数量分别是记忆条数/原始候选条数/问题组数，不能简单相加。开启的后续自动整理已持久化；无新候选不调用模型；有限失败退避，已完成批次不重复处理。用户可暂停、纠正、查看来源、归档疑问或明确解决冲突，不再逐条确认全部原始候选。
+- 最后一轮模型复核输出不合法，仅余13条未提交；有界重试2次模型调用后完成，没有直接绕过核验。最终维护报告 OS Temp `deskmate-curation-t71-last.json` 为 finished，原记录逐项哈希比对通过，SQLite integrity ok。最新备份 `maintenance-backups/t71-1790213490750`；中间备份 `t71-1790213313418` 含语义数字门修正前状态；首轮前完整备份仍为 `t71-1790212383871`。当前1491条回合保留（较首轮1489条增加的2条来自用户重开软件期间），原候选不改写，摘要、日终及outbox完全保留。只读复核待同步0；旧20份KnowledgeOS回执异常仍未在本轮解决，不等同远端丢失。
+- 生产前端、Release InputBridge、NSIS 构建均通过。全量 **927/927**；数字语义门/批量调整后最终相关 **36/36**。最终 ASAR 精确资源校验、T71 合成自动整理/来源/检索/无重复费用、T70投递隔离、T69通知、T58音乐生命周期均通过。实际Electron44隔离ASAR运行时 SQLite/safeStorage/Sherpa通过；最终包内UI1440/1024授权、整理、问题二次确认、暂停与来源入口通过，截图 OS Temp `deskmate-t71-ui-Qxbw3i`。不声称真实语音、舵机或今晚定时验收。
+- 按既有明确授权用 `/S /D=D:\DeskMate` 原位更新，安装器退出0；D安装EXE/ASAR/InputBridge与F产物哈希全部一致，版本0.1.6，构建`t71-automatic-memory-curation`。已启动 `D:\DeskMate\DeskMate.exe` PID28192，桌面公共快捷方式仍指向D路径。未卸载、清理用户设置或删除历史工程。
+- 交付 `release-t71/DeskMate-0.1.6-setup.exe`，211531370字节，SHA256 `F93E67E9F3E969EA49312072997CF34D2724FFF81F86BBA9DD4FE69C8CF7E5B2`；EXE `DB1AB3E40BB4C09ABDA41EC7FFC96F14DE81E8CFE012A9193601C2C3961D3530`；ASAR `6993F48188618BCE34B11FA87EEB3A7BDE160FA6DBE5C40BD8C24D77AF10D515`；InputBridge `9FFEA40FADE3622AEF75FE65B1F59B12CB675DEB0034A46C2A5DD28E60D119B3`。签名状态NotSigned，不能称签名正式发行。
+- 下一步用户在“记忆管理→长期记忆”抽看自动表述；“待核对”只处理36组具体疑问。不需把原始归档再次批准。模型整理不保证绝无错误，保留纠正与来源入口；不把本次本地整理完成冒称KnowledgeOS正式发布/共享。
+
+# 2026-09-24 — T71 自动记忆整理实施中，真实历史已处理 320 条，安装版待更新
+
+- 用户明确同意当前文本模型处理历史 430 条与后续新增内容，已告知个人信息与模型费用。此授权仅针对 DeskMate 记忆整理，不扩展 KnowledgeOS 正式知识、共享或其它项目采集。当前 KnowledgeOS MCP 聚焦查询返回 service_starting，未编造检索结论。
+- canonical `F:\Codex\deskmate\build-t10dc-work`，分支 `codex/t65-task-status-journal-recovery`、HEAD `95b8daf`；保留 T66～T70 既有修改。实现 `memory-curation*.cjs`、分层 UI、持久化授权/暂停、24 条有界批处理、引用校验+独立语义核验、去重归档/具体疑问、来源追溯、备份兼容与恢复撤销云处理授权。原始候选不改写；自动记忆为独立 accepted 行，不伪称用户确认。
+- 首轮真实模型空归档标签、非精确引用导致整批拒收，原数据均未变；改为中性归档标签及对有问题的单组保持 review。成功处理 320 条时一次 JSON 非法停止，保留检查点：87 条自动记忆、129 条归档/合并、48 组问题、110 条待处理。48 中 28 组只因简单数字字符串校验造成，已修订为独立语义复核（保留否定/数字/主体检查），准备将仅此程序原因的 review 重新交给模型；不直接批准。最后维护尝试检测 app 重新运行，安全退出，未继续并发修改。
+- 一致备份在真实 userData `maintenance-backups/t71-1790212383871`（首轮前），后续每次维护另建快照；有效处理前快照 `t71-1790212674290`。OS Temp 脱敏报告 `deskmate-curation-t71-final.json` 记录 partial，SQLite integrity ok，原始 430 行、1489 回合、每日摘要/日终/投递队列逐行哈希保持一致。报告不含正文/密钥，未进入仓库。
+- 专项 21/21、备份 15/15通过；全量第一次 922/926（新增状态断言、SDK 沙箱访问、Vite 传输超时、worker 测试清理竞态），修正测试状态和 await 清理并在正常权限复跑 **927/927 通过**。之后数字语义门与24条批量微调专项通过。生产 React/Electron 隔离 UI 在1440/1024通过授权、自动记住、具体疑问二次确认、暂停、来源/原文与无横向溢出；未访问真实网络/设备。
+- 0.1.6 / `t71-automatic-memory-curation` 正在生成 `release-t71`；尚未声称 D 安装版已更新。下一步完成剩余与程序性误拦复核、最终 ASAR/native/UI验包、更新D并重启，记录真实最终统计及备份比对。旧20份KnowledgeOS回执异常仍属T70已记录边界，本轮未改其封存结论。
+
+# 2026-09-24 — T70 记忆队列与候选资料修复，待同步归零，D 盘 0.1.5 已更新并启动
+
+- 按用户明确授权以 `/S /D=D:\DeskMate` 原位安装，安装器退出 0；未卸载或清理设置/记录。安装后 EXE、ASAR、InputBridge 与下列最终构建 SHA256 逐一相同，ProductVersion=0.1.5.0。2026-09-24 08:32（本机时间）从 `D:\DeskMate\DeskMate.exe` 启动 PID 36680，Responding=true、主窗口句柄非零；检查到的产品/输入桥进程全部来自 D 安装目录，不是 F 旧工作树。桌面图标位于 Public Desktop，目标已单独核对。不把启动和隔离探针等同于真实语音/硬件验收。
+- 当前代码分支仍为 `codex/t65-task-status-journal-recovery`，已提交基线 `95b8dafb29a7048661bbf1e220b430f9e1a07692`；保留所有既有未提交工作，本轮未提交/推送。最终 git diff --check 通过。下一步用户查看记忆管理：此次 10 份补传全部 raw_sealed、pendingSync=0；430 原始候选本地分为 163 工作资料/267 可选确认，未外发模型/自动批准。旧 20 份受理回执 resource_not_found 仍待 KnowledgeOS 侧核对，不能称为已封存或正文已丢；不阻塞新日记。旧 T04～T09 目录未删除。
+- 最终交付使用 `release-t70-final/DeskMate-0.1.5-setup.exe`（211523794 字节），不是未完成的 `release-t70`。首轮构建持续枚举/写入约 2.6 万资源（其中两套 Tabler 共 23733 个源文件），经核对主进程无消费者，停止精确匹配的本次 builder；把已打入 renderer bundle 的 React/Tabler/Vite 改为 devDependencies。离线重算锁文件，全部 package 版本、resolved 和 integrity 均保持不变。D174；未删旧构建或用户目录。
+- 最终 NSIS 构建退出 0；安装器 SHA256 `E95572869140DDBEFC3B21CA4F6C7B58E64D23D0174BADC23213386981B07F1B`，ASAR `9D93C0A3686B32C036AA13B8848DBE7BF77C19E0B37159E8B1100E5CCE07CA75`，EXE `C738642ACA040339D757D4157E1BC46FC3985D1A9EC3E5DE9A87FDFA339EBB95`，输入桥 `9FFEA40FADE3622AEF75FE65B1F59B12CB675DEB0034A46C2A5DD28E60D119B3`。Authenticode NotSigned，不能称为已签名发布。最终 ASAR 与产品源码/前端/视频/原生桥精确一致；T70/T69/T53/T58 包内行为全部通过。
+- 最终包隔离 UI 通过本地分类、模型归类取消（modelRequests=0）、两步选中确认、原始纠正入口、助手逐句与两种窗口布局，截图在 OS Temp `deskmate-t70-ui-hfGdJM`。首轮 capturePage 报 UnknownVizError；探针增加阶段记录和最多 3 次截图重试后完整通过，无产品代码绕过。原生探针确认 Electron 44.4.3、Node 24.21.0、SQLite、safeStorage 和 Sherpa 加载成功。
+- 依赖分类后的全量初跑为 904/905（单个 SSR fetchModule 超时），独立复测仍超时。实测 resolveConfig 证明空 clientFiles 数组被 Vite 合并回 `./src/main.jsx`，未真正关闭预热。仅修测试：显式复用产品插件、禁用二次 configFile 合并、关闭一次性测试文件监听与预热，保留实际 App 首渲染断言。最终全量 **905/905 通过**（73.93 秒）；git diff --check 通过，构建目录被忽略。正在用已校验安装器按用户授权原位更新 D 盘。
+- 用户授权修复记忆，并明确允许备份、补同步、更新 D 盘安装版及重启。所有源码修改在 `F:\Codex\deskmate\build-t10dc-work`，保留 T66～T69 未提交改动；没有改 KnowledgeOS 服务端代码或硬件。当前会话无 KnowledgeOS MCP 工具，改用应用已保存的 DeskMate 身份与官方 adapter 核验。
+- 本次修复期间 KnowledgeOS 已在运行，健康检查成功。旧 30 份 accepted 回执中 10 份 completed/raw_sealed，20 份 resource_not_found。客户端把 snake_case 错误码丢成通用 request-failed，并在第一条旧回执失败后全局退避，导致 10 份新投递饥饿。修复错误码规范化、单条回执错误隔离及强制轮询公平性；保留连接/认证失败退避、原 payload/幂等键、真实封存才可清理的边界。
+- 已停止精确匹配 D 安装路径的 DeskMate/输入桥，维护脚本先用 VACUUM INTO 创建一致 SQLite 备份，再补传 9/19～9/23 的 work/personal 共 10 份；新增 10 份全部确认 raw_sealed。实测本地总计 sealed=20、accepted 但回执异常=20、failed=0、pendingSync=0。旧 20 份本地日记保留，不假称远端成功、不擅自历史重传；仍需 KnowledgeOS 侧核对早期回执/归档映射。
+- 候选修复：日终只采纳最终综合最多 10 条唯一候选，不再重新拼接分段提取碎片。新增本地类型分组、可选模型主题归类和指纹绑定的选择式批量确认；不自动批准、删原文或把推断当画像。分组缓存可重建；纠正后失效，逐条纠正/删除入口保留。顺带修复记忆逐句页缺少 state 解构的问题。合同 `docs/contracts/t70-memory-queue-review-v1.md`，D173。
+- 首次拟运行模型归类被安全审核阻止（430 条可能含个人/敏感信息的批量外发尚未单独确认），该命令未执行。已向用户明确说明并提问；截至本条未收到这项答复。后续仅执行 `--local-only --organize-local`：零外发、430 条原文与 0 条 accepted 均不变，163 条普通工作资料、267 条可选确认资料，9 个类型分组。不是完成语义去重，也不是 267 个必须处理的待办。
+- 两次一致备份在实际 userData 的 `maintenance-backups/t70-1790206276226`（同步前）和 `t70-1790206522063`（本地分组前）；脱敏报告位于 OS Temp 的 `deskmate-memory-repair-t70.json`、`deskmate-memory-local-t70.json`。数据/备份/报告未进入仓库。
+- 用户另问截图旧目录能否删除：只核对 T04～T09 圈定工作树，未删除。`deskmate-t05-audit3`、`deskmate-t08-desktop-hil` 有未提交源码，`deskmate-t05-audit` 有未跟踪文件，其余工作树 clean 不等于已证明无独有提交/忽略资产。当前 F 主工作目录、D 安装版、固件备份不动；清理需另行确认并保留独有修改。
+- 初轮专项 31/31 通过；首次完整 904 项中 901 通过，2 处旧文案/状态精确断言已更新，1 处 Vite SSR 模块传输因并发超时，相关 29 项独立复测全通过。再次全量限并发运行中。隔离 Electron 44 合成 UI 测试已通过本地分类、无授权不发模型、两步选择确认、原始纠正入口、助手逐句记录与 1440/1024 布局，无网络/硬件调用。首个带 hash loadFile 探针失败，先加载入口再切页后通过。0.1.5 / `t70-memory-queue-review` NSIS 打包中，尚未声称 D 安装版已更新。
+- 后续验证：生产前端构建成功；全量 `node --test --test-concurrency=4 tests/*.test.mjs` **904/904 通过**。SQLite `integrity_check` 当前库与同步前备份均为 ok；逐项比较 conversation_turns、memory_candidates、memory_daily_journals、daily_summaries 完全一致，outbox 的 payload 与 idempotency_key 全部一致。旧回执异常精确涉及 9/1、2、3、4、7、8、10、11、12、13 的工作/个人日记，共 20 份；不等于已证明远端正文丢失。最终安装包仍在生成。
+
+# 2026-09-24 — 430 条候选与 10 份待同步的只读排查
+
+- 用户询问记忆是否正常，质疑 430 条逐项确认负担，并指出 10 份待同步。本轮仅诊断：使用 SQLite readOnly 查询数量、类型、日期、投递状态，未输出记忆正文，未批准/删除候选、生成摘要、重投日记、改配置或启动 KnowledgeOS。
+- 本地确有 430 条 pending 候选、0 条 accepted/rejected；包含事实、偏好、人物、项目、决定、目标、约束，不是 430 个待办。精确 summary 重复组为 0（不代表无语义重复）。源码中日终综合候选又与分段复核候选合并后截到 40 条，均写 pending；跨日 ID 包含 day/inputDigest，不做跨日语义归并。长期已确认检索仅 accepted；原文、当天上下文和历史日记证据仍可按既有规则使用，不等同于完全没有记忆。全量逐条人工审核是当前使用负担，未擅自绕过审核边界。
+- 本地日终正常完成：9/21 23:01:06（10 条）、9/22 23:06:59（237 条）、9/23 23:01:55（215 条）。待同步 10 份精确为 9/19～9/23 每天 work/personal 各一份：9/19～20 的 4 份 failed/knowledgeos-adapter-exited，9/21～23 的 6 份 pending/attempts=0。候选审核不阻塞日记投递，两者是独立流程。
+- 另有 30 份 9/1～9/18 的本地 accepted 记录，尚无 journal-sync:sealed 元数据，不能将 UI 的“封存 0”解释成远端全丢，也不能宣称 30 份均封存。客户端先核回执、调用失败就退避返回，连接失败会阻塞后续新投递。现有 app 内只读健康审计返回 configured=true、syncEnabled=true、knowledgeos-adapter-exited；未发现名称匹配 knowledgeos 的运行进程。当前会话无 KnowledgeOS MCP 检索工具，不编造查询结果；本轮依据本地证据，未确认历史每次失败均由退出服务造成。
+- 审计由现有 `scripts/audit-memory-health.cjs` 执行，输出在 OS Temp 的 `deskmate-memory-audit-20260924.json`，只读取已配置连接并检查健康/已有回执，不提交内容；工具进程已退出。后续建议待授权：恢复/核验 KnowledgeOS 连接及旧回执，再按原幂等键补传；重设计候选分级、归并与批量复核，普通日常证据不逐条打扰，冲突/不确定/敏感项集中确认。不能把全部批准当作修复。
+
+# 2026-09-23 — 按用户授权更新 D 盘 T69 安装版并重新启动
+
+- 用户明确要求退出后更新 D 盘并启动。安装前确认无 DeskMate/InputBridge 进程，原安装版本 0.1.3.0；核验 `release-t69/DeskMate-0.1.4-setup.exe` SHA256 与上一条交付一致，以 `/S /D=D:\DeskMate` 原位升级，安装器退出码 0。未卸载、清理或手动改写用户设置/记录，未启动其他项目服务。
+- 安装后的 `DeskMate.exe`、`resources/app.asar`、`resources/input-bridge/DeskMate.InputBridge.exe` 与 F 盘 T69 构建逐一哈希相同。EXE SHA256 `0C149304E239AB90F85D55E1EE5FA12E8DBA3F6222B70422D3D739253F547042`，ASAR `B38634348E9D6BBCCDA0A7B6A977E62B4CB4AE8A55A0B3E6D0E6369F10CCF879`，输入桥 `9FFEA40FADE3622AEF75FE65B1F59B12CB675DEB0034A46C2A5DD28E60D119B3`。版本 0.1.4.0；桌面快捷方式仍指向 `D:\DeskMate\DeskMate.exe`。
+- 已从 D 安装目录启动主进程 PID 37124，Responding=true、窗口句柄非零；所有检查到的 DeskMate 子进程及输入桥均来自 D 安装目录，没有启动旧 F 工作树。未额外发送测试语音或硬件动作。下一步用户正常运行多任务观察误报是否消失，并验证真正提问时仍能提醒；启动与包一致性不等于真实多任务验收。
+
+# 2026-09-23 — T69 任务需要回复误报修复，0.1.4 安装包已验证、待用户决定更新
+
+- 用户授权修复。所有产品修改仍在 `F:\Codex\deskmate\build-t10dc-work`，分支 `codex/t65-task-status-journal-recovery`、已提交基线 `95b8daf`；保留 T66/T67/T68 既有未提交改动。此次不改全局 Codex Hook 配置、不读取其他项目正文、不调用模型、不操作硬件。KnowledgeOS 聚焦检索无匹配，依据本地源码与合成测试。
+- PermissionRequest 改为中性的 working/权限检查，不再声称必须人工回复；旧 mapped sender 同样归一化。保留明确阻塞式提问、主动 waiting 报告，以及真实完成/失败；不按项目还有其他任务工作就屏蔽真实提问。现有 Hook 不提供父子角色或审批结果，因此不宣称已实现父子任务识别或所有审批提醒；Codex 原生审批提示不受影响。
+- 同任务同类候选 15 秒去重，通知单独等待 300 毫秒复核（不改变语音 0.5 秒收尾）；内部状态片段 revision 防止旧通知复活。状态登记移到 await 硬件交付之前，语音连接/音量准备完成后、送 TTS 前再检查任务与开关。过期独立播报关闭连接，对话内过期播报恢复音量与聆听；已发送 TTS 的话语不强行中断。诊断新增三个有界计数，不暴露任务标识/正文，候选数不代表播报成功数。
+- 验证：第一轮 58 项相关测试通过；首次完整运行发现两处旧版本断言与 Windows SDK 沙箱权限限制，修正断言并正常权限重跑，`npm test` 891/891 通过。之后新增主进程顺序/复核向量，T69 专项 12/12，包含版本/诊断的组合回归 31/31 通过。`git diff --check`、主进程语法检查通过；无真实语音/设备验收声明。
+- 版本 0.1.4 / `t69-task-notification-guard`，合同 `docs/contracts/t69-task-notification-guard-v1.md`，决策 D172。Release InputBridge、生产前端与 NSIS 构建退出 0；依赖整理/资源写入较慢但正常完成。最终 ASAR 源码/视频/界面/native 精确一致性通过，包内 T69 权限静默、真实提问、状态复核/语音准备撤销行为通过，既有 T53 提醒/插话和 T58 音乐生命周期验证通过；未用安装包启动真实产品做设备/API 测试。
+- 交付 `release-t69/DeskMate-0.1.4-setup.exe`，224482872 字节，SHA256 `622E45DA01F9B5BA4DF04AEB57D27FF5D4B9245DA27052AD64A471A169457239`；ASAR SHA256 `B38634348E9D6BBCCDA0A7B6A977E62B4CB4AE8A55A0B3E6D0E6369F10CCF879`。安装器 Authenticode 为 NotSigned，不能称为签名发行版。打包完成后再次精确资源检查通过。
+- 尚未更新或重启 `D:\DeskMate`，异步询问“更新并重启/先生成安装包”未收到选择。原设置、数据、运行进程均未改动；旧安装版仍可能误报，不能把源码通过等同于已生效。下一步按用户选择用本安装器更新 D 安装版并核对哈希，再观察实际多任务执行与真实提问；无需修改 Codex 模型或子 Agent 设置。
+
+# 2026-09-23 — Codex 项目需要回复误报的只读诊断
+
+- 用户反馈 KnowledgeOS 项目持续工作却反复播报需要回复，怀疑 Astra 多子 Agent。只诊断，未改产品代码、Hook 注册、配置或安装版，未重启服务。当前诊断 2026-09-23T06:58:00Z 为 T68/0.1.3，任务接收端 listening、保留 8 条任务、播报开启；最近设备状态 working 已确认。该全局状态不能单独证明某个具体任务有无待答问题。安装 ASAR 与 T68 交付哈希相同，现有全局 Hook helper 与源码生成内容一致，排除旧安装版/旧 helper 偏差。
+- 已证实代码缺陷：`codex-hook-state.cjs` 无条件将 PermissionRequest 映射 waiting；`codex-task-brief.cjs` 每次状态变化进入 waiting 就生成“项目的一个任务需要你回复”，没有核验权限请求是否仍悬而未决、是否交给人工。虽有 throttleMs/lastAnnouncementAt 字段，播报条件没有使用冷却间隔。`main.cjs` 立即提交播报，不在 TTS 启动前重验原任务是否恢复 working。
+- 层级缺口：Hook v2 仅传 event/toolName/taskKey/taskLabel，无父任务、子 Agent 或人工介入状态；catalog 只补项目名称。收到的每个 session 独立入表，子 Agent 若发出事件会与同项目任务共享播报名称，无法核实其等待是否需要用户处理。不能仅凭当前诊断断定这次每条误报来自哪个 Agent，也不能把模型选择判为根因。
+- 用内存实例、合成身份执行无 IPC/无硬件复现：PreToolUse→PermissionRequest→PostToolUse→PermissionRequest→PostToolUse 产生两次等待播报，最终仍 working；另一个合成会话进入 waiting 时，即使主会话仍 working 也播报。最近诊断包含 direct/TTS 路径且该次 modelRequests=0，与源码固定通知文案一致，但没有逐条播报事件证据，不把 TTS 次数等同于误报次数。
+- 下一步建议获准后修复：区分真实未解决的人工确认与内部/自动权限流程；依据可靠的父子任务元数据处理子 Agent，不按项目整体仍 running 就压掉真实提问；按请求身份去重并撤销已经恢复的待播通知；增加不含正文/路径的播报原因诊断和异步事件测试。T65 只修 Stop/SessionEnd 的完成误判，这条 waiting 通路此前未覆盖。KnowledgeOS 本轮查询可返回结果，但无相关证据，结论来自本地源码、脱敏诊断和合成复现；未读取其他项目正文。
+
+# 2026-09-22 — DeskMate 大作业录屏口播初稿
+
+- 按用户本次口述编写第一人称演示稿，路径 `docs/product/deskmate-demo-narration.md`，正文约 2900 字，纯口播约 12 分钟，加演示预计约 15 分钟。涵盖第二节课开始构思、时间投入与 Codex 辅助，以及软件各页、实体键/旋钮、三维建模和亚克力外壳；增加可直接说出的演示指令与拍摄提示。优秀作业八篇中六篇按用户口述保留，并提醒发布前核对统计口径，没有外推成训练营总成绩。
+- 使用 humanizer 写作技能，语气按同学间分享处理；不夸张宣称最强模型、零门槛、所有人必定做成、硬件自行从零设计或夜间同步已经成功。KnowledgeOS 按需查询返回 `service_starting`，没有重启服务、写入记忆或更改应用。
+- 核对 T50 自我介绍合同、提示词/场景切换说明及本地进展。录制前仍需实体 KEY4 验收、短时提醒实测、KnowledgeOS 当前服务与回执检查，并遮挡私人内容。此次仅新增产品演示文案与工作记录，没有改代码或安装版；下一步由用户按真实演示结果调整措辞和时长。
+
+# 2026-09-22 — T68 修复 Electron 44 剪贴板异步兼容回归，安装版已更新并重启
+
+- 用户反馈安装版第四键再次按下不能收起，显示“复制失败，页面已保留”。本次诊断 build 为 T67/0.1.2，实际进程来自 `D:\DeskMate`。根因为 T66 升级 Electron 36.9.5→44.4.3 后未迁移剪贴板调用：`readText()` 返回 Promise，旧代码直接与提示词字符串比较必定失败；不是按键配置丢失。当前诊断无剪贴板错误细项，根因由本地类型声明、源码和实际 Electron 44 探针交叉确认。
+- 所有修改在 `F:\Codex\deskmate\build-t10dc-work`（`codex/t65-task-status-journal-recovery`，基线 `95b8daf`）完成，保留既有未提交修改；未修改 D 安装包内部文件。新增 `electron/clipboard-access.cjs`，等待写入与精确回读再允许 KEY4 收起；语音输出等待复制成功才粘贴，剪贴板 IPC 不再提前报告成功。语音编辑改为异步 MIME 快照/还原，空剪贴板条目不构造无效 ClipboardItem，失败时不继续编辑。没有改用户提示词、配置、硬件映射或固件。
+- 验证：初次相关测试 67/67，完整 `npm test` 880/880（此轮加载了最初 8 条 T68 向量）；之后补充空剪贴板向量的 T68 专项 9/9。Vite 生产构建、Release InputBridge 与语法检查通过。实际 Electron 44.4.3 隔离探针已通过真实系统剪贴板、多行文字、文本/HTML 快照恢复与 KEY4 控制器复制/收起流程；使用最终 ASAR 再次运行也通过。探针不加载产品 main、不启硬件/云服务，运行前后保存还原剪贴板。NSIS 打包、包内源码/媒体/native 一致性校验通过；不把模拟焦点恢复当实体键验收。
+- 用户已确认“更新并重启，方便马上测试”。已生成并安装 `release-t68/DeskMate-0.1.3-setup.exe`，224482128 字节，SHA256 `9CECBE117A00324124D833DBC38FFA4903FD9AA465014BA9DE9C01E884600BEF`，build ID `t68-async-clipboard`。安装器退出码 0，未签名。已安装 ASAR SHA256 `216454C7F19D8789CB4AF3484AE8344D28FC7281B8368A9A6E149449236C8276`；EXE、ASAR、InputBridge 与 `release-t68/win-unpacked` 逐一哈希相同。保留原 appId/userData，无配置迁移、卸载或数据清理。桌面快捷方式仍指向 `D:\DeskMate\DeskMate.exe`，已从该路径启动 PID 39632，产品版本 0.1.3.0。上一版回退安装器仍保留在 `release-t67`。
+- 下一步请用户从原工作窗口测试 KEY4 打开→KEY4 复制并收起→KEY8/粘贴确认所选提示词，以及一次普通语音输入。实体按键与真实目标窗口焦点恢复尚待用户确认。合同 `docs/contracts/t68-async-clipboard-v1.md`，决策 D171。
+
+# 2026-09-21 — T67 从 F 盘最终源码修复语音配置、移除原生菜单并更新安装版
+
+- 纠正发布来源：确认完整 T66 工作树为 `F:\Codex\deskmate\build-t10dc-work`，分支 `codex/t65-task-status-journal-recovery`、已提交基线 `95b8daf`，其未提交 T66 审计改动全部保留；仓库根部旧 T07 工程不是发布来源。`D:\DeskMate` 仅是安装输出。先前对安装 ASAR 的临时菜单补丁已有 `D:\DeskMate-backups\t66-menu-removal-20260921-1454`，用户配置备份仍在 `D:\DeskMate-backups\voice-config-repair-20260921-150519`，未反向并入源码。
+- 根因：误启动的旧工程与正式版共用 `deskmate` profile，旧 store 不认识 schema 15，回退默认后把 renderer 的 `sttMode` 持久化成 `unconfigured`；麦克风电平与 InputBridge 正常，加密百炼凭据文件仍存在，因此故障是转写适配器选择被清空，不是麦克风录音链或凭据丢失。
+- T67 修复：启动时仅当 renderer 精确为 `unconfigured` 且 main-process 加密凭据状态明确 `configured=true` 时恢复 `bailian`，保留麦克风及其他设置，清空不用的 endpoint，并将 STT 诊断置为 `qwen3-asr-flash-realtime/pending`；不读取/暴露密钥，不伪造凭据，不覆盖显式 mock/http/bailian。窗口使用 `Menu.setApplicationMenu(null)`、`autoHideMenuBar` 和 `setMenu(null)` 移除无用原生菜单，托盘菜单保留。版本 0.1.2，build ID `t67-voice-config-recovery`。合同与决策：`docs/contracts/t67-voice-config-recovery-v1.md`、D170。
+- 验证：`npm ci --include=dev --offline --no-audit --no-fund` 成功；专项 4/4；完整 `npm test` 872/872；Release InputBridge、Vite 与 `npm run build:desktop` 包装主体成功，包资源校验通过。首屏 SSR 烟测禁用无关 dev warmup 后通过，未改变生产渲染。`release-t67` 的最终 ASAR、DeskMate EXE、InputBridge 与安装后的三个文件 SHA256 逐一相同；保留的 profile 最新 LevelDB 记录已出现 `sttMode=bailian` 与正确 provider，证明启动自恢复已落盘。未调用真实转写 API、未读取密钥、未写固件，也未把自动测试冒充真实麦克风验收。
+- 交付并安装：`release-t67/DeskMate-0.1.2-setup.exe`，224481662 字节，SHA256 `013C067D49D041EDAE0601EB8F5EB41955BB8A83024D3025FEE1C540D3E0E5EA`。NSIS 静默更新到 `D:\DeskMate` 退出码 0，正常保留 AppData；公共桌面快捷方式精确指向 `D:\DeskMate\DeskMate.exe`。安装版产品版本 0.1.2，ASAR SHA256 `4A57F0DF091BC91DFAA967A16E86CB98A4A61D0DB3D64B5B91E633FE6047F624`；Installer 与 EXE 均 `NotSigned`，不能称为签名发行版。
+- 已启动安装版供用户测试：主 PID 44812、窗口标题 `DeskMate · AI 工作台伙伴`、Responding=true；观察到的 Electron 子进程与 InputBridge 均来自 `D:\DeskMate`，没有旧 F 盘工程混跑。下一步只需用户做一次真实语音输入，确认页面出现实时文字和最终转写；若失败，导出新的脱敏诊断继续沿 T67 安装版排查。
+
+# 2026-09-21 — T66 发布前审计、记忆投递加固与 Windows 安装包
+
+- 用户授权全面代码审计、复核最近两日记忆写入，能修复的问题自行修复，并交付不依赖 Codex 启动的可安装软件。本轮以 `codex/t65-task-status-journal-recovery`、已提交 HEAD `95b8daf` 为基线；保留此前启动记录，未启动额外任务或修改硬件。
+- 只读事实：9/19 工作日 38 条听写已于 9/20 00:01:11 完成本地总结；9/20 工作日 7 条于当晚 23:06:25 完成，23:00:14 自动触发。两日 work/personal 投递均失败且没有回执 ID；初查重试次数分别为每份 152 / 48。KnowledgeOS 未发现运行中的服务，旧、新运行时使用现有加密身份进行 health 检查都返回 `knowledgeos-adapter-exited`。**本地已总结不等于两晚远端已写入**。已询问是否启动 KnowledgeOS，尚未得到答复，因此未启动、未代写总结或声称补传成功。
+- 修复：持久化共享 5/15/30/60 分钟离线退避，首次传输失败停止本批，手动可重试原 payload/幂等键；已受理只查询回执、不重投，只有 completed/raw_sealed 记为封存。两处保留清理同时要求逐条 summary_day 覆盖和必要的双类封存；未真实删除数据。MCP 等 initialize 完成并发送 initialized 后再调用工具。三类加密 AI 设置改为 flush + 原子替换；空闲扫描不再无变化写 revision。UI 增加真实投递/回执状态及备份不含风格媒体/外部音乐的说明。
+- 升级：Electron 36.9.5 → 44.4.3、Vite 6.4.3 和相关锁定依赖；最终 npm audit 为 0 条已知漏洞。应用版本 0.1.1，build ID `t66-release-audit`，保留既有 appId 和用户数据路径。中文 NSIS 安装向导为当前用户安装，创建桌面/开始菜单快捷方式，正常卸载不删除应用数据。未执行实际安装/卸载；原 T65 仍在运行，安装后首次启动前须从托盘退出旧版。
+- 验证：基线 npm test 860/860，最终 868/868；Release 输入桥构建及无硬件 protocol-self-test 退出 0；全新 MSVC host 构建 EasyInput 17/17、小智 16/16。新版 Electron 的源码/最终 ASAR 数据安全 UI、真实视频解码/状态切换/离页卸载、源码风格映像模拟功能探针通过；源码/ASAR SQLite、safeStorage 往返、sherpa native 加载通过。最终包资源逐字节、T53 提醒/插话、T58 舞蹈生命周期检查通过。未运行 ESP-IDF 构建、真实录音/API、设备动作或固件写入。
+- 交付：`release-t66/DeskMate-0.1.1-setup.exe`，224480909 字节，SHA256 `1A1FBB2B2623B6EA82BB2C4C053916F9C23A93831549972A8DBC89D80A78150D`；已复制到用户桌面同名文件并核对一致。最终 ASAR SHA256 `27887343651FF4C87C8C07B354FDE0C954975F24BAF6D7AEA3DF47ED7E688BB2`。Installer 和 EXE 均 NotSigned，不能称为签名正式发行版。
+- 审计报告：`docs/reviews/t66-release-audit-2026-09-21.md`；D169 与 lessons 同步。无密钥/会话正文/录音/用户数据库/构建产物加入源码；诊断结果和日志仅在 OS Temp。下一步：用户安装并从桌面启动验证版本、一次真实语音和提醒；KnowledgeOS 服务获准启动后核对两日四份 completed/raw_sealed 回执，再观察下一晚 23:00 定时；不把模拟测试或本地完成冒充远端/硬件验收。
+
+# 2026-09-21 — 按用户要求启动 T65
+
+- 启动前未发现 DeskMate 进程，已启动 `release-t65/win-unpacked/DeskMate.exe`；确认主进程 PID 21988、窗口句柄非零、Responding=True，输入桥进程存在。未另行启动 KnowledgeOS；仅验证启动，不代表记忆同步或真机功能验收。
+
+# 2026-09-20 15:42 — 再次按用户要求启动 T65
+
+- 启动前未发现 DeskMate 进程，已启动 `release-t65/win-unpacked/DeskMate.exe`。确认主进程 PID 30780、窗口句柄非零、Responding=True，输入桥进程存在。未启动 KnowledgeOS；本次仅验证软件启动，不代表同步或功能验收。
+
+# 2026-09-20 — 按用户要求启动 T65
+
+- 从 `release-t65/win-unpacked/DeskMate.exe` 启动已修复版本；启动前核对 ASAR 与上条交付哈希一致。
+- 验证主进程 PID 32676，窗口句柄非零，Responding=True，进程路径为 T65。未另行启动 KnowledgeOS，未将本次启动视为记忆同步或真机功能验收；下一步由用户检查界面与功能。
+
 # 2026-09-20 — T65 任务误报与日终恢复修复已打包；按用户要求不启动
 
 - 用户授权修复后，Codex `Stop` 改为本轮空闲、`SessionEnd` 改为会话关闭，两者不再触发任务完成播报/点头；明确任务报告的完成/需要回复/失败仍按原开关处理。旧事件发送者传入 completed 也会按事件重新归类。合同 T65、决策 D168。
@@ -1075,7 +1198,7 @@
 - The user-present diagnostic after voice motion showed a real completed choreography but a frozen realtime capsule. Its bounded counters ended at `ttsStarts=8` / `ttsEnds=7`, proving the configured Doubao path omitted one terminal `tts.end`. Windows implementation `codex/t18-software-closure@dffbd6f7f14f7ad4f2528b0848b38967da654a77` adds a length-bounded trusted-speech watchdog. A missing terminal now abandons only that playback generation, reconnects the provider without replay, increments `trustedSpeechTimeouts` and returns the same companion session to listening instead of remaining in processing.
 - Trusted ownership now begins synchronously when the final ASR text is recognizable as a Codex-status or frozen motion request, before any asynchronous Bridge work. Provider free-chat text and audio are suppressed throughout resolution. With no bounded task report, DeskMate replies that no trustworthy Codex state has arrived; it no longer combines a coarse state with model-authored task names or percentages. Regression includes an attempted `65%` free-chat answer and proves that it contributes zero audible sink chunks.
 - Root cause for the empty task list was outside DeskMate: the seven already installed DeskMate Codex lifecycle handlers were all reported as `untrusted` by Codex, so none could deliver state. Their helper was inspected as the bounded `codex-hook-v2` sender and only those seven DeskMate handler hashes were persisted as trusted; the unrelated EasyInput handlers remain untrusted. Local verification reports seven registrations trusted, helper v2 present and no prompt/content fields in the helper. A fresh Codex turn/task may be required before the currently running Codex desktop process reloads this trust state and emits its first real event.
-- AI Companion now exposes the persisted automatic-context-motion master switch at the top of its overview. Offline wake remains intentionally unimplemented: the saved wake-phrase field is visibly disabled and tells the user to start Companion or use the EasyInput call key. Persona schema v2 adds owner name `祖名`, defaults to a cute/warm desktop work partner with a gentle Taiwan-style tone, and restyles all persona text areas inside the product's rounded panel language. The prompt repeats the non-negotiable no-fabrication and trusted-Codex-only boundaries.
+- AI Companion now exposes the persisted automatic-context-motion master switch at the top of its overview. Offline wake remains intentionally unimplemented: the saved wake-phrase field is visibly disabled and tells the user to start Companion or use the EasyInput call key. Persona schema v2 adds owner name `[redacted for public distribution]`, defaults to a cute/warm desktop work partner with a gentle Taiwan-style tone, and restyles all persona text areas inside the product's rounded panel language. The prompt repeats the non-negotiable no-fabrication and trusted-Codex-only boundaries.
 - Verification: focused `72/72`; full `npm test` `404/404`; `npm run build:desktop`; packaged build id `t16a-trusted-bridge-recovery-hil`; packaged InputBridge protocol self-test `1/1/1`; `git diff --check`. Fresh unpacked artifacts: `DeskMate.exe` 202690560 bytes / SHA-256 `1F90937E81B2E688F295117F54D06F72CE22E71D4895F6A62698BB960CEB79A4`; `app.asar` 113074430 bytes / `AB89736F7C63DD11E166E199A25C58F84BC7E655A7DEC204DF77E8F13E3A28BA`; InputBridge 153525129 bytes / `C4789961E74B1D02461787F8959008EAAA2D5118193322BB2101E389BF53433E`.
 - Classification: `WINDOWS_CODE_BUILD_CONFIRMED / TRUSTED_TTS_TIMEOUT_RECOVERY_TESTED / CODEX_HOOK_TRUST_PERSISTED / REAL_CODEX_EVENT_AND_VOICE_HIL_PENDING / T15C_AND_PERSONA_HIL_PENDING / OFFLINE_WAKE_NOT_IMPLEMENTED / FIRMWARE_UNCHANGED`. No firmware, HID contract, DeskMate Link, device, Flash, NVS, eFuse or servo operation occurred. Next: launch the exact package; verify voice motion returns to listening, the overview switch is visible, and a new Codex turn populates a real task before asking aggregate and named status questions.
 

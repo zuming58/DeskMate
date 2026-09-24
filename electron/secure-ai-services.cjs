@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { writePrivateJson } = require('./atomic-private-json.cjs');
 
 const TEXT_PROVIDERS = new Set(["deepseek", "custom"]);
 const REALTIME_PROVIDERS = new Set(["doubao", "custom"]);
@@ -66,8 +67,7 @@ function createSecureAiServiceStore({ safeStorage, userDataPath }) {
     try { return JSON.parse(fs.readFileSync(filePath, "utf8")); } catch { return { version: 1 }; }
   };
   const write = (value) => {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(value), { encoding: "utf8", mode: 0o600 });
+    writePrivateJson(filePath, value);
   };
   const encrypted = (value) => safeStorage.encryptString(value).toString("base64");
   const decrypted = (value) => safeStorage.decryptString(Buffer.from(value, "base64"));

@@ -92,12 +92,12 @@ class LocalRetention {
       const journals = new Map();
       const accepted = new Map();
       if (memory) {
-        for (const row of memory.prepare("SELECT id, source_event_id AS sourceEventId, created_at AS createdAt, workday_day AS workdayDay FROM conversation_turns").all()) {
+        for (const row of memory.prepare("SELECT id, source_event_id AS sourceEventId, created_at AS createdAt, workday_day AS workdayDay, summary_day AS summaryDay FROM conversation_turns").all()) {
           if (row.sourceEventId) turns.set(row.sourceEventId, row);
         }
         for (const row of memory.prepare("SELECT day, status FROM memory_daily_journals").all()) journals.set(row.day, row.status);
-        for (const row of memory.prepare("SELECT day, memory_class AS memoryClass, status FROM memory_journal_outbox").all()) {
-          if (row.status === "accepted") (accepted.get(row.day) || accepted.set(row.day, new Set()).get(row.day)).add(row.memoryClass);
+        for (const row of memory.prepare("SELECT o.day, o.memory_class AS memoryClass, o.status, m.value AS sealed FROM memory_journal_outbox o LEFT JOIN companion_memory_meta m ON m.key='journal-sync:sealed:' || o.id").all()) {
+          if (row.status === "accepted" && row.sealed > 0) (accepted.get(row.day) || accepted.set(row.day, new Set()).get(row.day)).add(row.memoryClass);
         }
       }
       const readyDay = (day) => {
@@ -112,6 +112,7 @@ class LocalRetention {
         if (!eventId) return "";
         const turn = turns.get(eventId);
         if (!turn) return "memory-link-missing";
+        if (turn.summaryDay !== turn.workdayDay) return 'raw-summary-incomplete';
         return readyDay(turn.workdayDay);
       };
 
@@ -158,8 +159,8 @@ class LocalRetention {
       }
 
       if (memory) {
-        for (const row of memory.prepare("SELECT id, source_event_id AS sourceEventId, created_at AS createdAt, workday_day AS workdayDay FROM conversation_turns WHERE created_at<=?").all(textCutoff)) {
-          const reason = readyDay(row.workdayDay);
+        for (const row of memory.prepare("SELECT id, source_event_id AS sourceEventId, created_at AS createdAt, workday_day AS workdayDay, summary_day AS summaryDay FROM conversation_turns WHERE created_at<=?").all(textCutoff)) {
+          const reason = row.summaryDay !== row.workdayDay ? 'raw-summary-incomplete' : readyDay(row.workdayDay);
           if (reason) { hold(reason); continue; }
           memoryDelete.push(row);
         }

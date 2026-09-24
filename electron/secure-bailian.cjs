@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { writePrivateJson } = require('./atomic-private-json.cjs');
 const { validateApiKey, validateWorkspaceId, DEFAULT_MODEL } = require("./bailian.cjs");
 
 function createSecureBailianStore({ safeStorage, userDataPath }) {
@@ -15,8 +16,7 @@ function createSecureBailianStore({ safeStorage, userDataPath }) {
     if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows 安全存储当前不可用，未保存 API Key");
     const key = validateApiKey(apiKey);
     const value = { version: 1, apiKey: safeStorage.encryptString(key).toString("base64"), workspaceId: validateWorkspaceId(workspaceId), model: DEFAULT_MODEL };
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(value), { encoding: "utf8", mode: 0o600 });
+    writePrivateJson(filePath, value);
     return status();
   };
   const loadSecret = () => {

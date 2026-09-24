@@ -4,7 +4,7 @@
 
 DeskMate 桌面版使用阿里云百炼 `qwen3-asr-flash`：录音停止后，将浏览器生成的 WebM 音频以 Base64 形式发送到百炼 OpenAI 兼容接口，取得文字后进入现有的词库纠错、历史保存和文字输出流程。
 
-旧版“祖名闪电说”的 `fun-asr-realtime`、16 kHz PCM 和右 Alt 全局触发设计仍有参考价值，但它是实时流式链路，不能原样塞进 DeskMate 当前的录后处理流程。后续需要实时字幕或更低延迟时，再升级为 `qwen3-asr-flash-realtime` 或 Qwen Audio 实时模型。
+旧版“旧版语音输入原型”的 `fun-asr-realtime`、16 kHz PCM 和右 Alt 全局触发设计仍有参考价值，但它是实时流式链路，不能原样塞进 DeskMate 当前的录后处理流程。后续需要实时字幕或更低延迟时，再升级为 `qwen3-asr-flash-realtime` 或 Qwen Audio 实时模型。
 
 ## 用户配置
 

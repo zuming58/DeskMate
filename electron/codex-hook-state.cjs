@@ -70,7 +70,9 @@ function mapCodexHookEvent(value = {}) {
   const metadata = taskKey && taskLabel ? { taskKey, taskLabel } : {};
   if (event === "SessionStart" || event === "SessionEnd") return { event, toolName: "", state: "idle", ...metadata };
   if (event === "UserPromptSubmit") return { event, toolName: "", state: "thinking", ...metadata };
-  if (event === "PermissionRequest") return { event, toolName, state: "waiting", ...metadata };
+  // A permission check may be handled automatically. Hook v2 does not prove
+  // that a human has an unresolved approval, so never label it as user input.
+  if (event === "PermissionRequest") return { event, toolName, state: "working", ...metadata };
   if (event === "PreToolUse") return { event, toolName, state: toolName === "request_user_input" ? "waiting" : "working", ...metadata };
   if (event === "PostToolUse") return { event, toolName, state: "working", ...metadata };
   if (event === "Stop") return { event, toolName: "", state: "idle", ...metadata };

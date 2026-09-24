@@ -22,12 +22,12 @@ test("versioned persona persists and safety boundary remains after user persona"
   const store = new CompanionPersonaStore({ userDataPath: directory });
   const saved = store.save({ ownerProfile: { occupation: "独立创作者", currentFocus: "准备一个桌面产品内测", ageStage: "成年", background: "偏好本地优先的数据管理" }, companionProfile: { ageStage: "年轻伙伴" }, role: "我的工作搭档", traits: "直接、耐心", speakingStyle: "先结论", boundaries: "打开应用前先问我" });
   assert.equal(saved.persona.version, 4);
-  assert.equal(saved.persona.ownerName, "祖名");
+  assert.equal(saved.persona.ownerName, "小明");
   const loaded = new CompanionPersonaStore({ userDataPath: directory }).snapshot().persona;
   assert.equal(loaded.role, "我的工作搭档");
   const prompt = buildPersonaInstructions({ name: "小智", persona: loaded });
   assert.match(prompt, /小智/);
-  assert.match(prompt, /用户称呼：祖名/);
+  assert.match(prompt, /用户称呼：小明/);
   assert.match(prompt, /独立创作者/);
   assert.match(prompt, /桌面产品内测/);
   assert.match(prompt, /年龄 \/ 人生阶段":"成年/);

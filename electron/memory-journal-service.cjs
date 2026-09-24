@@ -35,11 +35,17 @@ function chunksOfTurns(turns, maximum = MAX_CHUNK_CHARACTERS) {
   if (current.length) chunks.push(current);
   return chunks;
 }
-function normalizedCandidates(value) {
-  return (Array.isArray(value) ? value : []).slice(0, 40).map((item) => ({
+function normalizedCandidates(value, maximum = 40) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : []).map((item) => ({
     kind: CANDIDATE_KINDS.has(String(item?.kind || "")) ? String(item.kind) : "fact",
     summary: String(item?.summary || "").trim().slice(0, 10000),
-  })).filter((item) => item.summary);
+  })).filter((item) => {
+    if (!item.summary) return false;
+    const key = JSON.stringify([item.kind, item.summary.normalize('NFKC').replace(/\s+/g, ' ').trim()]);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  }).slice(0, maximum);
 }
 
 class MemoryJournalService {
@@ -176,7 +182,9 @@ class MemoryJournalService {
         if (!String(result?.workMarkdown || '').trim() || !String(result?.personalMarkdown || '').trim()) throw new Error('memory-daily-summary-invalid');
         workMarkdown = String(result?.workMarkdown || "").trim().slice(0, 100000) || workMarkdown;
         personalMarkdown = String(result?.personalMarkdown || "").trim().slice(0, 100000) || personalMarkdown;
-        candidates = normalizedCandidates([...(result?.candidates || []), ...extracts.flatMap((item) => item.candidates)]);
+        // The synthesis has already consolidated the raw extracts. Re-appending
+        // them turns temporary observations into a 40-item/day review backlog.
+        candidates = normalizedCandidates(result?.candidates, 10);
       }
       const combinedMarkdown = `## 工作总结\n\n${workMarkdown}\n\n## 使用者长期记忆\n\n${personalMarkdown}`;
       const sourceCounts = Object.fromEntries(["companion", "dictation"].map((source) => [source, turns.filter((turn) => turn.source === source).length]));
@@ -251,22 +259,61 @@ class MemoryJournalService {
     const status = this.knowledgeOsSettings.status();
     if (!status.syncEnabled) return { ok: true, skipped: true, reason: "knowledgeos-sync-disabled", accepted: 0 };
     if (!status.configured) return { ok: false, skipped: true, reason: "knowledgeos-not-configured", accepted: 0 };
+    if (!force && this.store.syncMeta('next-at') > this.now()) return { ok: false, skipped: true, reason: 'knowledgeos-retry-delayed', accepted: 0, nextRetryAt: this.store.syncMeta('next-at') };
     this.syncActive = true;
     try {
+      // Poll earlier accepted submissions first. Acceptance alone is not storage.
+      const receipts = [];
+      for (const item of this.store.pendingJournalReceipts({ at: this.now(), force, day })) {
+        if (!this.knowledgeOsSettings.status().syncEnabled) return { ok: true, skipped: true, reason: 'knowledgeos-sync-disabled', accepted: 0, receipts };
+        let result;
+        try { result = await this.knowledgeOsClient.callTool('submission.get_status', { submission_id: item.submissionId }); }
+        catch { result = { ok: false, reason: 'knowledgeos-request-failed' }; }
+        if (!result.ok && !this.knowledgeOsSettings.status().syncEnabled) return { ok: true, skipped: true, reason: 'knowledgeos-sync-disabled', accepted: 0, receipts };
+        if (!result.ok) {
+          // A missing/invalid historical receipt is item-scoped. Never let it
+          // starve later receipts or new deliveries. Transport/auth still backs off.
+          if (!['knowledgeos-resource-not-found', 'knowledgeos-not-found', 'knowledgeos-submission-not-found', 'knowledgeos-validation-failed'].includes(result.reason)) return this.deferSync(result.reason);
+          this.store.markJournalReceipt(item.id, { failed: true, nextAt: this.now() + 60 * 60_000 });
+          receipts.push({ day: item.day, memoryClass: item.memoryClass, sealed: false, failed: true, reason: result.reason });
+          continue;
+        }
+        const sealed = result.data?.status === 'completed' && result.data?.stage === 'raw_sealed';
+        const failed = ['failed', 'rejected', 'cancelled'].includes(result.data?.status);
+        this.store.markJournalReceipt(item.id, { sealed, failed, nextAt: this.now() + (failed ? 60 : 5) * 60_000 });
+        receipts.push({ day: item.day, memoryClass: item.memoryClass, sealed, failed });
+      }
       for (const journal of this.store.journalProjectionItems()) this.ensureDelivery(journal);
       const deliveries = this.store.pendingJournalDeliveries({ limit: 4, at: this.now(), force, day });
       let accepted = 0;
       const results = [];
       for (const item of deliveries) {
-        const result = await this.knowledgeOsClient.callTool("memory.submit_journal", item.payload);
+        if (!this.knowledgeOsSettings.status().syncEnabled) return { ok: true, skipped: true, reason: 'knowledgeos-sync-disabled', accepted, results, receipts };
+        let result;
+        try { result = await this.knowledgeOsClient.callTool("memory.submit_journal", item.payload); }
+        catch { result = { ok: false, reason: 'knowledgeos-request-failed' }; }
+        if (!result.ok && !this.knowledgeOsSettings.status().syncEnabled) return { ok: true, skipped: true, reason: 'knowledgeos-sync-disabled', accepted, results, receipts };
         const submissionId = String(result?.data?.submission_id || "");
         const ok = result.ok === true && Boolean(submissionId);
         this.store.markJournalDelivery(item.id, { ok, submissionId, reason: result.reason || "knowledgeos-submit-failed", retryAt: this.now() + (result.retryable ? 5 * 60 * 1000 : 30 * 60 * 1000) });
         if (ok) accepted += 1;
         results.push({ day: item.day, memoryClass: item.memoryClass, ok, reason: ok ? "" : result.reason || "knowledgeos-submit-failed" });
+        if (!ok && !['knowledgeos-validation-failed', 'knowledgeos-idempotency-conflict'].includes(result.reason)) return { ...this.deferSync(result.reason), accepted, results, receipts };
       }
-      return { ok: results.every((item) => item.ok), skipped: !results.length, accepted, results };
+      this.store.setSyncMeta('failures', 0);
+      this.store.setSyncMeta('next-at', 0);
+      const failedReceipt = receipts.some(item => item.failed);
+      const failedDelivery = results.some(item => !item.ok);
+      return { ok: !failedReceipt && !failedDelivery, reason: failedDelivery ? 'knowledgeos-submit-failed' : failedReceipt ? 'knowledgeos-receipt-failed' : '', skipped: !results.length && !receipts.length, accepted, results, receipts };
     } finally { this.syncActive = false; }
+  }
+
+  deferSync(reason) {
+    const failures = this.store.syncMeta('failures') + 1;
+    const nextRetryAt = this.now() + [5, 15, 30, 60][Math.min(failures - 1, 3)] * 60_000;
+    this.store.setSyncMeta('failures', failures);
+    this.store.setSyncMeta('next-at', nextRetryAt);
+    return { ok: false, reason: /^knowledgeos-[a-z0-9-]+$/.test(String(reason)) ? reason : 'knowledgeos-request-failed', accepted: 0, nextRetryAt };
   }
 
   async tick() {

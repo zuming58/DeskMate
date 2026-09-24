@@ -13,7 +13,7 @@ const { validateXiaozhiHardwarePolicy, DEFAULT_XIAOZHI_HARDWARE_POLICY } = requi
 const { ChoreographyStore, validateChoreography, DEFAULT_MOTION_SETTINGS, MAX_CHOREOGRAPHIES } = require('./choreography-store.cjs');
 const { validateReminderState } = require('./personal-reminders.cjs');
 const MAX_BUNDLE = 256 * 1024 * 1024;
-const MEMORY_TABLES = ['conversation_turns','daily_summaries','memory_candidates','companion_memory_outbox','companion_memory_meta','memory_digest_runs','memory_workday_state','memory_hourly_summaries','memory_daily_journals','memory_journal_outbox'];
+const MEMORY_TABLES = ['conversation_turns','daily_summaries','memory_candidates','companion_memory_outbox','companion_memory_meta','memory_digest_runs','memory_workday_state','memory_hourly_summaries','memory_daily_journals','memory_journal_outbox','memory_curation_items'];
 const FIXED_FILES = ['voice-history.sqlite3','companion-memory.sqlite3','prompt-workbench-v1.json','companion-memory-policy.json','companion-preferences.json','companion-persona.json','personal-reminders.json','restored-ui-state.json','motion-automation-policy.json','xiaozhi-hardware-policy.json','choreographies.json'];
 const EMPTY_REMINDERS = {version:1,revision:0,items:[]};
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -133,7 +133,8 @@ function validateBundle(bundle) {
   const d = bundle.data;
   safeConfig(d.config); validatePrompts(d.prompts);
   if (!object(d.history) || !object(d.memory) || !object(d.policies) || !Array.isArray(d.audio) || typeof d.includeAudio !== 'boolean') fail('schema-invalid');
-  if (Object.keys(d.history).sort().join() !== ['audio','history','metadata'].join() || Object.keys(d.memory).sort().join() !== [...MEMORY_TABLES].sort().join()) fail('tables-invalid');
+  const memoryNames = Object.keys(d.memory).sort().join();
+  if (Object.keys(d.history).sort().join() !== ['audio','history','metadata'].join() || ![[...MEMORY_TABLES].sort().join(), MEMORY_TABLES.filter(name=>name!=='memory_curation_items').sort().join()].includes(memoryNames)) fail('tables-invalid');
   if (d.audio.length > 100000 || (!d.includeAudio && d.audio.length)) fail('audio-invalid');
   for(const table of [...Object.values(d.history),...Object.values(d.memory)]) if (!Array.isArray(table) || table.length > 100000) fail('rows-invalid');
   validateMemoryPolicy(d.policies.memory,{allowRuntime:true});validateCompanionPreferences(d.policies.companion);validatePersona(d.policies.persona);
@@ -162,7 +163,7 @@ function validateBundle(bundle) {
     }
   }
   const reminders = validateReminderState(d.reminders === undefined ? EMPTY_REMINDERS : d.reminders);
-  return {...d,reminders};
+  return {...d,reminders,memory:{...d.memory,memory_curation_items:d.memory.memory_curation_items || []}};
 }
 function loadRows(db, tables) {
   db.exec('BEGIN IMMEDIATE');
@@ -213,6 +214,9 @@ function prepareRestore(root, bundle) {
       if(sha(row.payload)!==row.digest || String(value.id)!==row.id || (row.audio_id && !expected.has(row.audio_id)))fail('history-integrity');
     }
     loadRows(memory.db,d.memory);
+    // Restoring records is not consent to send them to this machine's provider.
+    memory.setCurationMeta('enabled',0);
+    memory.setCurationMeta('consentRevision',memory.curationMeta('consentRevision')+1);
     // Keep source dates and honest pending/accepted receipts; hold only restored days.
     const importedDays=new Set([...d.memory.memory_daily_journals.map(row=>row.day),...d.memory.conversation_turns.map(row=>row.workday_day)]);
     for(const day of importedDays) if(day) memory.db.prepare('INSERT OR REPLACE INTO companion_memory_meta VALUES(?,1)').run(`restore-hold:${day}`);

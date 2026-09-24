@@ -9,7 +9,7 @@ const EMBODIMENT_DEFAULTS = Object.freeze({
   motionState: "unknown",
 });
 const PERSONA_DEFAULTS = Object.freeze({
-  ownerName: "祖名",
+  ownerName: "小明",
   ownerProfile: Object.freeze({
     occupation: "",
     currentFocus: "",
@@ -21,7 +21,7 @@ const PERSONA_DEFAULTS = Object.freeze({
   }),
   role: "可爱、温馨、温暖的桌面工作伙伴",
   traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰",
-  speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名",
+  speakingStyle: "自然亲切、语气柔和；回答简短清楚，只在自然合适时使用用户设置的称呼",
   boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答",
 });
 
@@ -103,13 +103,13 @@ function isCompanionExhibitionIntroductionQuery(value) {
   return /(?:介绍一下你自己|你(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?介绍一下自己|(?:小岚|小兰|小蓝)(?:小岚|小兰|小蓝)?(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?介绍一下自己|(?:给(?:大家|我们|现场|朋友们|同学们|老师们))介绍一下你自己|(?:^|你|小岚|小兰|小蓝)(?:给(?:大家|我们|现场|朋友们|同学们|老师们))?做(?:个|一下)自我介绍|自我介绍一下|(?:介绍|讲)(?:一下)?(?:deskmate|这个系统|这个软件|咱们(?:这个)?系统)(?:的功能)?)/iu.test(source);
 }
 
-function companionIdentityAnswer(name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
-  const companionName = clean(name, "小言", 32);
+function companionIdentityAnswer(name = "小岚", embodimentContext = EMBODIMENT_DEFAULTS) {
+  const companionName = clean(name, "小岚", 32);
   return `我是${companionName}，DeskMate 的桌面 AI 陪伴伙伴，不只是一个通用语音助手。我的对话、记忆和声音由电脑上的 DeskMate 提供；小智云台是我可选的实体表现身体，屏幕是我的表情，两个舵机让我左右转动和上下点头。EasyInput 可以作为我的实体按键、旋钮和板载麦克风交互入口。${embodimentStatusSentence(embodimentContext)}`;
 }
 
-function companionExhibitionIntroduction(name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
-  const companionName = clean(name, "小言", 32);
+function companionExhibitionIntroduction(name = "小岚", embodimentContext = EMBODIMENT_DEFAULTS) {
+  const companionName = clean(name, "小岚", 32);
   const embodiment = normalizeCompanionEmbodiment(embodimentContext);
   let physicalClosing = "小智云台是我的可选实体身体，连接后我还可以用屏幕表情、左右转动和上下点头回应大家。";
   if (embodiment.xiaozhiState === "connected" && embodiment.motionState === "ready") {
@@ -150,11 +150,11 @@ function validatePersona(value = {}) {
   return normalizePersona(value);
 }
 
-function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言", embodimentContext = EMBODIMENT_DEFAULTS) {
+function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小岚", embodimentContext = EMBODIMENT_DEFAULTS) {
   const source = String(value || "").normalize("NFKC").toLocaleLowerCase("zh-CN").replace(/[，。！？、,.!?\s]+/gu, "");
   if (!source) return null;
   const saved = normalizePersona(persona);
-  const companionName = clean(name, "小言", 32);
+  const companionName = clean(name, "小岚", 32);
   const ownerName = saved.ownerName;
   if (isCompanionExhibitionIntroductionQuery(source)) {
     return Object.freeze({ type: "companion-exhibition-introduction", answer: companionExhibitionIntroduction(companionName, embodimentContext) });
@@ -184,9 +184,9 @@ function explicitProfileAnswer(value, persona = PERSONA_DEFAULTS, name = "小言
   return null;
 }
 
-function buildPersonaInstructions({ name = "小言", persona = PERSONA_DEFAULTS, memoryContext = [], embodimentContext = EMBODIMENT_DEFAULTS } = {}) {
+function buildPersonaInstructions({ name = "小岚", persona = PERSONA_DEFAULTS, memoryContext = [], embodimentContext = EMBODIMENT_DEFAULTS } = {}) {
   const value = normalizePersona(persona);
-  const companionName = clean(name, "小言", 32);
+  const companionName = clean(name, "小岚", 32);
   const ownerProfile = Object.fromEntries(Object.entries({
     "职业 / 身份": value.ownerProfile.occupation,
     "最近在忙": value.ownerProfile.currentFocus,

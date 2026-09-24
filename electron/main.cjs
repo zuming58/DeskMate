@@ -1,4 +1,8 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog, session, safeStorage, shell, Tray, Menu, nativeImage, screen } = require("electron");
+// Copyright (c) 2026 zuming58. Personal noncommercial use only; see ../LICENSE.
+// Original work: no modification, rebranding or commercial use without permission.
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, ClipboardItem, dialog, session, safeStorage, shell, Tray, Menu, nativeImage, screen } = require("electron");
+const { createClipboardAccess } = require('./clipboard-access.cjs');
+const systemClipboard = createClipboardAccess(clipboard, ClipboardItem);
 const path = require("path");
 const { fileURLToPath } = require("url");
 const { spawn } = require("child_process");
@@ -83,7 +87,7 @@ const DEFAULT_EDIT_SHORTCUT = "Ctrl+Shift+E";
 const DEFAULT_DEV_URL = "http://localhost:5173";
 const APP_ROOT = path.resolve(__dirname, "..", "dist", "client");
 const APP_ID = "com.deskmate.app";
-const DESKMATE_BUILD_ID = "t65-task-status-journal-recovery";
+const DESKMATE_BUILD_ID = "t72-community-release";
 let restoreMaintenance = false;
 const FOREGROUND_SCRIPT = [
   "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class DeskMateForeground { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow(); }'",
@@ -129,6 +133,8 @@ let knowledgeOsSettings;
 let knowledgeOsClient;
 let knowledgeOsMemoryGateway;
 let memoryJournalService;
+let memoryCandidateReviewService;
+let memoryCurationService;
 let companionConversationController;
 let companionPreferenceStore;
 let companionPersonaStore;
@@ -210,7 +216,7 @@ function safeAgentStateReason(value, fallback = "agent-state-send-failed") {
 
 function inputBridgeSnapshot(value = inputBridge?.snapshot()) {
   const bridge = value || { available: false, process: process.platform === "win32" ? "missing" : "unsupported", boardConnected: false, configCollectionWritable: false, calibrationCollectionWritable: false, motionCollectionWritable: false, configCapabilities: null, linkDiagnostics: null };
-  return { ...bridge, xiaozhiHardware: xiaozhiHardwareCoordinator?.snapshot?.(bridge.linkDiagnostics?.state || "unavailable") || { policy: { version: 1, enabled: true }, enabled: true, state: bridge.linkDiagnostics?.state === "connected" ? "connected" : "enabled-disconnected", transitioning: false, lastShutdown: { state: "not-run", attempted: false, confirmed: false, reason: "", at: "" } }, agentStateDelivery: { ...agentStateDelivery }, codexLedDelivery: { ...codexLedDelivery, supported: bridge.configCapabilities?.codex_led_status_v1 === true }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" }, choreography: choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" } };
+  return { ...bridge, xiaozhiHardware: xiaozhiHardwareCoordinator?.snapshot?.(bridge.linkDiagnostics?.state || "unavailable") || { policy: { version: 1, enabled: false }, enabled: false, state: "disabled", transitioning: false, lastShutdown: { state: "not-run", attempted: false, confirmed: false, reason: "", at: "" } }, agentStateDelivery: { ...agentStateDelivery }, codexLedDelivery: { ...codexLedDelivery, supported: bridge.configCapabilities?.codex_led_status_v1 === true }, manualCalibration: manualCalibrationController?.diagnostics?.() || { status: "unavailable", request: null, accepted: false, transport: "unavailable", linkError: { enum: "NONE", code: 0 }, endpoint: null, at: null }, motionPresets: motionPresetService?.diagnostics?.() || { status: "unavailable", phase: "unavailable", busy: false, operation: null, preset: null, repeat: 0, source: null, endpointReportedComplete: false, endpoint: null, reason: "" }, choreography: choreographyService?.snapshot?.() || { ready: false, available: false, state: "unavailable", reason: "choreography-status-unavailable" } };
 }
 
 function emitInputBridgeStatus(value = inputBridge?.snapshot()) {
@@ -243,7 +249,7 @@ async function sendAgentStateReport(report) {
 }
 
 function xiaozhiHardwareEnabled() {
-  return xiaozhiHardwareCoordinator?.enabled?.() !== false;
+  return xiaozhiHardwareCoordinator?.enabled?.() === true;
 }
 
 function companionEmbodimentContext() {
@@ -605,33 +611,13 @@ async function getForegroundWindowId() {
   return result.ok && /^\d+$/.test(result.value) ? result.value : null;
 }
 
-function snapshotSystemClipboard() {
-  return {
-    text: clipboard.readText(),
-    html: clipboard.readHTML(),
-    rtf: clipboard.readRTF(),
-    bookmark: clipboard.readBookmark(),
-    image: clipboard.readImage(),
-  };
-}
-
-function restoreSystemClipboard(snapshot = {}) {
-  clipboard.write({
-    text: String(snapshot.text || ""),
-    html: String(snapshot.html || ""),
-    rtf: String(snapshot.rtf || ""),
-    bookmark: String(snapshot.bookmark || ""),
-    image: snapshot.image,
-  });
-}
-
 async function captureVoiceEditSelection(targetWindow) {
   return captureSelectedText({
     targetWindow,
-    readClipboardText: () => clipboard.readText(),
-    writeClipboardText: (value) => clipboard.writeText(value),
-    snapshotClipboard: snapshotSystemClipboard,
-    restoreClipboard: restoreSystemClipboard,
+    readClipboardText: systemClipboard.readText,
+    writeClipboardText: systemClipboard.writeText,
+    snapshotClipboard: systemClipboard.snapshot,
+    restoreClipboard: systemClipboard.restore,
     runCopy: (expectedWindow) => runPowershell(COPY_SELECTION_SCRIPT, 3000, { DESKMATE_TARGET_WINDOW: expectedWindow }),
     marker: `deskmate-selection-${randomUUID()}`,
   });
@@ -782,12 +768,13 @@ async function handleAutomaticAgentHookState(provider, value) {
 }
 
 async function handleCodexHookState(value) {
-  await handleAutomaticAgentHookState("codex", value);
+  // Update task state in receive order, before asynchronous device delivery.
   if (value?.taskKey && codexTaskBriefStore) {
     const result = codexTaskBriefStore.ingestHook(value, { taskLabel: codexTaskCatalog?.labelFor?.(value.taskKey) || value.taskLabel });
     if (result.ok && result.task) handleCodexTaskBriefResult(result, result.task.state);
     void refreshCodexTaskCatalog().catch(() => {});
   } else if (value?.state === "completed") void motionAutomationCoordinator?.onCodexState?.("completed");
+  await handleAutomaticAgentHookState("codex", value);
 }
 
 function codexTaskBriefStatusSnapshot() {
@@ -805,7 +792,7 @@ function handleCodexTaskBriefResult(result, state = "") {
   companionIntentBridge?.noteCodexReport?.();
   sendToMain("codex-task-brief-status", codexTaskBriefStatusSnapshot());
   const announcementsEnabled = companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true;
-  if (result.announcement && announcementsEnabled) void announceCodexTaskBrief(result.announcement);
+  if (result.announcement && announcementsEnabled) void announceCodexTaskBrief(result.announcement).catch(() => {});
   if (state) void motionAutomationCoordinator?.onCodexState?.(state);
   return result;
 }
@@ -971,7 +958,7 @@ async function pasteIntoCapturedWindow(text) {
   const result = await pasteToCapturedWindow({
     text,
     targetWindow,
-    writeClipboard: (value) => clipboard.writeText(value),
+    writeClipboard: systemClipboard.writeText,
     runPaste: (expectedWindow) => inputBridge?.pasteActiveWindow(expectedWindow) || { ok: false, reason: "input-bridge-unavailable" },
   });
   if (result.ok) voiceTargetWindow = null;
@@ -1059,16 +1046,19 @@ function createTray() {
 }
 
 function createWindow() {
+  Menu.setApplicationMenu(null);
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 1024,
     minWidth: 960,
     minHeight: 680,
     show: false,
+    autoHideMenuBar: true,
     backgroundColor: "#f4f7fb",
     icon: loadAppIcon("deskmate-dm.ico", "deskmate-dm.png"),
     webPreferences: { preload: path.join(__dirname, "preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
+  mainWindow.setMenu(null);
   mainWindow.once("ready-to-show", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.show();
@@ -1191,7 +1181,7 @@ async function finishSmokeTest() {
   const report = await mainWindow.webContents.executeJavaScript(`(() => { const state = JSON.parse(localStorage.getItem("deskmate.app-state") || "{}"); return { route: location.hash, sttMode: state.settings?.sttMode || "missing", simulatorEnabled: Boolean(state.settings?.simulatorEnabled), sttStatus: state.diagnostics?.stt?.status || "missing", sttProvider: state.diagnostics?.stt?.provider || "missing" }; })()`);
   const [latestHistory] = await localHistoryService.call("list", { limit: 1 });
   report.historyText = latestHistory?.text || "";
-  report.clipboardText = clipboard.readText();
+  report.clipboardText = await systemClipboard.readText();
   report.ok = Boolean(report.historyText && report.clipboardText === report.historyText && report.route === "#/dashboard");
   const resultPath = process.env.DESKMATE_SMOKE_RESULT;
   if (resultPath && path.extname(resultPath).toLowerCase() === ".json") fs.writeFileSync(resultPath, JSON.stringify(report, null, 2));
@@ -1260,7 +1250,7 @@ function normalizeTrustedAnnouncement(value) {
   return String(value || "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, 240);
 }
 
-async function startCompanionConversation(value = {}) {
+async function startCompanionConversation(value = {}, { announcementIsCurrent = () => true } = {}) {
   if (restoreMaintenance) return {ok:false,reason:'backup-maintenance-active'};
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active", status: companionConversationStatus() };
@@ -1302,7 +1292,7 @@ async function startCompanionConversation(value = {}) {
   const greeting = value.wakeGreeting === true ? wakeGreeting(savedPersona.persona) : "";
   const sessionConfigured = companionConversationController.configureSession({ preferences: { revision: savedPreferences.revision, ...savedPreferences.preferences, persona: savedPersona.persona, memoryContext: companionMemoryStore.recentAcceptedContext(), hotwords: options.hotwords, rules: options.rules } });
   if (!sessionConfigured.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); return { ok: false, reason: sessionConfigured.reason, status: companionConversationStatus() }; }
-  const result = await companionConversationController.start({ ...lease, initialAnnouncement: initialAnnouncement || greeting, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false, waitForAnnouncement: value.waitForAnnouncement === true });
+  const result = await companionConversationController.start({ ...lease, initialAnnouncement: initialAnnouncement || greeting, announcementIsCurrent, restoreVolume: initialAnnouncement ? conversationVolume : undefined, closeAfterAnnouncement: initialAnnouncement ? value.closeAfterAnnouncement === true : false, waitForAnnouncement: value.waitForAnnouncement === true });
   if (!result.ok) { releaseForegroundSession(lease); void syncWakeWordListener("companion-start-failed"); }
   else if (!announcementOnly) void motionAutomationCoordinator?.onCompanionStarted();
   return { ...result, status: companionConversationStatus() };
@@ -1310,17 +1300,21 @@ async function startCompanionConversation(value = {}) {
 
 
 async function announceCodexTaskBrief(announcement = {}) {
+  const announcementIsCurrent = () => !isQuitting && companionPreferenceStore.get().codexBriefAnnouncementsEnabled === true && codexTaskBriefStore.isAnnouncementCurrent(announcement);
+  // Coalesce short tool/approval transitions, without delaying conversation ASR.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  if (!announcementIsCurrent()) return { ok: false, reason: "codex-task-brief-announcement-stale" };
   const text = normalizeTrustedAnnouncement(announcement.text);
   if (!text) return { ok: false, reason: "codex-task-brief-announcement-empty" };
-  sendToMain("codex-task-brief-announcement", { ...announcement, text, voice: "three-stage-tts", listeningAfterPlayback: false });
+  sendToMain("codex-task-brief-announcement", { text, state: announcement.state, taskLabel: announcement.taskLabel, voice: "three-stage-tts", listeningAfterPlayback: false });
   if (isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || foregroundSessionState.active?.mode === "dictation") {
     return { ok: false, reason: "voice-workflow-active" };
   }
   if (companionIsActive()) {
     const preferences = companionPreferenceStore.get();
-    return companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume });
+    return companionConversationController.announce(text, { volume: preferences.codexBriefVolume, restoreVolume: preferences.conversationVolume, announcementIsCurrent });
   }
-  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true });
+  return startCompanionConversation({ ...companionStartOptions, initialAnnouncement: text, closeAfterAnnouncement: true }, { announcementIsCurrent });
 }
 
 function personalReminderSnapshot() {
@@ -1559,11 +1553,20 @@ app.whenReady().then(async () => {
     knowledgeOsClient,
     loadSecret: () => loadTextModelSecret(),
   });
+  const { MemoryCandidateReviewService } = require('./memory-candidate-review.cjs');
+  memoryCandidateReviewService = new MemoryCandidateReviewService({ store: companionMemoryStore,
+    loadSecret: () => loadTextModelSecret(),
+    isBusy: () => restoreMaintenance || localBackupService?.pending || memoryJournalService.active || memoryCurationService?.active || companionMemoryGenerationCoordinator.backlogActive });
+  const { MemoryCurationService } = require('./memory-curation.cjs');
+  memoryCurationService = new MemoryCurationService({ store: companionMemoryStore, policyStore: companionMemoryPolicyStore,
+    loadSecret: () => loadTextModelSecret(),
+    isBusy: () => restoreMaintenance || localBackupService?.pending || localRetentionService?.pending?.size || memoryJournalService.active || memoryJournalService.syncActive || memoryCandidateReviewService.active || companionMemoryGenerationCoordinator.backlogActive || companionMemoryPipeline.active || activeDictationSession || voiceSessionRecording || companionIsActive(),
+    onChanged: () => { try { companionMemoryGenerationCoordinator.projectIfConfigured(); } catch { /* SQLite result is authoritative; projection can retry. */ } sendToMain('memory-curation-status', memoryCurationService.status()); } });
   const restoreBusy = () => Boolean(
     localHistoryService?.pending?.size || localRetentionService?.pending?.size ||
     activeDictationSession || voiceSessionRecording || companionIsActive() ||
     activeBailianRequests.size || activeBailianOrganizers.size || activeRealtimeSessions.size ||
-    memoryJournalService?.active || memoryJournalService?.syncActive || companionMemoryDigestScheduler?.active ||
+    memoryJournalService?.active || memoryJournalService?.syncActive || memoryCandidateReviewService?.active || memoryCurationService?.active || companionMemoryDigestScheduler?.active ||
     companionMemoryGenerationCoordinator?.backlogActive || companionMemoryPipeline?.active || manualControlCoordinator?.snapshot?.().active || choreographyService?.snapshot?.().busy
   );
   const retentionBusy = () => restoreMaintenance || localBackupDialogBusy || localBackupService?.pending || restoreBusy();
@@ -1572,8 +1575,9 @@ app.whenReady().then(async () => {
     for (const cleanup of result?.status?.pendingBrowserCleanup || []) sendToMain("local-retention-browser-cleanup", cleanup);
   };
   const tickMemoryServices = async () => {
-    if (restoreMaintenance) return;
+    if (restoreMaintenance || memoryCandidateReviewService?.active || memoryCurationService?.active) return;
     try { await memoryJournalService.tick(); } catch { /* persisted state will retry */ }
+    try { await memoryCurationService.run(); } catch { /* bounded persisted retry */ }
     // The journal service owns automatic processing. The legacy per-source
     // pipeline remains available only for explicit manual backlog generation.
     if (!retentionBusy()) {
@@ -1688,10 +1692,8 @@ app.whenReady().then(async () => {
     show: () => { showMain('prompts'); mainWindow?.focus(); }, hide: () => mainWindow?.hide(),
     capture: () => inputBridge?.workbenchInput('capture'), restore: () => inputBridge?.workbenchInput('restore'),
     input: chord => inputBridge?.workbenchInput('chord', chord) || { ok: false, reason: 'input-bridge-unavailable' },
-    writeClipboard: text => {
-      clipboard.writeText(text);
-      if (clipboard.readText() !== text) throw new Error('clipboard-verification-failed');
-    }, appActions: appActionStore, publish: value => sendToMain('prompt-workbench-state', value),
+    writeClipboard: systemClipboard.writeText,
+    appActions: appActionStore, publish: value => sendToMain('prompt-workbench-state', value),
     isVoiceActive: () => Date.now() - lastActiveVoiceCancelAt < 500 || isVoiceActivityActive({ recording: voiceSessionRecording, state: lastVoiceState.state }) || companionIsActive(),
     announce: text => {
       clearTimeout(promptAnnouncementTimer);
@@ -1948,7 +1950,12 @@ app.whenReady().then(async () => {
     return sanitizedAgentProviderStatus(requested);
   });
   handleTrusted("desktop:get-codex-agent-status", () => sanitizedCodexHookStatus());
-  handleTrusted("desktop:clipboard-write", (value) => { const text = String(value || ""); if (text.length > 100000) return { ok: false, reason: "text-too-long" }; clipboard.writeText(text); return { ok: true, mode: "clipboard" }; });
+  handleTrusted("desktop:clipboard-write", async (value) => {
+    const text = String(value || "");
+    if (text.length > 100000) return { ok: false, reason: "text-too-long" };
+    try { await systemClipboard.writeText(text); return { ok: true, mode: "clipboard" }; }
+    catch { return { ok: false, reason: "clipboard-write-failed" }; }
+  });
   handleTrusted("desktop:paste-active-window", (text) => pasteIntoCapturedWindow(text));
   handleTrusted("desktop:key-diagnostic", (value) => ({ ok: true, event: value }));
   handleTrusted("bailian:get-status", () => bailianStore.status());
@@ -2025,6 +2032,19 @@ app.whenReady().then(async () => {
   handleTrusted("memory:list", (value) => companionMemoryStore.list(value || {}));
   handleTrusted("memory:list-turns", (value) => companionMemoryStore.listTurns(value || {}));
   handleTrusted("memory:set-candidate-state", (value = {}) => companionMemoryStore.setCandidateState(value.id, value.state));
+  handleTrusted('memory:get-candidate-review', () => ({ ...companionMemoryStore.candidateReview(), running: memoryCandidateReviewService.active }));
+  handleTrusted('memory:organize-candidates', (value = {}) => value.useModel === true
+    ? value.confirmed === true ? memoryCandidateReviewService.organize() : { ok: false, reason: 'memory-review-consent-required' }
+    : memoryCandidateReviewService.organizeLocal());
+  handleTrusted('memory:review-candidate-batch', (value = {}) => companionMemoryStore.reviewCandidateBatch(value));
+  handleTrusted('memory:get-curation', () => ({ ...memoryCurationService.status(), questionsList: companionMemoryStore.curationQuestions() }));
+  handleTrusted('memory:set-curation', (value = {}) => companionMemoryStore.setCurationEnabled(value));
+  handleTrusted('memory:run-curation', () => memoryCurationService.run({ force: true, maxBatches: 20 }));
+  handleTrusted('memory:resolve-curation', (value = {}) => {
+    const result = companionMemoryStore.resolveCurationQuestion(value);
+    if (result.ok) { companionDialogueContext.clear(); companionMemoryGenerationCoordinator.projectIfConfigured(); }
+    return result;
+  });
   handleTrusted("memory:update-candidate", (value = {}) => companionMemoryStore.updateCandidate(value));
   handleTrusted("memory:generate-pending", () => generateConfiguredMemories());
   handleTrusted("memory:get-journal-status", () => memoryJournalService.status());
@@ -2032,7 +2052,11 @@ app.whenReady().then(async () => {
   handleTrusted("memory:retry-journals", () => memoryJournalService.retryPending());
   handleTrusted("memory:sync-knowledgeos", () => memoryJournalService.syncPending({ force: true }));
   handleTrusted("memory:get-knowledgeos-status", () => knowledgeOsSettings.status());
-  handleTrusted("memory:set-knowledgeos-settings", (value = {}) => knowledgeOsSettings.save(value));
+  handleTrusted("memory:set-knowledgeos-settings", (value = {}) => {
+    const saved = knowledgeOsSettings.save(value);
+    if (!saved.readEnabled && !saved.syncEnabled) knowledgeOsClient.cancelPending();
+    return saved;
+  });
   handleTrusted("memory:test-knowledgeos", () => knowledgeOsClient.testConnection());
   handleTrusted("memory:choose-knowledgeos-adapter", async () => {
     const selection = await dialog.showOpenDialog(mainWindow, { title: "选择 KnowledgeOS MCP 适配器", properties: ["openFile"], filters: [{ name: "KnowledgeOS MCP", extensions: ["exe"] }] });

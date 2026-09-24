@@ -31,6 +31,7 @@ import { formatDashboardDate } from "./domain/dashboardStatus.js";
 import { createComputerCompanionAudioEngine } from "./domain/computerCompanionAudio.js";
 import { createCompanionStopAction } from "./domain/companionStop.js";
 import { createLocalDanceMusicEngine } from "./domain/localDanceMusic.js";
+import { repairCredentialBackedSttConfiguration } from "./domain/sttConfiguration.js";
 import {
   AgentsPage,
   CompanionPage,
@@ -154,10 +155,23 @@ function AppContent() {
   const [toast, setToast] = useState("");
   const lastBoardConnected = useRef(null);
   const { event, state, patch, mergeRuntime, updateCompanion } = useAppStore();
+  const latestState = useRef(state);
+  latestState.current = state;
   const stopActionRef = useRef(null);
   if (!stopActionRef.current) stopActionRef.current = createCompanionStopAction({ getBridge: () => globalThis.desktopBridge, updateCompanion });
   const stopCompanion = stopActionRef.current.stop;
   useEffect(() => mockAdapters.agentStatus.subscribe(event, { emitCurrent: false }), [event]);
+  useEffect(() => {
+    if (state.settings.sttMode !== "unconfigured" || typeof globalThis.desktopBridge?.getBailianStatus !== "function") return undefined;
+    let active = true;
+    globalThis.desktopBridge.getBailianStatus().then((bailianStatus) => {
+      if (!active) return;
+      const current = latestState.current;
+      const repaired = repairCredentialBackedSttConfiguration({ settings: current.settings, diagnostics: current.diagnostics, bailianStatus });
+      if (repaired) patch(repaired);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [state.settings.sttMode, patch]);
   useEffect(() => {
     if (!window.desktopBridge) return undefined;
     let active = true;

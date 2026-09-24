@@ -10,16 +10,18 @@ const { XiaozhiHardwareCoordinator, XiaozhiHardwarePolicyStore } = require("../e
 
 function temporaryDirectory() { return fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-xiaozhi-policy-")); }
 
-test("T23 policy defaults enabled for upgrades and persists a strict local choice", () => {
+test("T23 policy defaults disabled and preserves an explicit existing choice", () => {
   const directory = temporaryDirectory();
   try {
     const store = new XiaozhiHardwarePolicyStore({ userDataPath: directory });
-    assert.deepEqual(store.snapshot(), { version: 1, enabled: true });
+    assert.deepEqual(store.snapshot(), { version: 1, enabled: false });
+    store.save({ version: 1, enabled: true });
+    assert.equal(new XiaozhiHardwarePolicyStore({ userDataPath: directory }).snapshot().enabled, true);
     assert.deepEqual(store.save({ version: 1, enabled: false }), { version: 1, enabled: false });
     assert.deepEqual(new XiaozhiHardwarePolicyStore({ userDataPath: directory }).snapshot(), { version: 1, enabled: false });
     assert.throws(() => store.save({ version: 1, enabled: true, command: "unsafe" }), /xiaozhi-hardware-policy-invalid/);
     fs.writeFileSync(store.filePath, JSON.stringify({ version: 2, enabled: false }));
-    assert.deepEqual(new XiaozhiHardwarePolicyStore({ userDataPath: directory }).snapshot(), { version: 1, enabled: true });
+    assert.deepEqual(new XiaozhiHardwarePolicyStore({ userDataPath: directory }).snapshot(), { version: 1, enabled: false });
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -28,6 +30,7 @@ test("T23 disables immediately, records honest shutdown evidence, and never repl
   const calls = [];
   try {
     const store = new XiaozhiHardwarePolicyStore({ userDataPath: directory });
+    store.save({ version: 1, enabled: true });
     const coordinator = new XiaozhiHardwareCoordinator({
       store,
       shutdown: async () => { calls.push("shutdown"); assert.equal(coordinator.enabled(), false); return { attempted: true, confirmed: false, reason: "deskmatelink-waiting" }; },
@@ -48,6 +51,7 @@ test("T23 classifies an idle shutdown as not required", async () => {
   const directory = temporaryDirectory();
   try {
     const coordinator = new XiaozhiHardwareCoordinator({ store: new XiaozhiHardwarePolicyStore({ userDataPath: directory }) });
+    await coordinator.setEnabled(true);
     const result = await coordinator.setEnabled(false, "unavailable");
     assert.equal(result.lastShutdown.state, "not-required");
     assert.equal(result.lastShutdown.confirmed, true);

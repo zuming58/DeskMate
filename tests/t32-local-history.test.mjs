@@ -99,11 +99,15 @@ test("malformed records and unsupported database versions fail closed", (t) => {
 test("worker service uses bounded commands and emits sanitized errors", async (t) => {
   const f = fixture(t), service = new LocalHistoryService({ userDataPath: f.dir });
   t.after(() => service.close());
-  assert.equal((await service.call("status")).storage, "sqlite-managed");
-  await assert.rejects(service.call("arbitrary-sql", "private-secret"), /local-history-command-invalid/);
-  await service.call("append", record("worker"));
-  assert.equal((await service.call("list", {}))[0].id, "worker");
-  service.close();
+  try {
+    assert.equal((await service.call("status")).storage, "sqlite-managed");
+    await assert.rejects(service.call("arbitrary-sql", "private-secret"), /local-history-command-invalid/);
+    await service.call("append", record("worker"));
+    assert.equal((await service.call("list", {}))[0].id, "worker");
+  } finally {
+    // Windows cannot remove the fixture's SQLite files until the worker exits.
+    await service.worker?.terminate(); service.close();
+  }
 });
 test("corrupt localStorage is not overwritten by defaults; prior valid copy is recoverable", () => {
   const storage = memoryStorage(), state = structuredClone(defaultState);

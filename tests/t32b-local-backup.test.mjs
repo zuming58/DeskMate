@@ -164,3 +164,16 @@ test('memory text, evidence IDs, dates and review state survive the logical roun
     assert.equal(restored.db.prepare('SELECT summary FROM daily_summaries').get().summary,'Synthetic day summary');
   }finally{restored.close();}
 });
+test('T71 old backups remain restorable, new provenance survives and cloud consent clears', t => {
+  const f = fixture(t), store = new CompanionMemoryStore({userDataPath:f.root});
+  store.setCurationEnabled({enabled:true,confirmed:true});
+  const turn = store.appendTurn({sessionId:'curation',role:'user',content:'我希望答案简洁，这样更好理解。'});
+  const candidate = store.addCandidate({day:'2026-09-24',summary:'回答简洁',sourceTurnIds:[turn.id]});
+  store.commitCuration(store.curationSnapshot(store.curationCandidates()),[{ids:[candidate.id],action:'remember',kind:'preference',summary:'用户偏好简洁回答',reason:'原话支持',evidence:[{turnId:turn.id,quote:'我希望答案简洁，这样更好理解。'}],conflictIds:[]}]);
+  store.close();
+  const bundle = f.bundle(); const preview = backup.prepareRestore(f.root,bundle);
+  const restored = new CompanionMemoryStore({userDataPath:path.join(f.root,'recovery',`staged-${preview.id}`)});
+  try { assert.equal(restored.curationStatus().enabled,false); assert.equal(restored.curationStatus().automatic,1); assert.equal(restored.list({filter:'long-term'})[0].provenance.length,1); } finally { restored.close(); }
+  delete bundle.data.memory.memory_curation_items; bundle.digest=backup.sha(JSON.stringify(bundle.data));
+  assert.doesNotThrow(()=>backup.prepareRestore(f.root,bundle));
+});

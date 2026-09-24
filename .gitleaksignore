@@ -1,0 +1,6 @@
+# Exact reviewed historical findings only. Never blanket-ignore a source folder.
+# Doubao's documented shared protocol application constant, not a user access key.
+80dac2e98ca462a781ff8ecf14d6bafcffdecd02:electron/doubao-realtime.cjs:generic-api-key:6
+# Public reference document identifiers with SHA-256 provenance values, not tokens.
+7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5:docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md:generic-api-key:10
+7edf755b289b87e04c1b8a2cc78983b4ac4cf8e5:docs/provenance/t08-xiaozhi-link-phase-b-pinout-audit.md:generic-api-key:11

@@ -1,5 +1,29 @@
 # Development plan
 
+## Current work: T72 community release
+
+Prepare a sanitized source-visible personal-noncommercial release and Windows 0.1.7 installer; consolidate branch history on main without restoring obsolete implementations. Fresh profile uses 小明, KnowledgeOS disabled/local durable memories, Xiaozhi disabled; preserve saved configurations. Targeted tests initially 43/43; final full regression, installer validation and GitHub publication still pending. macOS needs platform adaptation and test access; no Mac acceptance claimed. See docs/contracts/t72-community-release-v1.md.
+
+## Current work: T71 automatic memory curation
+
+Completed explicit opt-in archive/merge/refinement and question-only review. All 430 historical candidates processed with original preservation: 159 automatic memories, 171 archived/merged originals, 36 review groups, zero automatic backlog. Background opt-in enabled. Version 0.1.6 installed to D and restarted after exact-package/runtime/UI verification; 927 full regression tests passed, then 36 targeted final tests passed. User may spot-check phrasing and answer genuine questions; unresolved historical KnowledgeOS receipt evidence remains separate. Details and rollback snapshots are in progress.md.
+
+## Current work: T69 task notification guard
+
+Replace permission-check/user-reply conflation with evidence-bounded status, suppress repeated notification candidates, and revalidate state immediately before TTS. Preserve explicit human questions and T65 closure semantics. Version 0.1.4 was built from the canonical F worktree, installed to D and restarted with explicit user authorization on 2026-09-23; package equivalence and window responsiveness verified, real multitask notification acceptance pending. Contract: `docs/contracts/t69-task-notification-guard-v1.md`.
+
+## Current work: T68 Electron 44 asynchronous clipboard compatibility
+
+Fix the release upgrade regression in KEY4 copy/return and related voice clipboard consumers. Await write/read verification, preserve real-failure page retention, migrate voice-edit MIME snapshot/restore, and verify using actual Electron 44 as well as asynchronous fixtures. Build 0.1.3 from the canonical F worktree; user approved updating/restarting the D installation. Contract: `docs/contracts/t68-async-clipboard-v1.md`.
+
+## Current work: T67 voice configuration recovery and source/install separation
+
+Recover dictation after a stale development build reused the retained production profile and reset only the renderer STT mode to `unconfigured`. The canonical implementation remains `F:\Codex\deskmate\build-t10dc-work`; `D:\DeskMate` is only an installed runtime target. On startup, restore Bailian mode only when the encrypted main-process store proves credentials exist, never infer or expose a key, and never override an explicit provider. Remove the unused native application menu while retaining the tray menu. Build and validate a new installer from the F-drive source before updating the installed copy. Contract: `docs/contracts/t67-voice-config-recovery-v1.md`.
+
+## Current work: T66 release audit and installer
+
+User-authorized scope (2026-09-21): audit current desktop/native/firmware boundaries, reproduce and fix confirmed software defects, verify the last two nights of memory processing and KnowledgeOS receipts, and deliver a Windows installer with a desktop shortcut. Preserve existing user data; no new product features, firmware writes, hardware actions, or destructive data operations. Use isolated tests, current-package consistency checks and installer validation; distinguish server acceptance from completed storage. Record findings, changes, verification and remaining manual acceptance in `docs/reviews/t66-release-audit-2026-09-21.md`.
+
 ## Current work: T65 task status and journal recovery
 
 Correct turn-stop versus task-completion semantics. Consolidate automatic memory processing, bound summary requests and retries, persist review checkpoints, expose daily failures and retry, and recover pending KnowledgeOS journals. Contract: `docs/contracts/t65-task-status-journal-recovery-v1.md`.

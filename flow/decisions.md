@@ -1,5 +1,37 @@
 # Decisions
 
+## D176 — Source-visible personal-use community distribution and optional integrations
+
+2026-09-24: User explicitly chose public sanitized source plus downloadable installers, then restricted original work to personal noncommercial unmodified use; modification, rebranding and commercial use require written permission. Use the custom root LICENSE, not MIT or an OSI-open-source claim; preserve upstream and GitHub platform rights. Fresh profiles use 小明, empty personal details, 小岚, KnowledgeOS off and Xiaozhi extension off. Saved choices remain unchanged. KnowledgeOS disable blocks and cancels transport, not local memory; summaries and long-term memories have no TTL. Windows first; macOS requires a genuine platform port and separate acceptance. T72 contract governs this release.
+
+## D175 — Opt-in evidence-backed automatic memory curation
+
+2026-09-24: The user explicitly permits the configured model to process historical and future memory, acknowledging privacy and charges. Supersede D173's manual-only promotion in this opted-in mode. Keep original rows unchanged, create separate derived memories with evidence, archive routine work, merge equivalents and ask only concrete unresolved questions. Verify user quotations and proposed facts in a separate model pass; malformed quotation fails closed for its group (review), not by repeatedly retrying the whole batch. Empty archive labels use neutral local labels and cannot create facts. Persist checkpoints/backoff, revalidate consent/source/context and clear cloud consent on backup restore. Never equate this with KnowledgeOS publication or sharing. Contract: `docs/contracts/t71-automatic-memory-curation-v1.md`.
+
+## D174 — Ship runtime dependencies, not renderer build sources
+
+2026-09-24: React, React DOM, Tabler React icons, Vite and its React plugin are build-time dependencies because the isolated renderer consumes the production bundle. Keep pinyin, Sherpa and WebSocket modules in runtime dependencies. Moving scopes must preserve dependency versions/resolutions/integrity and pass a final-ASAR UI/native-runtime probe. Do not remove modules merely for a smaller package without verifying their actual consumers.
+
+## D173 — Receipt exceptions do not block new journals; candidate collection is optional
+
+2026-09-24: Preserve outbox identity and distinguish accepted, sealed and missing receipts. An old item-level receipt error must not starve new deliveries. Keep transport/authentication backoff. Candidate synthesis is final (ten unique maximum), never expanded again with intermediate extracts. Dated evidence is automatically retained under existing policy; confirmed profile still requires the user's selection. Local reference grouping preserves originals. Bulk external model grouping requires explicit informed consent, never a silent startup migration; selected batch review is atomic and fingerprint-bound. Contract: `docs/contracts/t70-memory-queue-review-v1.md`.
+
+## D172 — Permission checks are not evidence of unresolved human input
+
+2026-09-23: Hook v1/v2 does not identify approval ownership/outcome or parent/child relationships. PermissionRequest therefore remains neutral working, not waiting-for-user speech. Preserve explicit blocking questions and task reports; do not suppress genuine questions at project scope. Guard notification state episodes before TTS and after asynchronous setup; bounded cooldown is only a repeat heuristic, not request identity. See T69 contract for limitations.
+
+## D171 — Clipboard delivery is asynchronous and verified before dependent actions
+
+2026-09-22: Electron 44 clipboard Promises must be awaited throughout the main-process chain. KEY4 hides and records use only after exact text readback; voice paste starts only after successful clipboard delivery. Voice-edit snapshots materialize MIME payloads before replacing the clipboard and await restoration. Do not mask copy failures by hiding unconditionally, trim user prompt bodies, or downgrade the runtime to evade compatibility work. Unit mocks must include delayed/rejected Promises; a real target-runtime clipboard probe is a release gate. Contract: `docs/contracts/t68-async-clipboard-v1.md`.
+
+## D170 — Source fixes stay in the canonical F-drive worktree; credential evidence may repair only the matching renderer mode
+
+2026-09-21: `F:\Codex\deskmate\build-t10dc-work` is the T66/T67 canonical source and packaging input. `D:\DeskMate` is an installed output, not a development worktree; emergency inspection or backup there does not become product source. Before launching or packaging, verify the source build identity so a stale build cannot share and downgrade a newer retained profile. If renderer state says STT is unconfigured while the encrypted main-process Bailian store independently reports configured, startup may restore only `sttMode=bailian`, clear the unused endpoint and reset bounded STT diagnostics. It must not read/expose credentials, invent configuration, replace explicit mock/http/Bailian choices, or rewrite unrelated settings. Native application menu removal does not remove the tray menu. Contract: `docs/contracts/t67-voice-config-recovery-v1.md`.
+
+## D169 — Acceptance is not sealed storage; installer preserves the existing identity
+
+2026-09-21: Only a confirmed KnowledgeOS `completed/raw_sealed` receipt permits remote-protected raw retention cleanup. Each raw record must additionally be covered by its day's summary. Keep immutable outbox payloads and idempotency keys, never resend accepted content merely to query its result, and persist shared bounded offline retry backoff. Release an assisted per-user NSIS installer with desktop/Start menu shortcuts while preserving `deskmate` / `com.deskmate.app` and application data on uninstall. KnowledgeOS remains separately managed. See `docs/reviews/t66-release-audit-2026-09-21.md`.
+
 ## D168 — Turn closure is not task completion; one owner runs recoverable journals
 
 2026-09-20: Codex Stop becomes local idle and SessionEnd becomes local closed, both silent; only an explicit task report proves completion. Automatic memory processing belongs to MemoryJournalService alone. Persist reviewed chunks and bounded failure/retry state, protect today's cutoff from older failures, and resume immutable outbox payloads on manual retry without resending accepted rows. The official DeepSeek V4 non-thinking setting and longer memory-only deadlines avoid changing live conversation latency. Contract: `docs/contracts/t65-task-status-journal-recovery-v1.md`.

@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { EventEmitter } = require("events");
 
-const DEFAULT_XIAOZHI_HARDWARE_POLICY = Object.freeze({ version: 1, enabled: true });
+const DEFAULT_XIAOZHI_HARDWARE_POLICY = Object.freeze({ version: 1, enabled: false });
 
 function normalizePolicy(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return DEFAULT_XIAOZHI_HARDWARE_POLICY;

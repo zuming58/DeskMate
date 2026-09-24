@@ -5,6 +5,7 @@ import fs from "node:fs";
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { createServer } from "vite";
+import viteConfig from "../vite.config.mjs";
 import {
   companionPreferencesToDraft,
   parseCompanionPreferenceDraft,
@@ -103,8 +104,8 @@ test("a session freezes provider and idle values at start even when saved prefer
   assert.equal(controller.snapshot().sessionPolicy.sessionApplied, null);
   controller.configureSession({ preferences: { revision: 4, name: "小言", endSmoothWindowMs: 7500, idleTimeoutMs: 90000 } });
   await controller.start({ sessionId: "frozen", generation: 1 });
-  assert.deepEqual(providers[0], { revision: 4, name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 7500, idleTimeoutMs: 90000 });
-  assert.deepEqual(controller.snapshot().sessionPolicy.sessionApplied, { revision: 4, name: "小言", wakePhrase: "你好，小言", endSmoothWindowMs: 7500, idleTimeoutMs: 90000 });
+  assert.deepEqual(providers[0], { revision: 4, name: "小言", wakePhrase: "小岚小岚", endSmoothWindowMs: 7500, idleTimeoutMs: 90000 });
+  assert.deepEqual(controller.snapshot().sessionPolicy.sessionApplied, { revision: 4, name: "小言", wakePhrase: "小岚小岚", endSmoothWindowMs: 7500, idleTimeoutMs: 90000 });
   controller.configureSession({ preferences: { revision: 5, name: "changed", endSmoothWindowMs: 1000, idleTimeoutMs: 10000 } });
   assert.equal(controller.snapshot().sessionPolicy.sessionApplied.endSmoothWindowMs, 7500);
   await controller.stop();
@@ -226,7 +227,10 @@ test("renderer shell completes an actual first render", async () => {
   const previousLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   Object.defineProperty(globalThis, "window", { configurable: true, writable: true, value: { location: { hash: "" }, addEventListener() {}, removeEventListener() {}, desktopBridge: undefined } });
   Object.defineProperty(globalThis, "localStorage", { configurable: true, writable: true, value: { getItem() { return null; }, setItem() {}, removeItem() {} } });
-  const server = await createServer({ server: { middlewareMode: true }, appType: "custom", logLevel: "silent" });
+  // Vite merges config arrays, so [] does NOT clear configured client warmup.
+  // Load the real plugins explicitly, without re-merging the config file, and
+  // disable filesystem watching for this one-shot SSR smoke test.
+  const server = await createServer({ ...viteConfig, configFile: false, server: { ...viteConfig.server, middlewareMode: true, watch: null, warmup: { clientFiles: [], ssrFiles: [] } }, appType: "custom", logLevel: "silent" });
   try {
     const { App } = await server.ssrLoadModule("/src/App.jsx");
     const html = renderToString(React.createElement(App));

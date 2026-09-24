@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const COMPANION_NAME_DEFAULT = "小言";
-const COMPANION_WAKE_PHRASE_DEFAULT = "你好，小言";
+const COMPANION_NAME_DEFAULT = "小岚";
+const COMPANION_WAKE_PHRASE_DEFAULT = "小岚小岚";
 const COMPANION_END_SMOOTH_MIN_MS = 500;
 const COMPANION_END_SMOOTH_MAX_MS = 50000;
 const COMPANION_END_SMOOTH_STEP_MS = 500;

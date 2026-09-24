@@ -95,7 +95,7 @@ test('T27 MCP abort terminates child and handles a subsequent broken input pipe'
   child.stdin = new EventEmitter(); child.stdin.write = () => {}; child.stdin.end = () => {};
   child.stdout = new EventEmitter(); child.stdout.setEncoding = () => {};
   child.stderr = { resume() {} }; child.kill = () => { killed++; };
-  const client = new KnowledgeOsMcpClient({ settings: { loadConnection: () => ({ command: 'test-adapter', credentialId: 'test' }) }, spawnProcess: () => child });
+  const client = new KnowledgeOsMcpClient({ settings: { status: () => ({ readEnabled: true, syncEnabled: true }), loadConnection: () => ({ command: 'test-adapter', credentialId: 'test' }) }, spawnProcess: () => child });
   const abort = new AbortController();
   const pending = client.callTool('knowledge.search', {}, { signal: abort.signal });
   abort.abort();

@@ -25,7 +25,7 @@ test("Codex lifecycle events map to the frozen seven-state subset without readin
   assert.equal(mapCodexHookEvent({ hook_event_name: "UserPromptSubmit", prompt: "private prompt" }).state, "thinking");
   assert.equal(mapCodexHookEvent({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "private command" } }).state, "working");
   assert.equal(mapCodexHookEvent({ hook_event_name: "PreToolUse", tool_name: "request_user_input" }).state, "waiting");
-  assert.equal(mapCodexHookEvent({ hook_event_name: "PermissionRequest", tool_name: "Bash" }).state, "waiting");
+  assert.equal(mapCodexHookEvent({ hook_event_name: "PermissionRequest", tool_name: "Bash" }).state, "working");
   assert.equal(mapCodexHookEvent({ hook_event_name: "PostToolUse", tool_name: "request_user_input", tool_response: "private" }).state, "working");
   assert.equal(mapCodexHookEvent({ hook_event_name: "Stop", last_assistant_message: "private response" }).state, "idle");
   assert.equal(mapCodexHookEvent({ hook_event_name: "SessionEnd" }).state, "idle");
@@ -44,7 +44,7 @@ test("hook v2 uses an opaque per-task identity and never sends prompt, raw id or
   const source = { hook_event_name: "PermissionRequest", tool_name: "Bash", prompt: "private prompt", session_id: "raw-secret-session", cwd: "C:\\private\\DeskMate" };
   const message = encodeCodexHookMessage(source);
   const decoded = decodeCodexHookMessage(message.trim());
-  assert.deepEqual(decoded, { event: "PermissionRequest", toolName: "Bash", state: "waiting", taskKey: opaqueCodexTaskKey(source.session_id), taskLabel: "DeskMate" });
+  assert.deepEqual(decoded, { event: "PermissionRequest", toolName: "Bash", state: "working", taskKey: opaqueCodexTaskKey(source.session_id), taskLabel: "DeskMate" });
   assert.doesNotMatch(message, /raw-secret-session|private prompt|C:\\\\private/);
 });
 

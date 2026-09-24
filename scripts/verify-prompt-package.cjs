@@ -14,11 +14,18 @@ assert.equal(bundled.prompts.length, 80);
 assert.equal(bundled.primaryScenes.find(scene => scene.id === 'scene-video')?.title, '多媒体制作');
 assert.equal(bundled.prompts.filter(prompt => prompt.primarySceneId === 'scene-video').length, 26);
 const main = packagedFile('electron/main.cjs').toString('utf8');
+assert(packagedFile('electron/memory-candidate-review.cjs').equals(fs.readFileSync(path.join(root, 'electron/memory-candidate-review.cjs'))));
 for (const name of ['idle.mp4','listen.mp4','think.mp4','speak.mp4','poster.jpg','manifest.json']) {
   const file = `assets/companion/home-video/${name}`;
   assert(packagedFile(`dist/client/${file}`).equals(fs.readFileSync(path.join(root, 'public', file))), `stale companion video: ${name}`);
 }
-assert(main.includes('t65-task-status-journal-recovery'));
+assert(main.includes('t72-community-release'));
+for (const file of ['memory-curation.cjs', 'memory-curation-store.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root, 'electron', file))), `stale curation resource: ${file}`);
+for (const file of ['clipboard-access.cjs', 'active-window-output.cjs', 'selection-capture.cjs']) {
+  assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root, 'electron', file))), `stale clipboard resource: ${file}`);
+}
+assert(packagedFile('electron/atomic-private-json.cjs').equals(fs.readFileSync(path.join(root, 'electron/atomic-private-json.cjs'))));
+for (const file of ['secure-ai-services.cjs', 'secure-bailian.cjs', 'secure-image2.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root, 'electron', file))));
 for (const file of ['text-model-json.cjs', 'companion-memory-pipeline.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root, 'electron', file))), `stale memory resource: ${file}`);
 for (const file of ['personal-reminders.cjs','preload.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale reminder resource: ${file}`);
 for (const file of ['local-retention.cjs','local-retention-service.cjs','local-retention-worker.cjs']) assert(packagedFile(`electron/${file}`).equals(fs.readFileSync(path.join(root,'electron',file))), `stale retention resource: ${file}`);
@@ -57,4 +64,4 @@ for (const filename of ['source.png', 'paper.png', 'yarn.png', 'glass.png', 'cla
 for (const filename of ['deskmate-dm.ico', 'deskmate-dm.png']) {
   assert(fs.readFileSync(path.join(root, releaseDirectory, 'win-unpacked/resources/app-assets', filename)).equals(fs.readFileSync(path.join(root, 'electron/assets', filename))));
 }
-console.log('T65 packaged resource check passed: task lifecycle, journal recovery, child pipe recovery, Style Studio, hotwords, dance audio, reminders, Workbench, backup/restore, renderer, companion videos and exact native bridge.');
+console.log('T68 packaged resource check passed: async clipboard consumers, voice configuration recovery, hidden native menu, Style Studio, reminders, Workbench, backup/restore, renderer, companion videos and exact native bridge.');

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { writePrivateJson } = require('./atomic-private-json.cjs');
 
 const DEFAULT_IMAGE2_BASE_URL = "https://metajing.cn/v1";
 const IMAGE2_MODEL = "gpt-image-2";
@@ -52,8 +53,7 @@ function createSecureImage2Store({ safeStorage, userDataPath }) {
       model: IMAGE2_MODEL,
       apiKey: safeStorage.encryptString(validateImage2ApiKey(apiKey)).toString("base64"),
     };
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(value), { encoding: "utf8", mode: 0o600 });
+    writePrivateJson(filePath, value);
     return status();
   };
   const loadSecret = () => {
@@ -76,4 +76,3 @@ function createSecureImage2Store({ safeStorage, userDataPath }) {
 }
 
 module.exports = { DEFAULT_IMAGE2_BASE_URL, IMAGE2_MODEL, createSecureImage2Store, normalizeImage2BaseUrl, validateImage2ApiKey };
-

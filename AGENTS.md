@@ -1,5 +1,7 @@
 # DeskMate project rules
 
+T72 community distribution: original work follows root LICENSE (source-visible, personal noncommercial unmodified use; not OSI open source). Preserve third-party licenses. Never publish author profile/presentation drafts or build outputs in Git. Fresh profiles default to 小明/empty personal details, KnowledgeOS off, Xiaozhi off; saved choices win. Do not equate Windows packaging with macOS support. See docs/contracts/t72-community-release-v1.md.
+
 本仓库是 DeskMate 的唯一产品边界。最终产品包含 Windows 桌面软件、EasyInput ESP32-S3 总控固件和小智 ESP32-S3 云台固件；课程资料、外部参考工程的完整副本和其他实验项目不得放入本仓库。
 
 ## Required reading
@@ -38,6 +40,8 @@
 - 小智是可选实体扩展。关闭“启用小智硬件扩展”后必须在主进程停用屏幕/表情/舵机/舞蹈/自动动作出口，但保留 AI 陪伴、唤醒、听写、提示词、按键、Codex 提醒与记忆；关闭不是连接故障，重新启用不得重放旧动作。
 
 ## Architecture constraints
+
+- T71 用户明确授权的自动记忆模式可以将有原话依据并经复核的候选提炼为独立长期记忆，保留全部原始候选及来源；流水自动归档，重复合并，只有矛盾/不确定/敏感内容待核对。默认未授权关闭；恢复备份清除模型处理授权。遵循 `docs/contracts/t71-automatic-memory-curation-v1.md`，不得把自动记忆标成用户已确认，不改 KnowledgeOS 正式知识或共享权限。
 
 - React 渲染进程不能直接读取密钥、Node API 或原始设备路径。
 - Electron 保持 `nodeIntegration: false`、`contextIsolation: true` 和最小化 preload/IPC。

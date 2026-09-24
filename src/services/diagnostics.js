@@ -338,6 +338,7 @@ export function createDiagnosticReport(input = {}) {
     receiver: taskBriefSource.receiver === "listening" ? "listening" : "unavailable",
     taskCount: Math.max(0, Math.min(8, Number(taskBriefSource.taskCount) || 0)),
     announcementsEnabled: taskBriefSource.announcementsEnabled !== false,
+    notificationCounters: Object.fromEntries(['permissionChecks', 'suppressedRepeats', 'candidates'].map(key => [key, Math.max(0, Math.min(1000000, Math.trunc(Number(taskBriefSource.notificationCounters?.[key]) || 0)))])),
   };
   const voiceOutput = { ...safeTimings(input.voiceOutput, ['outputMs', 'historyWaitMs', 'totalMs']), destination: ['active-window', 'clipboard', 'history'].includes(input.voiceOutput?.destination) ? input.voiceOutput.destination : 'unknown', ok: input.voiceOutput?.ok === true, requestedMode: ['active-window', 'clipboard', 'history'].includes(input.voiceOutput?.requestedMode) ? input.voiceOutput.requestedMode : 'unknown', fallback: input.voiceOutput?.fallback === true, reason: safeOutputReason(input.voiceOutput?.reason) };
   const retentionSource = input.retention || {};

@@ -19,7 +19,7 @@ async function fixture(run) {
   policyStore.save({ ...policy, dailyTime: '23:00' });
   const inputs = [], sent = [];
   let failSynthesis = false;
-  const options = { store, policyStore, now: () => now, loadSecret: () => ({}), knowledgeBaseProjection: () => ({ ok: true }), knowledgeOsSettings: { status: () => ({ configured: true, syncEnabled: true }) }, knowledgeOsClient: { callTool: async (name, payload) => { sent.push(payload); return { ok: true, data: { submission_id: `receipt-${sent.length}` } }; } }, requestJson: async request => {
+  const options = { store, policyStore, now: () => now, loadSecret: () => ({}), knowledgeBaseProjection: () => ({ ok: true }), knowledgeOsSettings: { status: () => ({ configured: true, syncEnabled: true }) }, knowledgeOsClient: { callTool: async (name, payload) => { if (name === 'submission.get_status') return { ok: true, data: { status: 'completed', stage: 'raw_sealed' } }; sent.push(payload); return { ok: true, data: { submission_id: `receipt-${sent.length}` } }; } }, requestJson: async request => {
     assert.equal(request.nonThinking, true); assert.equal(request.timeoutMs, 120000);
     const input = JSON.parse(request.messages.at(-1).content); inputs.push(input);
     if (input.workday) return { summary: '小时摘要' };
@@ -110,10 +110,10 @@ test('explicit outbox retry bypasses delay without resending accepted classes or
   };
   const service = new MemoryJournalService(h.options);
   const first = await service.closeCurrentWorkday({ manual: true });
-  assert.equal(first.sync.accepted, 1);
+  assert.equal(first.sync.accepted, 0); // shared connection failure stops this batch
   assert.equal((await service.syncPending()).skipped, true);
-  h.options.knowledgeOsClient.callTool = async (name, payload) => { assert.deepEqual(payload, attempted.find(p => p.memory_class === 'personal')); return original(name, payload); };
-  assert.equal((await service.syncPending({ force: true })).accepted, 1);
+  h.options.knowledgeOsClient.callTool = async (name, payload) => { if (payload.memory_class === 'personal') assert.deepEqual(payload, attempted.find(p => p.memory_class === 'personal')); return original(name, payload); };
+  assert.equal((await service.syncPending({ force: true })).accepted, 2);
   assert.equal(h.sent.length, 2);
 }));
 

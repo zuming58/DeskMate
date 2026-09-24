@@ -99,7 +99,7 @@ function taskNotification(task) {
 
 function hookMilestone(value = {}) {
   if (value.event === "UserPromptSubmit") return "开始处理新任务";
-  if (value.event === "PermissionRequest") return "需要你确认";
+  if (value.event === "PermissionRequest") return "正在处理权限检查";
   if (value.event === "PreToolUse" && value.toolName === "request_user_input") return "需要你输入";
   if (value.event === "PreToolUse") {
     if (/apply_patch|Edit|Write/i.test(value.toolName)) return "正在修改文件";
@@ -170,6 +170,8 @@ class CodexTaskBriefStore {
     this.maxTasks = Math.max(1, Math.min(MAX_RECENT_TASKS, Number(maxTasks) || MAX_RECENT_TASKS));
     this.throttleMs = Math.max(1_000, Number(throttleMs) || PROGRESS_THROTTLE_MS);
     this.tasks = new Map();
+    this.revision = 0;
+    this.notificationCounters = { permissionChecks: 0, suppressedRepeats: 0, candidates: 0 };
   }
 
   ingest(value, { allowAnnouncement = true } = {}) {
@@ -179,15 +181,21 @@ class CodexTaskBriefStore {
     if (previous && report.sequence <= previous.sequence) return { ok: false, reason: "codex-task-brief-stale" };
     const receivedAt = this.now();
     const stateChanged = Boolean(previous && previous.state !== report.state);
-    const shouldAnnounce = allowAnnouncement && stateChanged && IMMEDIATE_STATES.has(report.state);
-    const task = Object.freeze({ ...report, receivedAt, lastAnnouncementAt: shouldAnnounce ? receivedAt : previous?.lastAnnouncementAt || 0, thinkingAnnounced: report.state === "thinking" || previous?.thinkingAnnounced === true });
+    const eligible = allowAnnouncement && (stateChanged || (!previous && report.state === "waiting")) && IMMEDIATE_STATES.has(report.state);
+    const lastByState = { ...previous?.lastByState };
+    const repeated = eligible && lastByState[report.state] !== undefined && receivedAt - lastByState[report.state] < this.throttleMs;
+    const shouldAnnounce = eligible && !repeated;
+    if (repeated) this.notificationCounters.suppressedRepeats += 1;
+    if (shouldAnnounce) { lastByState[report.state] = receivedAt; this.notificationCounters.candidates += 1; }
+    const revision = !previous || stateChanged ? ++this.revision : previous.revision;
+    const task = Object.freeze({ ...report, receivedAt, revision, lastByState, lastAnnouncementAt: shouldAnnounce ? receivedAt : previous?.lastAnnouncementAt || 0, thinkingAnnounced: report.state === "thinking" || previous?.thinkingAnnounced === true });
     this.tasks.delete(report.taskKey);
     this.tasks.set(report.taskKey, task);
     while (this.tasks.size > this.maxTasks) this.tasks.delete(this.tasks.keys().next().value);
     return {
       ok: true,
       task: this.sanitize(task),
-      announcement: shouldAnnounce ? Object.freeze({ text: taskNotification(task), state: task.state, taskLabel: task.taskLabel }) : null,
+      announcement: shouldAnnounce ? Object.freeze({ text: taskNotification(task), state: task.state, taskLabel: task.taskLabel, taskKey: task.taskKey, revision }) : null,
     };
   }
 
@@ -200,7 +208,8 @@ class CodexTaskBriefStore {
     if (value.event === "SessionEnd" && !previous) return { ok: true, registered: false, task: null, announcement: null };
     // Lifecycle closure is not evidence that the user's task was accomplished.
     // Override legacy senders that still label Stop as completed.
-    const state = value.event === "Stop" ? "idle" : value.event === "SessionEnd" ? "closed" : value.state;
+    const state = value.event === "Stop" ? "idle" : value.event === "SessionEnd" ? "closed" : value.event === "PermissionRequest" ? "working" : value.state;
+    if (value.event === "PermissionRequest") this.notificationCounters.permissionChecks += 1;
     if (!STATES.has(state)) return { ok: false, reason: "codex-hook-task-state-unavailable" };
     const terminalWithoutActiveTask = ["Stop", "SessionEnd"].includes(value.event)
       && !["thinking", "working", "waiting"].includes(previous?.state);
@@ -223,6 +232,11 @@ class CodexTaskBriefStore {
     const updated = Object.freeze({ ...previous, taskLabel: label });
     this.tasks.set(previous.taskKey, updated);
     return { ok: true, changed: true, task: this.sanitize(updated) };
+  }
+
+  isAnnouncementCurrent(announcement = {}) {
+    const task = this.tasks.get(announcement.taskKey);
+    return Boolean(task && task.revision === announcement.revision && task.state === announcement.state);
   }
 
   sanitize(task) {
@@ -262,7 +276,7 @@ class CodexTaskBriefStore {
     return { ok: true, available: true, needsDisambiguation: false, aggregate: true, answer: aggregateTaskAnswer(tasks), tasks: tasks.map((task) => this.sanitize(task)) };
   }
 
-  status() { return Object.freeze({ receiver: "listening", protocol: "codex-task-brief-v1", tasks: this.list() }); }
+  status() { return Object.freeze({ receiver: "listening", protocol: "codex-task-brief-v1", tasks: this.list(), notificationCounters: { ...this.notificationCounters } }); }
 }
 
 class CodexTaskBriefServer {

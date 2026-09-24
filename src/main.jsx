@@ -1,3 +1,5 @@
+// Copyright (c) 2026 zuming58. Personal noncommercial use only; see ../LICENSE.
+// Third-party dependencies retain their own licenses.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.jsx";

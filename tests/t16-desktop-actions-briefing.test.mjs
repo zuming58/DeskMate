@@ -126,10 +126,10 @@ test("automatic hook lifecycle creates separate real tasks and can later hydrate
   assert.equal(first.task.state, "thinking");
   assert.equal(first.announcement, null);
   const waiting = store.ingestHook({ event: "PermissionRequest", state: "waiting", toolName: "Bash", taskKey: "codex_1234567890123456", taskLabel: "deskmate" });
-  assert.equal(waiting.task.state, "waiting");
-  assert.equal(waiting.announcement.text, "deskmate 项目的一个任务需要你回复。");
+  assert.equal(waiting.task.state, "working");
+  assert.equal(waiting.announcement, null);
   assert.equal(store.relabel("codex_1234567890123456", "DeskMate").changed, true);
-  assert.equal(store.query("DeskMate 项目怎么样").answer, "DeskMate 正在等你回复：需要你确认");
+  assert.equal(store.query("DeskMate 项目怎么样").answer, "DeskMate 正在执行：正在处理权限检查");
 });
 
 test("turn and session closure never announce task completion, including legacy Stop senders", () => {

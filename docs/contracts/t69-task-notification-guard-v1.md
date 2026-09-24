@@ -1,0 +1,14 @@
+# T69 Task notification evidence and stale-speech guard
+
+Status: `T69_TASK_NOTIFICATION_GUARD_V1_FROZEN`
+
+- Supersedes the PermissionRequest → waiting inference: hook v1/v2 reports a permission check, not a verified unresolved human approval. Map it to working with a neutral permission-check milestone, including legacy mapped senders. Do not announce it or guess whether automatic approval/subagents are involved. Codex's own approval UI remains authoritative.
+- Keep explicit blocking `request_user_input` and voluntary task-report `waiting` supported, including the first observed waiting report. Async question completion and parent/child ownership are not in the current hook contract: do not invent those fields or infer them from a shared project label. Genuine waiting is not suppressed merely because another session in the project works.
+- Preserve Stop→idle and SessionEnd→closed, without completion announcements. Real reported errors/completions remain supported.
+- Process task metadata synchronously in reception order before awaiting device delivery. Each state episode gets a process-local monotonically increasing revision. Announcements carry opaque identity/revision internally only; resume, close, a different state, eviction, and re-entry invalidate the old candidate. Same-state updates and relabeling do not invalidate it.
+- Suppress same-task/same-kind repeated notification candidates for 15 seconds. State updates and queries remain immediate; other tasks and kinds are not suppressed. This is a bounded heuristic, not request-ID deduplication (request IDs are unavailable). After eviction, history is intentionally bounded to eight tasks.
+- Allow a 300 ms settling window only for task notifications, not ASR or conversational endpointing. Recheck preference, application lifetime and state before dispatch and after asynchronous companion connection/volume setup, immediately before sending text to TTS. Stale standalone speech closes cleanly; stale speech within a conversation restores volume/listening. Already-submitted audible speech is not retroactively interrupted by this change.
+- Diagnostics export only bounded permission-check/suppression/candidate counters; no task keys, labels, tool arguments, approval contents or conversation text. Candidates are not proof of audible delivery.
+- No Hook registration/schema change, no global Codex setting change, no new model call, no hardware action, no user-data migration. Source remains in the canonical F worktree; an installer is built before any D update.
+
+Validation: synthetic parent/child permission sequences, legacy wire inputs, real-question preservation, cooldown, stale sequence/eviction, delayed connection and volume setup, normal speech, diagnostics redaction, complete desktop regression, packaged source equivalence. Real continuous Codex use is a user acceptance step, not claimed from mock tests.

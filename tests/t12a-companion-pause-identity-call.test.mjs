@@ -46,16 +46,16 @@ function fakeClock() {
   };
 }
 
-test("T12A preferences migrate to 小言, persist enums, and reject malformed imports", () => {
+test("T12A preferences use community defaults, persist enums, and reject malformed imports", () => {
   const migrated = migrateState({ schemaVersion: 11, settings: {} });
   assert.equal(migrated.schemaVersion, SCHEMA_VERSION);
-  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小言", wake: "你好，小言", pause: 500, idle: 10000 });
+  assert.deepEqual({ name: migrated.settings.companionName, wake: migrated.settings.companionWakePhrase, pause: migrated.settings.companionEndSmoothWindowMs, idle: migrated.settings.companionIdleTimeoutMs }, { name: "小岚", wake: "小岚小岚", pause: 500, idle: 10000 });
   assert.throws(() => validateConfig({ settings: { companionEndSmoothWindowMs: 650 } }), /停顿阈值/);
   assert.throws(() => validateConfig({ settings: { companionIdleTimeoutMs: 999 } }), /会话空闲/);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "deskmate-t12a-preferences-"));
   try {
     const store = new CompanionPreferenceStore({ userDataPath: root });
-    assert.equal(store.get().name, "小言");
+    assert.equal(store.get().name, "小岚");
     assert.deepEqual(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000 }), { name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 3000, idleTimeoutMs: 120000, codexBriefAnnouncementsEnabled: true, conversationVolume: 75, codexBriefVolume: 30, wakeEnabled: false });
     assert.equal(store.setCodexBriefAnnouncementsEnabled(false).codexBriefAnnouncementsEnabled, false);
     assert.equal(store.save({ name: "阿言", wakePhrase: "你好，阿言", endSmoothWindowMs: 5000, idleTimeoutMs: 60000 }).codexBriefAnnouncementsEnabled, false);

@@ -1,59 +1,62 @@
-# DeskMate
+# DeskMate · AI 工作台伙伴
 
-DeskMate 是一个 Windows 优先的软硬件 AI 工作伙伴。最终产品由桌面软件、运行在 EasyInput ESP32-S3 上的总控固件，以及运行在小智 ESP32-S3 云台上的表情/双舵机执行固件组成。桌面软件基线和两套正式固件模块骨架已经进入本仓库；当前第一开发包是 EasyInput 八键、旋钮与 USB HID 输入基础。
+语音输入、AI 陪伴小岚、个人提醒、提示词快选、风格映像与本地记忆管理，放在同一个 Windows 桌面工作台。可配合 EasyInput 按键/旋钮和小智屏幕云台；没有硬件时也能使用电脑音频与软件页面。
 
-当前可用基线：
+**个人非商业免费使用，源码可查看；不允许未经授权修改、套壳或商用。** 本项目不是 MIT/Apache 等宽松开源项目，完整条款见 [LICENSE](LICENSE)。第三方组件仍遵守[各自许可](THIRD_PARTY_NOTICES.md)。
 
-- EasyInput `VID 303A / PID 1006` 连接识别。
-- 板子语音键 `Ctrl+Shift+Space`、F22 兼容入口和页面按钮共用同一录音状态机。
-- 电脑麦克风录音、实时字幕、千问 `qwen3-asr-flash` 转写。
-- 原样、智能和自定义文本整理。
-- 历史记录、剪贴板及当前窗口输出、系统托盘、正式 Windows 图标。
-- 板载麦克风与厂商 HID 协议已有源码级合同，尚待接入与真机验收。
-- EasyInput Maker 与小智云台参考工程的技术、安全和接口地图已完成；正式固件只在本仓 `firmware/` 开发，外部目录保持只读。
+## 下载与安装
 
-## Start here
+**[前往官方下载页](https://github.com/zuming58/DeskMate/releases/latest)**
 
-1. 阅读 [AGENTS.md](AGENTS.md) 了解项目规则。
-2. 阅读 [flow/progress.md](flow/progress.md) 获取最新交接。
-3. 阅读 [flow/plan.md](flow/plan.md) 获取当前阶段计划。
-4. 文档总索引见 [docs/README.md](docs/README.md)。
+在 Assets 中选 `DeskMate-<版本>-setup.exe`。`Source code.zip` 是源码，不是安装器。Windows 10/11 x64 是当前发布目标；macOS 尚未完成适配与真机验收，暂不提供正式 Mac 安装包。
 
-## Development
+- 安装器提供中文向导、安装位置选择和桌面快捷方式；升级前从托盘完整退出旧版。
+- 当前安装包未代码签名，请核对官方来源与 Release 中的 SHA-256。不要为了安装未知副本关闭安全软件。
+- 不附带作者的 API Key、配置、个人资料、录音或记忆；需要使用者自行配置服务。
+- 软件免费不等于云服务免费，模型/语音/生图费用由使用者自己的账户承担。
+- KnowledgeOS 是可选的独立服务，不随本安装器安装。
 
-要求：Node.js 20+、npm、.NET 8 SDK；桌面打包与输入桥仅在 Windows 验证。
+完整说明见 [社区版安装、隐私与许可](docs/setup/community-release.md)。分享时直接发官方下载页链接即可。
+
+## 主要功能
+
+| 页面 | 功能 |
+| --- | --- |
+| 工作台 | 使用概览、连接状态、个人提醒与重要事项 |
+| 语音输入 | 录音、转写、整理、热词纠错、剪贴板/目标窗口输出 |
+| AI 陪伴 | 连续语音对话、个人资料与人设、提醒、可选实体动作 |
+| 风格映像 | 素材管理、风格生图与显影；生成使用自己配置的服务 |
+| 历史、词库、提示词 | 历史检索、确定性替换、场景与快捷提示词 |
+| 记忆管理 | 本地原文与摘要、授权后自动整理、疑问核对与可选 KnowledgeOS 同步 |
+| 按键配置、设备与诊断 | 硬件映射、服务设置、备份与脱敏诊断 |
+
+语音、提醒、模型费用和硬件能力以实际配置与状态为准。模拟预览、服务受理、封存回执和硬件执行不是同一件事，不将未验收能力描述为可用。
+
+## 源码与构建
+
+此源码供许可范围内阅读和构建未经修改的个人非商业版本；修改、再分发、商用需另行授权。开发要求 Node.js 22+、npm、.NET 8 SDK；官方桌面构建当前在 Windows 验证。
 
 ```powershell
 npm ci --include=dev
 npm test
-npm run build:desktop
-.\release\win-unpacked\DeskMate.exe
+npm run build:beta
 ```
 
-Web 开发：
-
-```powershell
-npm run dev
-```
-
-## Repository layout
+安装器位于 `release/`。产品源码在本仓，用户数据在系统独立用户目录；不要把本机用户目录或整个开发工作区打包发送给他人。
 
 ```text
-electron/       Electron 主进程、IPC、系统托盘、千问与输入桥
-native/         Windows Raw Input 自包含辅助进程
-src/            React 界面、领域模型、适配器和状态管理
-tests/          自动化测试
-firmware/       EasyInput 总控与小智云台正式固件模块
-contracts/      DeskMate host / DeskMate Link 机器合同与黄金向量
-tools/          无硬件模拟器和协议故障注入工具
-design/         自有概念图、界面稿与脱敏参考图
-docs/           产品、架构、协议、测试和交接文档
-flow/           Project Flow 项目控制面
+electron/       Electron 主进程、适配器、IPC 与安全存储
+src/            React 页面与领域模型
+native/         Windows 输入桥
+firmware/       EasyInput 与小智正式固件源码（不随安装器烧录）
+contracts/      三端版本化合同
+tests/          回归测试
+docs/           说明、架构、来源与验收记录
+flow/           开发计划、决定与事实交接
 ```
 
-## Safety
+开始维护前阅读 [AGENTS.md](AGENTS.md)、[当前进度](flow/progress.md) 和 [文档索引](docs/README.md)。未经明确确认不烧录、不改 Flash/分区/eFuse，不向未知 HID 接口写数据。
 
-- API Key 使用 Windows 当前用户加密存储，不进入 Git、配置导出或诊断。
-- 未经明确确认不烧录、不擦除、不改分区、不写 eFuse。
-- 未知 HID 接口不得写入随机数据；正式厂商报告必须严格遵循固定协议。
-- 不提交录音、识别正文、Wi-Fi 密码、IP/MAC/SSID、设备序列号或窗口标题。
+## 反馈与授权
+
+[提交问题或请求授权](https://github.com/zuming58/DeskMate/issues)。请勿在公开 Issue 上传 API Key、原始对话、数据库、个人资料或完整诊断目录。商用许可须取得作者明确书面同意，提交请求本身不是授权。

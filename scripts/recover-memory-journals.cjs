@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
     report.adapterLabel = connection.status().commandLabel;
     if (args.includes('--adapter')) {
       const candidate = path.resolve(argument('--adapter'));
-      const testClient = new KnowledgeOsMcpClient({ settings: { loadConnection: () => ({ command: candidate, credentialId: connection.status().credentialId }) } });
+      const testClient = new KnowledgeOsMcpClient({ settings: { status: () => connection.status(), loadConnection: () => ({ command: candidate, credentialId: connection.status().credentialId }) } });
       const health = await testClient.callTool('health.get_summary');
       if (!health.ok) throw new Error(health.reason);
       connection.saveCommand(candidate);

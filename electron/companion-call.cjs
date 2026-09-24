@@ -5,7 +5,7 @@ const COMPANION_CALL_ACTION = Object.freeze({
 });
 
 function wakeGreeting(persona = {}) {
-  const owner = String(persona.ownerName || "祖名").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 32);
+  const owner = String(persona.ownerName || "小明").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 32);
   return `在呢，${owner}。`;
 }
 

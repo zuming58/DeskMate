@@ -4,6 +4,7 @@ import { createDraftGuard } from "./domain/draftGuard.js";
 import { useUnsavedChanges } from './domain/unsavedChanges.js';
 import { createDictationCompletion, finalizedDictationOrFallback } from './domain/dictationStreamCompletion.js';
 import { LocalBackupPanel } from './LocalBackupPanel.jsx';
+import MemoryCurationPanel from './MemoryCurationPanel.jsx';
 import { ShortcutRecorder } from './ShortcutRecorder.jsx';
 import { keyboardSyncFeedback, normalizeKeyboardPending, prepareCompanionPromptKeys, projectKeyboardRead, workspaceKeyboardPatch } from './domain/keymapWorkspace.js';
 import {
@@ -249,7 +250,7 @@ function ExpressionTile({ preset, selected, onClick, compact = false }) {
 
 function AgentStateTestPanel({ notify, navigate, index = "03" }) {
   const { state } = useAppStore();
-  const hardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
+  const hardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled === true;
   const [testState,setTestState]=useState('idle');
   const control = { ...normalizeAgentControl(state.agentControl), state:testState };
   const evidence = agentStateEvidence(state.runtime?.inputBridge);
@@ -295,11 +296,11 @@ function AgentStateTestPanel({ notify, navigate, index = "03" }) {
 
 export function CompanionPage({ notify, navigate, stopCompanion, initialSection }) {
   const { state, patch, updateCompanion } = useAppStore();
-  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
+  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled === true;
   const [section, setSection] = useState(["overview", "motion", "agents"].includes(initialSection) ? initialSection : "overview");
   const [companionDraft, setCompanionDraft] = useState(() => companionPreferencesToDraft({ name: state.settings.companionName, wakePhrase: state.settings.companionWakePhrase, endSmoothWindowMs: state.settings.companionEndSmoothWindowMs, idleTimeoutMs: state.settings.companionIdleTimeoutMs, conversationVolume: state.settings.companionConversationVolume, codexBriefVolume: state.settings.companionCodexBriefVolume, wakeEnabled: state.settings.companionWakeEnabled }));
   const [companionSettingsStatus, setCompanionSettingsStatus] = useState({ state: "idle", message: "" });
-  const [personaDraft, setPersonaDraft] = useState({ ownerName: "祖名", ownerProfile: { occupation: "", currentFocus: "", ageStage: "", background: "" }, companionProfile: { ageStage: "" }, role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然可爱、语气柔和，带一点台湾女生的轻柔口吻；回答简短清楚，适时称呼祖名", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
+  const [personaDraft, setPersonaDraft] = useState({ ownerName: "小明", ownerProfile: { occupation: "", currentFocus: "", ageStage: "", background: "" }, companionProfile: { ageStage: "" }, role: "可爱、温馨、温暖的桌面工作伙伴", traits: "亲切、诚实、细心，会撒一点娇，但不过度打扰", speakingStyle: "自然亲切、语气柔和；回答简短清楚，只在自然合适时使用用户设置的称呼", boundaries: "不编造事实或任务进度；不声称拥有未接入的硬件能力；不直接执行系统命令；涉及外部动作时只通过可信白名单和真实状态回答" });
   const [personaStatus, setPersonaStatus] = useState({ state: "idle", message: "", scope: "" });
   const companionGuard = useRef(createDraftGuard()), personaGuard = useRef(createDraftGuard());
   const companionSaved = useRef(companionDraft), personaSaved = useRef(personaDraft);
@@ -576,7 +577,7 @@ export function CompanionPage({ notify, navigate, stopCompanion, initialSection 
 }
 
 export function MemoryManagementPage({ notify }) {
-  const { hasPendingHistory } = useAppStore();
+  const { state, hasPendingHistory } = useAppStore();
   const policyGuard = useRef(createDraftGuard());
   const knowledgeGuard = useRef(createDraftGuard());
   const editMemoryPolicy = (value) => { policyGuard.current.edit(); setMemoryPolicy(value); };
@@ -622,9 +623,9 @@ export function MemoryManagementPage({ notify }) {
     const policyRevision = policyGuard.current.revision;
     const knowledgeRevision = knowledgeGuard.current.revision;
     try {
-      const [status, items, knowledgeBase, policy, journal, knowledgeOs, retention] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), filter === "turns" ? globalThis.desktopBridge?.listMemoryTurns?.({ source: sourceFilter, query, limit: 100 }) : globalThis.desktopBridge?.listMemories?.({ filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.(), globalThis.desktopBridge?.getMemoryJournalStatus?.(), globalThis.desktopBridge?.getKnowledgeOsStatus?.(), globalThis.desktopBridge?.getLocalRetentionStatus?.()]);
+      const [status, items, knowledgeBase, policy, journal, knowledgeOs, retention] = await Promise.all([globalThis.desktopBridge?.getMemoryStatus?.(), filter === "turns" ? globalThis.desktopBridge?.listMemoryTurns?.({ source: sourceFilter, query, limit: 100 }) : globalThis.desktopBridge?.listMemories?.({ filter: filter === "candidate-items" ? "candidates" : filter, source: sourceFilter, query, limit: 100 }), globalThis.desktopBridge?.getKnowledgeBaseStatus?.(), globalThis.desktopBridge?.getMemoryPolicy?.(), globalThis.desktopBridge?.getMemoryJournalStatus?.(), globalThis.desktopBridge?.getKnowledgeOsStatus?.(), globalThis.desktopBridge?.getLocalRetentionStatus?.()]);
       if (status) setMemoryStatus(status);
-      setMemoryItems(Array.isArray(items) ? items : []);
+      setMemoryItems(Array.isArray(items) ? (filter === "all" ? items.filter(item => item.type !== "candidate" || item.state === "accepted") : items) : []);
       if (knowledgeBase) setKnowledgeBaseStatus(knowledgeBase);
       if (policy && policyGuard.current.acceptPoll(policyRevision)) setMemoryPolicy(policy);
       if (journal) setJournalStatus(journal);
@@ -769,7 +770,7 @@ export function MemoryManagementPage({ notify }) {
     "retention-consent-required": "请先预览并确认启用自动清理",
   }[String(reason || "")] || String(reason || "本地清理暂不可用"));
   const retentionHeldText = (held = {}) => {
-    const labels = { "date-unknown": "日期不明", "transcription-not-successful": "转写未成功", "daily-summary-incomplete": "日终总结未完成", "knowledgeos-sync-pending": "KnowledgeOS 尚未接收两类日记", "memory-link-missing": "记忆关联待恢复", "recording-retention-pending": "录音仍需保留", "orphan-recovery-required": "孤立录音待处理", "history-integrity-failed": "历史完整性异常" };
+    const labels = { "date-unknown": "日期不明", "transcription-not-successful": "转写未成功", "daily-summary-incomplete": "日终总结未完成", "raw-summary-incomplete": "这条原文尚未纳入日终总结", "knowledgeos-sync-pending": "KnowledgeOS 两类日记尚未确认封存", "memory-link-missing": "记忆关联待恢复", "recording-retention-pending": "录音仍需保留", "orphan-recovery-required": "孤立录音待处理", "history-integrity-failed": "历史完整性异常" };
     return Object.entries(held).map(([reason, count]) => `${labels[reason] || reason} ${count} 项`).join("、");
   };
   const previewRetention = async () => {
@@ -842,12 +843,15 @@ export function MemoryManagementPage({ notify }) {
     } catch (error) { notify(`适配器配置失败：${error.message}`); }
   };
   const knowledgeOsReasonLabel = (reason) => ({
+    "knowledgeos-disabled": "KnowledgeOS 已关闭，记忆只保存在本机",
     "knowledgeos-not-configured": "请先选择适配器，填写并保存 Credential ID",
     "knowledgeos-credential-id-invalid": "Credential ID 格式不正确，请只填写 KnowledgeOS 导出的 UUIDv7",
     "knowledgeos-secure-storage-unavailable": "Windows 安全存储当前不可用",
     "knowledgeos-adapter-invalid": "请选择 KnowledgeOS 导出的 knowledgeos-mcp.exe",
     "knowledgeos-adapter-start-failed": "MCP 适配器无法启动",
-    "knowledgeos-adapter-exited": "MCP 适配器意外退出",
+    "knowledgeos-adapter-exited": "KnowledgeOS 服务未运行或适配器退出，本地总结已保留",
+    "knowledgeos-retry-delayed": "连接暂不可用，已降低重试频率",
+    "knowledgeos-receipt-failed": "服务端未完成封存，请检查 KnowledgeOS",
     "knowledgeos-request-timeout": "连接超时，请确认 KnowledgeOS Core 正在运行",
   }[String(reason || "")] || String(reason || "KnowledgeOS 请求失败"));
   const saveKnowledgeOs = async () => {
@@ -862,6 +866,18 @@ export function MemoryManagementPage({ notify }) {
     } catch (error) { notify(`KnowledgeOS 设置保存失败：${knowledgeOsReasonLabel(error.message)}`); }
     finally { endAction(); }
   };
+  const toggleKnowledgeOs = async (enabled) => {
+    if (enabled && !globalThis.confirm("启用 KnowledgeOS 后，允许按需检索，并把已完成的本地日记（包括历史待同步项）交给你配置的 KnowledgeOS 服务。没有该软件请保持关闭。是否继续？")) return;
+    if (!beginAction()) return;
+    try {
+      const result = await globalThis.desktopBridge?.setKnowledgeOsSettings?.({ ...knowledgeOsStatus, readEnabled: enabled, syncEnabled: enabled });
+      if (!result) throw new Error('knowledgeos-settings-save-failed');
+      setKnowledgeOsStatus(result);
+      setKnowledgeOsDraft({ credentialId: result.credentialId || '', projectId: result.projectId || '', readEnabled: result.readEnabled === true, syncEnabled: result.syncEnabled === true, sensitivity: result.sensitivity || 'private' });
+      notify(enabled ? 'KnowledgeOS 已启用；需配置你自己的服务才能连接' : 'KnowledgeOS 已关闭；本地长期记忆继续保存，不会自动删除');
+    } catch (error) { notify(`KnowledgeOS 开关保存失败：${knowledgeOsReasonLabel(error.message)}`); }
+    finally { endAction(); }
+  };
   const testKnowledgeOs = async () => {
     if(!beginAction())return;
     try { const result = await globalThis.desktopBridge?.testKnowledgeOsConnection?.(); notify(result?.ok ? "KnowledgeOS 连接与当前身份正常" : `KnowledgeOS 暂不可用：${knowledgeOsReasonLabel(result?.reason)}`); }
@@ -870,53 +886,63 @@ export function MemoryManagementPage({ notify }) {
   };
   const syncKnowledgeOs = async () => {
     if(!beginAction())return;
-    try { const result = await globalThis.desktopBridge?.syncKnowledgeOsMemory?.(); notify(result?.ok ? result.skipped ? "没有待提交的日记" : `KnowledgeOS 已接收 ${result.accepted} 份分类日记` : `仍有日记待重试：${result?.reason || "knowledgeos-submit-failed"}`); await refreshMemory(); }
+    try { const result = await globalThis.desktopBridge?.syncKnowledgeOsMemory?.(); notify(result?.ok ? result.skipped ? "暂无到期的提交或回执检查" : `本次接收 ${result.accepted || 0} 份，确认封存 ${result.receipts?.filter(item => item.sealed).length || 0} 份` : `仍有日记待重试：${knowledgeOsReasonLabel(result?.reason)}`); await refreshMemory(); }
     catch (error) { notify(`KnowledgeOS 同步失败：${knowledgeOsReasonLabel(error.message)}`); }
     finally { endAction(); }
   };
   return (
     <div className="companion-embedded memory-management">
       <div className="embedded-heading">
-        <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>查看每日摘要、审核记忆候选、搜索长期记忆；陪伴对话和成功的语音输入共用这条流水线。</p></div>
-        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.ready} onClick={() => { void closeWorkday(); }}>{busy ? "正在收尾…" : "提前结束今天并同步"}</Button><Button variant="soft" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理历史待处理记录</Button><Button icon={FolderOpen} variant="soft" disabled={!memoryStatus.ready} onClick={async () => { try { const result = await globalThis.desktopBridge?.openKnowledgeBaseFolder?.(); if (!result?.ok) notify("笔记文件夹暂时无法打开"); } catch (error) { notify(`打开笔记失败：${error.message}`); } }}>打开笔记文件夹</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与已审核记忆</Button></div>
+        <div><span>LOCAL MEMORY</span><h2>长期记忆管理</h2><p>自动整理日常记录，只核对有疑问的内容、搜索长期记忆；陪伴对话和成功的语音输入共用这条流水线。</p></div>
+        <div className="memory-heading-actions"><StatusBadge tone={memoryStatus.ready ? "success" : "demo"}>{memoryStatus.ready ? "SQLite 已就绪" : "仅桌面版可用"}</StatusBadge><Button variant="primary" disabled={busy || !memoryStatus.ready} onClick={() => { void closeWorkday(); }}>{busy ? "正在收尾…" : knowledgeOsStatus.syncEnabled ? "提前结束今天并同步" : "提前结束今天并保存"}</Button><Button variant="soft" disabled={busy || !memoryStatus.unprocessedTurns} onClick={() => { void generatePending(); }}>整理历史待处理记录</Button><Button icon={FolderOpen} variant="soft" disabled={!memoryStatus.ready} onClick={async () => { try { const result = await globalThis.desktopBridge?.openKnowledgeBaseFolder?.(); if (!result?.ok) notify("笔记文件夹暂时无法打开"); } catch (error) { notify(`打开笔记失败：${error.message}`); } }}>打开笔记文件夹</Button><Button icon={FileExport} variant="soft" disabled={!memoryStatus.ready} onClick={exportReviewed}>导出摘要与长期记忆</Button></div>
       </div>
-      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedDays || 0} 天、${memoryStatus.unprocessedTurns || 0} 条待整理。每日摘要可以直接查看；长期记忆候选须由你审核后，才供 AI 陪伴长期检索。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
+      <Notice tone={memoryStatus.ready ? "info" : "demo"} title={memoryStatus.ready ? "本地记忆控制已启用" : "当前没有启用记忆服务"}>{memoryStatus.ready ? `现有 ${memoryStatus.turns} 条真实会话事件，其中 ${memoryStatus.unprocessedDays || 0} 天、${memoryStatus.unprocessedTurns || 0} 条待整理。每日摘要保存在本地；只有启用 KnowledgeOS 同步后才上传。开启自动整理后，软件会归档流水、合并重复，提炼有原话依据的长期记忆。只有矛盾和不确定的内容需要你核对。` : "请在 DeskMate 桌面版查看本地记忆；数据不写入 EasyInput 或小智 Flash。"}</Notice>
       {/* Configuration appears after the results. */}
       {(journalStatus.pendingJournals?.length > 0 || journalStatus.running) && <Notice tone="warning" title={journalStatus.running ? '日终正在整理，请稍候' : `还有 ${journalStatus.pendingJournals.length} 天日终未完成`}>
         {(journalStatus.jobs || []).filter(job => job.state !== 'completed').map(job => <p key={job.day}>{job.day} · {job.state === 'running' ? (job.stage === 'synthesis' ? '正在合并当日总结' : '正在分段复核原文') : journalReasonLabel(job.reason)}{job.state === 'failed' && (job.attempts >= 3 ? '；自动重试已暂停' : `；预计 ${new Date(job.nextRetryAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重试`)}</p>)}
         <Button variant="soft" disabled={busy || journalStatus.running} onClick={() => { void retryJournals(); }}>重试未完成日终</Button>
       </Notice>}
+      <div className="memory-source-toggle memory-storage-mode"><div><strong>{knowledgeOsStatus.readEnabled || knowledgeOsStatus.syncEnabled ? 'KnowledgeOS 扩展已启用' : '本地长期保存 · KnowledgeOS 已关闭'}</strong><small>默认关闭。没有 KnowledgeOS 也能保存、整理和检索本地记忆；摘要与长期记忆无到期清理，只有你主动删除才清除。开启后使用你自己配置的服务。</small></div><Toggle label="启用 KnowledgeOS" disabled={busy || knowledgeGuard.current.dirty} checked={knowledgeOsStatus.readEnabled || knowledgeOsStatus.syncEnabled} onChange={(enabled) => { void toggleKnowledgeOs(enabled); }} /></div>
+      {knowledgeOsStatus.syncEnabled && journalStatus.delivery && <Notice tone={journalStatus.delivery.failed || journalStatus.delivery.receiptFailed ? 'warning' : 'info'} title="KnowledgeOS 写入状态">
+        已确认封存 {journalStatus.delivery.sealed} 份；已接收、待核对回执 {journalStatus.delivery.awaitingReceipt} 份；投递失败 {journalStatus.delivery.failed} 份。
+        {journalStatus.delivery.receiptFailed > 0 && ` ${journalStatus.delivery.receiptFailed} 份旧回执异常或服务端处理失败，尚不能确认封存；不会重复提交已接收的日记，也不会阻塞新日记。`}
+        {journalStatus.delivery.nextRetryAt > Date.now() && ` 后台将在 ${new Date(journalStatus.delivery.nextRetryAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重试，也可以点击“重试待同步”。`}
+        {' KnowledgeOS 需保持服务运行；暂时离线时，本地总结会保留。'}
+      </Notice>}
       <div className="memory-metrics">
         <Metric label="日终综合" value={String(journalStatus.completedJournals || 0)} unit="天" trend={journalStatus.active?.day ? `当前 ${journalStatus.active.day}` : "等待记录"} tone="blue" />
-        <Metric label="待审核候选" value={String(memoryStatus.pendingCandidates)} unit="条" trend="需人工确认" tone="orange" />
-        <Metric label="长期记忆" value={String(memoryStatus.longTermMemories)} unit="条" trend="可检索" tone="cyan" />
-        <Metric label="待同步" value={String(journalStatus.pendingJournalSync || 0)} unit="份" trend={knowledgeOsStatus.syncEnabled ? "KnowledgeOS 队列" : "中枢同步未启用"} tone="violet" />
+        <Metric label="需你核对" value={String(memoryStatus.curation?.questions || 0)} unit="组" trend={`${memoryStatus.curation?.pending || 0} 条待自动整理 · 原文保留`} tone="orange" />
+        <Metric label="长期记忆" value={String(memoryStatus.longTermMemories)} unit="条" trend={`含 ${memoryStatus.curation?.automatic || 0} 条自动整理 · 可纠正`} tone="cyan" />
+        <Metric label={knowledgeOsStatus.syncEnabled ? '待同步' : '存储方式'} value={knowledgeOsStatus.syncEnabled ? String(journalStatus.pendingJournalSync || 0) : '本地'} unit={knowledgeOsStatus.syncEnabled ? '份' : ''} trend={knowledgeOsStatus.syncEnabled ? "KnowledgeOS 队列" : "长期保留 · 无外部同步"} tone="violet" />
       </div>
       <Card className="memory-toolbar">
-        <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "整理结果" }, { value: "turns", label: "逐句记录" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "候选箱" }, { value: "long-term", label: "长期记忆" }]} />
+        <Segmented compact value={filter} onChange={setFilter} options={[{ value: "all", label: "整理结果" }, { value: "turns", label: "逐句记录" }, { value: "daily", label: "每日摘要" }, { value: "candidates", label: "待核对" }, { value: "archive", label: "原始归档" }, { value: "long-term", label: "长期记忆" }]} />
         <Segmented compact value={sourceFilter} onChange={setSourceFilter} options={[{ value: "all", label: "全部来源" }, { value: "companion", label: "陪伴" }, { value: "dictation", label: "语音输入" }]} />
         <SearchField value={query} onChange={setQuery} placeholder="搜索日期、主题或记忆内容" /><Button variant="soft" disabled={!query.trim()} onClick={() => { void searchIndex(); }}>混合检索</Button>
       </Card>
       {indexResults.length > 0 && <Card><SectionTitle index="R" title="检索预览" description="关键词与本地可重建 embedding 的有界结果；不会向 React 暴露向量。" /><div className="memory-item-list">{indexResults.map((item) => <article key={item.chunkId}><div><span>{item.kind}</span><time>{item.day} · {Math.round(item.score * 100)}%</time></div><p>{item.content}</p></article>)}</div></Card>}
-      <div className="memory-layout">
+      <Card><MemoryCurationPanel notify={notify} onChanged={refreshMemory} /></Card>
+      {filter === 'candidate-items' && <Button variant="soft" onClick={() => setFilter("candidates")}>返回候选主题分组</Button>}
+      {filter !== 'candidates' && <div className="memory-layout">
         <Card className="memory-empty-card">
-          {memoryItems.length === 0 ? <EmptyState icon={Book2} title={filter === "turns" ? "尚无逐句记录" : "尚无可管理的摘要或候选"} description={filter === "turns" ? "实时陪伴的你问我答、以及成功的普通语音输入，会原样写入本地 SQLite；这里不显示演示数据。" : "真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。"} action={filter === "turns" ? null : <Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "turn" ? item.source === "dictation" ? "语音输入原文" : item.role === "user" ? "你" : state.settings.companionName || "小智" : item.type === "journal" ? "日终工作与个人综合" : item.type === "daily" ? "来源每日摘要" : item.state === "accepted" ? "长期记忆" : item.state === "rejected" ? "已忽略候选" : "待审核候选"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.type === "turn" ? `${item.day} ${new Date(Number(item.createdAt)).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea disabled={busy} value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}{["daily", "candidate"].includes(item.type) && <div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div>}</article>)}</div>}
+          {memoryItems.length === 0 ? <EmptyState icon={Book2} title={filter === "turns" ? "尚无逐句记录" : "尚无可管理的摘要或候选"} description={filter === "turns" ? "实时陪伴的你问我答、以及成功的普通语音输入，会原样写入本地 SQLite；这里不显示演示数据。" : "真实对话回合会先进入本地事务库；点击“整理待处理对话”后，文本模型才会生成待审核候选，不使用演示数据填充。"} action={filter === "turns" ? null : <Button variant="soft" onClick={() => { void generatePending(); }}>整理真实对话</Button>} /> : <div className="memory-item-list">{memoryItems.map((item) => <article key={`${item.type}-${item.id}`}><div><span>{item.type === "turn" ? item.source === "dictation" ? "语音输入原文" : item.role === "user" ? "你" : state.settings.companionName || "小智" : item.type === "journal" ? "日终工作与个人综合" : item.type === "daily" ? "来源每日摘要" : item.state === "accepted" ? item.curationOrigin === "automatic" ? "自动整理的长期记忆" : "已确认长期记忆" : item.state === "rejected" ? "已忽略候选" : item.curationOutcome ? "原始归档" : "待自动整理"}<small className="memory-source-badge">{item.source === "dictation" ? "语音输入" : item.source === "mixed" ? "多来源" : "陪伴"}</small></span><time>{item.type === "turn" ? `${item.day} ${new Date(Number(item.createdAt)).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : item.day}</time></div>{editing?.id === item.id ? <div className="memory-editor"><textarea disabled={busy} value={editing.summary} maxLength={10000} onChange={(event) => setEditing({ ...editing, summary: event.target.value })} aria-label="纠正记忆内容" /><div className="button-row"><Button variant="primary" disabled={busy} onClick={saveCandidate}>保存纠正</Button><Button variant="ghost" disabled={busy} onClick={() => setEditing(null)}>取消</Button></div></div> : <p>{item.content}</p>}{item.provenance?.length > 0 && <details><summary>查看整理来源 · {item.provenance.length} 条</summary>{item.provenance.map((original, index) => <p key={index}><small>{original.day} · {original.reason}</small><br />{original.content}</p>)}</details>}{["daily", "candidate"].includes(item.type) && <div className="memory-item-actions">{item.type === "candidate" && ["pending", "accepted"].includes(item.state) && editing?.id !== item.id && <Button variant="soft" onClick={() => setEditing({ id: item.id, summary: item.content })}>纠正</Button>}{item.type === "candidate" && item.state === "pending" && !item.curationOutcome && <><Button variant="primary" onClick={() => reviewCandidate(item.id, "accepted")}>保留</Button><Button variant="ghost" onClick={() => reviewCandidate(item.id, "rejected")}>忽略</Button></>}<Button icon={Trash} variant="ghost" onClick={() => prepareForget({ scope: "item", type: item.type, id: item.id, label: item.type === "daily" ? `每日摘要 ${item.day}` : `${item.state === "accepted" ? "长期记忆" : "记忆候选"} ${item.day}` })}>永久删除</Button></div>}</article>)}</div>}
         </Card>
         <Card>
-          <SectionTitle index="01" title="记忆流水线" description="先可靠落盘，再异步总结；所有长期保留都由用户审核。" />
+          <SectionTitle index="01" title="记忆流水线" description="自动归档、合并并提炼长期记忆；只有疑问需要你核对。" />
           <div className="memory-pipeline">
             <div><span><History size={18} /></span><strong>会话事件即时落盘</strong><small>每轮对话先进入本地 SQLite 事务日志，不等待每日总结。</small></div>
-            <div><span><Book2 size={18} /></span><strong>每日摘要与候选箱</strong><small>空闲时和每日收尾生成摘要；未审核候选不会静默变成长记忆。</small></div>
+            <div><span><Book2 size={18} /></span><strong>每日摘要与候选箱</strong><small>每日收尾精炼候选、归档工作资料；重复主题集中展示，不把全部记录变成审批任务。</small></div>
             <div><span><Brain size={18} /></span><strong>关键词 + 向量检索</strong><small>原文、结构化事实和 embedding 分层保存，更换模型不丢来源。</small></div>
             <div><span><Lock size={18} /></span><strong>可查看、纠正与忘记</strong><small>当前已支持已审核导出、单条永久删除和全库事务清空；人物隔离留到 T13。</small></div>
           </div>
         </Card>
       </div>
+      }
       <details className="memory-advanced"><summary>高级设置 · 自动整理、清理、连接与维护</summary>
       <Card className="memory-policy-card">
         <Notice tone="info" title="当天接着聊 · 旧记录手动整理">陪伴只自动接续本地日历当天的对话，新的一天不直接带入昨天闲聊。明确回顾历史时，可检索陪伴与语音输入两类记录；更早信息按需查询已审核记忆和 KnowledgeOS。普通听写只输入文字，不用记忆生成回答。原始记录即时存本地，即使关机也保留；点击“整理待处理记录”可按日期补整理多天内容，无需软件全天开着。</Notice>
         {policyGuard.current.dirty && <Notice title="有未保存的策略修改" tone="warning">刷新状态不会覆盖修改；请点击保存后再离开。</Notice>}
-        <SectionTitle index="01" title="来源与自动整理" description="每小时整理新增内容；默认每天 23:30 重新读取全天原文并封账，失败可恢复重试。" />
+        <SectionTitle index="01" title="来源与自动整理" description="每小时整理新增内容；按已保存的时间重新读取全天原文并封账，失败可恢复重试。" />
         <div className="memory-policy-grid">
           <div className="memory-source-toggle"><div><strong>陪伴对话</strong><small>{memoryStatus.sourceCounts?.companion?.turns || 0} 条 · {memoryStatus.sourceCounts?.companion?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("companion")} onChange={() => toggleMemorySource("companion")} /></div>
           <div className="memory-source-toggle"><div><strong>语音输入</strong><small>{memoryStatus.sourceCounts?.dictation?.turns || 0} 条 · {memoryStatus.sourceCounts?.dictation?.unprocessed || 0} 条待整理</small></div><Toggle label="参与每日整理" checked={memoryPolicy.enabledSources.includes("dictation")} onChange={() => toggleMemorySource("dictation")} /></div>
@@ -928,7 +954,7 @@ export function MemoryManagementPage({ notify }) {
         </div>
         <div className="memory-policy-status" aria-live="polite"><span><small>下次整理</small><strong>{nextMemoryRunLabel}</strong></span><span><small>陪伴对话上次结果</small><strong className={memoryPolicy.lastResults?.companion?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.companion?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("companion")}</strong></span><span><small>语音输入上次结果</small><strong className={memoryPolicy.lastResults?.dictation?.status === "failed" ? "is-failed" : memoryPolicy.lastResults?.dictation?.status === "warning" ? "is-warning" : ""}>{memoryResultLabel("dictation")}</strong></span></div>
         <div className="memory-policy-footer"><small>关闭来源只停止新整理，不删除既有记录。语音编辑、模拟转写和失败记录不会进入长期记忆。</small><Button disabled={busy} onClick={()=>{void cancelMemoryEdits("policy");}}>取消策略修改</Button><Button variant="primary" disabled={busy} onClick={() => { void saveMemoryPolicy(); }}>保存记忆策略</Button></div>
-        <Notice tone="info" title="内置整理规则 · 无需填写提示词">原始文字原样保存在本地 SQLite；日终会重新读取截止水位前全部启用来源的原始记录，小时摘要只用于查漏补缺。软件在 DeskMate/journal/ 保存日期命名的合并预览，并在 work/ 与 personal/ 保存两份分类稿；助手故事、建议和听写中的第三方材料不会被冒充为你的事实。提前收尾后新记录归入下一工作日，但真实发生时间不变。已审核长期记忆继续使用本地向量＋关键词检索。</Notice>
+        <Notice tone="info" title="内置整理规则 · 无需填写提示词">原始文字原样保存在本地 SQLite；日终会重新读取截止水位前全部启用来源的原始记录，小时摘要只用于查漏补缺。软件在 DeskMate/journal/ 保存日期命名的合并预览，并在 work/ 与 personal/ 保存两份分类稿；助手故事、建议和听写中的第三方材料不会被冒充为你的事实。提前收尾后新记录归入下一工作日，但真实发生时间不变。长期记忆继续使用本地向量＋关键词检索。</Notice>
       </Card>
       <Card className="memory-policy-card memory-retention-card">
         <SectionTitle index="02" title="本地自动清理" description="先预览、再授权；只处理达到期限且已具备安全条件的原始录音与文字。" />
@@ -953,7 +979,7 @@ export function MemoryManagementPage({ notify }) {
           <div className="memory-source-toggle"><div><strong>AI 陪伴按需检索</strong><small>对话与本地记忆优先；历史缺口或明确查知识库时访问中枢</small></div><Toggle label="允许读取" checked={knowledgeOsDraft.readEnabled} onChange={(readEnabled) => editKnowledgeOsDraft((current) => ({ ...current, readEnabled }))} /></div>
           <div className="memory-source-toggle"><div><strong>日终自动同步</strong><small>每天固定提交 work 与 personal 两份 sealed 日记</small></div><Toggle label="允许同步" checked={knowledgeOsDraft.syncEnabled} onChange={(syncEnabled) => editKnowledgeOsDraft((current) => ({ ...current, syncEnabled }))} /></div>
         </div>
-        <div className="memory-policy-footer"><small>个人日记强制 project_id=null；工作 Project ID 填错时会安全清空，不影响凭据保存与连接测试。已接收只表示 KnowledgeOS 封存成功，不表示发布成正式知识。</small><div className="button-row"><Button variant="soft" disabled={busy} onClick={() => { void testKnowledgeOs(); }}>测试连接</Button><Button variant="soft" disabled={busy || !knowledgeOsStatus.syncEnabled} onClick={() => { void syncKnowledgeOs(); }}>重试待同步</Button><Button disabled={busy} onClick={()=>{void cancelMemoryEdits("knowledge");}}>取消中枢修改</Button><Button variant="primary" disabled={busy} onClick={() => { void saveKnowledgeOs(); }}>保存中枢设置</Button></div></div>
+        <div className="memory-policy-footer"><small>个人日记强制 project_id=null；工作 Project ID 填错时会安全清空。已接收不等于封存成功，只有最终回执确认后才显示“已确认封存”；封存不代表发布为正式知识。</small><div className="button-row"><Button variant="soft" disabled={busy || !(knowledgeOsStatus.readEnabled || knowledgeOsStatus.syncEnabled)} onClick={() => { void testKnowledgeOs(); }}>测试连接</Button><Button variant="soft" disabled={busy || !knowledgeOsStatus.syncEnabled} onClick={() => { void syncKnowledgeOs(); }}>重试待同步</Button><Button disabled={busy} onClick={()=>{void cancelMemoryEdits("knowledge");}}>取消中枢修改</Button><Button variant="primary" disabled={busy} onClick={() => { void saveKnowledgeOs(); }}>保存中枢设置</Button></div></div>
       </Card>
       <div className="button-row"><Button variant="soft" disabled={busy || !memoryStatus.longTermMemories} onClick={() => { void rebuildIndex(); }}>重建本地索引</Button><Button icon={Trash} variant="danger" disabled={busy || !memoryStatus.ready} onClick={() => prepareForget({ scope: "all" })}>清空本地记忆库</Button></div>
       </details>
@@ -1700,7 +1726,7 @@ export function ConnectionsPage({ notify, embedded = false }) {
   useEffect(() => { voiceAdapters.desktop.capabilities().then(setDesktopCaps).catch(() => setDesktopCaps({ supported: false, shortcutRegistered: false })); }, [state.settings.voiceShortcut]);
   useEffect(() => deviceEventBus.subscribe((event) => { if (event.type === "voice-toggle" || event.type === "key-diagnostic") setLastTrigger({ source: event.source, key: event.payload.key || event.payload.shortcut || "", at: event.at }); }), []);
   const bridge = state.runtime?.inputBridge || desktopCaps.inputBridge || {};
-  const xiaozhiHardware = bridge.xiaozhiHardware || { enabled: true, state: "enabled-disconnected", transitioning: false, lastShutdown: { state: "not-run", reason: "" } };
+  const xiaozhiHardware = bridge.xiaozhiHardware || { enabled: false, state: "disabled", transitioning: false, lastShutdown: { state: "not-run", reason: "" } };
   const codexLed = bridge.codexLedDelivery || { status: "never", supported: false, targetState: "idle", reason: "" };
   const audioStatus = state.runtime?.easyInputAudio || {};
   const link = normalizeLinkDiagnostics(bridge.linkDiagnostics);
@@ -1873,7 +1899,7 @@ export function ExpressionEditorPage({ notify }) {
 
 export function MotionPage({ notify, embedded = false }) {
   const { state, patch } = useAppStore();
-  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled !== false;
+  const xiaozhiHardwareEnabled = state.runtime?.inputBridge?.xiaozhiHardware?.enabled === true;
   const { preset, repeatCount } = state.motion;
   const presetLabel = ({ attention: "关注", nod: "点头", search: "寻找", dance: "跳舞" })[preset] || "动作";
   const updateMotion = (value) => patch({ motion: { ...state.motion, ...value } });
@@ -2127,7 +2153,7 @@ export function SettingsPage({ notify, initialSection = "" }) {
     setMotionSettingsState(result.motionSettings || next);
     notify("动作角度和速度已保存，将用于下一次实体动作");
   };
-  const exportDiagnostics = async () => { const retention = await (globalThis.desktopBridge?.getLocalRetentionStatus?.() || Promise.resolve(null)).catch(() => null); const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); const liveCompanion = await voiceAdapters.desktop.getCompanionPreferences().catch(() => null); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const companion = state.runtime?.companion || {}; const codexTasks = state.runtime?.codexTasks || {}; const report = createDiagnosticReport({ retention, runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, conversation: { state: companion.state, serviceConfigured: companion.serviceConfigured ?? companion.service?.configured, connected: companion.active, input: companion.audioSelection?.activeSource || companion.audioSelection?.requestedSource, fallback: Boolean(companion.audioSelection?.fallback), error: companion.error, savedPreferences: companion.savedPreferences, sessionPolicy: companion.sessionPolicy, asrTiming: companion.asrTiming, counters: companion.computerAudio?.counters, sinkCancelReasons: companion.computerAudio?.sinkCancelReasons, lastSinkCancelReason: companion.computerAudio?.lastSinkCancelReason, echoGuard: companion.echoGuard, intentBridge: companion.intentBridge, build: companion.build, mainState: companion.mainState, eventSequence: companion.eventSequence, stopLifecycle: companion.stopLifecycle, providerLifecycle: companion.providerLifecycle, pipeline: companion.pipeline, turnLifecycle: companion.turnLifecycle, wakeWord: liveCompanion?.wakeWord || companion.wakeWord }, codexTaskBrief: { receiver: codexTasks.receiver, taskCount: Array.isArray(codexTasks.tasks) ? codexTasks.tasks.length : 0, announcementsEnabled: codexTasks.announcementsEnabled, hookIntegration: codexTasks.hookIntegration, catalog: codexTasks.catalog }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, voiceOutput: state.diagnostics?.voiceOutput, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
+  const exportDiagnostics = async () => { const retention = await (globalThis.desktopBridge?.getLocalRetentionStatus?.() || Promise.resolve(null)).catch(() => null); const caps = await voiceAdapters.desktop.capabilities(); const network = await voiceAdapters.desktop.networkSummary(); const liveCompanion = await voiceAdapters.desktop.getCompanionPreferences().catch(() => null); let microphonePermission = "unknown"; try { microphonePermission = (await navigator.permissions.query({ name: "microphone" })).state; } catch { /* unsupported permission query */ } const companion = state.runtime?.companion || {}; const codexTasks = state.runtime?.codexTasks || {}; const report = createDiagnosticReport({ retention, runtime: caps.supported ? "electron" : "web", inputBridge: state.runtime?.inputBridge || caps.inputBridge, shortcut: { value: state.settings.voiceShortcut, enabled: state.settings.globalShortcutsEnabled, registered: Boolean(caps.shortcutRegistered) }, microphone: { source: normalizeMicrophoneSource(state.settings.microphoneSource), selected: state.settings.microphoneId ? "custom-device" : "system-default", permission: microphonePermission }, network, lanAudio: { status: settingsAudioStatus.state, configured: settingsAudioStatus.setup?.configured, networkReady: settingsAudioStatus.networkReady, heartbeat: settingsAudioStatus.heartbeat, micTest: settingsAudioStatus.micTest, counters: settingsAudioStatus.counters }, conversation: { state: companion.state, serviceConfigured: companion.serviceConfigured ?? companion.service?.configured, connected: companion.active, input: companion.audioSelection?.activeSource || companion.audioSelection?.requestedSource, fallback: Boolean(companion.audioSelection?.fallback), error: companion.error, savedPreferences: companion.savedPreferences, sessionPolicy: companion.sessionPolicy, asrTiming: companion.asrTiming, counters: companion.computerAudio?.counters, sinkCancelReasons: companion.computerAudio?.sinkCancelReasons, lastSinkCancelReason: companion.computerAudio?.lastSinkCancelReason, echoGuard: companion.echoGuard, intentBridge: companion.intentBridge, build: companion.build, mainState: companion.mainState, eventSequence: companion.eventSequence, stopLifecycle: companion.stopLifecycle, providerLifecycle: companion.providerLifecycle, pipeline: companion.pipeline, turnLifecycle: companion.turnLifecycle, wakeWord: liveCompanion?.wakeWord || companion.wakeWord }, codexTaskBrief: { receiver: codexTasks.receiver, taskCount: Array.isArray(codexTasks.tasks) ? codexTasks.tasks.length : 0, announcementsEnabled: codexTasks.announcementsEnabled, hookIntegration: codexTasks.hookIntegration, catalog: codexTasks.catalog, notificationCounters: codexTasks.notificationCounters }, deviceEvent: deviceEventBus.lastEvent ? { source: deviceEventBus.lastEvent.source, type: deviceEventBus.lastEvent.type, at: deviceEventBus.lastEvent.at } : null, voiceOutput: state.diagnostics?.voiceOutput, stt: state.diagnostics?.stt || { status: state.settings.sttMode === "unconfigured" ? "unconfigured" : state.settings.sttMode }, organizer: state.diagnostics?.organizer ? { model: state.diagnostics.organizer.model, durationMs: state.diagnostics.organizer.durationMs, status: state.diagnostics.organizer.status, fallback: state.diagnostics.organizer.fallback, errorType: state.diagnostics.organizer.errorType || "" } : { model: "qwen3.7-flash", status: state.settings.formatting === "raw" ? "disabled" : "not-run" } }); const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-diagnostics.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 0); notify("已导出脱敏诊断 JSON"); };
   const downloadConfig = () => { const blob = new Blob([exportConfig()], { type: "application/json" }); const link = document.createElement("a"); const url = URL.createObjectURL(blob); link.href = url; link.download = "deskmate-config.json"; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 0); notify("配置 JSON 已导出"); };
   const importConfig = async (event) => {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;

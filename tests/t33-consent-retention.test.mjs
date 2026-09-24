@@ -24,6 +24,7 @@ function successful(id, audioId, createdAt) {
 function markMigrated(history) { history.db.prepare("INSERT OR REPLACE INTO metadata VALUES('legacy-complete','1')").run(); }
 function completeJournal(memory, day, at) {
   memory.db.prepare("INSERT INTO memory_daily_journals(day,period_start,period_end,status,work_markdown,personal_markdown,combined_markdown,input_digest,source_turn_count,source_counts_json,created_at,updated_at,completed_at) VALUES(?,?,?,'completed','','','','',1,'{}',?,?,?)").run(day, at, at, at, at, at);
+  memory.db.prepare('UPDATE conversation_turns SET summary_day=? WHERE workday_day=?').run(day, day);
 }
 
 test("T33 policy migrates to editable 7-day audio and 20-day text defaults", () => temporary((root) => {
@@ -84,12 +85,14 @@ test("T33 KnowledgeOS sync gate requires accepted work and personal receipts", (
   completeJournal(memory, "2026-08-14", old);
   let insert = memory.db.prepare("INSERT INTO memory_journal_outbox(id,day,memory_class,project_id,payload_json,idempotency_key,status,created_at,updated_at,accepted_at) VALUES(?, '2026-08-14', ?, NULL, '{}', ?, 'accepted', ?, ?, ?)");
   insert.run("work-id", "work", "work-key", old, old, old);
+  memory.setSyncMeta('sealed:work-id', now);
   memory.close();
   const retention = new LocalRetention({ userDataPath: root, now: () => now });
   assert.equal(retention.preview().eligible.memoryTurns, 0);
   const reopened = new CompanionMemoryStore({ userDataPath: root, now: () => now });
   insert = reopened.db.prepare("INSERT INTO memory_journal_outbox(id,day,memory_class,project_id,payload_json,idempotency_key,status,created_at,updated_at,accepted_at) VALUES(?, '2026-08-14', ?, NULL, '{}', ?, 'accepted', ?, ?, ?)");
-  insert.run("personal-id", "personal", "personal-key", old, old, old); reopened.close();
+  insert.run("personal-id", "personal", "personal-key", old, old, old);
+  reopened.setSyncMeta('sealed:personal-id', now); reopened.close();
   assert.equal(retention.preview().eligible.memoryTurns, 1);
 }));
 

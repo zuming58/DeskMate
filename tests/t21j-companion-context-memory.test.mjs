@@ -195,7 +195,7 @@ test("T21J every model question retrieves current reviewed vectors; pending, cor
 }));
 
 test("T21J wake greets once through direct TTS, then listens at normal conversation volume", async () => {
-  assert.equal(wakeGreeting({ ownerName: "祖名" }), "在呢，祖名。");
+  assert.equal(wakeGreeting({ ownerName: "小林" }), "在呢，小林。");
   const spoken = [];
   let emit;
   const source = new SimulatedCompanionAudioSource();
@@ -204,10 +204,10 @@ test("T21J wake greets once through direct TTS, then listens at normal conversat
     providerFactory: ({ onEvent }) => { emit = onEvent; return { connect: async () => ({ ok: true }), sayHello: (text) => { spoken.push(text); return true; }, sendAudio: () => true, close() {} }; },
   });
   try {
-    assert.equal((await controller.start({ initialAnnouncement: wakeGreeting({ ownerName: "祖名" }), closeAfterAnnouncement: false })).ok, true);
+    assert.equal((await controller.start({ initialAnnouncement: wakeGreeting({ ownerName: "小林" }), closeAfterAnnouncement: false })).ok, true);
     emit({ type: "tts.start" }); emit({ type: "audio", audio: Buffer.from([1, 2]) }); emit({ type: "tts.end" });
     await controller.eventChain;
-    assert.deepEqual(spoken, ["在呢，祖名。"]);
+    assert.deepEqual(spoken, ["在呢，小林。"]);
     assert.equal(controller.snapshot().state, "listening");
     assert.equal(controller.snapshot().active, true);
   } finally { await controller.stop(); }
