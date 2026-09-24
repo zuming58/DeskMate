@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-24 — T72 Windows 0.1.7 已公开发布，main 已汇总最新产品
+
+- branch=`main`；本条前 HEAD 与发布 tag `v0.1.7^{}` 均为 `4fe4801b67c581dc8b3fb5091cca1bb5f8c83938`；远端 main 已核验一致。产品实现提交 `53120d5`、保留当前产品树的历史汇总 `7c395c5`。没有 force push、删除旧分支/工作树或回滚旧界面；本条及探针启动辅助脚本是发布后的验证交接，不改变安装包产品代码。
+- GitHub Release `https://github.com/zuming58/DeskMate/releases/tag/v0.1.7`，id=`395296955`，API 已确认 draft=false、prerelease=false、published_at=`2026-09-24T03:42:38Z`。安装包 211583136 字节，GitHub digest 与本地 SHA256 完全一致：`3c8b64203d93a9ca4774cc828d89749f3e813580ff14404f71496e91790991a6`。安装说明与 SHA256SUMS.txt 同页可下载；latest 指向该版。仅发布 Windows x64，明确无 Mac 成品。
+- 验证闭环：最终全量 933/933；生产/原生/NSIS 构建、源码与最终包一致性、许可资源、T53/T58/T69/T70/T71 包内行为通过。最终 ASAR 隔离原生探针确认 Electron 44.4.3、Node 24.21.0、SQLite、safeStorage、Sherpa 加载正常；隔离生产界面确认 KnowledgeOS 默认关闭、取消启用、保存开启和关闭，以及自动整理/疑问处理，1440×1024 与 1024×768 无横向溢出。仅合成数据，2 次模拟模型响应，无真实网络/硬件。UI 报告和截图在 OS Temp `deskmate-t71-ui-QxAznq`，原生报告 `deskmate-runtime-probe-report.json`，均未提交。
+- 原终端管道启动探针挂起，用户确认没有安全提示；采用 detached/windowsHide/stdio=ignore 并通过独立 JSON 回执核验后运行成功。不把具体底层挂起原因断言为杀毒或产品错误。新增 `scripts/start-isolated-release-probe.cjs` 可复现该隔离方式，启动 PID 不等于通过，必须读回报告。没有关闭安全软件或放宽产品 Electron 安全边界。
+- 新安装的个人资料、小智与 KnowledgeOS 默认值、长期本地保存及个人非商业许可均已进入公开包。实际 D 安装版、用户设置/记忆、KnowledgeOS 服务、固件与设备均未改动。Mac 原生输入/权限/架构验收仍待条件；后续从 main 继续，不拿 Windows 打包或模拟测试冒充 Mac/真机验收。
+
 # 2026-09-24 — T72 代码与 Windows 包已完成回归，发布前核验
 
 - 产品提交 `53120d5`；历史汇总提交 `7c395c5bc7555a4a72de338fb520df6a33e86bf1`，分支 `codex/t72-community-release`。13 个旧侧分支按审计用保留当前树的历史合并汇总，合并前后 tree 完全一致，现有 local/remote refs 均已纳入；没有删除分支/工作树。fetch 后确认远端 main 仍是本产品祖先，可正常快进，不需要 force push。

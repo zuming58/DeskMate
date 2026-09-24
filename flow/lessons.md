@@ -1,5 +1,10 @@
 # Lessons learned
 
+## Separate probe startup from the agent terminal's lifetime
+
+- An Electron probe that produces no fresh report has not passed, even if an older JSON report says ok or an outer shell reports zero. Bind evidence to the expected final ASAR and current run.
+- In this desktop-agent environment, inherited/redirected terminal-pipe launches stalled; detached, hidden Electron with stdio ignored and its own bounded JSON report ran successfully. Use scripts/start-isolated-release-probe.cjs for the allowlisted synthetic probes. A returned PID only proves startup, not validation success; no claim about a specific underlying antivirus or OS cause follows from this workaround.
+
 ## Personal development defaults are not community defaults
 
 - Never ship the author's saved profile, keys, recordings, databases or presentation drafts. Empty-profile tests must verify default names and integration switches as well as packaging exclusions.

@@ -43,6 +43,10 @@ Windows uses .NET 8 Windows Forms, user32/Raw Input and PowerShell for native in
 
 T72 behavior tests cover clean/saved profile, off-state transport, cancellation, mid-batch gate, local long-term memory/Markdown after retention and reopen, and license packaging configuration. The initial full run passed 932/933 with a Vite module-fetch timeout; isolated retry passed 11/11, and the final full rerun passed **933/933**. Production renderer, self-contained input bridge and NSIS builds succeeded. Exact final-ASAR/source checks (125 Electron files), license resource checks and T53/T58/T69/T70/T71 package behavior probes passed. Isolated native/UI runtime probes and actual publication receipts are recorded at closure. No real paid model, microphone, reminder, hardware movement or nightly task was exercised by these tests.
 
+## Publication evidence
+
+Public Release [v0.1.7](https://github.com/zuming58/DeskMate/releases/tag/v0.1.7) points to `4fe4801b67c581dc8b3fb5091cca1bb5f8c83938`. Windows installer SHA-256 is `3c8b64203d93a9ca4774cc828d89749f3e813580ff14404f71496e91790991a6` (211583136 bytes); GitHub's uploaded-asset digest matches. The final-ASAR native runtime and 1440/1024 synthetic UI probes passed, including master-switch consent/cancel/on/off persistence. Console-pipe-based probe starts stalled; the detached, hidden, pipe-independent launcher completed and wrote verifiable reports. No antivirus change or production security relaxation was used. The existing installed profile was untouched.
+
 ## Primary references
 
 - GitHub [repository licensing](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/licensing-a-repository) and [releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).
