@@ -1,5 +1,12 @@
 # Progress log
 
+# 2026-09-24 — EasyInput 独立固件下载已公开
+
+- 发布说明与打包工具提交 `325472dcc600626695684daabcee742a12077071`，已推送并核对 `origin/main`。本条是发布回执交接，不改应用/固件二进制。用户取消 Mac 后没有继续开发/构建 Mac；只交付 EasyInput，不含小智。
+- GitHub v0.1.7 原发布页新增 `DeskMate-EasyInput-V2-T43A-app-only.zip`（674112 bytes）与 `EasyInput-SHA256SUMS.txt`。API 确认 uploaded、isDraft=false；远端 ZIP digest=`e9778794b0736ac22fb5552a55dfa4a9888667f975e3988224fdb31332845451` 与本地完全一致。直链 `https://github.com/zuming58/DeskMate/releases/download/v0.1.7/DeskMate-EasyInput-V2-T43A-app-only.zip`。既有 Windows 安装器 digest 和发布 tag 未改变。
+- ZIP 22 个被列入校验的内容文件逐项与包内清单一致，另有 SHA256SUMS.txt，共 23 文件；无额外二进制/私人数据输入。源提交增量 Gitleaks 无命中；Host 既有二进制复跑 17/17，应用镜像/描述符/源码一致性门通过。未重建固件、未连接或读写设备；不把历史部分 HIL 冒充所有用户的真机验收。
+- 下一步下载者先阅读 README 的板型/分区匹配条件；app-only 不是空白板或未知原固件的通用首次安装包。未知布局必须先确认，不能全片擦除。实际 D 软件、配置、记忆和作者设备均未改变。
+
 # 2026-09-24 — EasyInput 社区独立固件下载包准备
 
 - role=Windows 发布机；branch=`codex/easyinput-community-download`；base/本条前 HEAD=`ce628a57309a94736ff9964f43e9e74de0fe4505`。用户取消 Mac、只要求 EasyInput 固件下载，不发布小智固件。Mac 分支只有同 HEAD 的本地分支名，没有源码、CI、构建或远端修改。
