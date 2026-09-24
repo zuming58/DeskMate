@@ -1,5 +1,9 @@
 # Decisions
 
+## D177 — EasyInput-only companion download; macOS deferred
+
+2026-09-24: User cancelled the macOS release and requested only an EasyInput firmware download for community users without Xiaozhi. Keep firmware source in the same product repository and attach a separate, clearly scoped app-only ZIP to Windows v0.1.7. Reuse the exact T43A adopted image (57d30d3, SHA256 4b825c74e5daeec5f9c67a99d1860a25ef2b4d872713833ef68c5d1918028e56), whose firmware source is unchanged at current product HEAD. Do not distribute device dumps, NVS, private build metadata or Xiaozhi firmware; do not imply universal/factory-install compatibility or authorize device writes. Board identity/BOOT instructions follow easyinput-board-cy; require matching partitions and preserve bootloader/data. No macOS implementation, CI or package was created.
+
 ## D176 — Source-visible personal-use community distribution and optional integrations
 
 2026-09-24: User explicitly chose public sanitized source plus downloadable installers, then restricted original work to personal noncommercial unmodified use; modification, rebranding and commercial use require written permission. Use the custom root LICENSE, not MIT or an OSI-open-source claim; preserve upstream and GitHub platform rights. Fresh profiles use 小明, empty personal details, 小岚, KnowledgeOS off and Xiaozhi extension off. Saved choices remain unchanged. KnowledgeOS disable blocks and cancels transport, not local memory; summaries and long-term memories have no TTL. Windows first; macOS requires a genuine platform port and separate acceptance. T72 contract governs this release.

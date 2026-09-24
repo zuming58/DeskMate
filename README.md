@@ -18,6 +18,8 @@
 
 完整说明见 [社区版安装、隐私与许可](docs/setup/community-release.md)。分享时直接发官方下载页链接即可。
 
+有 EasyInput V2.0 按键板的用户，可另行下载 [EasyInput 固件升级包](https://github.com/zuming58/DeskMate/releases/download/v0.1.7/DeskMate-EasyInput-V2-T43A-app-only.zip)。这是分区匹配设备专用的 app-only 包，不适合空白板或未知分区；先读[固件适用范围与说明](docs/setup/easyinput-firmware-download.md)。无需小智云台，软件安装器不会自动刷机。
+
 ## 主要功能
 
 | 页面 | 功能 |

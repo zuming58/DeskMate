@@ -1,5 +1,13 @@
 # Progress log
 
+# 2026-09-24 — EasyInput 社区独立固件下载包准备
+
+- role=Windows 发布机；branch=`codex/easyinput-community-download`；base/本条前 HEAD=`ce628a57309a94736ff9964f43e9e74de0fe4505`。用户取消 Mac、只要求 EasyInput 固件下载，不发布小智固件。Mac 分支只有同 HEAD 的本地分支名，没有源码、CI、构建或远端修改。
+- 选取既有 `build-t43-final-head-57d30d3` 实际采用镜像；应用 SHA256=`4B825C74E5DAEEC5F9C67A99D1860A25EF2B4D872713833EF68C5D1918028E56`、880400 bytes，与 T43A 写入记录一致；源提交 `57d30d3a0ea19e6a9bddc37a792973e85c20e7a9` 到当前 HEAD 的整个固件目录无差异。分区 SHA256=`7C541B70DCAC8F920C2D11589F06745E1B033FA9B95B8343DE2748BB8312A278`，应用描述符版本/ESP32-S3/IDF v5.5.5 一致。
+- 新增 `scripts/package-easyinput-community.cjs` 精确哈希/版本/源码差异门，按实际构建组件收集许可，只白名单输出 23 个文件（含应用、说明、manifest、哈希与许可）；无 bootloader、分区写入镜像、NVS、ELF、SDKCONFIG、用户资料或小智镜像。限定 EasyInput V2.0/PCB V2.1、16MB、匹配分区的 app-only 0x10000 升级；不支持未知布局或空白板。规范采用 easyinput-board-cy 的开机短按 BOOT、关机再开机退出。
+- 产物 `release-easyinput-t43a/DeskMate-EasyInput-V2-T43A-app-only.zip`；SHA256=`E9778794B0736AC22FB5552A55DFA4A9888667F975E3988224FDB31332845451`。本地打包验证通过；既有 Host 测试二进制重跑 17/17，通过不等于本轮重编译或新板 HIL。PATH 无 ctest，使用 CMakeCache 记录的明确工具路径后成功。未执行任何设备发现、Flash 读取/写入、HID 或外部模型请求。
+- 本条尚未上传：下一步核验 ZIP 所有文件哈希与清单，提交/推送说明到 main，在 v0.1.7 增加独立 ZIP 与校验文件并核对 GitHub digest；Windows EXE 与原 tag 保持不变。KnowledgeOS 聚焦查询仍 service_starting，不声称已记忆入库。
+
 # 2026-09-24 — T72 Windows 0.1.7 已公开发布，main 已汇总最新产品
 
 - branch=`main`；本条前 HEAD 与发布 tag `v0.1.7^{}` 均为 `4fe4801b67c581dc8b3fb5091cca1bb5f8c83938`；远端 main 已核验一致。产品实现提交 `53120d5`、保留当前产品树的历史汇总 `7c395c5`。没有 force push、删除旧分支/工作树或回滚旧界面；本条及探针启动辅助脚本是发布后的验证交接，不改变安装包产品代码。
